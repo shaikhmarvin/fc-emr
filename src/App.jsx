@@ -86,7 +86,6 @@ export default function App() {
       console.error(error);
       alert("Error: " + error.message);
     } else {
-      console.log(data);
       alert("Supabase connection works!");
     }
   }
@@ -2130,10 +2129,12 @@ async function saveSoapNote(showConfirmation = true) {
       )
     );
 
-    await logAuditEvent("soap_saved", {
-      soapStatus: currentSoapStatus,
-    });
-    await loadAuditLog();
+    if (showConfirmation) {
+  await logAuditEvent("soap_saved", {
+    soapStatus: currentSoapStatus,
+  });
+  await loadAuditLog();
+}
 
     if (showConfirmation) {
   showSoapMessage("SOAP note saved.");

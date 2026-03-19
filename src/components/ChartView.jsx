@@ -1259,11 +1259,13 @@ Follow-up`}
                   {entry.actor_role || "Unknown role"} • {formatDate(entry.created_at)}
                 </p>
 
-                {entry.details && Object.keys(entry.details).length > 0 ? (
-                  <pre className="mt-2 overflow-x-auto rounded bg-white p-2 text-xs text-slate-600">
-                    {JSON.stringify(entry.details, null, 2)}
-                  </pre>
-                ) : null}
+                {entry.action !== "soap_saved" &&
+entry.details &&
+Object.keys(entry.details).length > 0 ? (
+  <pre className="mt-2 overflow-x-auto rounded bg-white p-2 text-xs text-slate-600">
+    {JSON.stringify(entry.details, null, 2)}
+  </pre>
+) : null}
               </div>
             ))}
           </div>
