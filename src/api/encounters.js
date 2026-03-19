@@ -1,0 +1,279 @@
+import { supabase } from "../lib/supabase";
+
+export async function fetchEncounters() {
+  const { data, error } = await supabase
+    .from("encounters")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+
+  return data ?? [];
+}
+
+function buildIntakeData(encounter) {
+  return {
+    newReturning: encounter.newReturning ?? "Returning",
+    visitLocation: encounter.visitLocation ?? "In Clinic",
+    transportation: encounter.transportation ?? "",
+    needsElevator: encounter.needsElevator ?? false,
+    spanishSpeaking: encounter.spanishSpeaking ?? false,
+    mammogramPapSmear: encounter.mammogramPapSmear ?? "",
+    fluShot: encounter.fluShot ?? "",
+    htn: encounter.htn ?? false,
+    dm: encounter.dm ?? false,
+    labsLast6Months: encounter.labsLast6Months ?? "",
+    tobaccoScreening: encounter.tobaccoScreening ?? "",
+    dermatology: encounter.dermatology ?? "N/A",
+    ophthalmology: encounter.ophthalmology ?? "N/A",
+    optometry: encounter.optometry ?? "N/A",
+    diabeticEyeExamPastYear: encounter.diabeticEyeExamPastYear ?? "N/A",
+    physicalTherapy: encounter.physicalTherapy ?? "N/A",
+    mentalHealthCombined: encounter.mentalHealthCombined ?? "N/A",
+    counseling: encounter.counseling ?? "N/A",
+    anyMentalHealthPositive: encounter.anyMentalHealthPositive ?? false,
+  };
+}
+
+export async function createEncounterInSupabase(patientId, encounter) {
+  const row = {
+    patient_id: patientId,
+    clinic_date: encounter.clinicDate,
+    chief_complaint: encounter.chiefComplaint || "",
+    status: mapUiStatusToDb(encounter.status || "Waiting"),
+    room: encounter.roomNumber || "",
+    notes: encounter.notes || "",
+    intake_data: buildIntakeData(encounter),
+  };
+
+  const { data, error } = await supabase
+    .from("encounters")
+    .insert([row])
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  return data;
+}
+
+export async function updateEncounterInSupabase(encounterId, updates) {
+  const payload = {};
+
+  if (updates.chiefComplaint !== undefined) {
+    payload.chief_complaint = updates.chiefComplaint;
+  }
+
+  if (updates.roomNumber !== undefined) {
+    payload.room = updates.roomNumber || "";
+  }
+
+  if (updates.soapSubjective !== undefined) {
+    payload.hpi = updates.soapSubjective;
+  }
+
+  if (updates.soapObjective !== undefined) {
+    payload.objective = updates.soapObjective;
+  }
+
+  if (updates.soapAssessment !== undefined) {
+    payload.assessment = updates.soapAssessment;
+  }
+
+  if (updates.soapPlan !== undefined) {
+    payload.plan = updates.soapPlan;
+  }
+
+  if (updates.notes !== undefined) {
+    payload.notes = updates.notes;
+  }
+
+  if (updates.vitalsHistory !== undefined) {
+    payload.vitals = updates.vitalsHistory;
+  }
+
+  if (updates.status !== undefined) {
+    payload.status = mapUiStatusToDb(updates.status);
+  }
+
+  if (updates.assignedStudent !== undefined) {
+    payload.assigned_student = updates.assignedStudent;
+  }
+
+  if (updates.assignedUpperLevel !== undefined) {
+    payload.assigned_upper_level = updates.assignedUpperLevel;
+  }
+
+  if (updates.soapStatus !== undefined) {
+    payload.soap_status = updates.soapStatus;
+  }
+
+  if (updates.soapAuthorId !== undefined) {
+    payload.soap_author_id = updates.soapAuthorId;
+  }
+
+  if (updates.soapAuthorRole !== undefined) {
+    payload.soap_author_role = updates.soapAuthorRole;
+  }
+
+  if (updates.upperLevelSignedBy !== undefined) {
+    payload.upper_level_signed_by = updates.upperLevelSignedBy;
+  }
+
+  if (updates.upperLevelSignedAt !== undefined) {
+    payload.upper_level_signed_at = updates.upperLevelSignedAt;
+  }
+
+  if (updates.attendingSignedBy !== undefined) {
+    payload.attending_signed_by = updates.attendingSignedBy;
+  }
+
+  if (updates.attendingSignedAt !== undefined) {
+    payload.attending_signed_at = updates.attendingSignedAt;
+  }
+
+  const intakeFields = [
+    "newReturning",
+    "visitLocation",
+    "transportation",
+    "needsElevator",
+    "spanishSpeaking",
+    "mammogramPapSmear",
+    "fluShot",
+    "htn",
+    "dm",
+    "labsLast6Months",
+    "tobaccoScreening",
+    "dermatology",
+    "ophthalmology",
+    "optometry",
+    "diabeticEyeExamPastYear",
+    "physicalTherapy",
+    "mentalHealthCombined",
+    "counseling",
+    "anyMentalHealthPositive",
+  ];
+
+  const hasIntakeUpdates = intakeFields.some(
+    (field) => updates[field] !== undefined
+  );
+
+  if (hasIntakeUpdates) {
+    payload.intake_data = {
+      newReturning: updates.newReturning ?? "Returning",
+      visitLocation: updates.visitLocation ?? "In Clinic",
+      transportation: updates.transportation ?? "",
+      needsElevator: updates.needsElevator ?? false,
+      spanishSpeaking: updates.spanishSpeaking ?? false,
+      mammogramPapSmear: updates.mammogramPapSmear ?? "",
+      fluShot: updates.fluShot ?? "",
+      htn: updates.htn ?? false,
+      dm: updates.dm ?? false,
+      labsLast6Months: updates.labsLast6Months ?? "",
+      tobaccoScreening: updates.tobaccoScreening ?? "",
+      dermatology: updates.dermatology ?? "N/A",
+      ophthalmology: updates.ophthalmology ?? "N/A",
+      optometry: updates.optometry ?? "N/A",
+      diabeticEyeExamPastYear: updates.diabeticEyeExamPastYear ?? "N/A",
+      physicalTherapy: updates.physicalTherapy ?? "N/A",
+      mentalHealthCombined: updates.mentalHealthCombined ?? "N/A",
+      counseling: updates.counseling ?? "N/A",
+      anyMentalHealthPositive: updates.anyMentalHealthPositive ?? false,
+    };
+  }
+
+  const { data, error } = await supabase
+    .from("encounters")
+    .update(payload)
+    .eq("id", encounterId)
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  return data;
+}
+
+function mapUiStatusToDb(status) {
+  switch (status) {
+    case "Waiting":
+    case "waiting":
+      return "waiting";
+    case "Assigned":
+    case "roomed":
+      return "roomed";
+    case "In Visit":
+    case "in_visit":
+      return "in_visit";
+    case "Completed":
+    case "done":
+      return "done";
+    case "Cancelled":
+    case "cancelled":
+      return "cancelled";
+    default:
+      return "waiting";
+  }
+}
+
+export async function fetchMedications() {
+  const { data, error } = await supabase
+    .from("medications")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+
+  return data ?? [];
+}
+
+export async function createMedicationInSupabase(encounterId, medication) {
+  const row = {
+    encounter_id: encounterId,
+    name: medication.name || "",
+    dosage: medication.dosage || "",
+    frequency: medication.frequency || "",
+    route: medication.route || "",
+    is_active: medication.isActive ?? true,
+  };
+
+  const { data, error } = await supabase
+    .from("medications")
+    .insert([row])
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  return data;
+}
+
+export async function updateMedicationInSupabase(medicationId, updates) {
+  const payload = {};
+
+  if (updates.name !== undefined) payload.name = updates.name;
+  if (updates.dosage !== undefined) payload.dosage = updates.dosage;
+  if (updates.frequency !== undefined) payload.frequency = updates.frequency;
+  if (updates.route !== undefined) payload.route = updates.route;
+  if (updates.isActive !== undefined) payload.is_active = updates.isActive;
+
+  const { data, error } = await supabase
+    .from("medications")
+    .update(payload)
+    .eq("id", medicationId)
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  return data;
+}
+
+export async function deleteMedicationInSupabase(medicationId) {
+  const { error } = await supabase
+    .from("medications")
+    .delete()
+    .eq("id", medicationId);
+
+  if (error) throw error;
+}
