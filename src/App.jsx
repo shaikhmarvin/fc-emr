@@ -664,43 +664,68 @@ const attendingSignerName = selectedEncounter?.attendingSignedBy
   );
 
 const waitingEncounterRows = useMemo(() => {
+  const todayClinicDate = formatClinicDate();
+
+  const queueBaseRows = filteredEncounterRows.filter(
+    ({ encounter }) =>
+      normalizeClinicDate(encounter.clinicDate) === todayClinicDate
+  );
+
   const currentUserName = (
     profileNameMap[session?.user?.id] ||
     authFullName ||
     ""
   ).trim();
 
-  let rows = filteredEncounterRows;
+  let rows = queueBaseRows;
 
   if (userRole === "student") {
-    rows = filteredEncounterRows.filter(({ encounter }) =>
+    rows = queueBaseRows.filter(({ encounter }) =>
       (encounter.assignedStudent || "")
         .trim()
         .toLowerCase()
         .includes(currentUserName.toLowerCase())
     );
   } else if (userRole === "upper_level") {
-    rows = filteredEncounterRows.filter(({ encounter }) =>
+    rows = queueBaseRows.filter(({ encounter }) =>
       (encounter.assignedUpperLevel || "")
         .trim()
         .toLowerCase()
         .includes(currentUserName.toLowerCase())
     );
   } else if (userRole === "attending") {
-    rows = filteredEncounterRows.filter(
+    rows = queueBaseRows.filter(
       ({ encounter }) => encounter.soapStatus === "awaiting_attending"
     );
   } else {
-    rows = filteredEncounterRows.filter(
-      ({ encounter }) => encounter.status === "Waiting"
-    );
+    rows = [...queueBaseRows].sort((a, b) => {
+      const aUnassigned =
+        !a.encounter.assignedStudent && !a.encounter.assignedUpperLevel
+          ? 0
+          : 1;
+      const bUnassigned =
+        !b.encounter.assignedStudent && !b.encounter.assignedUpperLevel
+          ? 0
+          : 1;
+
+      if (aUnassigned !== bUnassigned) return aUnassigned - bUnassigned;
+
+      const aBus =
+        a.encounter.transportation === "Bus/Public Transport" ? 0 : 1;
+      const bBus =
+        b.encounter.transportation === "Bus/Public Transport" ? 0 : 1;
+
+      if (aBus !== bBus) return aBus - bBus;
+
+      const aTime = new Date(a.encounter.createdAt || 0).getTime();
+      const bTime = new Date(b.encounter.createdAt || 0).getTime();
+      return aTime - bTime;
+    });
+
+    return rows;
   }
 
   return [...rows].sort((a, b) => {
-    const aBus = a.encounter.transportation === "Bus/Public Transport" ? 0 : 1;
-    const bBus = b.encounter.transportation === "Bus/Public Transport" ? 0 : 1;
-    if (aBus !== bBus) return aBus - bBus;
-
     const aTime = new Date(a.encounter.createdAt || 0).getTime();
     const bTime = new Date(b.encounter.createdAt || 0).getTime();
     return aTime - bTime;

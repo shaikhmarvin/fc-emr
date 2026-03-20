@@ -13,6 +13,22 @@ export default function QueueView({
   onAssignFromQueue,
   
 }) {
+
+  const unassignedRows =
+  userRole === "leadership"
+    ? waitingEncounterRows.filter(
+        ({ encounter }) =>
+          !encounter.assignedStudent && !encounter.assignedUpperLevel
+      )
+    : waitingEncounterRows;
+
+const assignedRows =
+  userRole === "leadership"
+    ? waitingEncounterRows.filter(
+        ({ encounter }) =>
+          encounter.assignedStudent || encounter.assignedUpperLevel
+      )
+    : [];
   return (
     <div className="space-y-4 p-3 sm:p-4 lg:space-y-6 lg:p-6">
       <div className="rounded-2xl bg-white p-4 shadow sm:p-5">
@@ -45,7 +61,13 @@ export default function QueueView({
         </div>
 
 <div className="divide-y">
-  {waitingEncounterRows.map(({ patient, encounter }) => (
+  {userRole === "leadership" && unassignedRows.length > 0 && (
+  <div className="px-2 py-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+    Unassigned / New Patients
+  </div>
+)}
+  {(userRole === "leadership" ? unassignedRows : waitingEncounterRows).map(
+    ({ patient, encounter }) => (
     <div
       key={encounter.id}
       onClick={(e) => {
@@ -86,67 +108,45 @@ export default function QueueView({
         </p>
 
         {/* 👇 LEADERSHIP ASSIGNMENT UI */}
-        {userRole === "leadership" && (
-          <div
-            className="mt-2 flex flex-col gap-1"
-            onClick={(e) => e.stopPropagation()} // prevents chart open
-          >
+        
+            {userRole === "leadership" && (
+  <>
+    <select
+      className="border rounded p-1 text-xs"
+      defaultValue={encounter.assignedStudent || ""}
+      onChange={(e) =>
+        onAssignFromQueue(encounter.id, {
+          assignedStudent: e.target.value,
+        })
+      }
+    >
+      <option value="">Assign Student</option>
+      {studentNameOptions.map((name) => (
+        <option key={name} value={name}>
+          {name}
+        </option>
+      ))}
+    </select>
 
+    <select
+      className="border rounded p-1 text-xs"
+      defaultValue={encounter.assignedUpperLevel || ""}
+      onChange={(e) =>
+        onAssignFromQueue(encounter.id, {
+          assignedUpperLevel: e.target.value,
+        })
+      }
+    >
+      <option value="">Assign Upper</option>
+      {upperLevelNameOptions.map((name) => (
+        <option key={name} value={name}>
+          {name}
+        </option>
+      ))}
+    </select>
+  </>
+)}
 
-<select
-  className="border rounded p-1 text-xs"
-  defaultValue={encounter.roomNumber || ""}
-  onChange={(e) =>
-    onAssignFromQueue(encounter.id, {
-      roomNumber: e.target.value,
-    })
-  }
->
-  <option value="">Assign Room</option>
-  {[...Array(10)].map((_, i) => {
-    const room = i + 1;
-    return (
-      <option key={room} value={room}>
-        Room {room}
-      </option>
-    );
-  })}
-</select>
-            <select
-              className="border rounded p-1 text-xs"
-              defaultValue={encounter.assignedStudent || ""}
-              onChange={(e) =>
-                onAssignFromQueue(encounter.id, {
-                  assignedStudent: e.target.value,
-                })
-              }
-            >
-              <option value="">Assign Student</option>
-              {studentNameOptions.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-
-            <select
-              className="border rounded p-1 text-xs"
-              defaultValue={encounter.assignedUpperLevel || ""}
-              onChange={(e) =>
-                onAssignFromQueue(encounter.id, {
-                  assignedUpperLevel: e.target.value,
-                })
-              }
-            >
-              <option value="">Assign Upper</option>
-              {upperLevelNameOptions.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
       </div>
     </div>
   ))}
@@ -156,6 +156,57 @@ export default function QueueView({
               No patients currently waiting.
             </div>
           )}
+          {userRole === "leadership" && assignedRows.length > 0 && (
+  <>
+    <div className="px-2 py-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+      Assigned / In Progress
+    </div>
+
+    {assignedRows.map(({ patient, encounter }) => (
+      <div
+        key={encounter.id}
+        onClick={(e) => {
+          if (e.target.tagName === "SELECT" || e.target.tagName === "BUTTON") return;
+          openPatientChart(patient.id, encounter.id);
+        }}
+        className="flex cursor-pointer flex-col gap-3 px-2 py-4 hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div className="space-y-1">
+          <p className="font-semibold text-slate-800">
+            {getPatientBoardName(patient)} ({patient.age})
+          </p>
+          <p className="text-sm text-slate-500">
+            MRN: {patient.mrn || "—"}
+          </p>
+          <p className="text-sm text-slate-500">
+            {encounter.chiefComplaint || "No chief complaint"}
+          </p>
+          <p className="text-sm text-slate-500">
+            Student: {encounter.assignedStudent || "—"} • Upper Level: {encounter.assignedUpperLevel || "—"}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {spanishBadge(encounter)}
+            {priorityBadge(encounter)}
+            {elevatorBadge(encounter)}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2 text-left sm:items-end sm:text-right">
+          <p className="text-sm font-medium text-slate-700">
+            {encounter.soapStatus === "awaiting_attending"
+              ? "Awaiting Signature"
+              : encounter.status || "—"}
+          </p>
+
+          <p className="text-sm text-slate-500">
+            {formatWaitTime(encounter.createdAt)}
+          </p>
+
+        </div>
+      </div>
+    ))}
+  </>
+)}
         </div>
       </div>
     </div>
