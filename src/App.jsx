@@ -2293,7 +2293,7 @@ export default function App() {
     const missingFields = getMissingSoapFields(selectedEncounter);
     if (missingFields.length > 0) {
       showSoapMessage(`Complete before submitting: ${missingFields.join(", ")}`);
-      return;
+      return false;
     }
 
     const authorId = selectedEncounter.soapAuthorId || session.user.id;
@@ -2536,6 +2536,7 @@ export default function App() {
       });
       await loadAuditLog();
       showSoapMessage("SOAP note signed by attending.");
+      return true;
     } catch (error) {
       console.error("Failed to sign SOAP as attending:", error);
       showSoapMessage(`Failed to sign SOAP: ${error.message}`);
@@ -2546,8 +2547,8 @@ export default function App() {
 
 
   async function signSoapAsAttendingWithPin(attendingId, pin) {
-    if (!selectedPatient || !selectedEncounter) return;
-    if (!attendingId || pin.length !== 4) return;
+    if (!selectedPatient || !selectedEncounter) return false;
+if (!attendingId || pin.length !== 4) return false;
 
     const missingFields = getMissingSoapFields(selectedEncounter);
     if (missingFields.length > 0) {
@@ -2562,17 +2563,17 @@ export default function App() {
 
       if (!attending) {
         showSoapMessage("Attending not found.");
-        return;
+        return false;
       }
 
       if (!attending.signature_pin_set) {
         showSoapMessage("This attending has not set up a signature PIN yet.");
-        return;
+        return false;
       }
 
       if (String(attending.signature_pin_hash || "") !== String(pin)) {
         showSoapMessage("Incorrect PIN.");
-        return;
+        return false;
       }
 
       const authorId = selectedEncounter.soapAuthorId || session?.user?.id;
@@ -2637,6 +2638,7 @@ export default function App() {
     } catch (error) {
       console.error("Failed to sign SOAP with PIN:", error);
       showSoapMessage(`Failed to sign SOAP: ${error.message}`);
+      return false;
     } finally {
       setSoapBusy(false);
     }

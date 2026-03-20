@@ -1336,28 +1336,41 @@ Object.keys(entry.details).length > 0 ? (
           />
         </div>
       </div>
+{soapUiMessage ? (
+  <p className="mt-3 text-sm text-red-600">{soapUiMessage}</p>
+            ) : null}
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={() => {
+                  setShowSignModal(false);
+                  setSelectedAttendingId("");
+                  setAttendingPin("");
+                }}
+                className="flex-1 rounded-lg bg-slate-200 px-4 py-3 text-slate-700 hover:bg-slate-300"
+              >
+                Cancel
+              </button>
 
-      <div className="mt-6 flex gap-3">
-        <button
-          onClick={() => {
-            setShowSignModal(false);
-            setSelectedAttendingId("");
-            setAttendingPin("");
-          }}
-          className="flex-1 rounded-lg bg-slate-200 px-4 py-3 text-slate-700 hover:bg-slate-300"
-        >
-          Cancel
-        </button>
+              <button
+                onClick={async () => {
+                  const success = await signSoapAsAttendingWithPin(
+                    selectedAttendingId,
+                    attendingPin
+                  );
 
-        <button
-          onClick={() =>
-            signSoapAsAttendingWithPin(selectedAttendingId, attendingPin)
-          }
-          disabled={!selectedAttendingId || attendingPin.length !== 4 || soapBusy}
-          className="flex-1 rounded-lg bg-emerald-600 px-4 py-3 text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {soapBusy ? "Signing..." : "Sign Note"}
-        </button>
+                  if (success) {
+                    setShowSignModal(false);
+                    setSelectedAttendingId("");
+                    setAttendingPin("");
+                  } else {
+                    setAttendingPin("");
+                  }
+                }}
+                disabled={!selectedAttendingId || attendingPin.length !== 4 || soapBusy}
+                className="flex-1 rounded-lg bg-emerald-600 px-4 py-3 text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {soapBusy ? "Signing..." : "Sign Note"}
+              </button>
       </div>
     </div>
   </div>
