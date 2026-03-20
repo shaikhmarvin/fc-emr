@@ -1,4 +1,5 @@
 export default function QueueView({
+  userRole,
   searchForm,
   waitingEncounterRows,
   openPatientChart,
@@ -13,10 +14,22 @@ export default function QueueView({
       <div className="rounded-2xl bg-white p-4 shadow sm:p-5">
         <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h3 className="text-lg font-semibold">Waiting Queue</h3>
+            <h3 className="text-lg font-semibold">
+  {userRole === "attending"
+    ? "Awaiting Signature"
+    : userRole === "student" || userRole === "upper_level"
+    ? "My Queue"
+    : "Waiting Queue"}
+</h3>
             <p className="mt-1 text-sm text-slate-500">
-              Bus/Public Transport patients are automatically shown first.
-            </p>
+  {userRole === "attending"
+    ? "Patients awaiting attending signature."
+    : userRole === "student"
+    ? "Patients assigned to you that are still waiting."
+    : userRole === "upper_level"
+    ? "Patients assigned to you that are still waiting."
+    : "Bus/Public Transport patients are automatically shown first."}
+</p>
           </div>
 
           <input

@@ -663,14 +663,46 @@ const attendingSignerName = selectedEncounter?.attendingSignedBy
     filteredPatients.some((p) => p.id === patient.id)
   );
 
-  const waitingEncounterRows = filteredEncounterRows
-    .filter(({ encounter }) => encounter.status === "Waiting")
-    .sort((a, b) => {
-      const aBus = a.encounter.transportation === "Bus/Public Transport" ? 0 : 1;
-      const bBus = b.encounter.transportation === "Bus/Public Transport" ? 0 : 1;
-      if (aBus !== bBus) return aBus - bBus;
-      return new Date(a.encounter.createdAt) - new Date(b.encounter.createdAt);
-    });
+  const waitingEncounterRows = useMemo(() => {
+  let rows = filteredEncounterRows.filter(
+    ({ encounter }) => encounter.status === "Waiting"
+  );
+
+  const currentUserName = (
+    profileNameMap[session?.user?.id] ||
+    authFullName ||
+    ""
+  ).trim();
+
+  if (userRole === "student") {
+    rows = rows.filter(
+      ({ encounter }) =>
+        (encounter.assignedStudent || "").trim() === currentUserName
+    );
+  } else if (userRole === "upper_level") {
+    rows = rows.filter(
+      ({ encounter }) =>
+        (encounter.assignedUpperLevel || "").trim() === currentUserName
+    );
+  } else if (userRole === "attending") {
+    rows = filteredEncounterRows.filter(
+      ({ encounter }) => encounter.soapStatus === "awaiting_attending"
+    );
+  }
+
+  return rows.sort((a, b) => {
+    const aBus = a.encounter.transportation === "Bus/Public Transport" ? 0 : 1;
+    const bBus = b.encounter.transportation === "Bus/Public Transport" ? 0 : 1;
+    if (aBus !== bBus) return aBus - bBus;
+    return new Date(a.encounter.createdAt) - new Date(b.encounter.createdAt);
+  });
+}, [
+  filteredEncounterRows,
+  profileNameMap,
+  session?.user?.id,
+  authFullName,
+  userRole,
+]);
 
   const assignedCount = filteredEncounterRows.filter(
     ({ encounter }) => encounter.status === "Assigned"
@@ -2629,18 +2661,19 @@ async function reopenSoapNote() {
           />
         )}
 
-        {activeView === "queue" && (
-          <QueueView
-            searchForm={searchForm}
-            waitingEncounterRows={waitingEncounterRows}
-            openPatientChart={openPatientChart}
-            getPatientBoardName={getPatientBoardName}
-            spanishBadge={spanishBadge}
-            priorityBadge={priorityBadge}
-            elevatorBadge={elevatorBadge}
-            formatWaitTime={formatWaitTime}
-          />
-        )}
+       {activeView === "queue" && (
+  <QueueView
+    userRole={userRole}
+    searchForm={searchForm}
+    waitingEncounterRows={waitingEncounterRows}
+    openPatientChart={openPatientChart}
+    getPatientBoardName={getPatientBoardName}
+    spanishBadge={spanishBadge}
+    priorityBadge={priorityBadge}
+    elevatorBadge={elevatorBadge}
+    formatWaitTime={formatWaitTime}
+  />
+)}
 
         {activeView === "board" && (
           <RoomBoard
