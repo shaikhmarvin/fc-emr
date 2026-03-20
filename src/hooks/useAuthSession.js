@@ -17,13 +17,16 @@ export function useAuthSession() {
     const [onboardingFullName, setOnboardingFullName] = useState("");
     const [onboardingClassification, setOnboardingClassification] = useState("");
     const isSigningOutRef = useRef(false);
+    const [authRole, setAuthRole] = useState("");
+    const [authPin, setAuthPin] = useState("");
+const [authPinConfirm, setAuthPinConfirm] = useState("");
 
   const isLeadershipView = authReady && userRole === "leadership";
 
  async function fetchProfileWithRetry(userId, attempt = 1) {
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("id, full_name, role, classification")
+    .select("id, full_name, role, classification, approval_status, signature_pin_set, signature_pin_hash")
     .eq("id", userId)
     .maybeSingle();
 
@@ -60,15 +63,48 @@ export function useAuthSession() {
   return;
 }
 
-if (!authClassification) {
-  setAuthMessage("Please select a classification.");
+if (!authRole) {
+  setAuthMessage("Please select a role.");
   setAuthLoading(false);
   return;
 }
 
+if (authRole === "student" || authRole === "upper_level") {
+  if (!authClassification) {
+    setAuthMessage("Please select a classification.");
+    setAuthLoading(false);
+    return;
+  }
+}
+
+if (authRole === "attending") {
+  if (authPin.length !== 4 || !/^\d{4}$/.test(authPin)) {
+    setAuthMessage("PIN must be exactly 4 digits.");
+    setAuthLoading(false);
+    return;
+  }
+
+  if (authPin !== authPinConfirm) {
+    setAuthMessage("PINs do not match.");
+    setAuthLoading(false);
+    return;
+  }
+}
+
     try {
-      await signUp(authEmail, authPassword, authFullName, authClassification);
+     await signUp(authEmail, authPassword, {
+  full_name: authFullName,
+  classification: authClassification || null,
+  role: authRole,
+  approval_status: "pending",
+  signature_pin_hash: authRole === "attending" ? authPin : null,
+  signature_pin_set: authRole === "attending",
+});
       setAuthMessage("Signup successful. You can now sign in.");
+      setAuthMode("login");
+      setAuthPassword("");
+setAuthPin("");
+setAuthPinConfirm("");
     } catch (error) {
       console.error(error);
       setAuthMessage(`Signup failed: ${error.message}`);
@@ -178,7 +214,10 @@ if (!authClassification) {
     return;
   }
 
-  if (!onboardingClassification) {
+  if (
+  (userRole === "student" || userRole === "upper_level") &&
+  !onboardingClassification
+) {
     setAuthMessage("Please select your classification.");
     return;
   }
@@ -221,7 +260,7 @@ if (!authClassification) {
       setSession(newSession);
 
       if (!newSession) {
-        setUserRole("student");
+        setUserRole(null);
         setAuthReady(true);
         return;
       }
@@ -229,7 +268,7 @@ if (!authClassification) {
       const userId = newSession.user?.id;
 
       if (!userId) {
-        setUserRole("student");
+        setUserRole(null);
         setAuthReady(true);
         return;
       }
@@ -237,10 +276,19 @@ if (!authClassification) {
       setTimeout(async () => {
         try {
             const profile = await fetchProfileWithRetry(userId);
-            await supabase
-                .from("profiles")
-                .update({ last_seen_at: new Date().toISOString() })
-                .eq("id", userId);
+
+if (!profile) {
+  console.error("No profile found for user:", userId);
+  setAuthMessage("No profile found. Contact leadership.");
+  setUserRole(null);
+  setAuthReady(true);
+  return;
+}
+
+await supabase
+  .from("profiles")
+  .update({ last_seen_at: new Date().toISOString() })
+  .eq("id", userId);
 
             console.log("PROFILE FROM onAuthStateChange:", profile, "EVENT:", event);
 
@@ -249,19 +297,21 @@ if (!authClassification) {
             const roleRequiresClassification =
                 role === "student" || role === "upper_level";
 
-            if (role && (!roleRequiresClassification || classification)) {
-                setUserRole(role);
-                setNeedsOnboarding(false);
-                setOnboardingFullName(profile?.full_name || "");
-                setOnboardingClassification(classification || "");
-                setAuthMessage("");
-            } else {
-                console.warn("Profile incomplete → sending to onboarding", profile);
-                setUserRole(null);
-                setNeedsOnboarding(true);
-                setOnboardingFullName(profile?.full_name || "");
-                setOnboardingClassification(classification || "");
+            if (profile?.approval_status !== "approved") {
+              setUserRole(null);
+              setNeedsOnboarding(false);
+              setAuthMessage("Awaiting leadership approval.");
+              setAuthReady(true);   // ✅ ADD THIS
+              return;
             }
+
+if (role && (!roleRequiresClassification || classification)) {
+  setUserRole(role);
+  setNeedsOnboarding(false);
+  setOnboardingFullName(profile?.full_name || "");
+  setOnboardingClassification(classification || "");
+  setAuthMessage("");
+}
 
         } catch (error) {
           console.error("Failed to load profile from auth state change:", error);
@@ -302,5 +352,11 @@ if (!authClassification) {
     onboardingClassification,
     setOnboardingClassification,
     handleCompleteOnboarding,
+    authRole,
+    setAuthRole,
+    authPin,
+setAuthPin,
+authPinConfirm,
+setAuthPinConfirm,
   };
 }

@@ -2,7 +2,7 @@ import { supabase } from "../lib/supabase";
 
 import { getRoleFromClassification } from "../utils/permissions";
 
-export async function signUp(email, password, fullName, classification) {
+export async function signUp(email, password, profileData) {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -11,16 +11,16 @@ export async function signUp(email, password, fullName, classification) {
   if (error) throw error;
 
   const user = data.user;
-
   if (!user) throw new Error("No user returned from signup");
-
-  const role = getRoleFromClassification(classification);
 
   const { error: profileError } = await supabase.from("profiles").upsert({
     id: user.id,
-    full_name: fullName,
-    classification,
-    role,
+    full_name: profileData.full_name || "",
+    classification: profileData.classification || null,
+    role: profileData.role || null,
+    approval_status: profileData.approval_status || "pending",
+    signature_pin_hash: profileData.signature_pin_hash || null,
+    signature_pin_set: !!profileData.signature_pin_set,
   });
 
   if (profileError) throw profileError;

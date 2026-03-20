@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./lib/supabase";
 import { createPatientInSupabase, updatePatientInSupabase } from "./api/patients";
-import {createEncounterInSupabase,updateEncounterInSupabase,createMedicationInSupabase,updateMedicationInSupabase,deleteMedicationInSupabase,} from "./api/encounters";
+import { createEncounterInSupabase, updateEncounterInSupabase, createMedicationInSupabase, updateMedicationInSupabase, deleteMedicationInSupabase, } from "./api/encounters";
 import { useAuthSession } from "./hooks/useAuthSession";
 import { useClinicData } from "./hooks/useClinicData";
-import {canStartIntake,canManageRoomBoard,canEditFormulary,canPrescribe,canChart,} from "./utils/permissions";
+import { canStartIntake, canManageRoomBoard, canEditFormulary, canPrescribe, canChart, } from "./utils/permissions";
 import { fetchProfiles, updateProfileRole, updateProfileDetails } from "./api/profiles";
 import { createAuditLog, fetchAuditLogForEncounter } from "./api/audit";
 import PatientSearch from "./components/PatientSearch";
@@ -12,7 +12,7 @@ import PatientTable from "./components/PatientTable";
 import QueueView from "./components/QueueView";
 import RoomBoard from "./components/RoomBoard";
 import MedicationModal from "./components/MedicationModal";
-import {createAllergyInSupabase,updateAllergyInSupabase,deleteAllergyInSupabase,} from "./api/allergies";
+import { createAllergyInSupabase, updateAllergyInSupabase, deleteAllergyInSupabase, } from "./api/allergies";
 import AllergyModal from "./components/AllergyModal";
 import IntakeModal from "./components/IntakeModal";
 import ChartView from "./components/ChartView";
@@ -22,7 +22,7 @@ import AppSidebar from "./components/AppSidebar";
 import UserManagementView from "./components/UserManagementView";
 import AppHeader from "./components/AppHeader";
 import DashboardView from "./components/DashboardView";
-import {ROOM_OPTIONS,EMPTY_FORM,EMPTY_VITALS,EMPTY_MEDICATION,EMPTY_SEARCH,} from "./constants";
+import { ROOM_OPTIONS, EMPTY_FORM, EMPTY_VITALS, EMPTY_MEDICATION, EMPTY_SEARCH, } from "./constants";
 import {
   calculateAge,
   generateMrn,
@@ -79,7 +79,7 @@ function elevatorBadge(encounter) {
 
 export default function App() {
   async function testSupabaseConnection() {
-  
+
     const { data, error } = await supabase.from("patients").select("*");
 
     if (error) {
@@ -115,83 +115,20 @@ export default function App() {
     onboardingClassification,
     setOnboardingClassification,
     handleCompleteOnboarding,
+    authRole,
+    setAuthRole,
+    authPin,
+    setAuthPin,
+    authPinConfirm,
+    setAuthPinConfirm,
   } = useAuthSession();
-  
+
   const canOpenIntake = canStartIntake(userRole);
   const canManageRooms = canManageRoomBoard(userRole);
   const canModifyFormulary = canEditFormulary(userRole);
   const canPrescribeMeds = canPrescribe(userRole);
   const canChartInEncounter = canChart(userRole);
-  
-  if (session && needsOnboarding) {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow">
-        <h2 className="mb-2 text-xl font-semibold text-slate-900">
-          Complete Your Profile
-        </h2>
-
-        <p className="mb-5 text-sm text-slate-600">
-          Finish setting up your account before entering the app.
-        </p>
-
-        <div className="space-y-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              Full Name
-            </label>
-            <input
-              className="w-full rounded-lg border px-3 py-3 text-sm"
-              value={onboardingFullName}
-              onChange={(e) => setOnboardingFullName(e.target.value)}
-              placeholder="Enter your full name"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              Classification
-            </label>
-            <select
-              className="w-full rounded-lg border px-3 py-3 text-sm"
-              value={onboardingClassification}
-              onChange={(e) => setOnboardingClassification(e.target.value)}
-            >
-              <option value="">Select classification</option>
-              <option value="MS1">MS1</option>
-              <option value="MS2">MS2</option>
-              <option value="MS3">MS3</option>
-              <option value="MS4">MS4</option>
-            </select>
-          </div>
-
-          {authMessage ? (
-            <div className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700">
-              {authMessage}
-            </div>
-          ) : null}
-
-          <button
-            onClick={handleCompleteOnboarding}
-            disabled={authLoading}
-            className="w-full rounded-lg bg-blue-600 px-4 py-3 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {authLoading ? "Saving..." : "Finish Setup"}
-          </button>
-
-          <button
-            onClick={handleSignOut}
-            disabled={authLoading}
-            className="w-full rounded-lg bg-slate-200 px-4 py-3 text-slate-700 hover:bg-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            Sign Out
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
+  const [authMode, setAuthMode] = useState("login");
 
   function getNextSoapStatus(authorRole) {
     if (authorRole === "student" || authorRole === "leadership") {
@@ -272,41 +209,41 @@ export default function App() {
   }
 
   async function logAuditEvent(action, details = {}) {
-  if (!selectedEncounter || !selectedPatient || !session?.user?.id) return;
+    if (!selectedEncounter || !selectedPatient || !session?.user?.id) return;
 
-  try {
-    await createAuditLog({
-  encounterId: selectedEncounter.id,
-  patientId: selectedPatient.id,
-  actorUserId: session.user.id,
-  actorName: profileNameMap[session.user.id] || authFullName || "Unknown User",
-  actorRole: userRole || "",
-  action,
-  details,
-});
-  } catch (error) {
-    console.error("Failed to write audit log:", error);
+    try {
+      await createAuditLog({
+        encounterId: selectedEncounter.id,
+        patientId: selectedPatient.id,
+        actorUserId: session.user.id,
+        actorName: profileNameMap[session.user.id] || authFullName || "Unknown User",
+        actorRole: userRole || "",
+        action,
+        details,
+      });
+    } catch (error) {
+      console.error("Failed to write audit log:", error);
+    }
   }
-}
 
   async function loadAuditLog() {
-  if (!selectedEncounter?.id) {
-    setAuditEntries([]);
-    return;
+    if (!selectedEncounter?.id) {
+      setAuditEntries([]);
+      return;
+    }
+
+    try {
+      setAuditLoading(true);
+      const rows = await fetchAuditLogForEncounter(selectedEncounter.id);
+      setAuditEntries(rows);
+    } catch (error) {
+      console.error("Failed to load audit log:", error);
+      setAuditEntries([]);
+    } finally {
+      setAuditLoading(false);
+    }
   }
 
-  try {
-    setAuditLoading(true);
-    const rows = await fetchAuditLogForEncounter(selectedEncounter.id);
-    setAuditEntries(rows);
-  } catch (error) {
-    console.error("Failed to load audit log:", error);
-    setAuditEntries([]);
-  } finally {
-    setAuditLoading(false);
-  }
-}
-  
   function setIsLeadershipView() {
     // no-op now that role comes from auth
   }
@@ -322,7 +259,7 @@ export default function App() {
     new URLSearchParams(window.location.search).get("display") === "board";
   const [selectedPatientId, setSelectedPatientId] = useState(null);
   const [selectedEncounterId, setSelectedEncounterId] = useState(null);
-  const { patients, setPatients } = useClinicData({authReady,session,userRole,selectedEncounterId,});
+  const { patients, setPatients } = useClinicData({ authReady, session, userRole, selectedEncounterId, });
   const [assignmentForm, setAssignmentForm] = useState({
     studentName: "",
     upperLevelName: "",
@@ -335,11 +272,11 @@ export default function App() {
   const [showMedicationModal, setShowMedicationModal] = useState(false);
   const [newMedication, setNewMedication] = useState(EMPTY_MEDICATION);
   const [editingMedicationId, setEditingMedicationId] = useState(null);
-  const EMPTY_ALLERGY = {allergen: "",reaction: "",severity: "",notes: "",isActive: true,};
+  const EMPTY_ALLERGY = { allergen: "", reaction: "", severity: "", notes: "", isActive: true, };
 
-const [showAllergyModal, setShowAllergyModal] = useState(false);
-const [newAllergy, setNewAllergy] = useState(EMPTY_ALLERGY);
-const [editingAllergyId, setEditingAllergyId] = useState(null);
+  const [showAllergyModal, setShowAllergyModal] = useState(false);
+  const [newAllergy, setNewAllergy] = useState(EMPTY_ALLERGY);
+  const [editingAllergyId, setEditingAllergyId] = useState(null);
   const [isEditingIntake, setIsEditingIntake] = useState(false);
   const [editingPatientId, setEditingPatientId] = useState(null);
   const [intakeMatchPatientId, setIntakeMatchPatientId] = useState(null);
@@ -386,13 +323,13 @@ const [editingAllergyId, setEditingAllergyId] = useState(null);
     showIntakeModal,
     intakeMatchPatientId,
   ]);
-  
+
   useEffect(() => {
     if (activeView === "users" && isLeadershipView) {
       loadProfiles();
     }
   }, [activeView, isLeadershipView]);
-  
+
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       setDebouncedSearchForm(searchForm);
@@ -504,35 +441,35 @@ const [editingAllergyId, setEditingAllergyId] = useState(null);
   }, [allEncounterRows, selectedClinicDate]);
 
 
-const filteredPatients = patients.filter((patient) => {
-  const mrnMatch =
-    !debouncedSearchForm.mrn ||
-    (patient.mrn || "")
-      .toLowerCase()
-      .includes(debouncedSearchForm.mrn.toLowerCase());
+  const filteredPatients = patients.filter((patient) => {
+    const mrnMatch =
+      !debouncedSearchForm.mrn ||
+      (patient.mrn || "")
+        .toLowerCase()
+        .includes(debouncedSearchForm.mrn.toLowerCase());
 
-  const firstNameMatch =
-    !debouncedSearchForm.firstName ||
-    (patient.firstName || "")
-      .toLowerCase()
-      .includes(debouncedSearchForm.firstName.toLowerCase());
+    const firstNameMatch =
+      !debouncedSearchForm.firstName ||
+      (patient.firstName || "")
+        .toLowerCase()
+        .includes(debouncedSearchForm.firstName.toLowerCase());
 
-  const lastNameMatch =
-    !debouncedSearchForm.lastName ||
-    (patient.lastName || "")
-      .toLowerCase()
-      .includes(debouncedSearchForm.lastName.toLowerCase());
+    const lastNameMatch =
+      !debouncedSearchForm.lastName ||
+      (patient.lastName || "")
+        .toLowerCase()
+        .includes(debouncedSearchForm.lastName.toLowerCase());
 
-  const dobMatch =
-    !debouncedSearchForm.dob || patient.dob === debouncedSearchForm.dob;
+    const dobMatch =
+      !debouncedSearchForm.dob || patient.dob === debouncedSearchForm.dob;
 
-  const ssnMatch =
-    !debouncedSearchForm.last4ssn ||
-    (patient.last4ssn || "").includes(debouncedSearchForm.last4ssn);
+    const ssnMatch =
+      !debouncedSearchForm.last4ssn ||
+      (patient.last4ssn || "").includes(debouncedSearchForm.last4ssn);
 
-  return mrnMatch && firstNameMatch && lastNameMatch && dobMatch && ssnMatch;
-});
-  
+    return mrnMatch && firstNameMatch && lastNameMatch && dobMatch && ssnMatch;
+  });
+
   const visiblePatientIds = new Set(
     visibleEncounterRows.map(({ patient }) => patient.id)
   );
@@ -593,150 +530,150 @@ const filteredPatients = patients.filter((patient) => {
   const [savingProfileId, setSavingProfileId] = useState(null);
   const [profilesMessage, setProfilesMessage] = useState("");
   const [userSearch, setUserSearch] = useState("");
-const [editingProfileNameId, setEditingProfileNameId] = useState(null);
-const [editingProfileNameValue, setEditingProfileNameValue] = useState("");
-const [showOnlyActiveToday, setShowOnlyActiveToday] = useState(false);
+  const [editingProfileNameId, setEditingProfileNameId] = useState(null);
+  const [editingProfileNameValue, setEditingProfileNameValue] = useState("");
+  const [showOnlyActiveToday, setShowOnlyActiveToday] = useState(false);
 
 
-const filteredProfiles = useMemo(() => {
-  let nextProfiles = profiles;
+  const filteredProfiles = useMemo(() => {
+    let nextProfiles = profiles;
 
-  if (showOnlyActiveToday) {
-    nextProfiles = nextProfiles.filter((profile) =>
-      isToday(profile.last_seen_at)
-    );
-  }
+    if (showOnlyActiveToday) {
+      nextProfiles = nextProfiles.filter((profile) =>
+        isToday(profile.last_seen_at)
+      );
+    }
 
-  const query = userSearch.trim().toLowerCase();
-  if (!query) return nextProfiles;
+    const query = userSearch.trim().toLowerCase();
+    if (!query) return nextProfiles;
 
-  return nextProfiles.filter((profile) => {
-    const fullName = (profile.full_name || "").toLowerCase();
-    const role = (profile.role || "").toLowerCase();
-    const classification = (profile.classification || "").toLowerCase();
-    const id = (profile.id || "").toLowerCase();
+    return nextProfiles.filter((profile) => {
+      const fullName = (profile.full_name || "").toLowerCase();
+      const role = (profile.role || "").toLowerCase();
+      const classification = (profile.classification || "").toLowerCase();
+      const id = (profile.id || "").toLowerCase();
 
-    return (
-      fullName.includes(query) ||
-      role.includes(query) ||
-      classification.includes(query) ||
-      id.includes(query)
-    );
-  });
-}, [profiles, userSearch, showOnlyActiveToday]);
+      return (
+        fullName.includes(query) ||
+        role.includes(query) ||
+        classification.includes(query) ||
+        id.includes(query)
+      );
+    });
+  }, [profiles, userSearch, showOnlyActiveToday]);
 
   useEffect(() => {
-  if (session && profiles.length === 0) {
-    loadProfiles();
-  }
-}, [session, profiles.length]);
+    if (session && profiles.length === 0) {
+      loadProfiles();
+    }
+  }, [session, profiles.length]);
 
-const profileNameMap = useMemo(() => {
-  const map = {};
+  const profileNameMap = useMemo(() => {
+    const map = {};
 
-  profiles.forEach((profile) => {
-    map[profile.id] = profile.full_name || "Unknown User";
-  });
+    profiles.forEach((profile) => {
+      map[profile.id] = profile.full_name || "Unknown User";
+    });
 
-  if (session?.user?.id && authFullName) {
-    map[session.user.id] = authFullName;
-  }
+    if (session?.user?.id && authFullName) {
+      map[session.user.id] = authFullName;
+    }
 
-  return map;
-}, [profiles, session?.user?.id, authFullName]);
+    return map;
+  }, [profiles, session?.user?.id, authFullName]);
 
-const soapAuthorName = selectedEncounter?.soapAuthorId
-  ? profileNameMap[selectedEncounter.soapAuthorId] || "Unknown User"
-  : "";
+  const soapAuthorName = selectedEncounter?.soapAuthorId
+    ? profileNameMap[selectedEncounter.soapAuthorId] || "Unknown User"
+    : "";
 
-const upperLevelSignerName = selectedEncounter?.upperLevelSignedBy
-  ? profileNameMap[selectedEncounter.upperLevelSignedBy] || "Unknown User"
-  : "";
+  const upperLevelSignerName = selectedEncounter?.upperLevelSignedBy
+    ? profileNameMap[selectedEncounter.upperLevelSignedBy] || "Unknown User"
+    : "";
 
-const attendingSignerName = selectedEncounter?.attendingSignedBy
-  ? profileNameMap[selectedEncounter.attendingSignedBy] || "Unknown User"
-  : "";
+  const attendingSignerName = selectedEncounter?.attendingSignedBy
+    ? profileNameMap[selectedEncounter.attendingSignedBy] || "Unknown User"
+    : "";
 
-  
+
 
   const filteredEncounterRows = visibleEncounterRows.filter(({ patient }) =>
     filteredPatients.some((p) => p.id === patient.id)
   );
 
-const waitingEncounterRows = useMemo(() => {
-  const todayClinicDate = formatClinicDate();
+  const waitingEncounterRows = useMemo(() => {
+    const todayClinicDate = formatClinicDate();
 
-  const queueBaseRows = filteredEncounterRows.filter(
-    ({ encounter }) =>
-      normalizeClinicDate(encounter.clinicDate) === todayClinicDate
-  );
-
-  const currentUserName = (
-    profileNameMap[session?.user?.id] ||
-    authFullName ||
-    ""
-  ).trim();
-
-  let rows = queueBaseRows;
-
-  if (userRole === "student") {
-    rows = queueBaseRows.filter(({ encounter }) =>
-      (encounter.assignedStudent || "")
-        .trim()
-        .toLowerCase()
-        .includes(currentUserName.toLowerCase())
+    const queueBaseRows = filteredEncounterRows.filter(
+      ({ encounter }) =>
+        normalizeClinicDate(encounter.clinicDate) === todayClinicDate
     );
-  } else if (userRole === "upper_level") {
-    rows = queueBaseRows.filter(({ encounter }) =>
-      (encounter.assignedUpperLevel || "")
-        .trim()
-        .toLowerCase()
-        .includes(currentUserName.toLowerCase())
-    );
-  } else if (userRole === "attending") {
-    rows = queueBaseRows.filter(
-      ({ encounter }) => encounter.soapStatus === "awaiting_attending"
-    );
-  } else {
-    rows = [...queueBaseRows].sort((a, b) => {
-      const aUnassigned =
-        !a.encounter.assignedStudent && !a.encounter.assignedUpperLevel
-          ? 0
-          : 1;
-      const bUnassigned =
-        !b.encounter.assignedStudent && !b.encounter.assignedUpperLevel
-          ? 0
-          : 1;
 
-      if (aUnassigned !== bUnassigned) return aUnassigned - bUnassigned;
+    const currentUserName = (
+      profileNameMap[session?.user?.id] ||
+      authFullName ||
+      ""
+    ).trim();
 
-      const aBus =
-        a.encounter.transportation === "Bus/Public Transport" ? 0 : 1;
-      const bBus =
-        b.encounter.transportation === "Bus/Public Transport" ? 0 : 1;
+    let rows = queueBaseRows;
 
-      if (aBus !== bBus) return aBus - bBus;
+    if (userRole === "student") {
+      rows = queueBaseRows.filter(({ encounter }) =>
+        (encounter.assignedStudent || "")
+          .trim()
+          .toLowerCase()
+          .includes(currentUserName.toLowerCase())
+      );
+    } else if (userRole === "upper_level") {
+      rows = queueBaseRows.filter(({ encounter }) =>
+        (encounter.assignedUpperLevel || "")
+          .trim()
+          .toLowerCase()
+          .includes(currentUserName.toLowerCase())
+      );
+    } else if (userRole === "attending") {
+      rows = queueBaseRows.filter(
+        ({ encounter }) => encounter.soapStatus === "awaiting_attending"
+      );
+    } else {
+      rows = [...queueBaseRows].sort((a, b) => {
+        const aUnassigned =
+          !a.encounter.assignedStudent && !a.encounter.assignedUpperLevel
+            ? 0
+            : 1;
+        const bUnassigned =
+          !b.encounter.assignedStudent && !b.encounter.assignedUpperLevel
+            ? 0
+            : 1;
 
+        if (aUnassigned !== bUnassigned) return aUnassigned - bUnassigned;
+
+        const aBus =
+          a.encounter.transportation === "Bus/Public Transport" ? 0 : 1;
+        const bBus =
+          b.encounter.transportation === "Bus/Public Transport" ? 0 : 1;
+
+        if (aBus !== bBus) return aBus - bBus;
+
+        const aTime = new Date(a.encounter.createdAt || 0).getTime();
+        const bTime = new Date(b.encounter.createdAt || 0).getTime();
+        return aTime - bTime;
+      });
+
+      return rows;
+    }
+
+    return [...rows].sort((a, b) => {
       const aTime = new Date(a.encounter.createdAt || 0).getTime();
       const bTime = new Date(b.encounter.createdAt || 0).getTime();
       return aTime - bTime;
     });
-
-    return rows;
-  }
-
-  return [...rows].sort((a, b) => {
-    const aTime = new Date(a.encounter.createdAt || 0).getTime();
-    const bTime = new Date(b.encounter.createdAt || 0).getTime();
-    return aTime - bTime;
-  });
-}, [
-  filteredEncounterRows,
-  profileNameMap,
-  session?.user?.id,
-  authFullName,
-  userRole,
-]);
+  }, [
+    filteredEncounterRows,
+    profileNameMap,
+    session?.user?.id,
+    authFullName,
+    userRole,
+  ]);
 
   const assignedCount = filteredEncounterRows.filter(
     ({ encounter }) => encounter.status === "Assigned"
@@ -745,7 +682,7 @@ const waitingEncounterRows = useMemo(() => {
   const inVisitCount = filteredEncounterRows.filter(
     ({ encounter }) => encounter.status === "In Visit"
   ).length;
- 
+
 
   const roomMap = useMemo(() => {
     const map = {};
@@ -836,17 +773,17 @@ const waitingEncounterRows = useMemo(() => {
   }
 
   function isToday(dateString) {
-      if (!dateString) return false;
+    if (!dateString) return false;
 
-      const date = new Date(dateString);
-      const today = new Date();
+    const date = new Date(dateString);
+    const today = new Date();
 
-      return (
-        date.getFullYear() === today.getFullYear() &&
-        date.getMonth() === today.getMonth() &&
-        date.getDate() === today.getDate()
-      );
-    }
+    return (
+      date.getFullYear() === today.getFullYear() &&
+      date.getMonth() === today.getMonth() &&
+      date.getDate() === today.getDate()
+    );
+  }
 
   async function loadProfiles() {
     try {
@@ -860,131 +797,171 @@ const waitingEncounterRows = useMemo(() => {
     } finally {
       setLoadingProfiles(false);
     }
-    
+
   }
 
- const activeTodayProfiles = useMemo(() => {
-  return profiles.filter((profile) => isToday(profile.last_seen_at));
-}, [profiles]);
+  const activeTodayProfiles = useMemo(() => {
+    return profiles.filter((profile) => isToday(profile.last_seen_at));
+  }, [profiles]);
 
-const activeStudents = useMemo(() => {
-  return activeTodayProfiles.filter((profile) => profile.role === "student");
-}, [activeTodayProfiles]);
+  const activeStudents = useMemo(() => {
+    return activeTodayProfiles.filter((profile) => profile.role === "student");
+  }, [activeTodayProfiles]);
 
-const studentNameOptions = useMemo(() => {
-  const activeNames = activeStudents
-    .map((profile) => (profile.full_name || "").trim())
-    .filter(Boolean);
+  const studentNameOptions = useMemo(() => {
+    const activeNames = activeStudents
+      .map((profile) => (profile.full_name || "").trim())
+      .filter(Boolean);
 
-  const inactiveNames = profiles
-    .filter(
-      (profile) =>
-        profile.role === "student" &&
-        !activeStudents.some((active) => active.id === profile.id)
-    )
-    .map((profile) => (profile.full_name || "").trim())
-    .filter(Boolean);
+    const inactiveNames = profiles
+      .filter(
+        (profile) =>
+          profile.role === "student" &&
+          !activeStudents.some((active) => active.id === profile.id)
+      )
+      .map((profile) => (profile.full_name || "").trim())
+      .filter(Boolean);
 
-  return [...activeNames.sort((a, b) => a.localeCompare(b)), ...inactiveNames.sort((a, b) => a.localeCompare(b))];
-}, [profiles, activeStudents]);
+    return [...activeNames.sort((a, b) => a.localeCompare(b)), ...inactiveNames.sort((a, b) => a.localeCompare(b))];
+  }, [profiles, activeStudents]);
 
-const activeUpperLevels = useMemo(() => {
-  return activeTodayProfiles.filter((profile) => profile.role === "upper_level");
-}, [activeTodayProfiles]);
+  const activeUpperLevels = useMemo(() => {
+    return activeTodayProfiles.filter((profile) => profile.role === "upper_level");
+  }, [activeTodayProfiles]);
 
-const upperLevelNameOptions = useMemo(() => {
-  const activeNames = activeUpperLevels
-    .map((profile) => (profile.full_name || "").trim())
-    .filter(Boolean);
+  const upperLevelNameOptions = useMemo(() => {
+    const activeNames = activeUpperLevels
+      .map((profile) => (profile.full_name || "").trim())
+      .filter(Boolean);
 
-  const inactiveNames = profiles
-    .filter(
-      (profile) =>
-        profile.role === "upper_level" &&
-        !activeUpperLevels.some((active) => active.id === profile.id)
-    )
-    .map((profile) => (profile.full_name || "").trim())
-    .filter(Boolean);
+    const inactiveNames = profiles
+      .filter(
+        (profile) =>
+          profile.role === "upper_level" &&
+          !activeUpperLevels.some((active) => active.id === profile.id)
+      )
+      .map((profile) => (profile.full_name || "").trim())
+      .filter(Boolean);
 
-  return [...activeNames.sort((a, b) => a.localeCompare(b)), ...inactiveNames.sort((a, b) => a.localeCompare(b))];
-}, [profiles, activeUpperLevels]);
+    return [...activeNames.sort((a, b) => a.localeCompare(b)), ...inactiveNames.sort((a, b) => a.localeCompare(b))];
+  }, [profiles, activeUpperLevels]);
 
-async function handleChangeProfileRole(profileId, nextRole, nextClassification = null) {
-  if (!isLeadershipView) return;
+  const activeAttendings = useMemo(() => {
+    return activeTodayProfiles.filter((profile) => profile.role === "attending");
+  }, [activeTodayProfiles]);
 
-  const currentUserId = session?.user?.id;
+  async function handleChangeProfileRole(profileId, nextRole, nextClassification = null) {
+    if (!isLeadershipView) return;
 
-  const currentProfile = profiles.find((profile) => profile.id === profileId);
-  const effectiveRole = nextRole ?? currentProfile?.role ?? "student";
-  const effectiveClassification =
-    nextClassification !== null ? nextClassification : currentProfile?.classification ?? null;
+    const currentUserId = session?.user?.id;
 
-  if (profileId === currentUserId && effectiveRole !== "leadership") {
-    setProfilesMessage("You cannot remove your own leadership role.");
-    return;
-  }
+    const currentProfile = profiles.find((profile) => profile.id === profileId);
+    const effectiveRole = nextRole ?? currentProfile?.role ?? "student";
+    const effectiveClassification =
+      nextClassification !== null ? nextClassification : currentProfile?.classification ?? null;
 
-  const previousProfiles = profiles;
+    if (profileId === currentUserId && effectiveRole !== "leadership") {
+      setProfilesMessage("You cannot remove your own leadership role.");
+      return;
+    }
 
-  setProfiles((prev) =>
-    prev.map((profile) =>
-      profile.id === profileId
-        ? {
+    const previousProfiles = profiles;
+
+    setProfiles((prev) =>
+      prev.map((profile) =>
+        profile.id === profileId
+          ? {
             ...profile,
             role: effectiveRole,
             classification: effectiveClassification,
           }
-        : profile
-    )
-  );
+          : profile
+      )
+    );
 
-  try {
-    setSavingProfileId(profileId);
-    setProfilesMessage("");
-    await updateProfileRole(profileId, effectiveRole, effectiveClassification);
-    setProfilesMessage("User updated successfully.");
-  } catch (error) {
-    console.error("Failed to update profile role:", error);
-    setProfiles(previousProfiles);
-    setProfilesMessage(`Failed to update user: ${error.message}`);
-  } finally {
-    setSavingProfileId(null);
-  }
-}
-
-async function handleSaveProfileName(profileId) {
-  const trimmedName = editingProfileNameValue.trim();
-
-  if (!trimmedName) {
-    setProfilesMessage("Full name cannot be blank.");
-    return;
+    try {
+      setSavingProfileId(profileId);
+      setProfilesMessage("");
+      await updateProfileRole(profileId, effectiveRole, effectiveClassification);
+      setProfilesMessage("User updated successfully.");
+    } catch (error) {
+      console.error("Failed to update profile role:", error);
+      setProfiles(previousProfiles);
+      setProfilesMessage(`Failed to update user: ${error.message}`);
+    } finally {
+      setSavingProfileId(null);
+    }
   }
 
-  const previousProfiles = profiles;
+  async function handleSaveProfileName(profileId) {
+    const trimmedName = editingProfileNameValue.trim();
 
-  setProfiles((prev) =>
-    prev.map((profile) =>
-      profile.id === profileId
-        ? { ...profile, full_name: trimmedName }
-        : profile
-    )
-  );
+    if (!trimmedName) {
+      setProfilesMessage("Full name cannot be blank.");
+      return;
+    }
 
-  try {
-    setSavingProfileId(profileId);
-    setProfilesMessage("");
-    await updateProfileDetails(profileId, { full_name: trimmedName });
-    setEditingProfileNameId(null);
-    setEditingProfileNameValue("");
-    setProfilesMessage("User updated successfully.");
-  } catch (error) {
-    console.error("Failed to update profile name:", error);
-    setProfiles(previousProfiles);
-    setProfilesMessage(`Failed to update user: ${error.message}`);
-  } finally {
-    setSavingProfileId(null);
+    const previousProfiles = profiles;
+
+    setProfiles((prev) =>
+      prev.map((profile) =>
+        profile.id === profileId
+          ? { ...profile, full_name: trimmedName }
+          : profile
+      )
+    );
+
+    try {
+      setSavingProfileId(profileId);
+      setProfilesMessage("");
+      await updateProfileDetails(profileId, { full_name: trimmedName });
+      setEditingProfileNameId(null);
+      setEditingProfileNameValue("");
+      setProfilesMessage("User updated successfully.");
+    } catch (error) {
+      console.error("Failed to update profile name:", error);
+      setProfiles(previousProfiles);
+      setProfilesMessage(`Failed to update user: ${error.message}`);
+    } finally {
+      setSavingProfileId(null);
+    }
   }
-}
+
+  async function handleApproveUser(profileId) {
+    if (!isLeadershipView) return;
+
+    const previousProfiles = profiles;
+
+    setProfiles((prev) =>
+      prev.map((profile) =>
+        profile.id === profileId
+          ? {
+            ...profile,
+            approval_status: "approved",
+            approved_by: session?.user?.id || null,
+            approved_at: new Date().toISOString(),
+          }
+          : profile
+      )
+    );
+
+    try {
+      setSavingProfileId(profileId);
+      setProfilesMessage("");
+      await updateProfileDetails(profileId, {
+        approval_status: "approved",
+        approved_by: session?.user?.id || null,
+        approved_at: new Date().toISOString(),
+      });
+      setProfilesMessage("User approved successfully.");
+    } catch (error) {
+      console.error("Failed to approve user:", error);
+      setProfiles(previousProfiles);
+      setProfilesMessage(`Failed to approve user: ${error.message}`);
+    } finally {
+      setSavingProfileId(null);
+    }
+  }
 
   function openEditIntake() {
     if (!selectedPatient || !selectedEncounter) return;
@@ -1461,135 +1438,135 @@ async function handleSaveProfileName(profileId) {
   }
 
   async function assignEncounterFromQueue(encounterId, updates) {
-  if (!canManageRooms) return;
+    if (!canManageRooms) return;
 
-  const targetRow = allEncounterRows.find(
-    ({ encounter }) => encounter.id === encounterId
-  );
-  if (!targetRow) return;
-
-  const { patient, encounter } = targetRow;
-
-  const nextStudent =
-    updates.assignedStudent !== undefined
-      ? updates.assignedStudent
-      : encounter.assignedStudent || "";
-
-  const nextUpperLevel =
-    updates.assignedUpperLevel !== undefined
-      ? updates.assignedUpperLevel
-      : encounter.assignedUpperLevel || "";
-
-  const nextRoomNumber =
-    updates.roomNumber !== undefined
-      ? updates.roomNumber
-      : encounter.roomNumber || "";
-
-  const numericRoom = nextRoomNumber ? Number(nextRoomNumber) : null;
-
-  if (
-    numericRoom !== null &&
-    isPapRestricted(encounter) &&
-    (numericRoom === 9 || numericRoom === 10)
-  ) {
-    alert("Pap smear patients cannot be assigned to Room 9 or Room 10.");
-    return;
-  }
-
-  if (numericRoom !== null) {
-    const takenByOtherEncounter = allEncounterRows.some(
-      ({ patient: otherPatient, encounter: otherEncounter }) =>
-        otherPatient.id !== patient.id &&
-        otherEncounter.id !== encounter.id &&
-        Number(otherEncounter.roomNumber) === numericRoom &&
-        otherEncounter.status !== "Completed"
+    const targetRow = allEncounterRows.find(
+      ({ encounter }) => encounter.id === encounterId
     );
+    if (!targetRow) return;
 
-    if (takenByOtherEncounter) {
-      alert("That room is already in use.");
+    const { patient, encounter } = targetRow;
+
+    const nextStudent =
+      updates.assignedStudent !== undefined
+        ? updates.assignedStudent
+        : encounter.assignedStudent || "";
+
+    const nextUpperLevel =
+      updates.assignedUpperLevel !== undefined
+        ? updates.assignedUpperLevel
+        : encounter.assignedUpperLevel || "";
+
+    const nextRoomNumber =
+      updates.roomNumber !== undefined
+        ? updates.roomNumber
+        : encounter.roomNumber || "";
+
+    const numericRoom = nextRoomNumber ? Number(nextRoomNumber) : null;
+
+    if (
+      numericRoom !== null &&
+      isPapRestricted(encounter) &&
+      (numericRoom === 9 || numericRoom === 10)
+    ) {
+      alert("Pap smear patients cannot be assigned to Room 9 or Room 10.");
       return;
     }
-  }
 
-  const hasAnyAssignment = !!nextStudent || !!nextUpperLevel || !!nextRoomNumber;
+    if (numericRoom !== null) {
+      const takenByOtherEncounter = allEncounterRows.some(
+        ({ patient: otherPatient, encounter: otherEncounter }) =>
+          otherPatient.id !== patient.id &&
+          otherEncounter.id !== encounter.id &&
+          Number(otherEncounter.roomNumber) === numericRoom &&
+          otherEncounter.status !== "Completed"
+      );
 
-  try {
-    await updateEncounterInSupabase(encounterId, {
-      assignedStudent: nextStudent,
-      assignedUpperLevel: nextUpperLevel,
-      roomNumber: nextRoomNumber || null,
-      status: hasAnyAssignment
-        ? encounter.status === "Waiting"
-          ? "Assigned"
-          : encounter.status
-        : encounter.status,
-    });
+      if (takenByOtherEncounter) {
+        alert("That room is already in use.");
+        return;
+      }
+    }
 
-    setPatients((prev) =>
-      prev.map((p) =>
-        p.id === patient.id
-          ? {
+    const hasAnyAssignment = !!nextStudent || !!nextUpperLevel || !!nextRoomNumber;
+
+    try {
+      await updateEncounterInSupabase(encounterId, {
+        assignedStudent: nextStudent,
+        assignedUpperLevel: nextUpperLevel,
+        roomNumber: nextRoomNumber || null,
+        status: hasAnyAssignment
+          ? encounter.status === "Waiting"
+            ? "Assigned"
+            : encounter.status
+          : encounter.status,
+      });
+
+      setPatients((prev) =>
+        prev.map((p) =>
+          p.id === patient.id
+            ? {
               ...p,
               encounters: p.encounters.map((e) =>
                 e.id === encounterId
                   ? {
-                      ...e,
-                      assignedStudent: nextStudent,
-                      assignedUpperLevel: nextUpperLevel,
-                      roomNumber: nextRoomNumber || "",
-                      status: hasAnyAssignment
-                        ? e.status === "Waiting"
-                          ? "Assigned"
-                          : e.status
-                        : e.status,
-                    }
+                    ...e,
+                    assignedStudent: nextStudent,
+                    assignedUpperLevel: nextUpperLevel,
+                    roomNumber: nextRoomNumber || "",
+                    status: hasAnyAssignment
+                      ? e.status === "Waiting"
+                        ? "Assigned"
+                        : e.status
+                      : e.status,
+                  }
                   : e
               ),
             }
-          : p
-      )
-    );
-  } catch (error) {
-    console.error("Failed to assign encounter from queue:", error);
-    alert(`Failed to save assignment: ${error.message}`);
+            : p
+        )
+      );
+    } catch (error) {
+      console.error("Failed to assign encounter from queue:", error);
+      alert(`Failed to save assignment: ${error.message}`);
+    }
   }
-}
 
   async function assignEncounter() {
     if (!canManageRooms) return;
     if (leadershipActionLocked) return;
     if (!selectedPatient || !selectedEncounter) return;
     if (
-  !assignmentForm.studentName &&
-  !assignmentForm.upperLevelName &&
-  !assignmentForm.roomNumber
-) return;
+      !assignmentForm.studentName &&
+      !assignmentForm.upperLevelName &&
+      !assignmentForm.roomNumber
+    ) return;
 
     lockLeadershipActions();
 
     const roomNumber = assignmentForm.roomNumber
-  ? Number(assignmentForm.roomNumber)
-  : null;
+      ? Number(assignmentForm.roomNumber)
+      : null;
 
     if (roomNumber !== null) {
-  if (isPapRestricted(selectedEncounter) && (roomNumber === 9 || roomNumber === 10)) {
-    alert("Pap smear patients cannot be assigned to Room 9 or Room 10.");
-    return;
-  }
+      if (isPapRestricted(selectedEncounter) && (roomNumber === 9 || roomNumber === 10)) {
+        alert("Pap smear patients cannot be assigned to Room 9 or Room 10.");
+        return;
+      }
 
-  const takenByOtherEncounter = allEncounterRows.some(
-    ({ patient, encounter }) =>
-      patient.id !== selectedPatient.id &&
-      encounter.id !== selectedEncounter.id &&
-      Number(encounter.roomNumber) === roomNumber &&
-      encounter.status !== "Completed"
-  );
+      const takenByOtherEncounter = allEncounterRows.some(
+        ({ patient, encounter }) =>
+          patient.id !== selectedPatient.id &&
+          encounter.id !== selectedEncounter.id &&
+          Number(encounter.roomNumber) === roomNumber &&
+          encounter.status !== "Completed"
+      );
 
-  if (takenByOtherEncounter) {
-    alert("That room is already in use.");
-    return;
-  }
-}
+      if (takenByOtherEncounter) {
+        alert("That room is already in use.");
+        return;
+      }
+    }
 
     try {
       await updateEncounterInSupabase(selectedEncounter.id, {
@@ -2152,17 +2129,17 @@ async function handleSaveProfileName(profileId) {
   }
 
   async function addOrUpdateAllergy() {
-  if (!selectedPatient) return;
-  if (!newAllergy.allergen.trim()) return;
+    if (!selectedPatient) return;
+    if (!newAllergy.allergen.trim()) return;
 
-  if (editingAllergyId !== null) {
-    try {
-      await updateAllergyInSupabase(editingAllergyId, newAllergy);
+    if (editingAllergyId !== null) {
+      try {
+        await updateAllergyInSupabase(editingAllergyId, newAllergy);
 
-      setPatients((prev) =>
-        prev.map((patient) =>
-          patient.id === selectedPatient.id
-            ? {
+        setPatients((prev) =>
+          prev.map((patient) =>
+            patient.id === selectedPatient.id
+              ? {
                 ...patient,
                 allergyList: (patient.allergyList || []).map((allergy) =>
                   allergy.id === editingAllergyId
@@ -2170,22 +2147,22 @@ async function handleSaveProfileName(profileId) {
                     : allergy
                 ),
               }
-            : patient
-        )
-      );
-    } catch (error) {
-      console.error("Failed to update allergy:", error);
-      alert(`Failed to update allergy: ${error.message}`);
-      return;
-    }
-  } else {
-    try {
-      const savedAllergy = await createAllergyInSupabase(selectedPatient.id, newAllergy);
+              : patient
+          )
+        );
+      } catch (error) {
+        console.error("Failed to update allergy:", error);
+        alert(`Failed to update allergy: ${error.message}`);
+        return;
+      }
+    } else {
+      try {
+        const savedAllergy = await createAllergyInSupabase(selectedPatient.id, newAllergy);
 
-      setPatients((prev) =>
-        prev.map((patient) =>
-          patient.id === selectedPatient.id
-            ? {
+        setPatients((prev) =>
+          prev.map((patient) =>
+            patient.id === selectedPatient.id
+              ? {
                 ...patient,
                 allergyList: [
                   {
@@ -2199,419 +2176,517 @@ async function handleSaveProfileName(profileId) {
                   ...(patient.allergyList || []),
                 ],
               }
-            : patient
-        )
-      );
-    } catch (error) {
-      console.error("Failed to create allergy:", error);
-      alert(`Failed to create allergy: ${error.message}`);
-      return;
+              : patient
+          )
+        );
+      } catch (error) {
+        console.error("Failed to create allergy:", error);
+        alert(`Failed to create allergy: ${error.message}`);
+        return;
+      }
     }
+
+    setNewAllergy(EMPTY_ALLERGY);
+    setEditingAllergyId(null);
+    setShowAllergyModal(false);
   }
 
-  setNewAllergy(EMPTY_ALLERGY);
-  setEditingAllergyId(null);
-  setShowAllergyModal(false);
-}
+  function startEditAllergy(allergy) {
+    setNewAllergy({
+      allergen: allergy.allergen || "",
+      reaction: allergy.reaction || "",
+      severity: allergy.severity || "",
+      notes: allergy.notes || "",
+      isActive: allergy.isActive ?? true,
+    });
+    setEditingAllergyId(allergy.id);
+    setShowAllergyModal(true);
+  }
 
-function startEditAllergy(allergy) {
-  setNewAllergy({
-    allergen: allergy.allergen || "",
-    reaction: allergy.reaction || "",
-    severity: allergy.severity || "",
-    notes: allergy.notes || "",
-    isActive: allergy.isActive ?? true,
-  });
-  setEditingAllergyId(allergy.id);
-  setShowAllergyModal(true);
-}
+  async function deleteAllergy(allergyId) {
+    if (!selectedPatient) return;
 
-async function deleteAllergy(allergyId) {
-  if (!selectedPatient) return;
+    const confirmed = window.confirm("Delete this allergy?");
+    if (!confirmed) return;
 
-  const confirmed = window.confirm("Delete this allergy?");
-  if (!confirmed) return;
+    try {
+      await deleteAllergyInSupabase(allergyId);
 
-  try {
-    await deleteAllergyInSupabase(allergyId);
-
-    setPatients((prev) =>
-      prev.map((patient) =>
-        patient.id === selectedPatient.id
-          ? {
+      setPatients((prev) =>
+        prev.map((patient) =>
+          patient.id === selectedPatient.id
+            ? {
               ...patient,
               allergyList: (patient.allergyList || []).filter(
                 (allergy) => allergy.id !== allergyId
               ),
             }
-          : patient
-      )
-    );
-  } catch (error) {
-    console.error("Failed to delete allergy:", error);
-    alert(`Failed to delete allergy: ${error.message}`);
+            : patient
+        )
+      );
+    } catch (error) {
+      console.error("Failed to delete allergy:", error);
+      alert(`Failed to delete allergy: ${error.message}`);
+    }
   }
-}
 
-async function saveSoapNote(showConfirmation = true) {
-  if (!selectedPatient || !selectedEncounter || !session?.user?.id || !userRole) return;
+  async function saveSoapNote(showConfirmation = true) {
+    if (!selectedPatient || !selectedEncounter || !session?.user?.id || !userRole) return;
 
-  const authorId = selectedEncounter.soapAuthorId || session.user.id;
-  const authorRole = selectedEncounter.soapAuthorRole || userRole;
-  const currentSoapStatus = selectedEncounter.soapStatus || "draft";
+    const authorId = selectedEncounter.soapAuthorId || session.user.id;
+    const authorRole = selectedEncounter.soapAuthorRole || userRole;
+    const currentSoapStatus = selectedEncounter.soapStatus || "draft";
 
-  try {
-    setSoapBusy(true);
+    try {
+      setSoapBusy(true);
 
-    if (showConfirmation) {
+      if (showConfirmation) {
+        setSoapUiMessage("Saving...");
+      }
+
+      await updateEncounterInSupabase(selectedEncounter.id, {
+        soapSubjective: selectedEncounter.soapSubjective || "",
+        soapObjective: selectedEncounter.soapObjective || "",
+        soapAssessment: selectedEncounter.soapAssessment || "",
+        soapPlan: selectedEncounter.soapPlan || "",
+        notes: selectedEncounter.notes || "",
+        soapAuthorId: authorId,
+        soapAuthorRole: authorRole,
+        soapStatus: currentSoapStatus,
+      });
+
+      setPatients((prev) =>
+        prev.map((patient) =>
+          patient.id === selectedPatient.id
+            ? {
+              ...patient,
+              encounters: patient.encounters.map((encounter) =>
+                encounter.id === selectedEncounter.id
+                  ? {
+                    ...encounter,
+                    soapAuthorId: authorId,
+                    soapAuthorRole: authorRole,
+                    soapStatus: currentSoapStatus,
+                    soapSavedAt: new Date().toLocaleString(),
+                  }
+                  : encounter
+              ),
+            }
+            : patient
+        )
+      );
+
+      if (showConfirmation) {
+        showSoapMessage("SOAP note saved.");
+      }
+    } catch (error) {
+      console.error("Failed to save SOAP note:", error);
+      showSoapMessage(`Failed to save SOAP note: ${error.message}`);
+    } finally {
+      setSoapBusy(false);
+    }
+  }
+
+  async function submitSoapForUpperLevel() {
+    if (!selectedPatient || !selectedEncounter || !session?.user?.id || !userRole) return;
+
+    const missingFields = getMissingSoapFields(selectedEncounter);
+    if (missingFields.length > 0) {
+      showSoapMessage(`Complete before submitting: ${missingFields.join(", ")}`);
+      return;
+    }
+
+    const authorId = selectedEncounter.soapAuthorId || session.user.id;
+    const authorRole = selectedEncounter.soapAuthorRole || userRole;
+
+    try {
+      setSoapBusy(true);
       setSoapUiMessage("Saving...");
+
+      await updateEncounterInSupabase(selectedEncounter.id, {
+        soapSubjective: selectedEncounter.soapSubjective || "",
+        soapObjective: selectedEncounter.soapObjective || "",
+        soapAssessment: selectedEncounter.soapAssessment || "",
+        soapPlan: selectedEncounter.soapPlan || "",
+        notes: selectedEncounter.notes || "",
+        soapAuthorId: authorId,
+        soapAuthorRole: authorRole,
+        soapStatus: "awaiting_upper",
+      });
+
+      setPatients((prev) =>
+        prev.map((patient) =>
+          patient.id === selectedPatient.id
+            ? {
+              ...patient,
+              encounters: patient.encounters.map((encounter) =>
+                encounter.id === selectedEncounter.id
+                  ? {
+                    ...encounter,
+                    soapAuthorId: authorId,
+                    soapAuthorRole: authorRole,
+                    soapStatus: "awaiting_upper",
+                    soapSavedAt: new Date().toLocaleString(),
+                  }
+                  : encounter
+              ),
+            }
+            : patient
+        )
+      );
+      await logAuditEvent("soap_submitted_upper", {
+        soapStatus: "awaiting_upper",
+      });
+      await loadAuditLog();
+      showSoapMessage("SOAP note submitted for upper-level signature.");
+    } catch (error) {
+      console.error("Failed to submit SOAP for upper-level signature:", error);
+      showSoapMessage(`Failed to submit SOAP: ${error.message}`);
+    } finally {
+      setSoapBusy(false);
+    }
+  }
+
+  async function submitSoapForAttending() {
+    if (!selectedPatient || !selectedEncounter || !session?.user?.id || !userRole) return;
+
+    const missingFields = getMissingSoapFields(selectedEncounter);
+    if (missingFields.length > 0) {
+      showSoapMessage(`Complete before submitting: ${missingFields.join(", ")}`);
+      return;
     }
 
-    await updateEncounterInSupabase(selectedEncounter.id, {
-      soapSubjective: selectedEncounter.soapSubjective || "",
-      soapObjective: selectedEncounter.soapObjective || "",
-      soapAssessment: selectedEncounter.soapAssessment || "",
-      soapPlan: selectedEncounter.soapPlan || "",
-      notes: selectedEncounter.notes || "",
-      soapAuthorId: authorId,
-      soapAuthorRole: authorRole,
-      soapStatus: currentSoapStatus,
-    });
+    const authorId = selectedEncounter.soapAuthorId || session.user.id;
+    const authorRole = selectedEncounter.soapAuthorRole || userRole;
 
-    setPatients((prev) =>
-      prev.map((patient) =>
-        patient.id === selectedPatient.id
-          ? {
+    try {
+      setSoapBusy(true);
+      setSoapUiMessage("Saving...");
+
+      await updateEncounterInSupabase(selectedEncounter.id, {
+        soapSubjective: selectedEncounter.soapSubjective || "",
+        soapObjective: selectedEncounter.soapObjective || "",
+        soapAssessment: selectedEncounter.soapAssessment || "",
+        soapPlan: selectedEncounter.soapPlan || "",
+        notes: selectedEncounter.notes || "",
+        soapAuthorId: authorId,
+        soapAuthorRole: authorRole,
+        soapStatus: "awaiting_attending",
+      });
+
+      setPatients((prev) =>
+        prev.map((patient) =>
+          patient.id === selectedPatient.id
+            ? {
               ...patient,
               encounters: patient.encounters.map((encounter) =>
                 encounter.id === selectedEncounter.id
                   ? {
-                      ...encounter,
-                      soapAuthorId: authorId,
-                      soapAuthorRole: authorRole,
-                      soapStatus: currentSoapStatus,
-                      soapSavedAt: new Date().toLocaleString(),
-                    }
+                    ...encounter,
+                    soapAuthorId: authorId,
+                    soapAuthorRole: authorRole,
+                    soapStatus: "awaiting_attending",
+                    soapSavedAt: new Date().toLocaleString(),
+                  }
                   : encounter
               ),
             }
-          : patient
-      )
-    );
+            : patient
+        )
+      );
 
-    if (showConfirmation) {
-  showSoapMessage("SOAP note saved.");
+      await logAuditEvent("soap_submitted_attending", {
+        soapStatus: "awaiting_attending",
+      });
+      await loadAuditLog();
+      showSoapMessage("SOAP note submitted for attending signature.");
+    } catch (error) {
+      console.error("Failed to submit SOAP for attending signature:", error);
+      showSoapMessage(`Failed to submit SOAP: ${error.message}`);
+    } finally {
+      setSoapBusy(false);
     }
-  } catch (error) {
-    console.error("Failed to save SOAP note:", error);
-    showSoapMessage(`Failed to save SOAP note: ${error.message}`);
-  } finally {
-    setSoapBusy(false);
-  }
-}
-
-async function submitSoapForUpperLevel() {
-  if (!selectedPatient || !selectedEncounter || !session?.user?.id || !userRole) return;
-
-  const missingFields = getMissingSoapFields(selectedEncounter);
-  if (missingFields.length > 0) {
-    showSoapMessage(`Complete before submitting: ${missingFields.join(", ")}`);
-    return;
   }
 
-  const authorId = selectedEncounter.soapAuthorId || session.user.id;
-  const authorRole = selectedEncounter.soapAuthorRole || userRole;
+  async function signSoapAsUpperLevel() {
+    if (!selectedPatient || !selectedEncounter || !session?.user?.id || !userRole) return;
+    if (!canSignAsUpperLevel) return;
 
-  try {
-    setSoapBusy(true);
-    setSoapUiMessage("Saving...");
+    const missingFields = getMissingSoapFields(selectedEncounter);
+    if (missingFields.length > 0) {
+      showSoapMessage(`Complete before submitting: ${missingFields.join(", ")}`);
+      return;
+    }
 
-    await updateEncounterInSupabase(selectedEncounter.id, {
-      soapSubjective: selectedEncounter.soapSubjective || "",
-      soapObjective: selectedEncounter.soapObjective || "",
-      soapAssessment: selectedEncounter.soapAssessment || "",
-      soapPlan: selectedEncounter.soapPlan || "",
-      notes: selectedEncounter.notes || "",
-      soapAuthorId: authorId,
-      soapAuthorRole: authorRole,
-      soapStatus: "awaiting_upper",
-    });
+    const authorId = selectedEncounter.soapAuthorId || session.user.id;
+    const authorRole = selectedEncounter.soapAuthorRole || userRole;
+    const signedAt = new Date().toISOString();
 
-    setPatients((prev) =>
-      prev.map((patient) =>
-        patient.id === selectedPatient.id
-          ? {
+    try {
+      setSoapBusy(true);
+      setSoapUiMessage("Saving...");
+
+      await updateEncounterInSupabase(selectedEncounter.id, {
+        soapSubjective: selectedEncounter.soapSubjective || "",
+        soapObjective: selectedEncounter.soapObjective || "",
+        soapAssessment: selectedEncounter.soapAssessment || "",
+        soapPlan: selectedEncounter.soapPlan || "",
+        notes: selectedEncounter.notes || "",
+        soapAuthorId: authorId,
+        soapAuthorRole: authorRole,
+        upperLevelSignedBy: session.user.id,
+        upperLevelSignedAt: signedAt,
+        soapStatus: "awaiting_attending",
+      });
+
+      setPatients((prev) =>
+        prev.map((patient) =>
+          patient.id === selectedPatient.id
+            ? {
               ...patient,
               encounters: patient.encounters.map((encounter) =>
                 encounter.id === selectedEncounter.id
                   ? {
-                      ...encounter,
-                      soapAuthorId: authorId,
-                      soapAuthorRole: authorRole,
-                      soapStatus: "awaiting_upper",
-                      soapSavedAt: new Date().toLocaleString(),
-                    }
+                    ...encounter,
+                    soapAuthorId: authorId,
+                    soapAuthorRole: authorRole,
+                    upperLevelSignedBy: session.user.id,
+                    upperLevelSignedAt: signedAt,
+                    soapStatus: "awaiting_attending",
+                    soapSavedAt: new Date().toLocaleString(),
+                  }
                   : encounter
               ),
             }
-          : patient
-      )
-    );
-    await logAuditEvent("soap_submitted_upper", {
-      soapStatus: "awaiting_upper",
-    });
-    await loadAuditLog();
-    showSoapMessage("SOAP note submitted for upper-level signature.");
-  } catch (error) {
-    console.error("Failed to submit SOAP for upper-level signature:", error);
-    showSoapMessage(`Failed to submit SOAP: ${error.message}`);
-  } finally {
-    setSoapBusy(false);
-  }
-}
-
-async function submitSoapForAttending() {
-  if (!selectedPatient || !selectedEncounter || !session?.user?.id || !userRole) return;
-
-  const missingFields = getMissingSoapFields(selectedEncounter);
-  if (missingFields.length > 0) {
-    showSoapMessage(`Complete before submitting: ${missingFields.join(", ")}`);
-    return;
+            : patient
+        )
+      );
+      await logAuditEvent("soap_signed_upper", {
+        soapStatus: "awaiting_attending",
+        signedAt,
+      });
+      await loadAuditLog();
+      showSoapMessage("SOAP note signed by upper-level reviewer.");
+    } catch (error) {
+      console.error("Failed to sign SOAP as upper-level:", error);
+      showSoapMessage(`Failed to sign SOAP: ${error.message}`);
+    } finally {
+      setSoapBusy(false);
+    }
   }
 
-  const authorId = selectedEncounter.soapAuthorId || session.user.id;
-  const authorRole = selectedEncounter.soapAuthorRole || userRole;
+  async function signSoapAsAttending() {
+    if (!selectedPatient || !selectedEncounter || !session?.user?.id || !userRole) return;
+    if (!canSignAsAttending) return;
 
-  try {
-    setSoapBusy(true);
-    setSoapUiMessage("Saving...");
+    const missingFields = getMissingSoapFields(selectedEncounter);
+    if (missingFields.length > 0) {
+      showSoapMessage(`Complete before submitting: ${missingFields.join(", ")}`);
+      return;
+    }
 
-    await updateEncounterInSupabase(selectedEncounter.id, {
-      soapSubjective: selectedEncounter.soapSubjective || "",
-      soapObjective: selectedEncounter.soapObjective || "",
-      soapAssessment: selectedEncounter.soapAssessment || "",
-      soapPlan: selectedEncounter.soapPlan || "",
-      notes: selectedEncounter.notes || "",
-      soapAuthorId: authorId,
-      soapAuthorRole: authorRole,
-      soapStatus: "awaiting_attending",
-    });
 
-    setPatients((prev) =>
-      prev.map((patient) =>
-        patient.id === selectedPatient.id
-          ? {
+
+    const authorId = selectedEncounter.soapAuthorId || session.user.id;
+    const authorRole = selectedEncounter.soapAuthorRole || userRole;
+    const signedAt = new Date().toISOString();
+
+    try {
+      setSoapBusy(true);
+      setSoapUiMessage("Saving...");
+
+      await updateEncounterInSupabase(selectedEncounter.id, {
+        soapSubjective: selectedEncounter.soapSubjective || "",
+        soapObjective: selectedEncounter.soapObjective || "",
+        soapAssessment: selectedEncounter.soapAssessment || "",
+        soapPlan: selectedEncounter.soapPlan || "",
+        notes: selectedEncounter.notes || "",
+        soapAuthorId: authorId,
+        soapAuthorRole: authorRole,
+        attendingSignedBy: session.user.id,
+        attendingSignedAt: signedAt,
+        soapStatus: "signed",
+      });
+
+      setPatients((prev) =>
+        prev.map((patient) =>
+          patient.id === selectedPatient.id
+            ? {
               ...patient,
               encounters: patient.encounters.map((encounter) =>
                 encounter.id === selectedEncounter.id
                   ? {
-                      ...encounter,
-                      soapAuthorId: authorId,
-                      soapAuthorRole: authorRole,
-                      soapStatus: "awaiting_attending",
-                      soapSavedAt: new Date().toLocaleString(),
-                    }
+                    ...encounter,
+                    soapAuthorId: authorId,
+                    soapAuthorRole: authorRole,
+                    attendingSignedBy: session.user.id,
+                    attendingSignedAt: signedAt,
+                    soapStatus: "signed",
+                    soapSavedAt: new Date().toLocaleString(),
+                  }
                   : encounter
               ),
             }
-          : patient
-      )
-    );
-
-    await logAuditEvent("soap_submitted_attending", {
-      soapStatus: "awaiting_attending",
-    });
-    await loadAuditLog();
-    showSoapMessage("SOAP note submitted for attending signature.");
-  } catch (error) {
-    console.error("Failed to submit SOAP for attending signature:", error);
-    showSoapMessage(`Failed to submit SOAP: ${error.message}`);
-  } finally {
-    setSoapBusy(false);
-  }
-}
-
-async function signSoapAsUpperLevel() {
-  if (!selectedPatient || !selectedEncounter || !session?.user?.id || !userRole) return;
-  if (!canSignAsUpperLevel) return;
-
-  const missingFields = getMissingSoapFields(selectedEncounter);
-  if (missingFields.length > 0) {
-    showSoapMessage(`Complete before submitting: ${missingFields.join(", ")}`);
-    return;
+            : patient
+        )
+      );
+      await logAuditEvent("soap_signed_attending", {
+        soapStatus: "signed",
+        signedAt,
+      });
+      await loadAuditLog();
+      showSoapMessage("SOAP note signed by attending.");
+    } catch (error) {
+      console.error("Failed to sign SOAP as attending:", error);
+      showSoapMessage(`Failed to sign SOAP: ${error.message}`);
+    } finally {
+      setSoapBusy(false);
+    }
   }
 
-  const authorId = selectedEncounter.soapAuthorId || session.user.id;
-  const authorRole = selectedEncounter.soapAuthorRole || userRole;
-  const signedAt = new Date().toISOString();
 
-  try {
-    setSoapBusy(true);
-    setSoapUiMessage("Saving...");
+  async function signSoapAsAttendingWithPin(attendingId, pin) {
+    if (!selectedPatient || !selectedEncounter) return;
+    if (!attendingId || pin.length !== 4) return;
 
-    await updateEncounterInSupabase(selectedEncounter.id, {
-      soapSubjective: selectedEncounter.soapSubjective || "",
-      soapObjective: selectedEncounter.soapObjective || "",
-      soapAssessment: selectedEncounter.soapAssessment || "",
-      soapPlan: selectedEncounter.soapPlan || "",
-      notes: selectedEncounter.notes || "",
-      soapAuthorId: authorId,
-      soapAuthorRole: authorRole,
-      upperLevelSignedBy: session.user.id,
-      upperLevelSignedAt: signedAt,
-      soapStatus: "awaiting_attending",
-    });
+    const missingFields = getMissingSoapFields(selectedEncounter);
+    if (missingFields.length > 0) {
+      showSoapMessage(`Complete before submitting: ${missingFields.join(", ")}`);
+      return;
+    }
 
-    setPatients((prev) =>
-      prev.map((patient) =>
-        patient.id === selectedPatient.id
-          ? {
+    try {
+      const attending = activeAttendings.find(
+        (a) => String(a.id) === String(attendingId)
+      );
+
+      if (!attending) {
+        showSoapMessage("Attending not found.");
+        return;
+      }
+
+      if (!attending.signature_pin_set) {
+        showSoapMessage("This attending has not set up a signature PIN yet.");
+        return;
+      }
+
+      if (String(attending.signature_pin_hash || "") !== String(pin)) {
+        showSoapMessage("Incorrect PIN.");
+        return;
+      }
+
+      const authorId = selectedEncounter.soapAuthorId || session?.user?.id;
+      const authorRole = selectedEncounter.soapAuthorRole || userRole;
+      const signedAt = new Date().toISOString();
+
+      setSoapBusy(true);
+      setSoapUiMessage("Saving...");
+
+      await updateEncounterInSupabase(selectedEncounter.id, {
+        soapSubjective: selectedEncounter.soapSubjective || "",
+        soapObjective: selectedEncounter.soapObjective || "",
+        soapAssessment: selectedEncounter.soapAssessment || "",
+        soapPlan: selectedEncounter.soapPlan || "",
+        notes: selectedEncounter.notes || "",
+        soapAuthorId: authorId,
+        soapAuthorRole: authorRole,
+        attendingSignedBy: attending.id,
+        attendingSignedAt: signedAt,
+        soapStatus: "signed",
+      });
+
+      setPatients((prev) =>
+        prev.map((patient) =>
+          patient.id === selectedPatient.id
+            ? {
               ...patient,
               encounters: patient.encounters.map((encounter) =>
                 encounter.id === selectedEncounter.id
                   ? {
-                      ...encounter,
-                      soapAuthorId: authorId,
-                      soapAuthorRole: authorRole,
-                      upperLevelSignedBy: session.user.id,
-                      upperLevelSignedAt: signedAt,
-                      soapStatus: "awaiting_attending",
-                      soapSavedAt: new Date().toLocaleString(),
-                    }
+                    ...encounter,
+                    soapAuthorId: authorId,
+                    soapAuthorRole: authorRole,
+                    attendingSignedBy: attending.id,
+                    attendingSignedAt: signedAt,
+                    soapStatus: "signed",
+                    soapSavedAt: new Date().toLocaleString(),
+                  }
                   : encounter
               ),
             }
-          : patient
-      )
-    );
-    await logAuditEvent("soap_signed_upper", {
-      soapStatus: "awaiting_attending",
-      signedAt,
-    });
-    await loadAuditLog();
-    showSoapMessage("SOAP note signed by upper-level reviewer.");
-  } catch (error) {
-    console.error("Failed to sign SOAP as upper-level:", error);
-    showSoapMessage(`Failed to sign SOAP: ${error.message}`);
-  } finally {
-    setSoapBusy(false);
+            : patient
+        )
+      );
+
+      await createAuditLog({
+        encounterId: selectedEncounter.id,
+        patientId: selectedPatient.id,
+        actorUserId: attending.id,
+        actorName: attending.full_name || "Unknown User",
+        actorRole: "attending",
+        action: "soap_signed_attending",
+        details: {
+          soapStatus: "signed",
+          signedAt,
+          signedByPin: true,
+        },
+      });
+
+      await loadAuditLog();
+      showSoapMessage("SOAP note signed by attending.");
+    } catch (error) {
+      console.error("Failed to sign SOAP with PIN:", error);
+      showSoapMessage(`Failed to sign SOAP: ${error.message}`);
+    } finally {
+      setSoapBusy(false);
+    }
   }
-}
 
-async function signSoapAsAttending() {
-  if (!selectedPatient || !selectedEncounter || !session?.user?.id || !userRole) return;
-  if (!canSignAsAttending) return;
+  async function reopenSoapNote() {
+    if (!selectedPatient || !selectedEncounter) return;
+    if (!canReopenSoap) return;
 
-  const missingFields = getMissingSoapFields(selectedEncounter);
-  if (missingFields.length > 0) {
-    showSoapMessage(`Complete before submitting: ${missingFields.join(", ")}`);
-    return;
-  }
+    try {
+      setSoapBusy(true);
+      setSoapUiMessage("Reopening...");
 
+      await updateEncounterInSupabase(selectedEncounter.id, {
+        attendingSignedBy: null,
+        attendingSignedAt: null,
+        soapStatus: "awaiting_attending",
+      });
 
-
-  const authorId = selectedEncounter.soapAuthorId || session.user.id;
-  const authorRole = selectedEncounter.soapAuthorRole || userRole;
-  const signedAt = new Date().toISOString();
-
-  try {
-    setSoapBusy(true);
-    setSoapUiMessage("Saving...");
-
-    await updateEncounterInSupabase(selectedEncounter.id, {
-      soapSubjective: selectedEncounter.soapSubjective || "",
-      soapObjective: selectedEncounter.soapObjective || "",
-      soapAssessment: selectedEncounter.soapAssessment || "",
-      soapPlan: selectedEncounter.soapPlan || "",
-      notes: selectedEncounter.notes || "",
-      soapAuthorId: authorId,
-      soapAuthorRole: authorRole,
-      attendingSignedBy: session.user.id,
-      attendingSignedAt: signedAt,
-      soapStatus: "signed",
-    });
-
-    setPatients((prev) =>
-      prev.map((patient) =>
-        patient.id === selectedPatient.id
-          ? {
+      setPatients((prev) =>
+        prev.map((patient) =>
+          patient.id === selectedPatient.id
+            ? {
               ...patient,
               encounters: patient.encounters.map((encounter) =>
                 encounter.id === selectedEncounter.id
                   ? {
-                      ...encounter,
-                      soapAuthorId: authorId,
-                      soapAuthorRole: authorRole,
-                      attendingSignedBy: session.user.id,
-                      attendingSignedAt: signedAt,
-                      soapStatus: "signed",
-                      soapSavedAt: new Date().toLocaleString(),
-                    }
+                    ...encounter,
+                    attendingSignedBy: null,
+                    attendingSignedAt: null,
+                    soapStatus: "awaiting_attending",
+                  }
                   : encounter
               ),
             }
-          : patient
-      )
-    );
-    await logAuditEvent("soap_signed_attending", {
-      soapStatus: "signed",
-      signedAt,
-    });
-    await loadAuditLog();
-    showSoapMessage("SOAP note signed by attending.");
-  } catch (error) {
-    console.error("Failed to sign SOAP as attending:", error);
-    showSoapMessage(`Failed to sign SOAP: ${error.message}`);
-  } finally {
-    setSoapBusy(false);
+            : patient
+        )
+      );
+      await logAuditEvent("soap_reopened", {
+        soapStatus: "awaiting_attending",
+      });
+      await loadAuditLog();
+      showSoapMessage("SOAP note reopened.");
+    } catch (error) {
+      console.error("Failed to reopen SOAP note:", error);
+      showSoapMessage(`Failed to reopen SOAP note: ${error.message}`);
+    } finally {
+      setSoapBusy(false);
+    }
   }
-}
-
-async function reopenSoapNote() {
-  if (!selectedPatient || !selectedEncounter) return;
-  if (!canReopenSoap) return;
-
-  try {
-    setSoapBusy(true);
-    setSoapUiMessage("Reopening...");
-
-    await updateEncounterInSupabase(selectedEncounter.id, {
-      attendingSignedBy: null,
-      attendingSignedAt: null,
-      soapStatus: "awaiting_attending",
-    });
-
-    setPatients((prev) =>
-      prev.map((patient) =>
-        patient.id === selectedPatient.id
-          ? {
-              ...patient,
-              encounters: patient.encounters.map((encounter) =>
-                encounter.id === selectedEncounter.id
-                  ? {
-                      ...encounter,
-                      attendingSignedBy: null,
-                      attendingSignedAt: null,
-                      soapStatus: "awaiting_attending",
-                    }
-                  : encounter
-              ),
-            }
-          : patient
-      )
-    );
-    await logAuditEvent("soap_reopened", {
-      soapStatus: "awaiting_attending",
-    });
-    await loadAuditLog();
-    showSoapMessage("SOAP note reopened.");
-  } catch (error) {
-    console.error("Failed to reopen SOAP note:", error);
-    showSoapMessage(`Failed to reopen SOAP note: ${error.message}`);
-  } finally {
-    setSoapBusy(false);
-  }
-}
 
   function endClinicReset() {
     const confirmed = window.confirm(
@@ -2667,7 +2742,221 @@ async function reopenSoapNote() {
         sortedSelectedPatientEncounters[1]?.clinicDate
       )
       : "No prior visit";
-  if (isBoardDisplayMode) {
+  
+    if (session && needsOnboarding) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+        <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow">
+          <h2 className="mb-2 text-xl font-semibold text-slate-900">
+            Complete Your Profile
+          </h2>
+
+          <p className="mb-5 text-sm text-slate-600">
+            Finish setting up your account before entering the app.
+          </p>
+
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Full Name
+              </label>
+              <input
+                className="w-full rounded-lg border px-3 py-3 text-sm"
+                value={onboardingFullName}
+                onChange={(e) => setOnboardingFullName(e.target.value)}
+                placeholder="Enter your full name"
+              />
+            </div>
+
+
+            {userRole === "student" || userRole === "upper_level" ? (
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Classification
+                </label>
+                <select
+                  className="w-full rounded-lg border px-3 py-3 text-sm"
+                  value={onboardingClassification}
+                  onChange={(e) => setOnboardingClassification(e.target.value)}
+                >
+                  <option value="">Select classification</option>
+                  <option value="MS1">MS1</option>
+                  <option value="MS2">MS2</option>
+                  <option value="MS3">MS3</option>
+                  <option value="MS4">MS4</option>
+                </select>
+              </div>
+            ) : null}
+
+            {authMessage ? (
+              <div className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700">
+                {authMessage}
+              </div>
+            ) : null}
+
+            <button
+              onClick={handleCompleteOnboarding}
+              disabled={authLoading}
+              className="w-full rounded-lg bg-blue-600 px-4 py-3 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {authLoading ? "Saving..." : "Finish Setup"}
+            </button>
+
+            <button
+              onClick={handleSignOut}
+              disabled={authLoading}
+              className="w-full rounded-lg bg-slate-200 px-4 py-3 text-slate-700 hover:bg-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-slate-100">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 px-4">
+            <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+              <div className="mb-6 text-center">
+                <h1 className="text-2xl font-semibold text-slate-900">FC EMR</h1>
+                <p className="mt-2 text-sm text-slate-600">
+                  Log in to continue or create your account if this is your first time here.
+                </p>
+              </div>
+
+              <div className="mb-6 flex rounded-xl bg-slate-100 p-1">
+                <button
+                  onClick={() => setAuthMode("login")}
+                  className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium ${authMode === "login"
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-600"
+                    }`}
+                >
+                  Log In
+                </button>
+                <button
+                  onClick={() => setAuthMode("signup")}
+                  className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium ${authMode === "signup"
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-600"
+                    }`}
+                >
+                  First-Time Sign Up
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {authMode === "signup" ? (
+                  <>
+                    <input
+                      className="w-full rounded-lg border px-3 py-3 text-sm"
+                      placeholder="Full name"
+                      value={authFullName}
+                      onChange={(e) => setAuthFullName(e.target.value)}
+                    />
+
+                    <select
+                      className="w-full rounded-lg border px-3 py-3 text-sm"
+                      value={authRole}
+                      onChange={(e) => setAuthRole(e.target.value)}
+                    >
+                      <option value="">Select role</option>
+                      <option value="student">Student</option>
+                      <option value="upper_level">Upper Level</option>
+                      <option value="attending">Attending</option>
+                      <option value="leadership">Leadership</option>
+                    </select>
+
+                    {authRole === "student" || authRole === "upper_level" ? (
+                      <select
+                        className="w-full rounded-lg border px-3 py-3 text-sm"
+                        value={authClassification}
+                        onChange={(e) => setAuthClassification(e.target.value)}
+                      >
+                        <option value="">Select classification</option>
+                        <option value="MS1">MS1</option>
+                        <option value="MS2">MS2</option>
+                        <option value="MS3">MS3</option>
+                        <option value="MS4">MS4</option>
+                      </select>
+                    ) : null}
+
+                    {authRole === "attending" ? (
+                      <>
+                        <input
+                          className="w-full rounded-lg border px-3 py-3 text-sm"
+                          placeholder="4-digit PIN"
+                          value={authPin}
+                          onChange={(e) =>
+                            setAuthPin(e.target.value.replace(/\D/g, "").slice(0, 4))
+                          }
+                        />
+
+                        <input
+                          className="w-full rounded-lg border px-3 py-3 text-sm"
+                          placeholder="Confirm 4-digit PIN"
+                          value={authPinConfirm}
+                          onChange={(e) =>
+                            setAuthPinConfirm(
+                              e.target.value.replace(/\D/g, "").slice(0, 4)
+                            )
+                          }
+                        />
+                      </>
+                    ) : null}
+                  </>
+                ) : null}
+
+                <input
+                  className="w-full rounded-lg border px-3 py-3 text-sm"
+                  placeholder="Email"
+                  value={authEmail}
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                />
+
+                <input
+                  className="w-full rounded-lg border px-3 py-3 text-sm"
+                  placeholder="Password"
+                  type="password"
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                />
+
+                {authMessage ? (
+                  <div className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700">
+                    {authMessage}
+                  </div>
+                ) : null}
+
+                {authMode === "login" ? (
+                  <button
+                    onClick={handleSignIn}
+                    disabled={authLoading}
+                    className="w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {authLoading ? "Signing In..." : "Log In"}
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleSignUp}
+                    disabled={authLoading}
+                    className="w-full rounded-lg bg-slate-800 px-4 py-3 text-sm font-medium text-white hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {authLoading ? "Creating Account..." : "Create Account"}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+      </div>
+    );
+  }
+  
+  
+      if (isBoardDisplayMode) {
     return (
       <BoardDisplay
         ROOM_OPTIONS={ROOM_OPTIONS}
@@ -2716,135 +3005,72 @@ async function reopenSoapNote() {
         />
         <div>
 
-  <div className="px-4 py-2 space-y-2">
-          <div className="text-sm font-medium">
-          </div>
-          {authMessage ? (
-            <div className="text-sm text-slate-600">{authMessage}</div>
-          ) : null}
 
-          {!session ? (
-            <div className="flex flex-wrap gap-2">
-              <input
-                className="rounded border px-3 py-2 text-sm"
-                placeholder="Full name"
-                value={authFullName}
-                onChange={(e) => setAuthFullName(e.target.value)}
-              />
-              <input
-                className="rounded border px-3 py-2 text-sm"
-                placeholder="Email"
-                value={authEmail}
-                onChange={(e) => setAuthEmail(e.target.value)}
-              />
-              <input
-                className="rounded border px-3 py-2 text-sm"
-                placeholder="Password"
-                type="password"
-                value={authPassword}
-                onChange={(e) => setAuthPassword(e.target.value)}
-              />
-              <select
-                className="rounded border px-3 py-2 text-sm"
-                value={authClassification}
-                onChange={(e) => setAuthClassification(e.target.value)}
-              >
-                <option value="">Classification</option>
-                <option value="MS1">MS1</option>
-                <option value="MS2">MS2</option>
-                <option value="MS3">MS3</option>
-                <option value="MS4">MS4</option>
-              </select>
-              <button
-                onClick={handleSignUp} disabled={authLoading}
-                className="rounded bg-slate-700 px-3 py-2 text-sm font-medium text-white"
-              >
-                Sign Up
-              </button>
-              <button
-                onClick={handleSignIn} disabled={authLoading}
-                className="rounded bg-blue-600 px-3 py-2 text-sm font-medium text-white"
-              >
-                Sign In
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={handleSignOut} disabled={authLoading}
-              className="rounded bg-red-600 px-3 py-2 text-sm font-medium text-white"
-            >
-              Sign Out
-            </button>
-
+          {activeView === "dashboard" && (
+            <DashboardView
+              isLeadershipView={isLeadershipView}
+              endClinicReset={endClinicReset}
+              selectedClinicDate={selectedClinicDate}
+              setSelectedClinicDate={setSelectedClinicDate}
+              filteredVisiblePatients={filteredVisiblePatients}
+              visibleEncounterRows={visibleEncounterRows}
+              assignedCount={assignedCount}
+              inVisitCount={inVisitCount}
+              searchForm={searchForm}
+              setSearchForm={setSearchForm}
+              patientRecordsTitle={patientRecordsTitle}
+              openPatientFromFilteredView={openPatientFromFilteredView}
+              getFullPatientName={getFullPatientName}
+            />
           )}
 
-        </div>
+          {activeView === "queue" && (
+            <QueueView
+              userRole={userRole}
+              searchForm={searchForm}
+              waitingEncounterRows={waitingEncounterRows}
+              openPatientChart={openPatientChart}
+              getPatientBoardName={getPatientBoardName}
+              spanishBadge={spanishBadge}
+              priorityBadge={priorityBadge}
+              elevatorBadge={elevatorBadge}
+              formatWaitTime={formatWaitTime}
+              studentNameOptions={studentNameOptions}
+              upperLevelNameOptions={upperLevelNameOptions}
 
-        {activeView === "dashboard" && (
-          <DashboardView
-            isLeadershipView={isLeadershipView}
-            endClinicReset={endClinicReset}
-            selectedClinicDate={selectedClinicDate}
-            setSelectedClinicDate={setSelectedClinicDate}
-            filteredVisiblePatients={filteredVisiblePatients}
-            visibleEncounterRows={visibleEncounterRows}
-            assignedCount={assignedCount}
-            inVisitCount={inVisitCount}
-            searchForm={searchForm}
-            setSearchForm={setSearchForm}
-            patientRecordsTitle={patientRecordsTitle}
-            openPatientFromFilteredView={openPatientFromFilteredView}
-            getFullPatientName={getFullPatientName}
-          />
-        )}
+              onAssignFromQueue={assignEncounterFromQueue}
+            />
+          )}
 
-       {activeView === "queue" && (
-  <QueueView
-    userRole={userRole}
-    searchForm={searchForm}
-    waitingEncounterRows={waitingEncounterRows}
-    openPatientChart={openPatientChart}
-    getPatientBoardName={getPatientBoardName}
-    spanishBadge={spanishBadge}
-    priorityBadge={priorityBadge}
-    elevatorBadge={elevatorBadge}
-    formatWaitTime={formatWaitTime}
-    studentNameOptions={studentNameOptions}
-upperLevelNameOptions={upperLevelNameOptions}
-
-onAssignFromQueue={assignEncounterFromQueue}
-  />
-)}
-
-        {activeView === "board" && (
-          <RoomBoard
-            ROOM_OPTIONS={ROOM_OPTIONS}
-            roomMap={roomMap}
-            allEncounterRows={allEncounterRows}
-            assignedCount={assignedCount}
-            inVisitCount={inVisitCount}
-            getPatientBoardName={getPatientBoardName}
-            getStudentBoardName={getStudentBoardName}
-            spanishBadge={spanishBadge}
-            priorityBadge={priorityBadge}
-            elevatorBadge={elevatorBadge}
-            getStatusClasses={getStatusClasses}
-            assignEncounterToRoom={assignEncounterToRoom}
-            selectedPatient={selectedPatient}
-            selectedEncounter={selectedEncounter}
-            openPatientChart={openPatientChart}
-            isLeadershipView={canManageRooms}
-          />
-        )}
-        {activeView === "formulary" && (
-          <FormularyView
-            formulary={formulary}
-            setFormulary={setFormulary}
-            onPrescribeMedication={prescribeFromFormulary}
-            selectedPatient={selectedPatient}
-            isLeadershipView={canModifyFormulary}
-          />
-        )}
+          {activeView === "board" && (
+            <RoomBoard
+              ROOM_OPTIONS={ROOM_OPTIONS}
+              roomMap={roomMap}
+              allEncounterRows={allEncounterRows}
+              assignedCount={assignedCount}
+              inVisitCount={inVisitCount}
+              getPatientBoardName={getPatientBoardName}
+              getStudentBoardName={getStudentBoardName}
+              spanishBadge={spanishBadge}
+              priorityBadge={priorityBadge}
+              elevatorBadge={elevatorBadge}
+              getStatusClasses={getStatusClasses}
+              assignEncounterToRoom={assignEncounterToRoom}
+              selectedPatient={selectedPatient}
+              selectedEncounter={selectedEncounter}
+              openPatientChart={openPatientChart}
+              isLeadershipView={canManageRooms}
+            />
+          )}
+          {activeView === "formulary" && (
+            <FormularyView
+              formulary={formulary}
+              setFormulary={setFormulary}
+              onPrescribeMedication={prescribeFromFormulary}
+              selectedPatient={selectedPatient}
+              isLeadershipView={canModifyFormulary}
+            />
+          )}
 
           {activeView === "users" && isLeadershipView && (
             <UserManagementView
@@ -2864,83 +3090,86 @@ onAssignFromQueue={assignEncounterFromQueue}
               onSaveProfileName={handleSaveProfileName}
               showOnlyActiveToday={showOnlyActiveToday}
               setShowOnlyActiveToday={setShowOnlyActiveToday}
+              onApproveUser={handleApproveUser}
             />
-        )}
+          )}
 
-        {activeView === "chart" && selectedPatient && (
-          <ChartView
-            selectedPatient={selectedPatient}
-            selectedEncounter={selectedEncounter}
-            selectedEncounterId={selectedEncounterId}
-            normalizeClinicDate={normalizeClinicDate}
-            setActiveView={setActiveView}
-            startNewEncounter={startNewEncounter}
-            openEditIntake={openEditIntake}
-            isLeadershipView={isLeadershipView}
-            getFullPatientName={getFullPatientName}
-            lastVisitLabel={lastVisitLabel}
-            openPatientChart={openPatientChart}
-            spanishBadge={spanishBadge}
-            priorityBadge={priorityBadge}
-            assignmentForm={assignmentForm}
-            setAssignmentForm={setAssignmentForm}
-            studentNameOptions={studentNameOptions}
-            upperLevelNameOptions={upperLevelNameOptions}
-            ROOM_OPTIONS={ROOM_OPTIONS}
-            isPapRestricted={isPapRestricted}
-            assignEncounter={assignEncounter}
-            leadershipActionLocked={leadershipActionLocked}
-            updateEncounterStatus={updateEncounterStatus}
-            clearEncounterRoom={clearEncounterRoom}
-            sortedMedications={sortedMedications}
-            activeMedicationCount={activeMedicationCount}
-            toggleMedicationActive={toggleMedicationActive}
-            startEditMedication={startEditMedication}
-            deleteMedication={deleteMedication}
-            setEditingMedicationId={setEditingMedicationId}
-            setNewMedication={setNewMedication}
-            setShowMedicationModal={setShowMedicationModal}
-            EMPTY_MEDICATION={EMPTY_MEDICATION}
-            startEditAllergy={startEditAllergy}
-            deleteAllergy={deleteAllergy}
-            setShowAllergyModal={setShowAllergyModal}
-            setEditingAllergyId={setEditingAllergyId}
-            setNewAllergy={setNewAllergy}
-            EMPTY_ALLERGY={EMPTY_ALLERGY}
-            updatePatientField={updatePatientField}
-            currentVitals={currentVitals}
-            updateVitalsField={updateVitalsField}
-            saveVitals={saveVitals}
-            editingVitalsIndex={editingVitalsIndex}
-            startEditVitals={startEditVitals}
-            saveSoapNote={saveSoapNote}
-            soapAutoSaveEnabled={true}
-            updateEncounterField={updateEncounterField}
-            formatDate={formatDate}
-            soapStatus={selectedEncounter?.soapStatus || "draft"}
-            canSignAsUpperLevel={canSignAsUpperLevel}
-            canSignAsAttending={canSignAsAttending}
-            signSoapAsUpperLevel={signSoapAsUpperLevel}
-            signSoapAsAttending={signSoapAsAttending}
-            canSubmitForUpperLevel={canSubmitForUpperLevel}
-            canSubmitForAttending={canSubmitForAttending}
-            submitSoapForUpperLevel={submitSoapForUpperLevel}
-            submitSoapForAttending={submitSoapForAttending}
-            soapBusy={soapBusy}
-            soapUiMessage={soapUiMessage}
-            formatRoleLabel={formatRoleLabel}
-            canReopenSoap={canReopenSoap}
-            reopenSoapNote={reopenSoapNote}
-            auditEntries={auditEntries}
-            auditLoading={auditLoading}
-            soapAuthorName={soapAuthorName}
-            upperLevelSignerName={upperLevelSignerName}
-            attendingSignerName={attendingSignerName}
-            activeStudents={activeStudents}
-            activeUpperLevels={activeUpperLevels}
-          />
-        )}
-      </div>
+          {activeView === "chart" && selectedPatient && (
+            <ChartView
+              selectedPatient={selectedPatient}
+              selectedEncounter={selectedEncounter}
+              selectedEncounterId={selectedEncounterId}
+              normalizeClinicDate={normalizeClinicDate}
+              setActiveView={setActiveView}
+              startNewEncounter={startNewEncounter}
+              openEditIntake={openEditIntake}
+              isLeadershipView={isLeadershipView}
+              getFullPatientName={getFullPatientName}
+              lastVisitLabel={lastVisitLabel}
+              openPatientChart={openPatientChart}
+              spanishBadge={spanishBadge}
+              priorityBadge={priorityBadge}
+              assignmentForm={assignmentForm}
+              setAssignmentForm={setAssignmentForm}
+              studentNameOptions={studentNameOptions}
+              upperLevelNameOptions={upperLevelNameOptions}
+              ROOM_OPTIONS={ROOM_OPTIONS}
+              isPapRestricted={isPapRestricted}
+              assignEncounter={assignEncounter}
+              leadershipActionLocked={leadershipActionLocked}
+              updateEncounterStatus={updateEncounterStatus}
+              clearEncounterRoom={clearEncounterRoom}
+              sortedMedications={sortedMedications}
+              activeMedicationCount={activeMedicationCount}
+              toggleMedicationActive={toggleMedicationActive}
+              startEditMedication={startEditMedication}
+              deleteMedication={deleteMedication}
+              setEditingMedicationId={setEditingMedicationId}
+              setNewMedication={setNewMedication}
+              setShowMedicationModal={setShowMedicationModal}
+              EMPTY_MEDICATION={EMPTY_MEDICATION}
+              startEditAllergy={startEditAllergy}
+              deleteAllergy={deleteAllergy}
+              setShowAllergyModal={setShowAllergyModal}
+              setEditingAllergyId={setEditingAllergyId}
+              setNewAllergy={setNewAllergy}
+              EMPTY_ALLERGY={EMPTY_ALLERGY}
+              updatePatientField={updatePatientField}
+              currentVitals={currentVitals}
+              updateVitalsField={updateVitalsField}
+              saveVitals={saveVitals}
+              editingVitalsIndex={editingVitalsIndex}
+              startEditVitals={startEditVitals}
+              saveSoapNote={saveSoapNote}
+              soapAutoSaveEnabled={true}
+              updateEncounterField={updateEncounterField}
+              formatDate={formatDate}
+              soapStatus={selectedEncounter?.soapStatus || "draft"}
+              canSignAsUpperLevel={canSignAsUpperLevel}
+              canSignAsAttending={canSignAsAttending}
+              signSoapAsUpperLevel={signSoapAsUpperLevel}
+              signSoapAsAttending={signSoapAsAttending}
+              canSubmitForUpperLevel={canSubmitForUpperLevel}
+              canSubmitForAttending={canSubmitForAttending}
+              submitSoapForUpperLevel={submitSoapForUpperLevel}
+              submitSoapForAttending={submitSoapForAttending}
+              soapBusy={soapBusy}
+              soapUiMessage={soapUiMessage}
+              formatRoleLabel={formatRoleLabel}
+              canReopenSoap={canReopenSoap}
+              reopenSoapNote={reopenSoapNote}
+              auditEntries={auditEntries}
+              auditLoading={auditLoading}
+              soapAuthorName={soapAuthorName}
+              upperLevelSignerName={upperLevelSignerName}
+              attendingSignerName={attendingSignerName}
+              activeStudents={activeStudents}
+              activeUpperLevels={activeUpperLevels}
+              activeAttendings={activeAttendings}
+              signSoapAsAttendingWithPin={signSoapAsAttendingWithPin}
+            />
+          )}
+        </div>
       </div>
 
 
@@ -2955,7 +3184,6 @@ onAssignFromQueue={assignEncounterFromQueue}
         addOrUpdateMedication={addOrUpdateMedication}
         EMPTY_MEDICATION={EMPTY_MEDICATION}
       />
-
       <AllergyModal
         showAllergyModal={showAllergyModal}
         selectedPatient={selectedPatient}

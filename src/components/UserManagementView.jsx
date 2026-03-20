@@ -16,6 +16,7 @@ export default function UserManagementView({
   onSaveProfileName,
   showOnlyActiveToday,
   setShowOnlyActiveToday,
+  onApproveUser,
 }) {
   return (
     <div className="p-4 md:p-6">
@@ -73,27 +74,17 @@ export default function UserManagementView({
             <table className="min-w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left">
-                  <th className="px-3 py-3 font-semibold text-slate-700">
-                    Name
-                  </th>
-                  <th className="px-3 py-3 font-semibold text-slate-700">
-                    User ID
-                  </th>
-                  <th className="px-3 py-3 font-semibold text-slate-700">
-                    Classification
-                  </th>
-                  <th className="px-3 py-3 font-semibold text-slate-700">
-                    Role
-                  </th>
-                  <th className="px-3 py-3 font-semibold text-slate-700">
-                    Last Seen
-                  </th>
-                  <th className="px-3 py-3 font-semibold text-slate-700">
-                    Action
-                  </th>
+                  <th className="px-3 py-3 font-semibold text-slate-700">Name</th>
+                  <th className="px-3 py-3 font-semibold text-slate-700">User ID</th>
+                  <th className="px-3 py-3 font-semibold text-slate-700">Classification</th>
+                  <th className="px-3 py-3 font-semibold text-slate-700">Role</th>
+                  <th className="px-3 py-3 font-semibold text-slate-700">Approval</th>
+                  <th className="px-3 py-3 font-semibold text-slate-700">Last Seen</th>
+                  <th className="px-3 py-3 font-semibold text-slate-700">Action</th>
                 </tr>
               </thead>
               <tbody>
+
                 {profiles.map((profile) => {
                   const isCurrentUser = profile.id === currentUserId;
 
@@ -219,6 +210,22 @@ export default function UserManagementView({
                           <option value="leadership">leadership</option>
                         </select>
                       </td>
+
+                       <td className="px-3 py-3">
+  {profile.approval_status === "approved" ? (
+    <span className="inline-block rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-700">
+      Approved
+    </span>
+  ) : (
+    <button
+      onClick={() => onApproveUser(profile.id)}
+      disabled={savingProfileId === profile.id}
+      className="rounded-lg bg-green-600 px-3 py-1 text-xs text-white disabled:opacity-60"
+    >
+      Approve
+    </button>
+  )}
+</td>
 
                       <td className="px-3 py-3 text-sm text-slate-600">
                         <div className="space-y-1">

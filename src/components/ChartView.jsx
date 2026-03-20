@@ -69,6 +69,8 @@ export default function ChartView({
   attendingSignerName,
   activeStudents,
   activeUpperLevels,
+  activeAttendings,
+signSoapAsAttendingWithPin,
 }) {
 
   function formatAuditAction(action) {
@@ -195,6 +197,9 @@ function getColorClasses(category) {
     saveSoapNote,
   ]);
   const [showTimeline, setShowTimeline] = useState(false);
+  const [showSignModal, setShowSignModal] = useState(false);
+const [selectedAttendingId, setSelectedAttendingId] = useState("");
+const [attendingPin, setAttendingPin] = useState("");
 
   if (!selectedPatient) return null;
 
@@ -1133,14 +1138,18 @@ const spo2Category = getSpo2Category(latestVitals?.spo2);
                 ) : null}
 
                 {canSignAsAttending ? (
-                  <button
-                    onClick={signSoapAsAttending}
-                    disabled={soapBusy}
-                    className="rounded-lg bg-emerald-600 px-4 py-3 text-sm font-medium text-white"
-                  >
-                    Sign as Attending
-                  </button>
-                ) : null}
+  <button
+    onClick={() => {
+      setSelectedAttendingId("");
+      setAttendingPin("");
+      setShowSignModal(true);
+    }}
+    disabled={soapBusy}
+    className="rounded-lg bg-emerald-600 px-4 py-3 text-sm font-medium text-white"
+  >
+    Sign as Attending
+  </button>
+) : null}
               </div>
 
               <div className="space-y-1 text-sm text-slate-600">
@@ -1281,6 +1290,78 @@ Object.keys(entry.details).length > 0 ? (
       </div>
         </>
       )}
+      {showSignModal && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+    <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+      <h3 className="text-lg font-semibold text-slate-900">
+        Attending Signature
+      </h3>
+      <p className="mt-1 text-sm text-slate-600">
+        Select the attending and enter their 4-digit PIN to sign this note.
+      </p>
+
+      <div className="mt-4 space-y-4">
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            Attending
+          </label>
+          <select
+            value={selectedAttendingId}
+            onChange={(e) => setSelectedAttendingId(e.target.value)}
+            className="w-full rounded-lg border p-3"
+          >
+            <option value="">Select attending</option>
+            {activeAttendings?.map((attending) => (
+              <option key={attending.id} value={attending.id}>
+                {attending.full_name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            4-Digit PIN
+          </label>
+          <input
+            type="password"
+            inputMode="numeric"
+            maxLength={4}
+            value={attendingPin}
+            onChange={(e) =>
+              setAttendingPin(e.target.value.replace(/\D/g, "").slice(0, 4))
+            }
+            className="w-full rounded-lg border p-3"
+            placeholder="Enter PIN"
+          />
+        </div>
+      </div>
+
+      <div className="mt-6 flex gap-3">
+        <button
+          onClick={() => {
+            setShowSignModal(false);
+            setSelectedAttendingId("");
+            setAttendingPin("");
+          }}
+          className="flex-1 rounded-lg bg-slate-200 px-4 py-3 text-slate-700 hover:bg-slate-300"
+        >
+          Cancel
+        </button>
+
+        <button
+          onClick={() =>
+            signSoapAsAttendingWithPin(selectedAttendingId, attendingPin)
+          }
+          disabled={!selectedAttendingId || attendingPin.length !== 4 || soapBusy}
+          className="flex-1 rounded-lg bg-emerald-600 px-4 py-3 text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {soapBusy ? "Signing..." : "Sign Note"}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 }
