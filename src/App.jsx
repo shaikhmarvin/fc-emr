@@ -673,14 +673,18 @@ const waitingEncounterRows = useMemo(() => {
   let rows = filteredEncounterRows;
 
   if (userRole === "student") {
-    rows = filteredEncounterRows.filter(
-      ({ encounter }) =>
-        (encounter.assignedStudent || "").trim() === currentUserName
+    rows = filteredEncounterRows.filter(({ encounter }) =>
+      (encounter.assignedStudent || "")
+        .trim()
+        .toLowerCase()
+        .includes(currentUserName.toLowerCase())
     );
   } else if (userRole === "upper_level") {
-    rows = filteredEncounterRows.filter(
-      ({ encounter }) =>
-        (encounter.assignedUpperLevel || "").trim() === currentUserName
+    rows = filteredEncounterRows.filter(({ encounter }) =>
+      (encounter.assignedUpperLevel || "")
+        .trim()
+        .toLowerCase()
+        .includes(currentUserName.toLowerCase())
     );
   } else if (userRole === "attending") {
     rows = filteredEncounterRows.filter(
