@@ -2131,13 +2131,6 @@ async function saveSoapNote(showConfirmation = true) {
     );
 
     if (showConfirmation) {
-  await logAuditEvent("soap_saved", {
-    soapStatus: currentSoapStatus,
-  });
-  await loadAuditLog();
-}
-
-    if (showConfirmation) {
   showSoapMessage("SOAP note saved.");
     }
   } catch (error) {
