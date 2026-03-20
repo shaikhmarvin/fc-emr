@@ -2681,6 +2681,12 @@ async function reopenSoapNote() {
     priorityBadge={priorityBadge}
     elevatorBadge={elevatorBadge}
     formatWaitTime={formatWaitTime}
+    studentNameOptions={studentNameOptions}
+upperLevelNameOptions={upperLevelNameOptions}
+
+onAssignFromQueue={(encounterId, updates) => {
+  updateEncounter(encounterId, updates);
+}}
   />
 )}
 

@@ -8,6 +8,10 @@ export default function QueueView({
   priorityBadge,
   elevatorBadge,
   formatWaitTime,
+  studentNameOptions,
+  upperLevelNameOptions,
+  onAssignFromQueue,
+  
 }) {
   return (
     <div className="space-y-4 p-3 sm:p-4 lg:space-y-6 lg:p-6">
@@ -40,45 +44,91 @@ export default function QueueView({
           />
         </div>
 
-        <div className="divide-y">
-          {waitingEncounterRows.map(({ patient, encounter }) => (
-            <div
-              key={encounter.id}
-              onClick={() => openPatientChart(patient.id, encounter.id)}
-              className="flex cursor-pointer flex-col gap-3 px-2 py-4 hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div className="space-y-1">
-                <p className="font-semibold text-slate-800">
-                  {getPatientBoardName(patient)} ({patient.age})
-                </p>
-                <p className="text-sm text-slate-500">
-                  MRN: {patient.mrn || "—"}
-                </p>
-                <p className="text-sm text-slate-500">
-  {encounter.chiefComplaint || "No chief complaint"}
-</p>
-<p className="text-sm text-slate-500">
-  Student: {encounter.assignedStudent || "—"} • Upper Level: {encounter.assignedUpperLevel || "—"}
-</p>
-                <div className="flex flex-wrap gap-2">
-                  {spanishBadge(encounter)}
-                  {priorityBadge(encounter)}
-                  {elevatorBadge(encounter)}
-                </div>
-              </div>
+<div className="divide-y">
+  {waitingEncounterRows.map(({ patient, encounter }) => (
+    <div
+      key={encounter.id}
+      onClick={(e) => {
+        if (e.target.tagName === "SELECT" || e.target.tagName === "BUTTON") return;
+        openPatientChart(patient.id, encounter.id);
+      }}
+      className="flex cursor-pointer flex-col gap-3 px-2 py-4 hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <div className="space-y-1">
+        <p className="font-semibold text-slate-800">
+          {getPatientBoardName(patient)} ({patient.age})
+        </p>
+        <p className="text-sm text-slate-500">
+          MRN: {patient.mrn || "—"}
+        </p>
+        <p className="text-sm text-slate-500">
+          {encounter.chiefComplaint || "No chief complaint"}
+        </p>
+        <p className="text-sm text-slate-500">
+          Student: {encounter.assignedStudent || "—"} • Upper Level: {encounter.assignedUpperLevel || "—"}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {spanishBadge(encounter)}
+          {priorityBadge(encounter)}
+          {elevatorBadge(encounter)}
+        </div>
+      </div>
 
-              <div className="text-left sm:text-right">
-                <p className="text-sm font-medium text-slate-700">
-  {encounter.soapStatus === "awaiting_attending"
-    ? "Awaiting Signature"
-    : encounter.status || "—"}
-</p>
-                <p className="text-sm text-slate-500">
-                  {formatWaitTime(encounter.createdAt)}
-                </p>
-              </div>
-            </div>
-          ))}
+      <div className="flex flex-col gap-2 text-left sm:items-end sm:text-right">
+        <p className="text-sm font-medium text-slate-700">
+          {encounter.soapStatus === "awaiting_attending"
+            ? "Awaiting Signature"
+            : encounter.status || "—"}
+        </p>
+
+        <p className="text-sm text-slate-500">
+          {formatWaitTime(encounter.createdAt)}
+        </p>
+
+        {/* 👇 LEADERSHIP ASSIGNMENT UI */}
+        {userRole === "leadership" && (
+          <div
+            className="mt-2 flex flex-col gap-2"
+            onClick={(e) => e.stopPropagation()} // prevents chart open
+          >
+            <select
+              className="border rounded p-1 text-xs"
+              defaultValue={encounter.assignedStudent || ""}
+              onChange={(e) =>
+                onAssignFromQueue(encounter.id, {
+                  assignedStudent: e.target.value,
+                })
+              }
+            >
+              <option value="">Assign Student</option>
+              {studentNameOptions.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+
+            <select
+              className="border rounded p-1 text-xs"
+              defaultValue={encounter.assignedUpperLevel || ""}
+              onChange={(e) =>
+                onAssignFromQueue(encounter.id, {
+                  assignedUpperLevel: e.target.value,
+                })
+              }
+            >
+              <option value="">Assign Upper</option>
+              {upperLevelNameOptions.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+    </div>
+  ))}
 
           {waitingEncounterRows.length === 0 && (
             <div className="px-5 py-6 text-slate-500">
