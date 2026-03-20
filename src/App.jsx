@@ -1439,33 +1439,41 @@ async function handleSaveProfileName(profileId) {
     if (!canManageRooms) return;
     if (leadershipActionLocked) return;
     if (!selectedPatient || !selectedEncounter) return;
-    if (!assignmentForm.studentName || !assignmentForm.roomNumber) return;
+    if (
+  !assignmentForm.studentName &&
+  !assignmentForm.upperLevelName &&
+  !assignmentForm.roomNumber
+) return;
 
     lockLeadershipActions();
 
-    const roomNumber = Number(assignmentForm.roomNumber);
+    const roomNumber = assignmentForm.roomNumber
+  ? Number(assignmentForm.roomNumber)
+  : null;
 
-    if (isPapRestricted(selectedEncounter) && (roomNumber === 9 || roomNumber === 10)) {
-      alert("Pap smear patients cannot be assigned to Room 9 or Room 10.");
-      return;
-    }
+    if (roomNumber !== null) {
+  if (isPapRestricted(selectedEncounter) && (roomNumber === 9 || roomNumber === 10)) {
+    alert("Pap smear patients cannot be assigned to Room 9 or Room 10.");
+    return;
+  }
 
-    const takenByOtherEncounter = allEncounterRows.some(
-      ({ patient, encounter }) =>
-        patient.id !== selectedPatient.id &&
-        encounter.id !== selectedEncounter.id &&
-        Number(encounter.roomNumber) === roomNumber &&
-        encounter.status !== "Completed"
-    );
+  const takenByOtherEncounter = allEncounterRows.some(
+    ({ patient, encounter }) =>
+      patient.id !== selectedPatient.id &&
+      encounter.id !== selectedEncounter.id &&
+      Number(encounter.roomNumber) === roomNumber &&
+      encounter.status !== "Completed"
+  );
 
-    if (takenByOtherEncounter) {
-      alert("That room is already in use.");
-      return;
-    }
+  if (takenByOtherEncounter) {
+    alert("That room is already in use.");
+    return;
+  }
+}
 
     try {
       await updateEncounterInSupabase(selectedEncounter.id, {
-        roomNumber: String(roomNumber),
+        roomNumber: roomNumber !== null ? String(roomNumber) : null,
         status: "Assigned",
         assignedStudent: assignmentForm.studentName,
         assignedUpperLevel: assignmentForm.upperLevelName,
@@ -1482,7 +1490,7 @@ async function handleSaveProfileName(profileId) {
                     ...encounter,
                     assignedStudent: assignmentForm.studentName,
                     assignedUpperLevel: assignmentForm.upperLevelName,
-                    roomNumber: String(roomNumber),
+                    roomNumber: roomNumber !== null ? String(roomNumber) : null,
                     status: "Assigned",
                   }
                   : encounter
