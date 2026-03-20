@@ -76,9 +76,9 @@ export default function ChartView({
     case "soap_saved":
       return "SOAP note saved";
     case "soap_submitted_upper":
-      return "Submitted for upper level review";
-    case "soap_submitted_attending":
-      return "Submitted for attending review";
+  return "Submitted to upper level";
+case "soap_submitted_attending":
+  return "Submitted to attending";
     case "soap_signed_upper":
       return "Signed by upper level";
     case "soap_signed_attending":
@@ -1256,10 +1256,18 @@ Follow-up`}
                   {formatAuditAction(entry.action)}
                 </p>
                 <p className="text-xs text-slate-500">
-                  {entry.actor_role || "Unknown role"} • {formatDate(entry.created_at)}
+                  {entry.actor_name || "Unknown User"} •{" "}
+{new Date(entry.created_at).toLocaleString()}
                 </p>
 
-                {entry.action !== "soap_saved" &&
+                {![
+  "soap_saved",
+  "soap_submitted_upper",
+  "soap_submitted_attending",
+  "soap_signed_upper",
+  "soap_signed_attending",
+  "soap_reopened",
+].includes(entry.action) &&
 entry.details &&
 Object.keys(entry.details).length > 0 ? (
   <pre className="mt-2 overflow-x-auto rounded bg-white p-2 text-xs text-slate-600">

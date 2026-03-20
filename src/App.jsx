@@ -279,6 +279,7 @@ export default function App() {
       encounterId: selectedEncounter.id,
       patientId: selectedPatient.id,
       actorUserId: session.user.id,
+      actorName: profileNameMap[session.user.id] || authFullName || "Unknown User",
       actorRole: userRole || "",
       action,
       details,
