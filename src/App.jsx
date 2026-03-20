@@ -1435,6 +1435,101 @@ async function handleSaveProfileName(profileId) {
     );
   }
 
+  async function assignEncounterFromQueue(encounterId, updates) {
+  if (!canManageRooms) return;
+
+  const targetRow = allEncounterRows.find(
+    ({ encounter }) => encounter.id === encounterId
+  );
+  if (!targetRow) return;
+
+  const { patient, encounter } = targetRow;
+
+  const nextStudent =
+    updates.assignedStudent !== undefined
+      ? updates.assignedStudent
+      : encounter.assignedStudent || "";
+
+  const nextUpperLevel =
+    updates.assignedUpperLevel !== undefined
+      ? updates.assignedUpperLevel
+      : encounter.assignedUpperLevel || "";
+
+  const nextRoomNumber =
+    updates.roomNumber !== undefined
+      ? updates.roomNumber
+      : encounter.roomNumber || "";
+
+  const numericRoom = nextRoomNumber ? Number(nextRoomNumber) : null;
+
+  if (
+    numericRoom !== null &&
+    isPapRestricted(encounter) &&
+    (numericRoom === 9 || numericRoom === 10)
+  ) {
+    alert("Pap smear patients cannot be assigned to Room 9 or Room 10.");
+    return;
+  }
+
+  if (numericRoom !== null) {
+    const takenByOtherEncounter = allEncounterRows.some(
+      ({ patient: otherPatient, encounter: otherEncounter }) =>
+        otherPatient.id !== patient.id &&
+        otherEncounter.id !== encounter.id &&
+        Number(otherEncounter.roomNumber) === numericRoom &&
+        otherEncounter.status !== "Completed"
+    );
+
+    if (takenByOtherEncounter) {
+      alert("That room is already in use.");
+      return;
+    }
+  }
+
+  const hasAnyAssignment = !!nextStudent || !!nextUpperLevel || !!nextRoomNumber;
+
+  try {
+    await updateEncounterInSupabase(encounterId, {
+      assignedStudent: nextStudent,
+      assignedUpperLevel: nextUpperLevel,
+      roomNumber: nextRoomNumber || null,
+      status: hasAnyAssignment
+        ? encounter.status === "Waiting"
+          ? "Assigned"
+          : encounter.status
+        : encounter.status,
+    });
+
+    setPatients((prev) =>
+      prev.map((p) =>
+        p.id === patient.id
+          ? {
+              ...p,
+              encounters: p.encounters.map((e) =>
+                e.id === encounterId
+                  ? {
+                      ...e,
+                      assignedStudent: nextStudent,
+                      assignedUpperLevel: nextUpperLevel,
+                      roomNumber: nextRoomNumber || "",
+                      status: hasAnyAssignment
+                        ? e.status === "Waiting"
+                          ? "Assigned"
+                          : e.status
+                        : e.status,
+                    }
+                  : e
+              ),
+            }
+          : p
+      )
+    );
+  } catch (error) {
+    console.error("Failed to assign encounter from queue:", error);
+    alert(`Failed to save assignment: ${error.message}`);
+  }
+}
+
   async function assignEncounter() {
     if (!canManageRooms) return;
     if (leadershipActionLocked) return;
@@ -2692,9 +2787,7 @@ async function reopenSoapNote() {
     studentNameOptions={studentNameOptions}
 upperLevelNameOptions={upperLevelNameOptions}
 
-onAssignFromQueue={(encounterId, updates) => {
-  updateEncounter(encounterId, updates);
-}}
+onAssignFromQueue={assignEncounterFromQueue}
   />
 )}
 

@@ -88,9 +88,30 @@ export default function QueueView({
         {/* 👇 LEADERSHIP ASSIGNMENT UI */}
         {userRole === "leadership" && (
           <div
-            className="mt-2 flex flex-col gap-2"
+            className="mt-2 flex flex-col gap-1"
             onClick={(e) => e.stopPropagation()} // prevents chart open
           >
+
+
+<select
+  className="border rounded p-1 text-xs"
+  defaultValue={encounter.roomNumber || ""}
+  onChange={(e) =>
+    onAssignFromQueue(encounter.id, {
+      roomNumber: e.target.value,
+    })
+  }
+>
+  <option value="">Assign Room</option>
+  {[...Array(10)].map((_, i) => {
+    const room = i + 1;
+    return (
+      <option key={room} value={room}>
+        Room {room}
+      </option>
+    );
+  })}
+</select>
             <select
               className="border rounded p-1 text-xs"
               defaultValue={encounter.assignedStudent || ""}
