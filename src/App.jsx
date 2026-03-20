@@ -167,10 +167,17 @@ export default function App() {
     );
   }
 
-  function canAttendingSignSoap(role, encounter) {
-    if (role !== "attending") return false;
-    return encounter?.soapStatus === "awaiting_attending";
-  }
+function canAttendingSignSoap(role, encounter) {
+  if (!encounter) return false;
+
+  return (
+    encounter.soapStatus === "awaiting_attending" &&
+    (role === "student" ||
+      role === "upper_level" ||
+      role === "leadership" ||
+      role === "attending")
+  );
+}
 
   function formatRoleLabel(role) {
     switch (role) {
