@@ -55,8 +55,11 @@ export default function QueueView({
                   MRN: {patient.mrn || "—"}
                 </p>
                 <p className="text-sm text-slate-500">
-                  {encounter.chiefComplaint || "No chief complaint"}
-                </p>
+  {encounter.chiefComplaint || "No chief complaint"}
+</p>
+<p className="text-sm text-slate-500">
+  Student: {encounter.assignedStudent || "—"} • Upper Level: {encounter.assignedUpperLevel || "—"}
+</p>
                 <div className="flex flex-wrap gap-2">
                   {spanishBadge(encounter)}
                   {priorityBadge(encounter)}
@@ -65,7 +68,11 @@ export default function QueueView({
               </div>
 
               <div className="text-left sm:text-right">
-                <p className="text-sm font-medium text-yellow-700">Waiting</p>
+                <p className="text-sm font-medium text-slate-700">
+  {encounter.soapStatus === "awaiting_attending"
+    ? "Awaiting Signature"
+    : encounter.status || "—"}
+</p>
                 <p className="text-sm text-slate-500">
                   {formatWaitTime(encounter.createdAt)}
                 </p>

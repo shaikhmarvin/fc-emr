@@ -663,24 +663,22 @@ const attendingSignerName = selectedEncounter?.attendingSignedBy
     filteredPatients.some((p) => p.id === patient.id)
   );
 
-  const waitingEncounterRows = useMemo(() => {
-  let rows = filteredEncounterRows.filter(
-    ({ encounter }) => encounter.status === "Waiting"
-  );
-
+const waitingEncounterRows = useMemo(() => {
   const currentUserName = (
     profileNameMap[session?.user?.id] ||
     authFullName ||
     ""
   ).trim();
 
+  let rows = filteredEncounterRows;
+
   if (userRole === "student") {
-    rows = rows.filter(
+    rows = filteredEncounterRows.filter(
       ({ encounter }) =>
         (encounter.assignedStudent || "").trim() === currentUserName
     );
   } else if (userRole === "upper_level") {
-    rows = rows.filter(
+    rows = filteredEncounterRows.filter(
       ({ encounter }) =>
         (encounter.assignedUpperLevel || "").trim() === currentUserName
     );
@@ -688,13 +686,20 @@ const attendingSignerName = selectedEncounter?.attendingSignedBy
     rows = filteredEncounterRows.filter(
       ({ encounter }) => encounter.soapStatus === "awaiting_attending"
     );
+  } else {
+    rows = filteredEncounterRows.filter(
+      ({ encounter }) => encounter.status === "Waiting"
+    );
   }
 
-  return rows.sort((a, b) => {
+  return [...rows].sort((a, b) => {
     const aBus = a.encounter.transportation === "Bus/Public Transport" ? 0 : 1;
     const bBus = b.encounter.transportation === "Bus/Public Transport" ? 0 : 1;
     if (aBus !== bBus) return aBus - bBus;
-    return new Date(a.encounter.createdAt) - new Date(b.encounter.createdAt);
+
+    const aTime = new Date(a.encounter.createdAt || 0).getTime();
+    const bTime = new Date(b.encounter.createdAt || 0).getTime();
+    return aTime - bTime;
   });
 }, [
   filteredEncounterRows,
