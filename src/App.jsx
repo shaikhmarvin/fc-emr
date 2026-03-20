@@ -276,14 +276,14 @@ export default function App() {
 
   try {
     await createAuditLog({
-      encounterId: selectedEncounter.id,
-      patientId: selectedPatient.id,
-      actorUserId: session.user.id,
-      actorName: profileNameMap[session.user.id] || authFullName || "Unknown User",
-      actorRole: userRole || "",
-      action,
-      details,
-    });
+  encounterId: selectedEncounter.id,
+  patientId: selectedPatient.id,
+  actorUserId: session.user.id,
+  actorName: profileNameMap[session.user.id] || authFullName || "Unknown User",
+  actorRole: userRole || "",
+  action,
+  details,
+});
   } catch (error) {
     console.error("Failed to write audit log:", error);
   }
