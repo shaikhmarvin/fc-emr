@@ -22,6 +22,19 @@ import AppSidebar from "./components/AppSidebar";
 import UserManagementView from "./components/UserManagementView";
 import AppHeader from "./components/AppHeader";
 import DashboardView from "./components/DashboardView";
+import ClinicSummaryView from "./components/ClinicSummaryView";
+import {
+  Document,
+  Packer,
+  Paragraph,
+  TextRun,
+  Table,
+  TableRow,
+  TableCell,
+  WidthType,
+  AlignmentType,
+} from "docx";
+import { saveAs } from "file-saver";
 import { ROOM_OPTIONS, EMPTY_FORM, EMPTY_VITALS, EMPTY_MEDICATION, EMPTY_SEARCH, } from "./constants";
 import {
   calculateAge,
@@ -122,6 +135,40 @@ export default function App() {
     authPinConfirm,
     setAuthPinConfirm,
   } = useAuthSession();
+
+  useEffect(() => {
+  if (!session?.user?.id) return;
+
+  async function updateLastSeen() {
+    try {
+      await supabase
+        .from("profiles")
+        .update({ last_seen_at: new Date().toISOString() })
+        .eq("id", session.user.id);
+
+      await loadProfiles(); // refresh UI immediately
+    } catch (err) {
+      console.error("Failed to update last_seen_at:", err);
+    }
+  }
+
+  updateLastSeen();
+}, [session]);
+
+useEffect(() => {
+  if (!session?.user?.id) return;
+
+  const interval = setInterval(async () => {
+  await supabase
+    .from("profiles")
+    .update({ last_seen_at: new Date().toISOString() })
+    .eq("id", session.user.id);
+
+  loadProfiles(); // keep UI fresh
+}, 5 * 60 * 1000);
+
+  return () => clearInterval(interval);
+}, [session]);
 
   const canOpenIntake = canStartIntake(userRole);
   const canManageRooms = canManageRoomBoard(userRole);
@@ -256,6 +303,20 @@ function canAttendingSignSoap(role, encounter) {
   }
 
   const [activeView, setActiveView] = useState("dashboard");
+  const [clinicSummary, setClinicSummary] = useState({
+  refillCount: "",
+  labsCount: "",
+  mentalHealthCount: "",
+  socialWorkCount: "",
+  ophthalmologyCount: "",
+  lwobsCount: "",
+  zoomCount: "",
+  phoneCount: "",
+  attendingNames: "",
+  residentNames: "",
+  ms34Names: "",
+  ms12Names: "",
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showIntakeModal, setShowIntakeModal] = useState(false);
   const [intakeTab, setIntakeTab] = useState(0);
@@ -484,6 +545,16 @@ function canAttendingSignSoap(role, encounter) {
   const filteredVisiblePatients = filteredPatients.filter((patient) =>
     visiblePatientIds.has(patient.id)
   );
+
+  const newPatientCount = visibleEncounterRows.filter(
+  ({ encounter }) => encounter.newReturning === "New"
+).length;
+
+const returningPatientCount = visibleEncounterRows.filter(
+  ({ encounter }) => encounter.newReturning === "Returning"
+).length;
+
+const totalPatientCount = visibleEncounterRows.length;
   const [formulary, setFormulary] = useState([
     {
       id: 1,
@@ -570,10 +641,10 @@ function canAttendingSignSoap(role, encounter) {
   }, [profiles, userSearch, showOnlyActiveToday]);
 
   useEffect(() => {
-    if (session && profiles.length === 0) {
-      loadProfiles();
-    }
-  }, [session, profiles.length]);
+  if (session) {
+    loadProfiles();
+  }
+}, [session]);
 
   const profileNameMap = useMemo(() => {
     const map = {};
@@ -792,6 +863,14 @@ function canAttendingSignSoap(role, encounter) {
     );
   }
 
+  function joinActiveNames(list) {
+  return list
+    .map((profile) => (profile.full_name || "").trim())
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b))
+    .join(", ");
+}
+
   async function loadProfiles() {
     try {
       setLoadingProfiles(true);
@@ -856,6 +935,15 @@ function canAttendingSignSoap(role, encounter) {
   const activeAttendings = useMemo(() => {
     return activeTodayProfiles.filter((profile) => profile.role === "attending");
   }, [activeTodayProfiles]);
+
+  useEffect(() => {
+  setClinicSummary((prev) => ({
+    ...prev,
+    attendingNames: attendingNames || joinActiveNames(activeAttendings),
+    ms34Names: ms34Names || joinActiveNames(activeUpperLevels),
+    ms12Names: ms12Names || joinActiveNames(activeStudents),
+  }));
+}, [activeAttendings, activeUpperLevels, activeStudents]);
 
   async function handleChangeProfileRole(profileId, nextRole, nextClassification = null) {
     if (!isLeadershipView) return;
@@ -2734,6 +2822,268 @@ if (!attendingId || pin.length !== 4) return false;
     setSelectedClinicDate("");
     setActiveView("dashboard");
   }
+
+async function exportClinicSummaryToWord() {
+  const clinicDateLabel = selectedClinicDate || formatClinicDate();
+
+  const rowsForDate = visibleEncounterRows.filter(
+    ({ encounter }) =>
+      !selectedClinicDate ||
+      normalizeClinicDate(encounter.clinicDate) === selectedClinicDate
+  );
+
+  const returningRows = rowsForDate.filter(
+    ({ encounter }) => encounter.newReturning === "Returning"
+  );
+
+  const newRows = rowsForDate.filter(
+    ({ encounter }) => encounter.newReturning === "New"
+  );
+
+  const tableBorders = {
+    top: { style: "single", size: 1, color: "000000" },
+    bottom: { style: "single", size: 1, color: "000000" },
+    left: { style: "single", size: 1, color: "000000" },
+    right: { style: "single", size: 1, color: "000000" },
+    insideHorizontal: { style: "single", size: 1, color: "000000" },
+    insideVertical: { style: "single", size: 1, color: "000000" },
+  };
+
+  function headerCell(text) {
+    return new TableCell({
+      children: [
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          children: [new TextRun({ text, bold: true })],
+        }),
+      ],
+    });
+  }
+
+  function bodyCell(text, align = AlignmentType.LEFT) {
+    return new TableCell({
+      children: [
+        new Paragraph({
+          alignment: align,
+          children: [new TextRun(String(text ?? ""))],
+        }),
+      ],
+    });
+  }
+  function formatDobForSummary(dob) {
+  if (!dob) return "";
+
+  const parts = String(dob).split("-");
+  if (parts.length === 3) {
+    const [year, month, day] = parts;
+    return `${month}-${day}-${year}`;
+  }
+
+  return String(dob).replaceAll("/", "-");
+}
+
+  function patientTableRows(items) {
+    return [
+      new TableRow({
+        children: [
+          headerCell("MRN"),
+          headerCell("NAME"),
+          headerCell("DOB"),
+          headerCell("INSURANCE?"),
+        ],
+      }),
+      ...items.map(({ patient }) =>
+        new TableRow({
+          children: [
+            bodyCell(patient.mrn || "", AlignmentType.CENTER),
+            bodyCell(getFullPatientName(patient) || "", AlignmentType.LEFT),
+            bodyCell(formatDobForSummary(patient.dob) || "", AlignmentType.CENTER),
+            bodyCell("", AlignmentType.CENTER),
+          ],
+        })
+      ),
+    ];
+  }
+
+  const summaryTable = new Table({
+    width: {
+      size: 100,
+      type: WidthType.PERCENTAGE,
+    },
+    borders: tableBorders,
+    rows: [
+      new TableRow({
+        children: [
+          new TableCell({
+            columnSpan: 2,
+            children: [
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [new TextRun({ text: "Clinic Staff", bold: true })],
+              }),
+            ],
+          }),
+          new TableCell({
+            columnSpan: 2,
+            children: [
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [new TextRun({ text: "Clinic Numbers", bold: true })],
+              }),
+            ],
+          }),
+        ],
+      }),
+
+      new TableRow({
+        children: [
+          bodyCell("Attendings"),
+          bodyCell(clinicSummary.attendingNames || ""),
+          bodyCell("Returning"),
+          bodyCell(returningPatientCount, AlignmentType.CENTER),
+        ],
+      }),
+      new TableRow({
+        children: [
+          bodyCell("Residents:"),
+          bodyCell(clinicSummary.residentNames || ""),
+          bodyCell("New"),
+          bodyCell(newPatientCount, AlignmentType.CENTER),
+        ],
+      }),
+      new TableRow({
+        children: [
+          bodyCell("MS3 / MS4"),
+          bodyCell(clinicSummary.ms34Names || ""),
+          bodyCell("Refill"),
+          bodyCell(clinicSummary.refillCount || "", AlignmentType.CENTER),
+        ],
+      }),
+      new TableRow({
+        children: [
+          bodyCell("MS1 / MS2"),
+          bodyCell(clinicSummary.ms12Names || ""),
+          bodyCell("LWOBS"),
+          bodyCell(clinicSummary.lwobsCount || "", AlignmentType.CENTER),
+        ],
+      }),
+      new TableRow({
+        children: [
+          bodyCell(""),
+          bodyCell(""),
+          bodyCell("Labs"),
+          bodyCell(clinicSummary.labsCount || "", AlignmentType.CENTER),
+        ],
+      }),
+      new TableRow({
+        children: [
+          bodyCell(""),
+          bodyCell(""),
+          bodyCell("Mental Health"),
+          bodyCell(clinicSummary.mentalHealthCount || "", AlignmentType.CENTER),
+        ],
+      }),
+      new TableRow({
+        children: [
+          bodyCell(""),
+          bodyCell(""),
+          bodyCell("Ophthalmology"),
+          bodyCell(clinicSummary.ophthalmologyCount || "", AlignmentType.CENTER),
+        ],
+      }),
+      new TableRow({
+        children: [
+          bodyCell(""),
+          bodyCell(""),
+          bodyCell("Social Work"),
+          bodyCell(clinicSummary.socialWorkCount || "", AlignmentType.CENTER),
+        ],
+      }),
+      new TableRow({
+        children: [
+          bodyCell(""),
+          bodyCell(""),
+          bodyCell("Zoom"),
+          bodyCell(clinicSummary.zoomCount || "", AlignmentType.CENTER),
+        ],
+      }),
+      new TableRow({
+        children: [
+          bodyCell(""),
+          bodyCell(""),
+          bodyCell("Phone"),
+          bodyCell(clinicSummary.phoneCount || "", AlignmentType.CENTER),
+        ],
+      }),
+    ],
+  });
+
+  const doc = new Document({
+    sections: [
+      {
+        children: [
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "Patients Seen: ",
+                bold: true,
+                underline: {},
+              }),
+            ],
+          }),
+
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [new TextRun({ text: "RETURNING PATIENTS", bold: true })],
+          }),
+
+          new Table({
+            width: {
+              size: 100,
+              type: WidthType.PERCENTAGE,
+            },
+            borders: tableBorders,
+            rows: patientTableRows(returningRows),
+          }),
+
+          new Paragraph({ text: "" }),
+
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [new TextRun({ text: "NEW PATIENTS", bold: true })],
+          }),
+
+          new Table({
+            width: {
+              size: 100,
+              type: WidthType.PERCENTAGE,
+            },
+            borders: tableBorders,
+            rows: patientTableRows(newRows),
+          }),
+
+          new Paragraph({ text: "" }),
+
+          summaryTable,
+
+          new Paragraph({ text: "" }),
+
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "(#) = number of patients seen for clinic AND specialty",
+              }),
+            ],
+          }),
+        ],
+      },
+    ],
+  });
+
+  const blob = await Packer.toBlob(doc);
+  saveAs(blob, `Clinic Summary - ${clinicDateLabel}.docx`);
+}
+
   const sortedMedications = selectedEncounter
     ? [...(selectedEncounter.medications || [])].sort((a, b) => {
       if (a.isActive === b.isActive) return 0;
@@ -2992,7 +3342,7 @@ if (!attendingId || pin.length !== 4) return false;
         EMPTY_FORM={EMPTY_FORM}
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}
-        isLeadershipView={canOpenIntake}
+        isLeadershipView={isLeadershipView}
       />
 
       <div className="min-w-0 flex-1 md:ml-64 md:flex md:min-h-0 md:flex-col">
@@ -3001,7 +3351,7 @@ if (!attendingId || pin.length !== 4) return false;
           selectedPatient={selectedPatient}
           getFullPatientName={getFullPatientName}
           formatDate={formatDate}
-          isLeadershipView={canOpenIntake}
+          isLeadershipView={isLeadershipView}
           setIsLeadershipView={setIsLeadershipView}
           setIsEditingIntake={setIsEditingIntake}
           setEditingPatientId={setEditingPatientId}
@@ -3178,6 +3528,19 @@ if (!attendingId || pin.length !== 4) return false;
               signSoapAsAttendingWithPin={signSoapAsAttendingWithPin}
             />
           )}
+
+          {activeView === "summary" && isLeadershipView && (
+  <ClinicSummaryView
+    selectedClinicDate={selectedClinicDate}
+    setSelectedClinicDate={setSelectedClinicDate}
+    clinicSummary={clinicSummary}
+    setClinicSummary={setClinicSummary}
+    newPatientCount={newPatientCount}
+    returningPatientCount={returningPatientCount}
+    totalPatientCount={totalPatientCount}
+    exportClinicSummaryToWord={exportClinicSummaryToWord}
+  />
+)}
         </div>
       </div>
 

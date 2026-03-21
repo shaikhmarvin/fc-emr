@@ -104,6 +104,22 @@ export default function AppSidebar({
           )}
 
           {isLeadershipView && (
+  <button
+    onClick={() => {
+      setActiveView("summary");
+      setSidebarOpen(false);
+    }}
+    className={`w-full rounded-xl px-3 py-2 text-left text-sm font-medium ${
+      activeView === "summary"
+        ? "bg-slate-900 text-white"
+        : "text-slate-700 hover:bg-slate-100"
+    }`}
+  >
+    Clinic Summary
+  </button>
+)}
+
+          {isLeadershipView && (
             <button
               onClick={handleNewIntake}
               className="w-full rounded-lg bg-red-700 px-4 py-3 text-left text-white hover:bg-red-800"
