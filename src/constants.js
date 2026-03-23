@@ -80,3 +80,24 @@ export const EMPTY_SEARCH = {
   dob: "",
   last4ssn: "",
 };
+export const PT_TIME_SLOTS = [
+  "6:00 PM",
+  "6:30 PM",
+  "7:00 PM",
+  "7:30 PM",
+];
+
+export const PROGRAM_TYPES = [
+  "Physical Therapy",
+  "Dermatology",
+  "Mental Health",
+  "Addiction Medicine",
+];
+
+export const PROGRAM_STATUSES = [
+  "Interested",
+  "Contacted",
+  "Scheduled",
+  "Completed",
+  "No Show",
+];

@@ -159,13 +159,16 @@ export default function UserManagementView({
                         <select
                           className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                           value={profile.classification || ""}
-                          onChange={(e) =>
-                            onChangeRole(
-                              profile.id,
-                              getRoleFromClassification(e.target.value),
-                              e.target.value
-                            )
-                          }
+                          onChange={(e) => {
+  const nextClassification = e.target.value;
+  const mappedRole = getRoleFromClassification(nextClassification);
+
+  onChangeRole(
+    profile.id,
+    mappedRole || profile.role,
+    nextClassification
+  );
+}}
                           disabled={
                             savingProfileId === profile.id ||
                             profile.role === "leadership" ||
@@ -180,7 +183,8 @@ export default function UserManagementView({
                         </select>
                         {!profile.classification &&
                           profile.role !== "leadership" &&
-                          profile.role !== "attending" ? (
+                          profile.role !== "attending" &&
+                          profile.role !== "undergraduate" ? (
                           <div className="mt-1 text-xs text-red-500">
                             Missing classification
                           </div>
@@ -208,6 +212,7 @@ export default function UserManagementView({
                           <option value="upper_level">upper_level</option>
                           <option value="attending">attending</option>
                           <option value="leadership">leadership</option>
+                          <option value="undergraduate">undergraduate</option>
                         </select>
                       </td>
 

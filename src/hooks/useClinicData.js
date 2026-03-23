@@ -185,254 +185,35 @@ export function useClinicData({
 }) {
   const [patients, setPatients] = useState([]);
 
-  useEffect(() => {
-    if (!authReady || !session || !userRole) return;
+const [isLoaded, setIsLoaded] = useState(false);
 
-    async function loadData() {
-      try {
-        const patientsData = await fetchPatients();
-        const encountersData = await fetchEncounters();
-        const medicationsData = await fetchMedications();
-        const allergiesData = await fetchAllergies();
+useEffect(() => {
+  if (!authReady || !session || !userRole || isLoaded) return;
 
-        setPatients(
-          buildPatientMap(
-            patientsData,
-            encountersData,
-            medicationsData,
-            allergiesData
-          )
-        );
-      } catch (error) {
-        console.error("Failed loading data:", error);
-      }
+  async function loadData() {
+    try {
+      const patientsData = await fetchPatients();
+      const encountersData = await fetchEncounters();
+      const medicationsData = await fetchMedications();
+      const allergiesData = await fetchAllergies();
+
+      setPatients(
+        buildPatientMap(
+          patientsData,
+          encountersData,
+          medicationsData,
+          allergiesData
+        )
+      );
+
+      setIsLoaded(true); // 👈 IMPORTANT
+    } catch (error) {
+      console.error("Failed loading data:", error);
     }
+  }
 
-    loadData();
-  }, [authReady, session, userRole]);
-
-  useEffect(() => {
-    if (!authReady || !session || !userRole) return;
-
-    const channel = supabase
-      .channel("clinic-realtime")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "encounters",
-        },
-        (payload) => {
-          console.log("Realtime encounter update → targeted update", payload);
-
-          const eventType = payload.eventType;
-          const newEncounter = payload.new;
-          const oldEncounter = payload.old;
-
-          if (eventType === "DELETE" && oldEncounter?.id) {
-            setPatients((prevPatients) =>
-              prevPatients.map((patient) => ({
-                ...patient,
-                encounters: patient.encounters.filter(
-                  (encounter) => encounter.id !== oldEncounter.id
-                ),
-              }))
-            );
-            return;
-          }
-
-          if ((eventType === "INSERT" || eventType === "UPDATE") && newEncounter?.id) {
-            const mappedEncounter = mapEncounterRow(newEncounter);
-
-            setPatients((prevPatients) =>
-              prevPatients.map((patient) => {
-                if (patient.id === newEncounter.patient_id) {
-                  const existingEncounter = patient.encounters.find(
-                    (encounter) => encounter.id === newEncounter.id
-                  );
-
-                  let nextEncounter = mappedEncounter;
-
-                  if (
-                    selectedEncounterId &&
-                    mappedEncounter.id === selectedEncounterId &&
-                    existingEncounter
-                  ) {
-                    nextEncounter = {
-                      ...mappedEncounter,
-                      soapSubjective: existingEncounter.soapSubjective,
-                      soapObjective: existingEncounter.soapObjective,
-                      soapAssessment: existingEncounter.soapAssessment,
-                      soapPlan: existingEncounter.soapPlan,
-                      notes: existingEncounter.notes,
-                      medications: existingEncounter.medications || [],
-                    };
-                  } else if (existingEncounter) {
-                    nextEncounter = {
-                      ...mappedEncounter,
-                      medications: existingEncounter.medications || [],
-                    };
-                  }
-
-                  if (existingEncounter) {
-                    return {
-                      ...patient,
-                      encounters: patient.encounters.map((encounter) =>
-                        encounter.id === newEncounter.id ? nextEncounter : encounter
-                      ),
-                    };
-                  }
-
-                  return {
-                    ...patient,
-                    encounters: [nextEncounter, ...patient.encounters],
-                  };
-                }
-
-                return {
-                  ...patient,
-                  encounters: patient.encounters.filter(
-                    (encounter) => encounter.id !== newEncounter.id
-                  ),
-                };
-              })
-            );
-          }
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "medications",
-        },
-        async (payload) => {
-          console.log("Realtime medication update → targeted update", payload);
-
-          const newMed = payload.new;
-          const eventType = payload.eventType;
-
-          if (eventType === "INSERT" || eventType === "UPDATE") {
-            setPatients((prevPatients) =>
-              prevPatients.map((patient) => ({
-                ...patient,
-                encounters: patient.encounters.map((encounter) => {
-                  if (!newMed || encounter.id !== newMed.encounter_id) {
-                    return encounter;
-                  }
-
-                  let meds = encounter.medications || [];
-                  const exists = meds.find((m) => m.id === newMed.id);
-
-                  if (exists) {
-                    meds = meds.map((m) =>
-                      m.id === newMed.id
-                        ? {
-                            id: newMed.id,
-                            name: newMed.name || "",
-                            dosage: newMed.dosage || "",
-                            frequency: newMed.frequency || "",
-                            route: newMed.route || "",
-                            isActive: newMed.is_active ?? true,
-                          }
-                        : m
-                    );
-                  } else {
-                    meds = [
-                      ...meds,
-                      {
-                        id: newMed.id,
-                        name: newMed.name || "",
-                        dosage: newMed.dosage || "",
-                        frequency: newMed.frequency || "",
-                        route: newMed.route || "",
-                        isActive: newMed.is_active ?? true,
-                      },
-                    ];
-                  }
-
-                  return {
-                    ...encounter,
-                    medications: meds,
-                  };
-                }),
-              }))
-            );
-
-            return;
-          }
-
-          if (eventType === "DELETE") {
-            try {
-              const medicationsData = await fetchMedications();
-
-              setPatients((prevPatients) =>
-                prevPatients.map((patient) => ({
-                  ...patient,
-                  encounters: patient.encounters.map((encounter) => {
-                    const medsForEncounter = medicationsData
-                      .filter((med) => med.encounter_id === encounter.id)
-                      .map((med) => ({
-                        id: med.id,
-                        name: med.name || "",
-                        dosage: med.dosage || "",
-                        frequency: med.frequency || "",
-                        route: med.route || "",
-                        isActive: med.is_active ?? true,
-                      }));
-
-                    return {
-                      ...encounter,
-                      medications: medsForEncounter,
-                    };
-                  }),
-                }))
-              );
-            } catch (error) {
-              console.error("Realtime medication delete refresh failed:", error);
-            }
-          }
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "allergies",
-        },
-        async () => {
-          try {
-            const allergiesData = await fetchAllergies();
-
-            setPatients((prevPatients) =>
-              prevPatients.map((patient) => ({
-                ...patient,
-                allergyList: allergiesData
-                  .filter((allergy) => allergy.patient_id === patient.id)
-                  .map((allergy) => ({
-                    id: allergy.id,
-                    allergen: allergy.allergen || "",
-                    reaction: allergy.reaction || "",
-                    severity: allergy.severity || "",
-                    notes: allergy.notes || "",
-                    isActive: allergy.is_active ?? true,
-                  })),
-              }))
-            );
-          } catch (error) {
-            console.error("Realtime allergy refresh failed:", error);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [authReady, session, userRole, selectedEncounterId]);
+  loadData();
+}, [authReady, session, userRole, isLoaded]);
 
   return {
     patients,

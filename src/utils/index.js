@@ -182,3 +182,93 @@ export function createEncounterFromIntake(form) {
     soapSavedAt: "",
   };
 }
+
+export function canAssignRoom(encounter, roomNumber) {
+  if (!encounter) return false;
+
+  if (isPapRestricted(encounter) && (roomNumber === 9 || roomNumber === 10)) {
+    return false;
+  }
+
+  return true;
+}
+
+export function mapDbStatusToUi(status) {
+  switch (status) {
+    case "waiting":
+      return "Waiting";
+    case "roomed":
+      return "Assigned";
+    case "in_visit":
+      return "In Visit";
+    case "done":
+      return "Completed";
+    case "cancelled":
+      return "Cancelled";
+    default:
+      return "Waiting";
+  }
+}
+
+export function normalizeForDuplicateCheck(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[.,]/g, "")
+    .replace(/-/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+export function findPotentialDuplicatePatient(
+  patients,
+  firstName,
+  lastName,
+  dob,
+  last4ssn,
+  excludePatientId = null
+) {
+  return patients.find((patient) => {
+    if (excludePatientId && patient.id === excludePatientId) return false;
+
+    const sameDob =
+      normalizeForDuplicateCheck(patient.dob) ===
+      normalizeForDuplicateCheck(dob);
+
+    const sameFirst =
+      normalizeForDuplicateCheck(patient.firstName) ===
+      normalizeForDuplicateCheck(firstName);
+
+    const sameLast =
+      normalizeForDuplicateCheck(patient.lastName) ===
+      normalizeForDuplicateCheck(lastName);
+
+    const inputLast4 = normalizeForDuplicateCheck(last4ssn);
+    const patientLast4 = normalizeForDuplicateCheck(patient.last4ssn);
+
+    const hasLast4OnBoth = inputLast4 && patientLast4;
+    const sameLast4 = hasLast4OnBoth ? inputLast4 === patientLast4 : true;
+
+    return sameDob && sameFirst && sameLast && sameLast4;
+  });
+}
+
+export function mrnExists(patients, mrn, excludePatientId = null) {
+  const normalizedMrn = String(mrn || "").trim().toLowerCase();
+  if (!normalizedMrn) return false;
+
+  return patients.some((patient) => {
+    if (excludePatientId && patient.id === excludePatientId) return false;
+
+    return (
+      String(patient.mrn || "").trim().toLowerCase() === normalizedMrn
+    );
+  });
+}
+
+export function sortEncountersByDate(encounters = []) {
+  return [...encounters].sort((a, b) => {
+    const aTime = new Date(a.createdAt || a.clinicDate || 0).getTime();
+    const bTime = new Date(b.createdAt || b.clinicDate || 0).getTime();
+    return bTime - aTime;
+  });
+}

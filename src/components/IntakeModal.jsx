@@ -9,6 +9,26 @@ export default function IntakeModal({
   isEditingIntake,
   intakeMatchPatientId,
 }) {
+
+  const ETHNICITY_OPTIONS = [
+    "Hispanic or Latino",
+    "Asian",
+    "Black or African American",
+    "White",
+    "Middle Eastern",
+  ];
+
+  const SEX_OPTIONS = ["Male", "Female", "Other", "Prefer not to say"];
+
+  const YES_NO_OPTIONS = ["Yes", "No"];
+
+  function formatPhoneNumber(value) {
+    const digits = value.replace(/\D/g, "").slice(0, 10);
+
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
   if (!showIntakeModal) return null;
   return (
     <div className="fixed inset-0 z-[100] flex items-start justify-center bg-black/40 p-4 pt-20 sm:p-6 sm:pt-24">
@@ -41,11 +61,10 @@ export default function IntakeModal({
                 <button
                   key={tab}
                   onClick={() => setIntakeTab(index)}
-                  className={`rounded-full px-4 py-2 text-sm ${
-                    intakeTab === index
+                  className={`rounded-full px-4 py-2 text-sm ${intakeTab === index
                       ? "bg-blue-600 text-white"
                       : "bg-slate-100 text-slate-700"
-                  }`}
+                    }`}
                 >
                   {tab}
                 </button>
@@ -120,7 +139,9 @@ export default function IntakeModal({
                 className="rounded-lg border p-3"
                 placeholder="Phone Number"
                 value={intakeForm.phone}
-                onChange={(e) => updateIntakeField("phone", e.target.value)}
+                onChange={(e) =>
+                  updateIntakeField("phone", formatPhoneNumber(e.target.value))
+                }
               />
 
               <input
@@ -130,12 +151,18 @@ export default function IntakeModal({
                 onChange={(e) => updateIntakeField("pronouns", e.target.value)}
               />
 
-              <input
+              <select
                 className="rounded-lg border p-3"
-                placeholder="Sex"
                 value={intakeForm.sex}
                 onChange={(e) => updateIntakeField("sex", e.target.value)}
-              />
+              >
+                <option value="">Select Sex</option>
+                {SEX_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
 
               <select
                 className="rounded-lg border p-3"
@@ -253,9 +280,8 @@ export default function IntakeModal({
               </label>
 
               <select
-                className={`rounded-lg border p-3 ${
-                  intakeForm.htn || intakeForm.dm ? "" : "bg-slate-50 text-slate-400"
-                }`}
+                className={`rounded-lg border p-3 ${intakeForm.htn || intakeForm.dm ? "" : "bg-slate-50 text-slate-400"
+                  }`}
                 value={intakeForm.labsLast6Months}
                 onChange={(e) => updateIntakeField("labsLast6Months", e.target.value)}
                 disabled={!intakeForm.htn && !intakeForm.dm}
@@ -406,14 +432,18 @@ Type, quantity, duration, interested in cessation, substance use treatment`}
                 Needs Elevator
               </label>
 
-              <label className="flex items-center gap-2 rounded-lg border p-3">
-                <input
-                  type="checkbox"
-                  checked={intakeForm.spanishSpeaking}
-                  onChange={(e) => updateIntakeField("spanishSpeaking", e.target.checked)}
-                />
-                Spanish Speaking
-              </label>
+              <select
+                className="rounded-lg border p-3"
+                value={intakeForm.spanishSpeaking}
+                onChange={(e) => updateIntakeField("spanishSpeaking", e.target.value)}
+              >
+                <option value="">Spanish Speaking</option>
+                {YES_NO_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
             </div>
           )}
         </div>
@@ -439,7 +469,7 @@ Type, quantity, duration, interested in cessation, substance use treatment`}
             onClick={submitPatient}
             className="rounded-lg bg-blue-600 px-5 py-2 text-white hover:bg-blue-700"
           >
-            Submit Intake
+            Complete Intake
           </button>
         </div>
       </div>

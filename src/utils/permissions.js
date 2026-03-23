@@ -1,5 +1,5 @@
 export function canStartIntake(role) {
-  return role === "leadership";
+  return role === "leadership" || role === "undergraduate";
 }
 
 export function canManageRoomBoard(role) {
@@ -29,12 +29,16 @@ export function canChart(role) {
 }
 
 export function getRoleFromClassification(classification) {
-  if (!classification) return "student";
+  if (!classification) return null;
 
   const value = classification.toLowerCase();
 
   if (value === "ms1" || value === "ms2") return "student";
   if (value === "ms3" || value === "ms4") return "upper_level";
 
-  return "student";
+  return null;
+}
+
+export function isUndergraduate(role) {
+  return role === "undergraduate";
 }

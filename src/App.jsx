@@ -15,6 +15,9 @@ import MedicationModal from "./components/MedicationModal";
 import { createAllergyInSupabase, updateAllergyInSupabase, deleteAllergyInSupabase, } from "./api/allergies";
 import AllergyModal from "./components/AllergyModal";
 import IntakeModal from "./components/IntakeModal";
+import UndergradIntakeView from "./components/UndergradIntakeView";
+import RegistrationView from "./components/RegistrationView";
+import UndergradRegistrationModal from "./components/UndergradRegistrationModal";
 import ChartView from "./components/ChartView";
 import BoardDisplay from "./components/BoardDisplay";
 import FormularyView from "./components/FormularyView";
@@ -23,6 +26,13 @@ import UserManagementView from "./components/UserManagementView";
 import AppHeader from "./components/AppHeader";
 import DashboardView from "./components/DashboardView";
 import ClinicSummaryView from "./components/ClinicSummaryView";
+import ProgramsView from "./components/ProgramsView";
+import {
+  fetchProgramEntries,
+  createProgramEntryInSupabase,
+  updateProgramEntryInSupabase,
+  deleteProgramEntryInSupabase,
+} from "./api/programs";
 import {
   Document,
   Packer,
@@ -35,7 +45,16 @@ import {
   AlignmentType,
 } from "docx";
 import { saveAs } from "file-saver";
-import { ROOM_OPTIONS, EMPTY_FORM, EMPTY_VITALS, EMPTY_MEDICATION, EMPTY_SEARCH, } from "./constants";
+import {
+  ROOM_OPTIONS,
+  EMPTY_FORM,
+  EMPTY_VITALS,
+  EMPTY_MEDICATION,
+  EMPTY_SEARCH,
+  PT_TIME_SLOTS,
+  PROGRAM_TYPES,
+  PROGRAM_STATUSES,
+} from "./constants";
 import {
   calculateAge,
   generateMrn,
@@ -53,7 +72,11 @@ import {
   formatDate,
   formatClinicDate,
   normalizeClinicDate,
-
+  canAssignRoom,
+  mapDbStatusToUi,
+  findPotentialDuplicatePatient,
+  mrnExists,
+  sortEncountersByDate,
 } from "./utils";
 
 
@@ -302,7 +325,34 @@ function canAttendingSignSoap(role, encounter) {
     // no-op now that role comes from auth
   }
 
+  const EMPTY_UNDERGRAD_REGISTRATION_FORM = {
+  addressLine1: "",
+  city: "",
+  state: "",
+  zipCode: "",
+  emergencyContactName: "",
+  emergencyContactRelation: "",
+  emergencyContactPhone: "",
+  last4Ssn: "",
+  incomeRange: "",
+  spanishOnly: "",
+  chronicConditions: [],
+  chronicConditionsOther: "",
+};
+
+const [showUndergradRegistrationModal, setShowUndergradRegistrationModal] = useState(false);
+const [undergradRegistrationForm, setUndergradRegistrationForm] = useState(
+  EMPTY_UNDERGRAD_REGISTRATION_FORM
+);
+const [registrationPatientId, setRegistrationPatientId] = useState(null);
+const [registrationEncounterId, setRegistrationEncounterId] = useState(null);
+
   const [activeView, setActiveView] = useState("dashboard");
+  useEffect(() => {
+  if (userRole === "undergraduate") {
+    setActiveView("undergrad-intake");
+  }
+}, [userRole]);
   const [clinicSummary, setClinicSummary] = useState({
   refillCount: "",
   labsCount: "",
@@ -317,6 +367,69 @@ function canAttendingSignSoap(role, encounter) {
   ms34Names: "",
   ms12Names: "",
   });
+  const [programEntries, setProgramEntries] = useState([]);
+ const [programsLoaded, setProgramsLoaded] = useState(false);
+
+useEffect(() => {
+  if (!session || programsLoaded) return;
+
+  async function loadProgramEntries() {
+    try {
+      const rows = await fetchProgramEntries();
+      setProgramEntries(rows);
+      setProgramsLoaded(true); // 🔥 important
+    } catch (error) {
+      console.error("Failed to load program entries:", error);
+    }
+  }
+
+  loadProgramEntries();
+}, [session, programsLoaded]);
+
+async function addProgramEntry(entry) {
+  setProgramEntries((prev) => [entry, ...prev]);
+
+  try {
+    await createProgramEntryInSupabase(entry);
+  } catch (error) {
+    console.error("Failed to create program entry:", error);
+    alert(`Failed to save program entry: ${error.message}`);
+
+    setProgramEntries((prev) => prev.filter((item) => item.id !== entry.id));
+  }
+}
+
+async function updateProgramEntry(entryId, field, value) {
+  const previousEntries = [...programEntries];
+
+  setProgramEntries((prev) =>
+    prev.map((entry) =>
+      entry.id === entryId ? { ...entry, [field]: value } : entry
+    )
+  );
+
+  try {
+    await updateProgramEntryInSupabase(entryId, { [field]: value });
+  } catch (error) {
+    console.error("Failed to update program entry:", error);
+    alert(`Failed to update program entry: ${error.message}`);
+    setProgramEntries(previousEntries);
+  }
+}
+
+async function removeProgramEntry(entryId) {
+  const previousEntries = [...programEntries];
+
+  setProgramEntries((prev) => prev.filter((entry) => entry.id !== entryId));
+
+  try {
+    await deleteProgramEntryInSupabase(entryId);
+  } catch (error) {
+    console.error("Failed to delete program entry:", error);
+    alert(`Failed to delete program entry: ${error.message}`);
+    setProgramEntries(previousEntries);
+  }
+}
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showIntakeModal, setShowIntakeModal] = useState(false);
   const [intakeTab, setIntakeTab] = useState(0);
@@ -327,7 +440,73 @@ function canAttendingSignSoap(role, encounter) {
     new URLSearchParams(window.location.search).get("display") === "board";
   const [selectedPatientId, setSelectedPatientId] = useState(null);
   const [selectedEncounterId, setSelectedEncounterId] = useState(null);
-  const { patients, setPatients } = useClinicData({ authReady, session, userRole, selectedEncounterId, });
+  const { patients, setPatients } = useClinicData({
+  authReady,
+  session,
+  userRole,
+});
+useEffect(() => {
+  if (!session) return;
+
+  const channel = supabase
+    .channel("program-entries-realtime")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "program_entries",
+      },
+      (payload) => {
+        const eventType = payload.eventType;
+        const row = payload.new || payload.old;
+
+        if (!row) return;
+
+        const mappedRow = {
+          id: row.id,
+          patientId: row.patient_id || "",
+          patientName: row.patient_name || "",
+          encounterId: row.encounter_id || "",
+          clinicDate: row.clinic_date || "",
+          programType: row.program_type || "",
+          reason: row.reason || "",
+          assignedCoordinator: row.assigned_coordinator || "",
+          status: row.status || "",
+          nextStep: row.next_step || "",
+          notes: row.notes || "",
+          createdAt: row.created_at || "",
+        };
+
+        if (eventType === "INSERT") {
+          setProgramEntries((prev) => {
+            const exists = prev.some((entry) => entry.id === mappedRow.id);
+            if (exists) return prev;
+            return [mappedRow, ...prev];
+          });
+        }
+
+        if (eventType === "UPDATE") {
+          setProgramEntries((prev) =>
+            prev.map((entry) =>
+              entry.id === mappedRow.id ? mappedRow : entry
+            )
+          );
+        }
+
+        if (eventType === "DELETE") {
+          setProgramEntries((prev) =>
+            prev.filter((entry) => entry.id !== row.id)
+          );
+        }
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [session]);
   const [assignmentForm, setAssignmentForm] = useState({
     studentName: "",
     upperLevelName: "",
@@ -369,12 +548,13 @@ function canAttendingSignSoap(role, encounter) {
     }
 
     const possibleMatch = findPotentialDuplicatePatient(
-      intakeForm.firstName,
-      intakeForm.lastName,
-      intakeForm.dob,
-      intakeForm.last4ssn,
-      editingPatientId
-    );
+  patients,
+  intakeForm.firstName,
+  intakeForm.lastName,
+  intakeForm.dob,
+  intakeForm.last4ssn,
+  editingPatientId
+);
 
     const nextMatchId = possibleMatch ? possibleMatch.id : null;
 
@@ -469,33 +649,39 @@ function canAttendingSignSoap(role, encounter) {
     return () => clearInterval(interval);
   }, []);
 
+  
 
   const sortedSelectedPatientEncounters = useMemo(() => {
-    if (!selectedPatient) return [];
+  if (!selectedPatient) return [];
 
-    return [...selectedPatient.encounters].sort((a, b) => {
-      const aTime = new Date(a.createdAt || a.clinicDate || 0).getTime();
-      const bTime = new Date(b.createdAt || b.clinicDate || 0).getTime();
-      return bTime - aTime;
-    });
-  }, [selectedPatient]);
+  return sortEncountersByDate(selectedPatient.encounters);
+}, [selectedPatient]);
+
   const patientRecordsTitle = selectedClinicDate
     ? `Patient Records — ${selectedClinicDate}`
     : "Patient Records — All Encounters";
 
 
   const allEncounterRows = useMemo(() => {
-    const rows = [];
-    patients.forEach((patient) => {
-      patient.encounters.forEach((encounter) => {
-        rows.push({
-          patient,
-          encounter,
-        });
-      });
+  return patients.flatMap((patient) =>
+    patient.encounters.map((encounter) => ({
+      patient,
+      encounter,
+    }))
+  );
+}, [patients]);
+
+const registrationRows = useMemo(() => {
+  return allEncounterRows
+    .filter(({ encounter }) =>
+      encounter.status === "started" || encounter.status === "undergrad_complete"
+    )
+    .sort((a, b) => {
+      const aTime = new Date(a.encounter.createdAt || 0).getTime();
+      const bTime = new Date(b.encounter.createdAt || 0).getTime();
+      return aTime - bTime;
     });
-    return rows;
-  }, [patients]);
+}, [allEncounterRows]);
 
   const visibleEncounterRows = useMemo(() => {
     if (!selectedClinicDate) {
@@ -640,6 +826,217 @@ const totalPatientCount = visibleEncounterRows.length;
     });
   }, [profiles, userSearch, showOnlyActiveToday]);
 
+  async function handleUndergradStartEncounter(data) {
+  try {
+    const patientToSave = {
+      ...data,
+      mrn: "",
+    };
+
+    const savedPatient = await createPatientInSupabase(patientToSave);
+
+    const encounter = {
+      clinicDate: formatClinicDate(),
+      createdAt: new Date().toISOString(),
+      newReturning: data.isReturning || "New",
+      visitLocation: "In Clinic",
+      chiefComplaint: "",
+      notes: "",
+      transportation: "",
+      needsElevator: false,
+      spanishSpeaking: false,
+      mammogramPapSmear: "",
+      fluShot: "",
+      htn: false,
+      dm: false,
+      labsLast6Months: "",
+      tobaccoScreening: "",
+      dermatology: "N/A",
+      ophthalmology: "N/A",
+      optometry: "N/A",
+      diabeticEyeExamPastYear: "N/A",
+      physicalTherapy: "N/A",
+      mentalHealthCombined: "N/A",
+      counseling: "N/A",
+      anyMentalHealthPositive: false,
+      status: "started",
+      assignedStudent: "",
+      assignedUpperLevel: "",
+      roomNumber: "",
+    };
+
+    const savedEncounter = await createEncounterInSupabase(
+      savedPatient.id,
+      encounter
+    );
+
+    setPatients((prev) => [
+      {
+        ...savedPatient,
+        preferredName: data.preferredName || "",
+        last4ssn: data.last4Ssn || "",
+        phone: data.phone || "",
+        sex: data.sex || "",
+        ethnicity: data.ethnicity || "",
+        ttuStudent: data.ttuStudent || false,
+        address: data.address || "",
+        emergencyContact: data.emergencyContact || {},
+        incomeRange: data.incomeRange || "",
+        spanishOnly: data.spanishOnly || "",
+        chronicConditions: data.chronicConditions || [],
+        intakeStatus: "started",
+        encounters: [
+          {
+            ...encounter,
+            id: savedEncounter.id,
+            status: "started",
+          },
+        ],
+      },
+      ...prev,
+    ]);
+
+    setActiveView("registration");
+  } catch (error) {
+    console.error("Failed to save undergrad intake:", error);
+    alert(`Failed to save intake: ${error.message}`);
+  }
+}
+
+  function openUndergradRegistration(patientId, encounterId) {
+  const patient = patients.find((p) => p.id === patientId);
+  const encounter = patient?.encounters.find((e) => e.id === encounterId);
+
+  if (!patient || !encounter) return;
+
+  setRegistrationPatientId(patientId);
+  setRegistrationEncounterId(encounterId);
+
+  setUndergradRegistrationForm({
+    addressLine1: patient.addressLine1 || "",
+    city: patient.city || "",
+    state: patient.state || "",
+    zipCode: patient.zipCode || "",
+    emergencyContactName: patient.emergencyContact?.name || "",
+    emergencyContactRelation: patient.emergencyContact?.relation || "",
+    emergencyContactPhone: patient.emergencyContact?.phone || "",
+    last4Ssn: patient.last4ssn || "",
+    incomeRange: patient.incomeRange || "",
+    spanishOnly: patient.spanishOnly || "",
+    chronicConditions: patient.chronicConditions || [],
+    chronicConditionsOther: patient.chronicConditionsOther || "",
+  });
+
+  setShowUndergradRegistrationModal(true);
+}
+
+async function saveUndergradRegistration() {
+  const patient = patients.find((p) => p.id === registrationPatientId);
+  const encounter = patient?.encounters.find((e) => e.id === registrationEncounterId);
+
+  if (!patient || !encounter) return;
+
+  const patientUpdates = {
+    last4ssn: undergradRegistrationForm.last4Ssn,
+    addressLine1: undergradRegistrationForm.addressLine1,
+    city: undergradRegistrationForm.city,
+    state: undergradRegistrationForm.state,
+    zipCode: undergradRegistrationForm.zipCode,
+    emergencyContact: {
+      name: undergradRegistrationForm.emergencyContactName,
+      relation: undergradRegistrationForm.emergencyContactRelation,
+      phone: undergradRegistrationForm.emergencyContactPhone,
+    },
+    incomeRange: undergradRegistrationForm.incomeRange,
+    spanishOnly: undergradRegistrationForm.spanishOnly,
+    chronicConditions: undergradRegistrationForm.chronicConditions,
+    chronicConditionsOther: undergradRegistrationForm.chronicConditionsOther,
+  };
+
+  try {
+    await updatePatientInSupabase(registrationPatientId, patientUpdates);
+
+    await updateEncounterInSupabase(registrationEncounterId, {
+      status: "undergrad_complete",
+    });
+
+    setPatients((prev) =>
+      prev.map((p) =>
+        p.id === registrationPatientId
+          ? {
+              ...p,
+              ...patientUpdates,
+              encounters: p.encounters.map((e) =>
+                e.id === registrationEncounterId
+                  ? { ...e, status: "undergrad_complete" }
+                  : e
+              ),
+            }
+          : p
+      )
+    );
+
+    setShowUndergradRegistrationModal(false);
+    setRegistrationPatientId(null);
+    setRegistrationEncounterId(null);
+    setUndergradRegistrationForm(EMPTY_UNDERGRAD_REGISTRATION_FORM);
+  } catch (error) {
+    console.error("Failed to save undergrad registration:", error);
+    alert(`Failed to save undergrad registration: ${error.message}`);
+  }
+}
+function openLeadershipRegistration(patientId, encounterId) {
+  const patient = patients.find((p) => p.id === patientId);
+  const encounter = patient?.encounters.find((e) => e.id === encounterId);
+
+  if (!patient || !encounter) return;
+
+  setSelectedPatientId(patientId);
+  setSelectedEncounterId(encounterId);
+
+  setIntakeForm({
+    firstName: patient.firstName || "",
+    lastName: patient.lastName || "",
+    preferredName: patient.preferredName || "",
+    mrn: patient.mrn || "",
+    last4ssn: patient.last4ssn || "",
+    dob: patient.dob || "",
+    age: patient.age || "",
+    phone: patient.phone || "",
+    sex: patient.sex || "",
+    ethnicity: patient.ethnicity || "",
+    pronouns: patient.pronouns || "",
+    newReturning: encounter.newReturning || "",
+    ttuStudent: patient.ttuStudent || false,
+    visitLocation: encounter.visitLocation || "In Clinic",
+    chiefComplaint: encounter.chiefComplaint || "",
+    notes: encounter.notes || "",
+    transportation: encounter.transportation || "",
+    needsElevator: encounter.needsElevator || false,
+    spanishSpeaking: encounter.spanishSpeaking || "",
+    over65: patient.age ? Number(patient.age) > 65 : false,
+    mammogramPapSmear: encounter.mammogramPapSmear || "",
+    fluShot: encounter.fluShot || "",
+    htn: encounter.htn || false,
+    dm: encounter.dm || false,
+    labsLast6Months: encounter.labsLast6Months || "",
+    tobaccoScreening: encounter.tobaccoScreening || "",
+    dermatology: encounter.dermatology || "N/A",
+    ophthalmology: encounter.ophthalmology || "N/A",
+    optometry: encounter.optometry || "N/A",
+    diabeticEyeExamPastYear: encounter.diabeticEyeExamPastYear || "N/A",
+    physicalTherapy: encounter.physicalTherapy || "N/A",
+    mentalHealthCombined: encounter.mentalHealthCombined || "N/A",
+    counseling: encounter.counseling || "N/A",
+    anyMentalHealthPositive: encounter.anyMentalHealthPositive || false,
+  });
+
+  setEditingPatientId(patientId);
+  setIsEditingIntake(true);
+  setIntakeTab(1);
+  setShowIntakeModal(true);
+}
+
   useEffect(() => {
   if (session) {
     loadProfiles();
@@ -682,9 +1079,10 @@ const totalPatientCount = visibleEncounterRows.length;
     const todayClinicDate = formatClinicDate();
 
     const queueBaseRows = filteredEncounterRows.filter(
-      ({ encounter }) =>
-        normalizeClinicDate(encounter.clinicDate) === todayClinicDate
-    );
+  ({ encounter }) =>
+    normalizeClinicDate(encounter.clinicDate) === todayClinicDate &&
+    encounter.status === "ready"
+);
 
     const currentUserName = (
       profileNameMap[session?.user?.id] ||
@@ -779,46 +1177,6 @@ const totalPatientCount = visibleEncounterRows.length;
 
     return map;
   }, [visibleEncounterRows]);
-  function normalizeForDuplicateCheck(value) {
-    return String(value || "")
-      .trim()
-      .toLowerCase()
-      .replace(/[.,]/g, "")
-      .replace(/-/g, " ")      // <-- add this
-      .replace(/\s+/g, " ");
-  }
-
-  function findPotentialDuplicatePatient(firstName, lastName, dob, last4ssn, excludePatientId = null) {
-    return patients.find((patient) => {
-      if (excludePatientId && patient.id === excludePatientId) return false;
-
-      const sameDob =
-        normalizeForDuplicateCheck(patient.dob) === normalizeForDuplicateCheck(dob);
-
-      const sameFirst =
-        normalizeForDuplicateCheck(patient.firstName) === normalizeForDuplicateCheck(firstName);
-
-      const sameLast =
-        normalizeForDuplicateCheck(patient.lastName) === normalizeForDuplicateCheck(lastName);
-
-      const inputLast4 = normalizeForDuplicateCheck(last4ssn);
-      const patientLast4 = normalizeForDuplicateCheck(patient.last4ssn);
-
-      const hasLast4OnBoth = inputLast4 && patientLast4;
-      const sameLast4 = hasLast4OnBoth ? inputLast4 === patientLast4 : true;
-
-      return sameDob && sameFirst && sameLast && sameLast4;
-    });
-  }
-  function mrnExists(mrn, excludePatientId = null) {
-    const normalizedMrn = String(mrn || "").trim().toLowerCase();
-    if (!normalizedMrn) return false;
-
-    return patients.some((patient) => {
-      if (excludePatientId && patient.id === excludePatientId) return false;
-      return String(patient.mrn || "").trim().toLowerCase() === normalizedMrn;
-    });
-  }
   function updateIntakeField(field, value) {
     if (field === "dob") {
       const age = calculateAge(value);
@@ -939,9 +1297,9 @@ const totalPatientCount = visibleEncounterRows.length;
   useEffect(() => {
   setClinicSummary((prev) => ({
     ...prev,
-    attendingNames: attendingNames || joinActiveNames(activeAttendings),
-    ms34Names: ms34Names || joinActiveNames(activeUpperLevels),
-    ms12Names: ms12Names || joinActiveNames(activeStudents),
+    attendingNames: prev.attendingNames || joinActiveNames(activeAttendings),
+    ms34Names: prev.ms34Names || joinActiveNames(activeUpperLevels),
+    ms12Names: prev.ms12Names || joinActiveNames(activeStudents),
   }));
 }, [activeAttendings, activeUpperLevels, activeStudents]);
 
@@ -1107,17 +1465,18 @@ const totalPatientCount = visibleEncounterRows.length;
     if (!intakeForm.firstName || !intakeForm.lastName || !intakeForm.dob || !intakeForm.chiefComplaint) {
       return;
     }
-    if (intakeForm.mrn.trim() && mrnExists(intakeForm.mrn, editingPatientId)) {
+    if (intakeForm.mrn.trim() && mrnExists(patients, intakeForm.mrn, editingPatientId)) {
       window.alert("That MRN is already being used by another patient. Please use a different MRN.");
       return;
     }
     const potentialDuplicate = findPotentialDuplicatePatient(
-      intakeForm.firstName,
-      intakeForm.lastName,
-      intakeForm.dob,
-      intakeForm.last4ssn,
-      editingPatientId
-    );
+  patients,
+  intakeForm.firstName,
+  intakeForm.lastName,
+  intakeForm.dob,
+  intakeForm.last4ssn,
+  editingPatientId
+);
 
     if (potentialDuplicate) {
       const shouldContinue = window.confirm(
@@ -1148,28 +1507,29 @@ const totalPatientCount = visibleEncounterRows.length;
         console.log("savedPatient update worked:", savedPatient);
 
         const savedEncounter = await updateEncounterInSupabase(selectedEncounter.id, {
-          chiefComplaint: intakeForm.chiefComplaint,
-          notes: intakeForm.notes,
-          newReturning: intakeForm.newReturning,
-          visitLocation: intakeForm.visitLocation,
-          transportation: intakeForm.transportation,
-          needsElevator: intakeForm.needsElevator,
-          spanishSpeaking: intakeForm.spanishSpeaking,
-          mammogramPapSmear: intakeForm.mammogramPapSmear,
-          fluShot: intakeForm.fluShot,
-          htn: intakeForm.htn,
-          dm: intakeForm.dm,
-          labsLast6Months: intakeForm.labsLast6Months,
-          tobaccoScreening: intakeForm.tobaccoScreening,
-          dermatology: intakeForm.dermatology,
-          ophthalmology: intakeForm.ophthalmology,
-          optometry: intakeForm.optometry,
-          diabeticEyeExamPastYear: intakeForm.diabeticEyeExamPastYear,
-          physicalTherapy: intakeForm.physicalTherapy,
-          mentalHealthCombined: intakeForm.mentalHealthCombined,
-          counseling: intakeForm.counseling,
-          anyMentalHealthPositive: intakeForm.anyMentalHealthPositive,
-        });
+  chiefComplaint: intakeForm.chiefComplaint,
+  notes: intakeForm.notes,
+  newReturning: intakeForm.newReturning,
+  visitLocation: intakeForm.visitLocation,
+  transportation: intakeForm.transportation,
+  needsElevator: intakeForm.needsElevator,
+  spanishSpeaking: intakeForm.spanishSpeaking,
+  mammogramPapSmear: intakeForm.mammogramPapSmear,
+  fluShot: intakeForm.fluShot,
+  htn: intakeForm.htn,
+  dm: intakeForm.dm,
+  labsLast6Months: intakeForm.labsLast6Months,
+  tobaccoScreening: intakeForm.tobaccoScreening,
+  dermatology: intakeForm.dermatology,
+  ophthalmology: intakeForm.ophthalmology,
+  optometry: intakeForm.optometry,
+  diabeticEyeExamPastYear: intakeForm.diabeticEyeExamPastYear,
+  physicalTherapy: intakeForm.physicalTherapy,
+  mentalHealthCombined: intakeForm.mentalHealthCombined,
+  counseling: intakeForm.counseling,
+  anyMentalHealthPositive: intakeForm.anyMentalHealthPositive,
+  status: "ready",
+});
 
         console.log("savedEncounter update worked:", savedEncounter);
 
@@ -1191,6 +1551,7 @@ const totalPatientCount = visibleEncounterRows.length;
                   encounter.id === selectedEncounter.id
                     ? {
                       ...encounter,
+                      status: "ready",
                       newReturning: intakeForm.newReturning,
                       visitLocation: intakeForm.visitLocation,
                       chiefComplaint: intakeForm.chiefComplaint,
@@ -1239,7 +1600,7 @@ const totalPatientCount = visibleEncounterRows.length;
 
     const encounter = {
       ...baseEncounter,
-      status: "Waiting",
+      status: "ready",
       clinicDate: normalizeClinicDate(baseEncounter.clinicDate) || formatClinicDate(),
       createdAt: baseEncounter.createdAt || new Date().toISOString(),
     };
@@ -1258,18 +1619,7 @@ const totalPatientCount = visibleEncounterRows.length;
           createdAt: savedEncounter.created_at || encounter.createdAt,
           chiefComplaint:
             savedEncounter.chief_complaint || encounter.chiefComplaint || "",
-          status:
-            savedEncounter.status === "waiting"
-              ? "Waiting"
-              : savedEncounter.status === "roomed"
-                ? "Assigned"
-                : savedEncounter.status === "in_visit"
-                  ? "In Visit"
-                  : savedEncounter.status === "done"
-                    ? "Completed"
-                    : savedEncounter.status === "cancelled"
-                      ? "Cancelled"
-                      : "Waiting",
+          status: mapDbStatusToUi(savedEncounter.status),
           roomNumber: savedEncounter.room || encounter.roomNumber || "",
         };
 
@@ -1307,7 +1657,7 @@ const totalPatientCount = visibleEncounterRows.length;
       try {
         const patientToSave = {
           ...intakeForm,
-          mrn: intakeForm.mrn.trim() || generateMrn(),
+          mrn: intakeForm.mrn.trim() || "",
         };
 
         const savedPatient = await createPatientInSupabase(patientToSave);
@@ -1332,18 +1682,7 @@ const totalPatientCount = visibleEncounterRows.length;
               clinicDate: savedEncounter.clinic_date || encounter.clinicDate,
               createdAt: savedEncounter.created_at || encounter.createdAt,
               chiefComplaint: savedEncounter.chief_complaint || encounter.chiefComplaint,
-              status:
-                savedEncounter.status === "waiting"
-                  ? "Waiting"
-                  : savedEncounter.status === "roomed"
-                    ? "Assigned"
-                    : savedEncounter.status === "in_visit"
-                      ? "In Visit"
-                      : savedEncounter.status === "done"
-                        ? "Completed"
-                        : savedEncounter.status === "cancelled"
-                          ? "Cancelled"
-                          : encounter.status,
+              status: mapDbStatusToUi(savedEncounter.status),
               roomNumber: savedEncounter.room || encounter.roomNumber || "",
             },
           ],
@@ -1468,18 +1807,7 @@ const totalPatientCount = visibleEncounterRows.length;
         createdAt: savedEncounter.created_at || newEncounter.createdAt,
         chiefComplaint:
           savedEncounter.chief_complaint || newEncounter.chiefComplaint || "",
-        status:
-          savedEncounter.status === "waiting"
-            ? "Waiting"
-            : savedEncounter.status === "roomed"
-              ? "Assigned"
-              : savedEncounter.status === "in_visit"
-                ? "In Visit"
-                : savedEncounter.status === "done"
-                  ? "Completed"
-                  : savedEncounter.status === "cancelled"
-                    ? "Cancelled"
-                    : "Waiting",
+        status: mapDbStatusToUi(savedEncounter.status),
         roomNumber: savedEncounter.room || "",
       };
 
@@ -1559,14 +1887,10 @@ const totalPatientCount = visibleEncounterRows.length;
 
     const numericRoom = nextRoomNumber ? Number(nextRoomNumber) : null;
 
-    if (
-      numericRoom !== null &&
-      isPapRestricted(encounter) &&
-      (numericRoom === 9 || numericRoom === 10)
-    ) {
-      alert("Pap smear patients cannot be assigned to Room 9 or Room 10.");
-      return;
-    }
+    if (numericRoom !== null && !canAssignRoom(encounter, numericRoom)) {
+  alert("Pap smear patients cannot be assigned to Room 9 or Room 10.");
+  return;
+}
 
     if (numericRoom !== null) {
       const takenByOtherEncounter = allEncounterRows.some(
@@ -1644,10 +1968,10 @@ const totalPatientCount = visibleEncounterRows.length;
       : null;
 
     if (roomNumber !== null) {
-      if (isPapRestricted(selectedEncounter) && (roomNumber === 9 || roomNumber === 10)) {
-        alert("Pap smear patients cannot be assigned to Room 9 or Room 10.");
-        return;
-      }
+  if (!canAssignRoom(selectedEncounter, roomNumber)) {
+    alert("Pap smear patients cannot be assigned to Room 9 or Room 10.");
+    return;
+  }
 
       const takenByOtherEncounter = allEncounterRows.some(
         ({ patient, encounter }) =>
@@ -1705,10 +2029,10 @@ const totalPatientCount = visibleEncounterRows.length;
 
     const numericRoom = Number(roomNumber);
 
-    if (isPapRestricted(selectedEncounter) && (numericRoom === 9 || numericRoom === 10)) {
-      alert("Pap smear patients cannot be assigned to Room 9 or Room 10.");
-      return;
-    }
+    if (!canAssignRoom(selectedEncounter, numericRoom)) {
+  alert("Pap smear patients cannot be assigned to Room 9 or Room 10.");
+  return;
+}
 
     const takenByOtherEncounter = allEncounterRows.some(
       ({ patient, encounter }) =>
@@ -3227,6 +3551,7 @@ async function exportClinicSummaryToWord() {
                       <option value="upper_level">Upper Level</option>
                       <option value="attending">Attending</option>
                       <option value="leadership">Leadership</option>
+                      <option value="undergraduate">Undergraduate</option>
                     </select>
 
                     {authRole === "student" || authRole === "upper_level" ? (
@@ -3329,6 +3654,8 @@ async function exportClinicSummaryToWord() {
       />
     );
   }
+
+  
   return (
     <div className="min-h-screen bg-slate-100 md:flex md:h-screen">
       <AppSidebar
@@ -3343,6 +3670,7 @@ async function exportClinicSummaryToWord() {
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}
         isLeadershipView={isLeadershipView}
+        userRole={userRole}
       />
 
       <div className="min-w-0 flex-1 md:ml-64 md:flex md:min-h-0 md:flex-col">
@@ -3362,10 +3690,8 @@ async function exportClinicSummaryToWord() {
           sidebarOpen={sidebarOpen}
           setSidebarOpen={setSidebarOpen}
         />
-        <div>
-
-
-          {activeView === "dashboard" && (
+<div>
+  {activeView === "dashboard" && (
             <DashboardView
               isLeadershipView={isLeadershipView}
               endClinicReset={endClinicReset}
@@ -3382,6 +3708,20 @@ async function exportClinicSummaryToWord() {
               getFullPatientName={getFullPatientName}
             />
           )}
+
+          {activeView === "registration" && (
+  <RegistrationView
+    registrationRows={registrationRows}
+    openUndergradRegistration={openUndergradRegistration}
+    openLeadershipRegistration={openLeadershipRegistration}
+    getFullPatientName={getFullPatientName}
+    formatDate={formatDate}
+  />
+)}
+
+{activeView === "undergrad-intake" && userRole === "undergraduate" && (
+  <UndergradIntakeView onSave={handleUndergradStartEncounter} />
+)}
 
           {activeView === "queue" && (
             <QueueView
@@ -3530,17 +3870,28 @@ async function exportClinicSummaryToWord() {
           )}
 
           {activeView === "summary" && isLeadershipView && (
-  <ClinicSummaryView
-    selectedClinicDate={selectedClinicDate}
-    setSelectedClinicDate={setSelectedClinicDate}
-    clinicSummary={clinicSummary}
-    setClinicSummary={setClinicSummary}
-    newPatientCount={newPatientCount}
-    returningPatientCount={returningPatientCount}
-    totalPatientCount={totalPatientCount}
-    exportClinicSummaryToWord={exportClinicSummaryToWord}
-  />
-)}
+            <ClinicSummaryView
+              selectedClinicDate={selectedClinicDate}
+              setSelectedClinicDate={setSelectedClinicDate}
+              clinicSummary={clinicSummary}
+              setClinicSummary={setClinicSummary}
+              newPatientCount={newPatientCount}
+              returningPatientCount={returningPatientCount}
+              totalPatientCount={totalPatientCount}
+              exportClinicSummaryToWord={exportClinicSummaryToWord}
+            />
+          )}
+
+          {activeView === "programs" && isLeadershipView && (
+            <ProgramsView
+  programEntries={programEntries}
+  addProgramEntry={addProgramEntry}
+  updateProgramEntry={updateProgramEntry}
+  removeProgramEntry={removeProgramEntry}
+  patients={patients}
+  selectedClinicDate={selectedClinicDate}
+/>
+          )}
         </div>
       </div>
 
@@ -3579,6 +3930,19 @@ async function exportClinicSummaryToWord() {
         isEditingIntake={isEditingIntake}
         intakeMatchPatientId={intakeMatchPatientId}
       />
+
+      <UndergradRegistrationModal
+  show={showUndergradRegistrationModal}
+  form={undergradRegistrationForm}
+  setForm={setUndergradRegistrationForm}
+  onClose={() => {
+    setShowUndergradRegistrationModal(false);
+    setRegistrationPatientId(null);
+    setRegistrationEncounterId(null);
+    setUndergradRegistrationForm(EMPTY_UNDERGRAD_REGISTRATION_FORM);
+  }}
+  onSubmit={saveUndergradRegistration}
+/>
     </div>
   );
 }

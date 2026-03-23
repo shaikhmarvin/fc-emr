@@ -1,0 +1,82 @@
+import { supabase } from "../lib/supabase";
+
+export async function fetchProgramEntries() {
+  const { data, error } = await supabase
+    .from("program_entries")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+
+  return (data || []).map((row) => ({
+    id: row.id,
+    patientId: row.patient_id || "",
+    patientName: row.patient_name || "",
+    encounterId: row.encounter_id || "",
+    clinicDate: row.clinic_date || "",
+    programType: row.program_type || "",
+    reason: row.reason || "",
+    assignedCoordinator: row.assigned_coordinator || "",
+    status: row.status || "",
+    nextStep: row.next_step || "",
+    notes: row.notes || "",
+    createdAt: row.created_at || "",
+  }));
+}
+
+export async function createProgramEntryInSupabase(entry) {
+  const payload = {
+    id: entry.id,
+    patient_id: entry.patientId || null,
+    patient_name: entry.patientName || "",
+    encounter_id: entry.encounterId || null,
+    clinic_date: entry.clinicDate || "",
+    program_type: entry.programType || "",
+    reason: entry.reason || "",
+    assigned_coordinator: entry.assignedCoordinator || "",
+    status: entry.status || "",
+    next_step: entry.nextStep || "",
+    notes: entry.notes || "",
+    created_at: entry.createdAt || new Date().toISOString(),
+  };
+
+  const { data, error } = await supabase
+    .from("program_entries")
+    .insert(payload)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updateProgramEntryInSupabase(entryId, updates) {
+  const payload = {};
+
+  if ("patientId" in updates) payload.patient_id = updates.patientId || null;
+  if ("patientName" in updates) payload.patient_name = updates.patientName || "";
+  if ("encounterId" in updates) payload.encounter_id = updates.encounterId || null;
+  if ("clinicDate" in updates) payload.clinic_date = updates.clinicDate || "";
+  if ("programType" in updates) payload.program_type = updates.programType || "";
+  if ("reason" in updates) payload.reason = updates.reason || "";
+  if ("assignedCoordinator" in updates) payload.assigned_coordinator = updates.assignedCoordinator || "";
+  if ("status" in updates) payload.status = updates.status || "";
+  if ("nextStep" in updates) payload.next_step = updates.nextStep || "";
+  if ("notes" in updates) payload.notes = updates.notes || "";
+
+  const { error } = await supabase
+    .from("program_entries")
+    .update(payload)
+    .eq("id", entryId);
+
+  if (error) throw error;
+}
+
+export async function deleteProgramEntryInSupabase(entryId) {
+  const { error } = await supabase
+    .from("program_entries")
+    .delete()
+    .eq("id", entryId);
+
+  if (error) throw error;
+}
