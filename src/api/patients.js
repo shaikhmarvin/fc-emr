@@ -167,10 +167,20 @@ export async function updatePatientInSupabase(patientId, updates) {
 }
 
 export async function deletePatientInSupabase(patientId) {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("patients")
     .delete()
-    .eq("id", patientId);
+    .eq("id", patientId)
+    .select("id")
+    .maybeSingle();
 
   if (error) throw error;
+
+  if (!data) {
+    throw new Error(
+      "Patient was not deleted. This is usually caused by a missing RLS delete policy or a database relationship blocking deletion."
+    );
+  }
+
+  return data;
 }

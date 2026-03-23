@@ -276,7 +276,9 @@ const spo2Category = getSpo2Category(latestVitals?.spo2);
         <div className="rounded-2xl bg-white p-3 shadow sm:p-4">
           <p className="text-sm text-slate-500">Clinical Snapshot</p>
           <p className="mt-1 text-sm text-slate-700">
-            Allergies: {selectedPatient.allergies?.trim() || "None listed"}
+            Allergies: {(selectedPatient.allergyList || []).length > 0
+  ? `${selectedPatient.allergyList.filter((a) => a.isActive).length} active`
+  : "None listed"}
           </p>
           <p className="text-sm text-slate-700">
             Active meds: {activeMedicationCount}
@@ -439,13 +441,17 @@ const spo2Category = getSpo2Category(latestVitals?.spo2);
                   
                   <span
                     className={`inline-block rounded-full border px-3 py-1 text-xs ${
-                      encounter.status === "Waiting"
-                        ? "border-yellow-200 bg-yellow-100 text-yellow-800"
-                        : encounter.status === "Assigned"
-                        ? "border-green-200 bg-green-100 text-green-800"
-                        : encounter.status === "In Visit"
-                        ? "border-blue-200 bg-blue-100 text-blue-800"
-                        : "border-slate-300 bg-slate-100 text-slate-700"
+                      encounter.status === "started" ||
+encounter.status === "undergrad_complete" ||
+encounter.status === "ready"
+  ? "border-yellow-200 bg-yellow-100 text-yellow-800"
+  : encounter.status === "roomed"
+  ? "border-green-200 bg-green-100 text-green-800"
+  : encounter.status === "in_visit"
+  ? "border-blue-200 bg-blue-100 text-blue-800"
+  : encounter.status === "done"
+  ? "border-slate-300 bg-slate-100 text-slate-700"
+  : "border-slate-300 bg-slate-100 text-slate-700"
                     }`}
                   >
                     {encounter.status}
@@ -617,7 +623,7 @@ const spo2Category = getSpo2Category(latestVitals?.spo2);
                     </button>
 
                     <button
-                      onClick={() => updateEncounterStatus("In Visit")}
+                      onClick={() => updateEncounterStatus("in_visit")}
                       disabled={leadershipActionLocked}
                       className="rounded-lg bg-blue-600 px-4 py-3 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                     >
@@ -625,15 +631,15 @@ const spo2Category = getSpo2Category(latestVitals?.spo2);
                     </button>
 
                     <button
-                      onClick={() => updateEncounterStatus("Waiting")}
+                      onClick={() => updateEncounterStatus("ready")}
                       disabled={leadershipActionLocked}
                       className="rounded-lg bg-yellow-500 px-4 py-3 text-white hover:bg-yellow-600 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      Mark Waiting
+                      Mark Ready
                     </button>
 
                     <button
-                      onClick={() => updateEncounterStatus("Completed")}
+                      onClick={() => updateEncounterStatus("done")}
                       disabled={leadershipActionLocked}
                       className="rounded-lg bg-slate-600 px-4 py-3 text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
                     >

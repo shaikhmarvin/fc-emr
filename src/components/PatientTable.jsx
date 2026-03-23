@@ -1,5 +1,3 @@
-import { updatePatientInSupabase } from "../api/patients";
-
 export default function PatientTable({
   title,
   patients,
@@ -9,6 +7,7 @@ export default function PatientTable({
   canEditPatient,
   canDeletePatient,
   deletePatientCompletely,
+  selectedPatientId,
 }) {
   return (
     <div className="rounded-2xl bg-white shadow">
@@ -26,72 +25,58 @@ export default function PatientTable({
               <th className="p-3">Last 4 SSN</th>
               <th className="p-3">Phone</th>
               <th className="p-3">Encounters</th>
-{canDeletePatient && <th className="p-3">Actions</th>}
+              {canDeletePatient && <th className="p-3">Actions</th>}
             </tr>
           </thead>
           <tbody>
             {patients.map((patient) => (
               <tr
-                key={patient.id}
-                onClick={() => onSelectPatient(patient.id)}
-                className="cursor-pointer border-t hover:bg-slate-50 active:bg-slate-100"
-              >
-                <td className="px-4 py-3 font-semibold text-slate-800">
-  {getFullPatientName(patient)}
-</td>
-                <td>
-  {canEditMrn ? (
-    <input
-      value={patient.mrn || ""}
-      onChange={(e) => {
-        const newMrn = e.target.value;
-
-        // optimistic update (UI updates instantly)
-        <input
-  value={patient.mrn || ""}
-  onChange={(e) => {
-    const newMrn = e.target.value;
-
-    updatePatientInSupabase(patient.id, { mrn: newMrn });
-  }}
-  className="border rounded px-2 py-1 text-sm w-24"
-/>
-
-        // save to supabase
-        updatePatientInSupabase(patient.id, { mrn: newMrn });
-      }}
-      className="border rounded px-2 py-1 text-sm w-24"
-    />
-  ) : (
-    patient.mrn
-  )}
-</td>
-
-{canDeletePatient && (
-  <td className="px-4 py-3">
-    <button
-      onClick={(e) => {
-        e.stopPropagation(); // 🔥 VERY IMPORTANT
-        deletePatientCompletely(patient.id);
-      }}
-      className="text-red-600 text-xs hover:underline"
-    >
-      Delete
-    </button>
+  key={patient.id}
+  onClick={() => onSelectPatient(patient.id)}
+  className={`cursor-pointer border-t hover:bg-slate-50 active:bg-slate-100 ${
+  selectedPatientId === patient.id
+    ? "bg-blue-50 border-l-4 border-blue-500"
+    : ""
+}`}
+>
+  <td className="px-4 py-3 font-semibold text-slate-800">
+    {getFullPatientName(patient)}
   </td>
-)}
-                <td className="px-4 py-3">{patient.dob || "—"}</td>
-                <td className="px-4 py-3">{patient.last4ssn || "—"}</td>
-                <td className="px-4 py-3">{patient.phone || "—"}</td>
-                <td className="px-4 py-3">{patient.encounters.length}</td>
-              </tr>
+
+  <td className="px-4 py-3">{patient.mrn || "—"}</td>
+
+  <td className="px-4 py-3">{patient.dob || "—"}</td>
+
+  <td className="px-4 py-3">{patient.last4ssn || "—"}</td>
+
+  <td className="px-4 py-3">{patient.phone || "—"}</td>
+
+  <td className="px-4 py-3">{patient.encounters.length}</td>
+
+  {canDeletePatient && (
+    <td className="px-4 py-3">
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          deletePatientCompletely(patient.id);
+        }}
+        className="text-red-600 text-xs hover:underline"
+      >
+        Delete
+      </button>
+    </td>
+  )}
+</tr>
             ))}
 
             {patients.length === 0 && (
               <tr>
-                <td className="p-4 text-slate-500" colSpan={6}>
-                  No matching patients found.
-                </td>
+                <td
+  className="p-4 text-slate-500"
+  colSpan={canDeletePatient ? 7 : 6}
+>
+  No matching patients found.
+</td>
               </tr>
             )}
           </tbody>
@@ -111,14 +96,14 @@ export default function PatientTable({
                 {getFullPatientName(patient)}
               </p>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-slate-600">
-  <span>MRN: {patient.mrn || "—"}</span>
-  <span>DOB: {patient.dob || "—"}</span>
-  <span>SSN: {patient.last4ssn || "—"}</span>
-  <span>Phone: {patient.phone || "—"}</span>
-  <span className="col-span-2">
-    Encounters: {patient.encounters.length}
-  </span>
-</div>
+                <span>MRN: {patient.mrn || "—"}</span>
+                <span>DOB: {patient.dob || "—"}</span>
+                <span>SSN: {patient.last4ssn || "—"}</span>
+                <span>Phone: {patient.phone || "—"}</span>
+                <span className="col-span-2">
+                  Encounters: {patient.encounters.length}
+                </span>
+              </div>
             </div>
           </button>
         ))}

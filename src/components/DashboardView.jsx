@@ -4,16 +4,18 @@ import PatientTable from "./PatientTable";
 export default function DashboardView({
   isLeadershipView,
   canEditMrn,
+  canEditUndergradFields,
+  canEditAllPatientFields,
   canEditPatient,
   canDeletePatient,
   deletePatientCompletely,
+  openPatientEditModal,
+  dashboardSelectedPatient,
   endClinicReset,
   selectedClinicDate,
   setSelectedClinicDate,
   filteredVisiblePatients,
   visibleEncounterRows,
-  assignedCount,
-  inVisitCount,
   searchForm,
   setSearchForm,
   patientRecordsTitle,
@@ -34,7 +36,7 @@ export default function DashboardView({
                     : "border-gray-300 bg-white text-gray-700"
                 }`}
               >
-                All Encounters
+                All Dates
               </button>
 
               <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
@@ -79,29 +81,58 @@ export default function DashboardView({
         </div>
 
         <div className="rounded-2xl bg-white p-3 shadow sm:p-4">
-          <p className="text-sm text-slate-500">Waiting</p>
+          <p className="text-sm text-slate-500">Awaiting Assignment</p>
           <p className="mt-1 text-2xl font-bold sm:text-3xl">
             {
               visibleEncounterRows.filter(
-                ({ encounter }) => encounter.status === "Waiting"
-              ).length
+  ({ encounter }) =>
+    encounter.status === "started" ||
+    encounter.status === "undergrad_complete" ||
+    encounter.status === "ready"
+).length
             }
           </p>
         </div>
 
         <div className="rounded-2xl bg-white p-3 shadow sm:p-4">
           <p className="text-sm text-slate-500">Assigned</p>
-          <p className="mt-1 text-2xl font-bold sm:text-3xl">{assignedCount}</p>
+          <p className="mt-1 text-2xl font-bold sm:text-3xl">{visibleEncounterRows.filter(
+  ({ encounter }) => encounter.status === "roomed"
+).length}</p>
         </div>
 
         <div className="rounded-2xl bg-white p-3 shadow sm:p-4">
           <p className="text-sm text-slate-500">In Visit</p>
-          <p className="mt-1 text-2xl font-bold sm:text-3xl">{inVisitCount}</p>
+          <p className="mt-1 text-2xl font-bold sm:text-3xl">{visibleEncounterRows.filter(
+  ({ encounter }) => encounter.status === "in_visit"
+).length}</p>
         </div>
       </div>
 
       <div className="rounded-2xl bg-white p-3 shadow sm:p-4">
-  <PatientSearch searchForm={searchForm} setSearchForm={setSearchForm} />
+  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+    <PatientSearch searchForm={searchForm} setSearchForm={setSearchForm} />
+
+    {(canEditUndergradFields || canEditAllPatientFields) && (
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <button
+          onClick={openPatientEditModal}
+          className="rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-900"
+        >
+          Edit Patient Info
+        </button>
+
+        {canDeletePatient && dashboardSelectedPatient && (
+          <button
+            onClick={() => deletePatientCompletely(dashboardSelectedPatient.id)}
+            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+          >
+            Delete Patient
+          </button>
+        )}
+      </div>
+    )}
+  </div>
 </div>
 
       <PatientTable
@@ -113,6 +144,7 @@ export default function DashboardView({
   canEditPatient={canEditPatient}
   canDeletePatient={canDeletePatient}
   deletePatientCompletely={deletePatientCompletely}
+  selectedPatientId={dashboardSelectedPatient?.id}
 />
     </div>
   );

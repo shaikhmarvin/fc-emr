@@ -26,16 +26,21 @@ export default function RoomBoard({
               ROOM_OPTIONS.filter(
                 (room) =>
                   !roomMap[room.number] ||
-                  roomMap[room.number]?.encounter.status === "Completed"
+                  roomMap[room.number]?.encounter.status === "done"
               ).length
             }
           </p>
         </div>
 
         <div className="rounded-2xl bg-white p-3 shadow">
-          <p className="text-sm text-slate-500">Waiting</p>
+          <p className="text-sm text-slate-500">Awaiting Assignment</p>
           <p className="mt-1 text-2xl font-bold">
-            {allEncounterRows.filter(({ encounter }) => encounter.status === "Waiting").length}
+            {allEncounterRows.filter(
+  ({ encounter }) =>
+    encounter.status === "started" ||
+    encounter.status === "undergrad_complete" ||
+    encounter.status === "ready"
+).length}
           </p>
         </div>
 
@@ -64,7 +69,7 @@ export default function RoomBoard({
         {ROOM_OPTIONS.map((room) => {
           const slot = roomMap[room.number];
           const occupied =
-            Boolean(slot) && slot?.encounter?.status !== "Completed";
+            Boolean(slot) && slot?.encounter?.status !== "done";
 
           return (
             <button
@@ -83,11 +88,11 @@ export default function RoomBoard({
               }}
               className={`min-h-[180px] rounded-2xl border p-3 text-left shadow transition ${
                 occupied
-                  ? slot.encounter.status === "Assigned"
-                    ? "border-green-200 bg-green-50"
-                    : slot.encounter.status === "In Visit"
-                    ? "border-blue-200 bg-blue-50"
-                    : "border-yellow-200 bg-yellow-50"
+                  ? slot.encounter.status === "roomed"
+  ? "border-green-200 bg-green-50"
+  : slot.encounter.status === "in_visit"
+  ? "border-blue-200 bg-blue-50"
+  : "border-yellow-200 bg-yellow-50"
                   : "border-slate-200 bg-white hover:bg-slate-50"
               }`}
             >

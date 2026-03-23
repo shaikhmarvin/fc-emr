@@ -11,7 +11,10 @@ const EMPTY_FORMULARY_ITEM = {
 
 export default function FormularyView({
   formulary,
-  setFormulary,
+  onAddMedication,
+  onEditMedication,
+  onDeleteMedication,
+  onToggleStock,
   onPrescribeMedication,
   selectedPatient,
   isLeadershipView,
@@ -41,43 +44,42 @@ export default function FormularyView({
     setShowModal(true);
   }
 
-  function saveMedication() {
-    if (!itemForm.name.trim()) return;
+ async function saveMedication() {
+  if (!itemForm.name.trim()) return;
 
+  try {
     if (editingId !== null) {
-      setFormulary((prev) =>
-        prev.map((item) =>
-          item.id === editingId
-            ? { ...item, ...itemForm, id: editingId }
-            : item
-        )
-      );
+      await onEditMedication(editingId, itemForm);
     } else {
-      setFormulary((prev) => [
-        {
-          id: Date.now(),
-          ...itemForm,
-        },
-        ...prev,
-      ]);
+      await onAddMedication(itemForm);
     }
 
     setShowModal(false);
     setEditingId(null);
     setItemForm(EMPTY_FORMULARY_ITEM);
+  } catch (error) {
+    console.error("Save failed:", error);
+    alert("Failed to save medication");
   }
+}
 
-  function deleteMedication(id) {
-    setFormulary((prev) => prev.filter((item) => item.id !== id));
+  async function deleteMedication(id) {
+  try {
+    await onDeleteMedication(id);
+  } catch (error) {
+    console.error("Delete failed:", error);
+    alert("Failed to delete medication");
   }
+}
 
-  function toggleStock(id) {
-    setFormulary((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, inStock: !item.inStock } : item
-      )
-    );
+  async function toggleStock(id) {
+  try {
+    await onToggleStock(id);
+  } catch (error) {
+    console.error("Toggle failed:", error);
+    alert("Failed to update stock");
   }
+}
 
     const filteredFormulary = useMemo(() => {
         return formulary.filter((item) => {

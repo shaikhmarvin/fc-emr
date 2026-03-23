@@ -432,18 +432,14 @@ Type, quantity, duration, interested in cessation, substance use treatment`}
                 Needs Elevator
               </label>
 
-              <select
-                className="rounded-lg border p-3"
-                value={intakeForm.spanishSpeaking}
-                onChange={(e) => updateIntakeField("spanishSpeaking", e.target.value)}
-              >
-                <option value="">Spanish Speaking</option>
-                {YES_NO_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
+              <label className="flex items-center gap-2 rounded-lg border p-3">
+  <input
+    type="checkbox"
+    checked={!!intakeForm.spanishSpeaking}
+    onChange={(e) => updateIntakeField("spanishSpeaking", e.target.checked)}
+  />
+  Spanish Speaking
+</label>
             </div>
           )}
         </div>

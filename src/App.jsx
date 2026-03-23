@@ -9,6 +9,7 @@ import { fetchProfiles, updateProfileRole, updateProfileDetails } from "./api/pr
 import { createAuditLog, fetchAuditLogForEncounter } from "./api/audit";
 import PatientSearch from "./components/PatientSearch";
 import PatientTable from "./components/PatientTable";
+import PatientInfoEditModal from "./components/PatientInfoEditModal";
 import { deletePatientInSupabase } from "./api/patients";
 import QueueView from "./components/QueueView";
 import RoomBoard from "./components/RoomBoard";
@@ -21,6 +22,12 @@ import RegistrationView from "./components/RegistrationView";
 import UndergradRegistrationModal from "./components/UndergradRegistrationModal";
 import ChartView from "./components/ChartView";
 import BoardDisplay from "./components/BoardDisplay";
+import {
+  fetchFormularyItems,
+  createFormularyItemInSupabase,
+  updateFormularyItemInSupabase,
+  deleteFormularyItemInSupabase,
+} from "./api/formulary";
 import FormularyView from "./components/FormularyView";
 import AppSidebar from "./components/AppSidebar";
 import UserManagementView from "./components/UserManagementView";
@@ -161,38 +168,88 @@ export default function App() {
   } = useAuthSession();
 
   useEffect(() => {
-  if (!session?.user?.id) return;
+    if (!session?.user?.id) return;
 
-  async function updateLastSeen() {
-    try {
+    async function updateLastSeen() {
+      try {
+        await supabase
+          .from("profiles")
+          .update({ last_seen_at: new Date().toISOString() })
+          .eq("id", session.user.id);
+
+        await loadProfiles(); // refresh UI immediately
+      } catch (err) {
+        console.error("Failed to update last_seen_at:", err);
+      }
+    }
+
+    updateLastSeen();
+  }, [session]);
+
+  async function addFormularyItem(itemForm) {
+  try {
+    const saved = await createFormularyItemInSupabase(itemForm);
+    setFormulary((prev) => [saved, ...prev]);
+  } catch (error) {
+    console.error("Failed to add formulary item:", error);
+    alert(error.message);
+  }
+}
+
+async function editFormularyItem(itemId, itemForm) {
+  try {
+    const saved = await updateFormularyItemInSupabase(itemId, itemForm);
+    setFormulary((prev) =>
+      prev.map((item) => (item.id === itemId ? saved : item))
+    );
+  } catch (error) {
+    console.error("Failed to update formulary item:", error);
+    alert(error.message);
+  }
+}
+
+async function removeFormularyItem(itemId) {
+  try {
+    await deleteFormularyItemInSupabase(itemId);
+    setFormulary((prev) => prev.filter((item) => item.id !== itemId));
+  } catch (error) {
+    console.error("Failed to delete formulary item:", error);
+    alert(error.message);
+  }
+}
+
+async function toggleFormularyStock(itemId) {
+  const item = formulary.find((entry) => entry.id === itemId);
+  if (!item) return;
+
+  try {
+    const saved = await updateFormularyItemInSupabase(itemId, {
+      inStock: !item.inStock,
+    });
+
+    setFormulary((prev) =>
+      prev.map((entry) => (entry.id === itemId ? saved : entry))
+    );
+  } catch (error) {
+    console.error("Failed to toggle stock:", error);
+    alert(error.message);
+  }
+}
+
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    const interval = setInterval(async () => {
       await supabase
         .from("profiles")
         .update({ last_seen_at: new Date().toISOString() })
         .eq("id", session.user.id);
 
-      await loadProfiles(); // refresh UI immediately
-    } catch (err) {
-      console.error("Failed to update last_seen_at:", err);
-    }
-  }
+      loadProfiles(); // keep UI fresh
+    }, 5 * 60 * 1000);
 
-  updateLastSeen();
-}, [session]);
-
-useEffect(() => {
-  if (!session?.user?.id) return;
-
-  const interval = setInterval(async () => {
-  await supabase
-    .from("profiles")
-    .update({ last_seen_at: new Date().toISOString() })
-    .eq("id", session.user.id);
-
-  loadProfiles(); // keep UI fresh
-}, 5 * 60 * 1000);
-
-  return () => clearInterval(interval);
-}, [session]);
+    return () => clearInterval(interval);
+  }, [session]);
 
   const canOpenIntake = canStartIntake(userRole);
   const canManageRooms = canManageRoomBoard(userRole);
@@ -200,6 +257,10 @@ useEffect(() => {
   const canPrescribeMeds = canPrescribe(userRole);
   const canChartInEncounter = canChart(userRole);
   const [authMode, setAuthMode] = useState("login");
+  const [showPatientInfoEditModal, setShowPatientInfoEditModal] = useState(false);
+  const [dashboardSelectedPatientId, setDashboardSelectedPatientId] = useState(null);
+  const [formulary, setFormulary] = useState([]);
+  const [formularyLoaded, setFormularyLoaded] = useState(false);
 
   function getNextSoapStatus(authorRole) {
     if (authorRole === "student" || authorRole === "leadership") {
@@ -238,17 +299,17 @@ useEffect(() => {
     );
   }
 
-function canAttendingSignSoap(role, encounter) {
-  if (!encounter) return false;
+  function canAttendingSignSoap(role, encounter) {
+    if (!encounter) return false;
 
-  return (
-    encounter.soapStatus === "awaiting_attending" &&
-    (role === "student" ||
-      role === "upper_level" ||
-      role === "leadership" ||
-      role === "attending")
-  );
-}
+    return (
+      encounter.soapStatus === "awaiting_attending" &&
+      (role === "student" ||
+        role === "upper_level" ||
+        role === "leadership" ||
+        role === "attending")
+    );
+  }
 
   function formatRoleLabel(role) {
     switch (role) {
@@ -327,110 +388,179 @@ function canAttendingSignSoap(role, encounter) {
   }
 
   const EMPTY_UNDERGRAD_REGISTRATION_FORM = {
-  addressLine1: "",
-  city: "",
-  state: "",
-  zipCode: "",
-  emergencyContactName: "",
-  emergencyContactRelation: "",
-  emergencyContactPhone: "",
-  last4Ssn: "",
-  incomeRange: "",
-  spanishOnly: "",
-  chronicConditions: [],
-  chronicConditionsOther: "",
-};
+    addressLine1: "",
+    city: "",
+    state: "",
+    zipCode: "",
+    emergencyContactName: "",
+    emergencyContactRelation: "",
+    emergencyContactPhone: "",
+    last4Ssn: "",
+    incomeRange: "",
+    spanishOnly: "",
+    chronicConditions: [],
+    chronicConditionsOther: "",
+  };
 
-const [showUndergradRegistrationModal, setShowUndergradRegistrationModal] = useState(false);
-const [undergradRegistrationForm, setUndergradRegistrationForm] = useState(
-  EMPTY_UNDERGRAD_REGISTRATION_FORM
-);
-const [registrationPatientId, setRegistrationPatientId] = useState(null);
-const [registrationEncounterId, setRegistrationEncounterId] = useState(null);
+  const [showUndergradRegistrationModal, setShowUndergradRegistrationModal] = useState(false);
+  const [undergradRegistrationForm, setUndergradRegistrationForm] = useState(
+    EMPTY_UNDERGRAD_REGISTRATION_FORM
+  );
+  const [registrationPatientId, setRegistrationPatientId] = useState(null);
+  const [registrationEncounterId, setRegistrationEncounterId] = useState(null);
 
   const [activeView, setActiveView] = useState("dashboard");
   useEffect(() => {
   if (userRole === "undergraduate") {
     setActiveView("undergrad-intake");
+    return;
   }
+
+  if (
+    userRole === "student" ||
+    userRole === "upper_level" ||
+    userRole === "attending"
+  ) {
+    setActiveView("queue");
+    return;
+  }
+
+  setActiveView("dashboard");
 }, [userRole]);
   const [clinicSummary, setClinicSummary] = useState({
-  refillCount: "",
-  labsCount: "",
-  mentalHealthCount: "",
-  socialWorkCount: "",
-  ophthalmologyCount: "",
-  lwobsCount: "",
-  zoomCount: "",
-  phoneCount: "",
-  attendingNames: "",
-  residentNames: "",
-  ms34Names: "",
-  ms12Names: "",
+    refillCount: "",
+    labsCount: "",
+    mentalHealthCount: "",
+    socialWorkCount: "",
+    ophthalmologyCount: "",
+    lwobsCount: "",
+    zoomCount: "",
+    phoneCount: "",
+    attendingNames: "",
+    residentNames: "",
+    ms34Names: "",
+    ms12Names: "",
   });
   const [programEntries, setProgramEntries] = useState([]);
- const [programsLoaded, setProgramsLoaded] = useState(false);
+  const [programsLoaded, setProgramsLoaded] = useState(false);
 
-useEffect(() => {
-  if (!session || programsLoaded) return;
+  useEffect(() => {
+    if (!session || programsLoaded) return;
 
-  async function loadProgramEntries() {
+    async function loadProgramEntries() {
+      try {
+        const rows = await fetchProgramEntries();
+        setProgramEntries(rows);
+        setProgramsLoaded(true); // 🔥 important
+      } catch (error) {
+        console.error("Failed to load program entries:", error);
+      }
+    }
+
+    loadProgramEntries();
+  }, [session, programsLoaded]);
+
+  async function addProgramEntry(entry) {
+    setProgramEntries((prev) => [entry, ...prev]);
+
     try {
-      const rows = await fetchProgramEntries();
-      setProgramEntries(rows);
-      setProgramsLoaded(true); // 🔥 important
+      await createProgramEntryInSupabase(entry);
     } catch (error) {
-      console.error("Failed to load program entries:", error);
+      console.error("Failed to create program entry:", error);
+      alert(`Failed to save program entry: ${error.message}`);
+
+      setProgramEntries((prev) => prev.filter((item) => item.id !== entry.id));
     }
   }
 
-  loadProgramEntries();
-}, [session, programsLoaded]);
+  async function updateProgramEntry(entryId, field, value) {
+    const previousEntries = [...programEntries];
 
-async function addProgramEntry(entry) {
-  setProgramEntries((prev) => [entry, ...prev]);
+    setProgramEntries((prev) =>
+      prev.map((entry) =>
+        entry.id === entryId ? { ...entry, [field]: value } : entry
+      )
+    );
 
-  try {
-    await createProgramEntryInSupabase(entry);
-  } catch (error) {
-    console.error("Failed to create program entry:", error);
-    alert(`Failed to save program entry: ${error.message}`);
-
-    setProgramEntries((prev) => prev.filter((item) => item.id !== entry.id));
+    try {
+      await updateProgramEntryInSupabase(entryId, { [field]: value });
+    } catch (error) {
+      console.error("Failed to update program entry:", error);
+      alert(`Failed to update program entry: ${error.message}`);
+      setProgramEntries(previousEntries);
+    }
   }
-}
 
-async function updateProgramEntry(entryId, field, value) {
-  const previousEntries = [...programEntries];
+  async function removeProgramEntry(entryId) {
+    const previousEntries = [...programEntries];
 
-  setProgramEntries((prev) =>
-    prev.map((entry) =>
-      entry.id === entryId ? { ...entry, [field]: value } : entry
+    setProgramEntries((prev) => prev.filter((entry) => entry.id !== entryId));
+
+    try {
+      await deleteProgramEntryInSupabase(entryId);
+    } catch (error) {
+      console.error("Failed to delete program entry:", error);
+      alert(`Failed to delete program entry: ${error.message}`);
+      setProgramEntries(previousEntries);
+    }
+  }
+
+  useEffect(() => {
+  if (!session || formularyLoaded) return;
+
+  async function loadFormulary() {
+    try {
+      const rows = await fetchFormularyItems();
+      console.log("FORMULARY FROM DB:", rows); // debug
+      setFormulary(rows);
+      setFormularyLoaded(true);
+    } catch (error) {
+      console.error("Failed to load formulary:", error);
+    }
+  }
+
+  loadFormulary();
+}, [session, formularyLoaded]);
+
+useEffect(() => {
+  if (!session) return;
+
+  const channel = supabase
+    .channel("formulary-realtime")
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "formulary_items" },
+      (payload) => {
+        setFormulary((prev) => [payload.new, ...prev]);
+      }
     )
-  );
+    .on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "formulary_items" },
+      (payload) => {
+        setFormulary((prev) =>
+          prev.map((item) =>
+            item.id === payload.new.id ? payload.new : item
+          )
+        );
+      }
+    )
+    .on(
+      "postgres_changes",
+      { event: "DELETE", schema: "public", table: "formulary_items" },
+      (payload) => {
+        setFormulary((prev) =>
+          prev.filter((item) => item.id !== payload.old.id)
+        );
+      }
+    )
+    .subscribe();
 
-  try {
-    await updateProgramEntryInSupabase(entryId, { [field]: value });
-  } catch (error) {
-    console.error("Failed to update program entry:", error);
-    alert(`Failed to update program entry: ${error.message}`);
-    setProgramEntries(previousEntries);
-  }
-}
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [session]);
 
-async function removeProgramEntry(entryId) {
-  const previousEntries = [...programEntries];
-
-  setProgramEntries((prev) => prev.filter((entry) => entry.id !== entryId));
-
-  try {
-    await deleteProgramEntryInSupabase(entryId);
-  } catch (error) {
-    console.error("Failed to delete program entry:", error);
-    alert(`Failed to delete program entry: ${error.message}`);
-    setProgramEntries(previousEntries);
-  }
-}
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showIntakeModal, setShowIntakeModal] = useState(false);
   const [intakeTab, setIntakeTab] = useState(0);
@@ -442,72 +572,74 @@ async function removeProgramEntry(entryId) {
   const [selectedPatientId, setSelectedPatientId] = useState(null);
   const [selectedEncounterId, setSelectedEncounterId] = useState(null);
   const { patients, setPatients } = useClinicData({
-  authReady,
-  session,
-  userRole,
-});
-useEffect(() => {
-  if (!session) return;
+    authReady,
+    session,
+    userRole,
+  });
+  const dashboardSelectedPatient =
+    patients.find((p) => p.id === dashboardSelectedPatientId) || null;
+  useEffect(() => {
+    if (!session) return;
 
-  const channel = supabase
-    .channel("program-entries-realtime")
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "program_entries",
-      },
-      (payload) => {
-        const eventType = payload.eventType;
-        const row = payload.new || payload.old;
+    const channel = supabase
+      .channel("program-entries-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "program_entries",
+        },
+        (payload) => {
+          const eventType = payload.eventType;
+          const row = payload.new || payload.old;
 
-        if (!row) return;
+          if (!row) return;
 
-        const mappedRow = {
-          id: row.id,
-          patientId: row.patient_id || "",
-          patientName: row.patient_name || "",
-          encounterId: row.encounter_id || "",
-          clinicDate: row.clinic_date || "",
-          programType: row.program_type || "",
-          reason: row.reason || "",
-          assignedCoordinator: row.assigned_coordinator || "",
-          status: row.status || "",
-          nextStep: row.next_step || "",
-          notes: row.notes || "",
-          createdAt: row.created_at || "",
-        };
+          const mappedRow = {
+            id: row.id,
+            patientId: row.patient_id || "",
+            patientName: row.patient_name || "",
+            encounterId: row.encounter_id || "",
+            clinicDate: row.clinic_date || "",
+            programType: row.program_type || "",
+            reason: row.reason || "",
+            assignedCoordinator: row.assigned_coordinator || "",
+            status: row.status || "",
+            nextStep: row.next_step || "",
+            notes: row.notes || "",
+            createdAt: row.created_at || "",
+          };
 
-        if (eventType === "INSERT") {
-          setProgramEntries((prev) => {
-            const exists = prev.some((entry) => entry.id === mappedRow.id);
-            if (exists) return prev;
-            return [mappedRow, ...prev];
-          });
+          if (eventType === "INSERT") {
+            setProgramEntries((prev) => {
+              const exists = prev.some((entry) => entry.id === mappedRow.id);
+              if (exists) return prev;
+              return [mappedRow, ...prev];
+            });
+          }
+
+          if (eventType === "UPDATE") {
+            setProgramEntries((prev) =>
+              prev.map((entry) =>
+                entry.id === mappedRow.id ? mappedRow : entry
+              )
+            );
+          }
+
+          if (eventType === "DELETE") {
+            setProgramEntries((prev) =>
+              prev.filter((entry) => entry.id !== row.id)
+            );
+          }
         }
+      )
+      .subscribe();
 
-        if (eventType === "UPDATE") {
-          setProgramEntries((prev) =>
-            prev.map((entry) =>
-              entry.id === mappedRow.id ? mappedRow : entry
-            )
-          );
-        }
-
-        if (eventType === "DELETE") {
-          setProgramEntries((prev) =>
-            prev.filter((entry) => entry.id !== row.id)
-          );
-        }
-      }
-    )
-    .subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
-}, [session]);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session]);
   const [assignmentForm, setAssignmentForm] = useState({
     studentName: "",
     upperLevelName: "",
@@ -549,13 +681,13 @@ useEffect(() => {
     }
 
     const possibleMatch = findPotentialDuplicatePatient(
-  patients,
-  intakeForm.firstName,
-  intakeForm.lastName,
-  intakeForm.dob,
-  intakeForm.last4ssn,
-  editingPatientId
-);
+      patients,
+      intakeForm.firstName,
+      intakeForm.lastName,
+      intakeForm.dob,
+      intakeForm.last4ssn,
+      editingPatientId
+    );
 
     const nextMatchId = possibleMatch ? possibleMatch.id : null;
 
@@ -618,7 +750,9 @@ useEffect(() => {
     patients,
   ]);
 
-  const [selectedClinicDate, setSelectedClinicDate] = useState("");
+  const [selectedClinicDate, setSelectedClinicDate] = useState(
+  new Date().toISOString().slice(0, 10)
+);
   const [, setNow] = useState(Date.now());
   const selectedPatient = patients.find((p) => p.id === selectedPatientId) || null;
   const selectedEncounter =
@@ -650,13 +784,13 @@ useEffect(() => {
     return () => clearInterval(interval);
   }, []);
 
-  
+
 
   const sortedSelectedPatientEncounters = useMemo(() => {
-  if (!selectedPatient) return [];
+    if (!selectedPatient) return [];
 
-  return sortEncountersByDate(selectedPatient.encounters);
-}, [selectedPatient]);
+    return sortEncountersByDate(selectedPatient.encounters);
+  }, [selectedPatient]);
 
   const patientRecordsTitle = selectedClinicDate
     ? `Patient Records — ${selectedClinicDate}`
@@ -664,49 +798,49 @@ useEffect(() => {
 
 
   const allEncounterRows = useMemo(() => {
-  return patients.flatMap((patient) =>
-    patient.encounters.map((encounter) => ({
-      patient,
-      encounter,
-    }))
-  );
-}, [patients]);
+    return patients.flatMap((patient) =>
+      patient.encounters.map((encounter) => ({
+        patient,
+        encounter,
+      }))
+    );
+  }, [patients]);
 
-const registrationRows = useMemo(() => {
-  return allEncounterRows
-    .filter(({ encounter }) => {
-      if (userRole === "undergraduate") {
-        return encounter.status === "started";
-      }
+  const registrationRows = useMemo(() => {
+    return allEncounterRows
+      .filter(({ encounter }) => {
+        if (userRole === "undergraduate") {
+          return encounter.status === "started";
+        }
 
-      if (isLeadershipView) {
-        return encounter.status === "undergrad_complete";
-      }
+        if (isLeadershipView) {
+          return encounter.status === "undergrad_complete";
+        }
 
-      return false;
-    })
-    .sort((a, b) => {
-      const aTime = new Date(a.encounter.createdAt || 0).getTime();
-      const bTime = new Date(b.encounter.createdAt || 0).getTime();
-      return aTime - bTime;
-    });
-}, [allEncounterRows, userRole, isLeadershipView]);
+        return false;
+      })
+      .sort((a, b) => {
+        const aTime = new Date(a.encounter.createdAt || 0).getTime();
+        const bTime = new Date(b.encounter.createdAt || 0).getTime();
+        return aTime - bTime;
+      });
+  }, [allEncounterRows, userRole, isLeadershipView]);
 
-async function removeFromRegistration(patientId, encounterId) {
-  const confirmed = window.confirm(
-    "Remove this patient from registration? This will mark the encounter as cancelled."
-  );
-  if (!confirmed) return;
+  async function removeFromRegistration(patientId, encounterId) {
+    const confirmed = window.confirm(
+      "Remove this patient from registration? This will mark the encounter as cancelled."
+    );
+    if (!confirmed) return;
 
-  try {
-    await updateEncounterInSupabase(encounterId, {
-      status: "cancelled",
-    });
+    try {
+      await updateEncounterInSupabase(encounterId, {
+        status: "cancelled",
+      });
 
-    setPatients((prev) =>
-      prev.map((patient) =>
-        patient.id === patientId
-          ? {
+      setPatients((prev) =>
+        prev.map((patient) =>
+          patient.id === patientId
+            ? {
               ...patient,
               encounters: patient.encounters.map((encounter) =>
                 encounter.id === encounterId
@@ -714,14 +848,14 @@ async function removeFromRegistration(patientId, encounterId) {
                   : encounter
               ),
             }
-          : patient
-      )
-    );
-  } catch (error) {
-    console.error("Failed to remove registration encounter:", error);
-    alert(`Failed to remove patient from registration: ${error.message}`);
+            : patient
+        )
+      );
+    } catch (error) {
+      console.error("Failed to remove registration encounter:", error);
+      alert(`Failed to remove patient from registration: ${error.message}`);
+    }
   }
-}
 
   const visibleEncounterRows = useMemo(() => {
     if (!selectedClinicDate) {
@@ -773,61 +907,14 @@ async function removeFromRegistration(patientId, encounterId) {
   );
 
   const newPatientCount = visibleEncounterRows.filter(
-  ({ encounter }) => encounter.newReturning === "New"
-).length;
+    ({ encounter }) => encounter.newReturning === "New"
+  ).length;
 
-const returningPatientCount = visibleEncounterRows.filter(
-  ({ encounter }) => encounter.newReturning === "Returning"
-).length;
+  const returningPatientCount = visibleEncounterRows.filter(
+    ({ encounter }) => encounter.newReturning === "Returning"
+  ).length;
 
-const totalPatientCount = visibleEncounterRows.length;
-  const [formulary, setFormulary] = useState([
-    {
-      id: 1,
-      name: "Acyclovir",
-      strength: "400 mg",
-      dosageForm: "tablet",
-      use: "Antiviral",
-      inStock: true,
-      notes: "",
-    },
-    {
-      id: 2,
-      name: "Albuterol",
-      strength: "90 mcg",
-      dosageForm: "inhaler",
-      use: "Bronchodilator",
-      inStock: true,
-      notes: "",
-    },
-    {
-      id: 3,
-      name: "Lisinopril",
-      strength: "10 mg",
-      dosageForm: "tablet",
-      use: "Hypertension",
-      inStock: true,
-      notes: "",
-    },
-    {
-      id: 4,
-      name: "Metformin",
-      strength: "500 mg",
-      dosageForm: "tablet",
-      use: "Diabetes",
-      inStock: true,
-      notes: "",
-    },
-    {
-      id: 5,
-      name: "Triamcinolone",
-      strength: "0.1%",
-      dosageForm: "cream",
-      use: "Dermatologic",
-      inStock: false,
-      notes: "Awaiting restock",
-    },
-  ]);
+  const totalPatientCount = visibleEncounterRows.length;
 
   const [profiles, setProfiles] = useState([]);
   const [loadingProfiles, setLoadingProfiles] = useState(false);
@@ -867,146 +954,146 @@ const totalPatientCount = visibleEncounterRows.length;
   }, [profiles, userSearch, showOnlyActiveToday]);
 
   async function handleUndergradStartEncounter(data) {
-  try {
-    const patientToSave = {
-      ...data,
-      mrn: "",
-    };
+    try {
+      const patientToSave = {
+        ...data,
+        mrn: "",
+      };
 
-    const savedPatient = await createPatientInSupabase(patientToSave);
+      const savedPatient = await createPatientInSupabase(patientToSave);
 
-    const encounter = {
-      clinicDate: formatClinicDate(),
-      createdAt: new Date().toISOString(),
-      newReturning: data.isReturning || "New",
-      visitLocation: "In Clinic",
-      chiefComplaint: "",
-      notes: "",
-      transportation: "",
-      needsElevator: false,
-      spanishSpeaking: false,
-      mammogramPapSmear: "",
-      fluShot: "",
-      htn: false,
-      dm: false,
-      labsLast6Months: "",
-      tobaccoScreening: "",
-      dermatology: "N/A",
-      ophthalmology: "N/A",
-      optometry: "N/A",
-      diabeticEyeExamPastYear: "N/A",
-      physicalTherapy: "N/A",
-      mentalHealthCombined: "N/A",
-      counseling: "N/A",
-      anyMentalHealthPositive: false,
-      status: "started",
-      assignedStudent: "",
-      assignedUpperLevel: "",
-      roomNumber: "",
-    };
+      const encounter = {
+        clinicDate: formatClinicDate(),
+        createdAt: new Date().toISOString(),
+        newReturning: data.isReturning || "New",
+        visitLocation: "In Clinic",
+        chiefComplaint: "",
+        notes: "",
+        transportation: "",
+        needsElevator: false,
+        spanishSpeaking: false,
+        mammogramPapSmear: "",
+        fluShot: "",
+        htn: false,
+        dm: false,
+        labsLast6Months: "",
+        tobaccoScreening: "",
+        dermatology: "N/A",
+        ophthalmology: "N/A",
+        optometry: "N/A",
+        diabeticEyeExamPastYear: "N/A",
+        physicalTherapy: "N/A",
+        mentalHealthCombined: "N/A",
+        counseling: "N/A",
+        anyMentalHealthPositive: false,
+        status: "started",
+        assignedStudent: "",
+        assignedUpperLevel: "",
+        roomNumber: "",
+      };
 
-    const savedEncounter = await createEncounterInSupabase(
-      savedPatient.id,
-      encounter
-    );
+      const savedEncounter = await createEncounterInSupabase(
+        savedPatient.id,
+        encounter
+      );
 
-    setPatients((prev) => [
-      {
-        ...savedPatient,
-        preferredName: data.preferredName || "",
-        last4ssn: data.last4Ssn || "",
-        phone: data.phone || "",
-        sex: data.sex || "",
-        ethnicity: data.ethnicity || "",
-        ttuStudent: data.ttuStudent || false,
-        address: data.address || "",
-        emergencyContactName: data.emergencyContactName || "",
-        emergencyContactRelation: data.emergencyContactRelation || "",
-        emergencyContactPhone: data.emergencyContactPhone || "",
-        incomeRange: data.incomeRange || "",
-        spanishOnly: data.spanishOnly || "",
-        chronicConditions: data.chronicConditions || [],
-        intakeStatus: "started",
-        encounters: [
-          {
-            ...encounter,
-            id: savedEncounter.id,
-            status: "started",
-          },
-        ],
-      },
-      ...prev,
-    ]);
+      setPatients((prev) => [
+        {
+          ...savedPatient,
+          preferredName: data.preferredName || "",
+          last4ssn: data.last4Ssn || "",
+          phone: data.phone || "",
+          sex: data.sex || "",
+          ethnicity: data.ethnicity || "",
+          ttuStudent: data.ttuStudent || false,
+          address: data.address || "",
+          emergencyContactName: data.emergencyContactName || "",
+          emergencyContactRelation: data.emergencyContactRelation || "",
+          emergencyContactPhone: data.emergencyContactPhone || "",
+          incomeRange: data.incomeRange || "",
+          spanishOnly: data.spanishOnly || "",
+          chronicConditions: data.chronicConditions || [],
+          intakeStatus: "started",
+          encounters: [
+            {
+              ...encounter,
+              id: savedEncounter.id,
+              status: "started",
+            },
+          ],
+        },
+        ...prev,
+      ]);
 
-    setSelectedPatientId(savedPatient.id);
-    setSelectedEncounterId(savedEncounter.id);
+      setSelectedPatientId(savedPatient.id);
+      setSelectedEncounterId(savedEncounter.id);
 
-    setActiveView("registration");
-  } catch (error) {
-    console.error("Failed to save undergrad intake:", error);
-    alert(`Failed to save intake: ${error.message}`);
+      setActiveView("registration");
+    } catch (error) {
+      console.error("Failed to save undergrad intake:", error);
+      alert(`Failed to save intake: ${error.message}`);
+    }
   }
-}
 
   function openUndergradRegistration(patientId, encounterId) {
-  const patient = patients.find((p) => p.id === patientId);
-  const encounter = patient?.encounters.find((e) => e.id === encounterId);
+    const patient = patients.find((p) => p.id === patientId);
+    const encounter = patient?.encounters.find((e) => e.id === encounterId);
 
-  if (!patient || !encounter) return;
+    if (!patient || !encounter) return;
 
-  setRegistrationPatientId(patientId);
-  setRegistrationEncounterId(encounterId);
+    setRegistrationPatientId(patientId);
+    setRegistrationEncounterId(encounterId);
 
-  setUndergradRegistrationForm({
-  addressLine1: patient.address || "",
-  city: patient.city || "",
-  state: patient.state || "",
-  zipCode: patient.zipCode || "",
-  emergencyContactName: patient.emergencyContactName || "",
-  emergencyContactRelation: patient.emergencyContactRelation || "",
-  emergencyContactPhone: patient.emergencyContactPhone || "",
-  last4Ssn: patient.last4ssn || "",
-  incomeRange: patient.incomeRange || "",
-  spanishOnly: patient.spanishOnly || "",
-  chronicConditions: patient.chronicConditions || [],
-  chronicConditionsOther: patient.chronicConditionsOther || "",
-});
-
-  setShowUndergradRegistrationModal(true);
-}
-
-async function saveUndergradRegistration() {
-  const patient = patients.find((p) => p.id === registrationPatientId);
-  const encounter = patient?.encounters.find((e) => e.id === registrationEncounterId);
-
-  if (!patient || !encounter) return;
-
-  const patientUpdates = {
-  last4ssn: undergradRegistrationForm.last4Ssn,
-  address: undergradRegistrationForm.addressLine1,
-  city: undergradRegistrationForm.city,
-  state: undergradRegistrationForm.state,
-  zipCode: undergradRegistrationForm.zipCode,
-  emergencyContactName: undergradRegistrationForm.emergencyContactName,
-  emergencyContactRelation: undergradRegistrationForm.emergencyContactRelation,
-  emergencyContactPhone: undergradRegistrationForm.emergencyContactPhone,
-  incomeRange: undergradRegistrationForm.incomeRange,
-  spanishOnly: undergradRegistrationForm.spanishOnly,
-  chronicConditions: undergradRegistrationForm.chronicConditions,
-  chronicConditionsOther: undergradRegistrationForm.chronicConditionsOther,
-};
-
-  try {
-    await updatePatientInSupabase(registrationPatientId, patientUpdates);
-
-    await updateEncounterInSupabase(registrationEncounterId, {
-      status: "undergrad_complete",
+    setUndergradRegistrationForm({
+      addressLine1: patient.address || "",
+      city: patient.city || "",
+      state: patient.state || "",
+      zipCode: patient.zipCode || "",
+      emergencyContactName: patient.emergencyContactName || "",
+      emergencyContactRelation: patient.emergencyContactRelation || "",
+      emergencyContactPhone: patient.emergencyContactPhone || "",
+      last4Ssn: patient.last4ssn || "",
+      incomeRange: patient.incomeRange || "",
+      spanishOnly: patient.spanishOnly || "",
+      chronicConditions: patient.chronicConditions || [],
+      chronicConditionsOther: patient.chronicConditionsOther || "",
     });
 
-    setPatients((prev) =>
-      prev.map((p) =>
-        p.id === registrationPatientId
-          ? {
+    setShowUndergradRegistrationModal(true);
+  }
+
+  async function saveUndergradRegistration() {
+    const patient = patients.find((p) => p.id === registrationPatientId);
+    const encounter = patient?.encounters.find((e) => e.id === registrationEncounterId);
+
+    if (!patient || !encounter) return;
+
+    const patientUpdates = {
+      last4ssn: undergradRegistrationForm.last4Ssn,
+      address: undergradRegistrationForm.addressLine1,
+      city: undergradRegistrationForm.city,
+      state: undergradRegistrationForm.state,
+      zipCode: undergradRegistrationForm.zipCode,
+      emergencyContactName: undergradRegistrationForm.emergencyContactName,
+      emergencyContactRelation: undergradRegistrationForm.emergencyContactRelation,
+      emergencyContactPhone: undergradRegistrationForm.emergencyContactPhone,
+      incomeRange: undergradRegistrationForm.incomeRange,
+      spanishOnly: undergradRegistrationForm.spanishOnly,
+      chronicConditions: undergradRegistrationForm.chronicConditions,
+      chronicConditionsOther: undergradRegistrationForm.chronicConditionsOther,
+    };
+
+    try {
+      await updatePatientInSupabase(registrationPatientId, patientUpdates);
+
+      await updateEncounterInSupabase(registrationEncounterId, {
+        status: "undergrad_complete",
+      });
+
+      setPatients((prev) =>
+        prev.map((p) =>
+          p.id === registrationPatientId
+            ? {
               ...p,
               ...patientUpdates,
               encounters: p.encounters.map((e) =>
@@ -1015,76 +1102,76 @@ async function saveUndergradRegistration() {
                   : e
               ),
             }
-          : p
-      )
-    );
+            : p
+        )
+      );
 
-    setShowUndergradRegistrationModal(false);
-    setRegistrationPatientId(null);
-    setRegistrationEncounterId(null);
-    setUndergradRegistrationForm(EMPTY_UNDERGRAD_REGISTRATION_FORM);
-  } catch (error) {
-    console.error("Failed to save undergrad registration:", error);
-    alert(`Failed to save undergrad registration: ${error.message}`);
+      setShowUndergradRegistrationModal(false);
+      setRegistrationPatientId(null);
+      setRegistrationEncounterId(null);
+      setUndergradRegistrationForm(EMPTY_UNDERGRAD_REGISTRATION_FORM);
+    } catch (error) {
+      console.error("Failed to save undergrad registration:", error);
+      alert(`Failed to save undergrad registration: ${error.message}`);
+    }
   }
-}
-function openLeadershipRegistration(patientId, encounterId) {
-  const patient = patients.find((p) => p.id === patientId);
-  const encounter = patient?.encounters.find((e) => e.id === encounterId);
+  function openLeadershipRegistration(patientId, encounterId) {
+    const patient = patients.find((p) => p.id === patientId);
+    const encounter = patient?.encounters.find((e) => e.id === encounterId);
 
-  if (!patient || !encounter) return;
+    if (!patient || !encounter) return;
 
-  setSelectedPatientId(patientId);
-  setSelectedEncounterId(encounterId);
+    setSelectedPatientId(patientId);
+    setSelectedEncounterId(encounterId);
 
-  setIntakeForm({
-    firstName: patient.firstName || "",
-    lastName: patient.lastName || "",
-    preferredName: patient.preferredName || "",
-    mrn: patient.mrn || "",
-    last4ssn: patient.last4ssn || "",
-    dob: patient.dob || "",
-    age: patient.age || "",
-    phone: patient.phone || "",
-    sex: patient.sex || "",
-    ethnicity: patient.ethnicity || "",
-    pronouns: patient.pronouns || "",
-    newReturning: encounter.newReturning || "",
-    ttuStudent: patient.ttuStudent || false,
-    visitLocation: encounter.visitLocation || "In Clinic",
-    chiefComplaint: encounter.chiefComplaint || "",
-    notes: encounter.notes || "",
-    transportation: encounter.transportation || "",
-    needsElevator: encounter.needsElevator || false,
-    spanishSpeaking: encounter.spanishSpeaking || "",
-    over65: patient.age ? Number(patient.age) > 65 : false,
-    mammogramPapSmear: encounter.mammogramPapSmear || "",
-    fluShot: encounter.fluShot || "",
-    htn: encounter.htn || false,
-    dm: encounter.dm || false,
-    labsLast6Months: encounter.labsLast6Months || "",
-    tobaccoScreening: encounter.tobaccoScreening || "",
-    dermatology: encounter.dermatology || "N/A",
-    ophthalmology: encounter.ophthalmology || "N/A",
-    optometry: encounter.optometry || "N/A",
-    diabeticEyeExamPastYear: encounter.diabeticEyeExamPastYear || "N/A",
-    physicalTherapy: encounter.physicalTherapy || "N/A",
-    mentalHealthCombined: encounter.mentalHealthCombined || "N/A",
-    counseling: encounter.counseling || "N/A",
-    anyMentalHealthPositive: encounter.anyMentalHealthPositive || false,
-  });
+    setIntakeForm({
+      firstName: patient.firstName || "",
+      lastName: patient.lastName || "",
+      preferredName: patient.preferredName || "",
+      mrn: patient.mrn || "",
+      last4ssn: patient.last4ssn || "",
+      dob: patient.dob || "",
+      age: patient.age || "",
+      phone: patient.phone || "",
+      sex: patient.sex || "",
+      ethnicity: patient.ethnicity || "",
+      pronouns: patient.pronouns || "",
+      newReturning: encounter.newReturning || "",
+      ttuStudent: patient.ttuStudent || false,
+      visitLocation: encounter.visitLocation || "In Clinic",
+      chiefComplaint: encounter.chiefComplaint || "",
+      notes: encounter.notes || "",
+      transportation: encounter.transportation || "",
+      needsElevator: encounter.needsElevator || false,
+      spanishSpeaking: encounter.spanishSpeaking || "",
+      over65: patient.age ? Number(patient.age) > 65 : false,
+      mammogramPapSmear: encounter.mammogramPapSmear || "",
+      fluShot: encounter.fluShot || "",
+      htn: encounter.htn || false,
+      dm: encounter.dm || false,
+      labsLast6Months: encounter.labsLast6Months || "",
+      tobaccoScreening: encounter.tobaccoScreening || "",
+      dermatology: encounter.dermatology || "N/A",
+      ophthalmology: encounter.ophthalmology || "N/A",
+      optometry: encounter.optometry || "N/A",
+      diabeticEyeExamPastYear: encounter.diabeticEyeExamPastYear || "N/A",
+      physicalTherapy: encounter.physicalTherapy || "N/A",
+      mentalHealthCombined: encounter.mentalHealthCombined || "N/A",
+      counseling: encounter.counseling || "N/A",
+      anyMentalHealthPositive: encounter.anyMentalHealthPositive || false,
+    });
 
-  setEditingPatientId(patientId);
-  setIsEditingIntake(true);
-  setIntakeTab(1);
-  setShowIntakeModal(true);
-}
+    setEditingPatientId(patientId);
+    setIsEditingIntake(true);
+    setIntakeTab(1);
+    setShowIntakeModal(true);
+  }
 
   useEffect(() => {
-  if (session) {
-    loadProfiles();
-  }
-}, [session]);
+    if (session) {
+      loadProfiles();
+    }
+  }, [session]);
 
   const profileNameMap = useMemo(() => {
     const map = {};
@@ -1122,10 +1209,10 @@ function openLeadershipRegistration(patientId, encounterId) {
     const todayClinicDate = formatClinicDate();
 
     const queueBaseRows = filteredEncounterRows.filter(
-  ({ encounter }) =>
-    normalizeClinicDate(encounter.clinicDate) === todayClinicDate &&
-    encounter.status === "ready"
-);
+      ({ encounter }) =>
+        normalizeClinicDate(encounter.clinicDate) === todayClinicDate &&
+        encounter.status === "ready"
+    );
 
     const currentUserName = (
       profileNameMap[session?.user?.id] ||
@@ -1265,12 +1352,12 @@ function openLeadershipRegistration(patientId, encounterId) {
   }
 
   function joinActiveNames(list) {
-  return list
-    .map((profile) => (profile.full_name || "").trim())
-    .filter(Boolean)
-    .sort((a, b) => a.localeCompare(b))
-    .join(", ");
-}
+    return list
+      .map((profile) => (profile.full_name || "").trim())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b))
+      .join(", ");
+  }
 
   async function loadProfiles() {
     try {
@@ -1338,13 +1425,13 @@ function openLeadershipRegistration(patientId, encounterId) {
   }, [activeTodayProfiles]);
 
   useEffect(() => {
-  setClinicSummary((prev) => ({
-    ...prev,
-    attendingNames: prev.attendingNames || joinActiveNames(activeAttendings),
-    ms34Names: prev.ms34Names || joinActiveNames(activeUpperLevels),
-    ms12Names: prev.ms12Names || joinActiveNames(activeStudents),
-  }));
-}, [activeAttendings, activeUpperLevels, activeStudents]);
+    setClinicSummary((prev) => ({
+      ...prev,
+      attendingNames: prev.attendingNames || joinActiveNames(activeAttendings),
+      ms34Names: prev.ms34Names || joinActiveNames(activeUpperLevels),
+      ms12Names: prev.ms12Names || joinActiveNames(activeStudents),
+    }));
+  }, [activeAttendings, activeUpperLevels, activeStudents]);
 
   async function handleChangeProfileRole(profileId, nextRole, nextClassification = null) {
     if (!isLeadershipView) return;
@@ -1513,13 +1600,13 @@ function openLeadershipRegistration(patientId, encounterId) {
       return;
     }
     const potentialDuplicate = findPotentialDuplicatePatient(
-  patients,
-  intakeForm.firstName,
-  intakeForm.lastName,
-  intakeForm.dob,
-  intakeForm.last4ssn,
-  editingPatientId
-);
+      patients,
+      intakeForm.firstName,
+      intakeForm.lastName,
+      intakeForm.dob,
+      intakeForm.last4ssn,
+      editingPatientId
+    );
 
     if (potentialDuplicate) {
       const shouldContinue = window.confirm(
@@ -1550,29 +1637,29 @@ function openLeadershipRegistration(patientId, encounterId) {
         console.log("savedPatient update worked:", savedPatient);
 
         const savedEncounter = await updateEncounterInSupabase(selectedEncounter.id, {
-  chiefComplaint: intakeForm.chiefComplaint,
-  notes: intakeForm.notes,
-  newReturning: intakeForm.newReturning,
-  visitLocation: intakeForm.visitLocation,
-  transportation: intakeForm.transportation,
-  needsElevator: intakeForm.needsElevator,
-  spanishSpeaking: intakeForm.spanishSpeaking,
-  mammogramPapSmear: intakeForm.mammogramPapSmear,
-  fluShot: intakeForm.fluShot,
-  htn: intakeForm.htn,
-  dm: intakeForm.dm,
-  labsLast6Months: intakeForm.labsLast6Months,
-  tobaccoScreening: intakeForm.tobaccoScreening,
-  dermatology: intakeForm.dermatology,
-  ophthalmology: intakeForm.ophthalmology,
-  optometry: intakeForm.optometry,
-  diabeticEyeExamPastYear: intakeForm.diabeticEyeExamPastYear,
-  physicalTherapy: intakeForm.physicalTherapy,
-  mentalHealthCombined: intakeForm.mentalHealthCombined,
-  counseling: intakeForm.counseling,
-  anyMentalHealthPositive: intakeForm.anyMentalHealthPositive,
-  status: "ready",
-});
+          chiefComplaint: intakeForm.chiefComplaint,
+          notes: intakeForm.notes,
+          newReturning: intakeForm.newReturning,
+          visitLocation: intakeForm.visitLocation,
+          transportation: intakeForm.transportation,
+          needsElevator: intakeForm.needsElevator,
+          spanishSpeaking: intakeForm.spanishSpeaking,
+          mammogramPapSmear: intakeForm.mammogramPapSmear,
+          fluShot: intakeForm.fluShot,
+          htn: intakeForm.htn,
+          dm: intakeForm.dm,
+          labsLast6Months: intakeForm.labsLast6Months,
+          tobaccoScreening: intakeForm.tobaccoScreening,
+          dermatology: intakeForm.dermatology,
+          ophthalmology: intakeForm.ophthalmology,
+          optometry: intakeForm.optometry,
+          diabeticEyeExamPastYear: intakeForm.diabeticEyeExamPastYear,
+          physicalTherapy: intakeForm.physicalTherapy,
+          mentalHealthCombined: intakeForm.mentalHealthCombined,
+          counseling: intakeForm.counseling,
+          anyMentalHealthPositive: intakeForm.anyMentalHealthPositive,
+          status: "ready",
+        });
 
         console.log("savedEncounter update worked:", savedEncounter);
 
@@ -1752,6 +1839,8 @@ function openLeadershipRegistration(patientId, encounterId) {
 
 
   function openPatientFromFilteredView(patientId) {
+    setDashboardSelectedPatientId(patientId);
+
     const matchingRows = visibleEncounterRows.filter(
       ({ patient }) => patient.id === patientId
     );
@@ -1762,6 +1851,47 @@ function openLeadershipRegistration(patientId, encounterId) {
     }
 
     openPatientChart(patientId);
+  }
+
+  function openPatientEditModal() {
+    if (!dashboardSelectedPatient) {
+      alert("Select a patient first from the dashboard.");
+      return;
+    }
+
+    setShowPatientInfoEditModal(true);
+  }
+
+  async function saveDashboardPatientEdits(patientId, updates) {
+    const trimmedMrn = (updates.mrn || "").trim();
+
+    if (trimmedMrn && mrnExists(patients, trimmedMrn, patientId)) {
+      alert("That MRN is already being used by another patient. Please use a different MRN.");
+      return;
+    }
+
+    try {
+      const savedPatient = await updatePatientInSupabase(patientId, {
+        ...updates,
+        mrn: trimmedMrn,
+      });
+
+      setPatients((prev) =>
+        prev.map((patient) =>
+          patient.id === patientId
+            ? {
+              ...patient,
+              ...savedPatient,
+              ...updates,
+              mrn: trimmedMrn,
+            }
+            : patient
+        )
+      );
+    } catch (error) {
+      console.error("Failed to save patient edits:", error);
+      alert(`Failed to save patient edits: ${error.message}`);
+    }
   }
 
   function openPatientChart(patientId, encounterId = null) {
@@ -1931,9 +2061,9 @@ function openLeadershipRegistration(patientId, encounterId) {
     const numericRoom = nextRoomNumber ? Number(nextRoomNumber) : null;
 
     if (numericRoom !== null && !canAssignRoom(encounter, numericRoom)) {
-  alert("Pap smear patients cannot be assigned to Room 9 or Room 10.");
-  return;
-}
+      alert("Pap smear patients cannot be assigned to Room 9 or Room 10.");
+      return;
+    }
 
     if (numericRoom !== null) {
       const takenByOtherEncounter = allEncounterRows.some(
@@ -1958,9 +2088,9 @@ function openLeadershipRegistration(patientId, encounterId) {
         assignedUpperLevel: nextUpperLevel,
         roomNumber: nextRoomNumber || null,
         status: hasAnyAssignment
-  ? encounter.status === "ready"
-    ? "roomed"
-    : encounter.status
+          ? encounter.status === "ready"
+            ? "roomed"
+            : encounter.status
           : encounter.status,
       });
 
@@ -1977,10 +2107,10 @@ function openLeadershipRegistration(patientId, encounterId) {
                     assignedUpperLevel: nextUpperLevel,
                     roomNumber: nextRoomNumber || "",
                     status: hasAnyAssignment
-  ? e.status === "ready"
-    ? "roomed"
-    : e.status
-  : e.status,
+                      ? e.status === "ready"
+                        ? "roomed"
+                        : e.status
+                      : e.status,
                   }
                   : e
               ),
@@ -2011,10 +2141,10 @@ function openLeadershipRegistration(patientId, encounterId) {
       : null;
 
     if (roomNumber !== null) {
-  if (!canAssignRoom(selectedEncounter, roomNumber)) {
-    alert("Pap smear patients cannot be assigned to Room 9 or Room 10.");
-    return;
-  }
+      if (!canAssignRoom(selectedEncounter, roomNumber)) {
+        alert("Pap smear patients cannot be assigned to Room 9 or Room 10.");
+        return;
+      }
 
       const takenByOtherEncounter = allEncounterRows.some(
         ({ patient, encounter }) =>
@@ -2073,9 +2203,9 @@ function openLeadershipRegistration(patientId, encounterId) {
     const numericRoom = Number(roomNumber);
 
     if (!canAssignRoom(selectedEncounter, numericRoom)) {
-  alert("Pap smear patients cannot be assigned to Room 9 or Room 10.");
-  return;
-}
+      alert("Pap smear patients cannot be assigned to Room 9 or Room 10.");
+      return;
+    }
 
     const takenByOtherEncounter = allEncounterRows.some(
       ({ patient, encounter }) =>
@@ -2133,42 +2263,21 @@ function openLeadershipRegistration(patientId, encounterId) {
 
     alert(`Assigned ${getFullPatientName(selectedPatient)} to room ${numericRoom}.`);
   }
-async function deletePatientCompletely(patientId) {
-  const confirmed = window.confirm(
-    "Delete this patient completely? This cannot be undone."
-  );
-  if (!confirmed) return;
-
-  try {
-    await deletePatientInSupabase(patientId); // let DB handle cascade
-
-    setPatients((prev) => prev.filter((p) => p.id !== patientId));
-  } catch (error) {
-    console.error("Delete failed:", error);
-    alert(error.message);
-  }
-}
-
-async function saveDashboardPatientEdits(patientId, updates) {
-  try {
-    const savedPatient = await updatePatientInSupabase(patientId, updates);
-
-    setPatients((prev) =>
-      prev.map((patient) =>
-        patient.id === patientId
-          ? {
-              ...patient,
-              ...savedPatient,
-              ...updates,
-            }
-          : patient
-      )
+  async function deletePatientCompletely(patientId) {
+    const confirmed = window.confirm(
+      "Delete this patient completely? This cannot be undone."
     );
-  } catch (error) {
-    console.error("Failed to save patient edits:", error);
-    alert(`Failed to save patient edits: ${error.message}`);
+    if (!confirmed) return;
+
+    try {
+      await deletePatientInSupabase(patientId); // let DB handle cascade
+
+      setPatients((prev) => prev.filter((p) => p.id !== patientId));
+    } catch (error) {
+      console.error("Delete failed:", error);
+      alert(error.message);
+    }
   }
-}
 
   async function updateEncounterStatus(status) {
     if (!canManageRooms) return;
@@ -3047,7 +3156,7 @@ async function saveDashboardPatientEdits(patientId, updates) {
 
   async function signSoapAsAttendingWithPin(attendingId, pin) {
     if (!selectedPatient || !selectedEncounter) return false;
-if (!attendingId || pin.length !== 4) return false;
+    if (!attendingId || pin.length !== 4) return false;
 
     const missingFields = getMissingSoapFields(selectedEncounter);
     if (missingFields.length > 0) {
@@ -3227,286 +3336,286 @@ if (!attendingId || pin.length !== 4) return false;
     setActiveView("dashboard");
   }
 
-async function exportClinicSummaryToWord() {
-  const clinicDateLabel = selectedClinicDate || formatClinicDate();
+  async function exportClinicSummaryToWord() {
+    const clinicDateLabel = selectedClinicDate || formatClinicDate();
 
-  const rowsForDate = visibleEncounterRows.filter(
-    ({ encounter }) =>
-      !selectedClinicDate ||
-      normalizeClinicDate(encounter.clinicDate) === selectedClinicDate
-  );
+    const rowsForDate = visibleEncounterRows.filter(
+      ({ encounter }) =>
+        !selectedClinicDate ||
+        normalizeClinicDate(encounter.clinicDate) === selectedClinicDate
+    );
 
-  const returningRows = rowsForDate.filter(
-    ({ encounter }) => encounter.newReturning === "Returning"
-  );
+    const returningRows = rowsForDate.filter(
+      ({ encounter }) => encounter.newReturning === "Returning"
+    );
 
-  const newRows = rowsForDate.filter(
-    ({ encounter }) => encounter.newReturning === "New"
-  );
+    const newRows = rowsForDate.filter(
+      ({ encounter }) => encounter.newReturning === "New"
+    );
 
-  const tableBorders = {
-    top: { style: "single", size: 1, color: "000000" },
-    bottom: { style: "single", size: 1, color: "000000" },
-    left: { style: "single", size: 1, color: "000000" },
-    right: { style: "single", size: 1, color: "000000" },
-    insideHorizontal: { style: "single", size: 1, color: "000000" },
-    insideVertical: { style: "single", size: 1, color: "000000" },
-  };
+    const tableBorders = {
+      top: { style: "single", size: 1, color: "000000" },
+      bottom: { style: "single", size: 1, color: "000000" },
+      left: { style: "single", size: 1, color: "000000" },
+      right: { style: "single", size: 1, color: "000000" },
+      insideHorizontal: { style: "single", size: 1, color: "000000" },
+      insideVertical: { style: "single", size: 1, color: "000000" },
+    };
 
-  function headerCell(text) {
-    return new TableCell({
-      children: [
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          children: [new TextRun({ text, bold: true })],
-        }),
-      ],
-    });
-  }
-
-  function bodyCell(text, align = AlignmentType.LEFT) {
-    return new TableCell({
-      children: [
-        new Paragraph({
-          alignment: align,
-          children: [new TextRun(String(text ?? ""))],
-        }),
-      ],
-    });
-  }
-  function formatDobForSummary(dob) {
-  if (!dob) return "";
-
-  const parts = String(dob).split("-");
-  if (parts.length === 3) {
-    const [year, month, day] = parts;
-    return `${month}-${day}-${year}`;
-  }
-
-  return String(dob).replaceAll("/", "-");
-}
-
-  function patientTableRows(items) {
-    return [
-      new TableRow({
+    function headerCell(text) {
+      return new TableCell({
         children: [
-          headerCell("MRN"),
-          headerCell("NAME"),
-          headerCell("DOB"),
-          headerCell("INSURANCE?"),
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [new TextRun({ text, bold: true })],
+          }),
         ],
-      }),
-      ...items.map(({ patient }) =>
+      });
+    }
+
+    function bodyCell(text, align = AlignmentType.LEFT) {
+      return new TableCell({
+        children: [
+          new Paragraph({
+            alignment: align,
+            children: [new TextRun(String(text ?? ""))],
+          }),
+        ],
+      });
+    }
+    function formatDobForSummary(dob) {
+      if (!dob) return "";
+
+      const parts = String(dob).split("-");
+      if (parts.length === 3) {
+        const [year, month, day] = parts;
+        return `${month}-${day}-${year}`;
+      }
+
+      return String(dob).replaceAll("/", "-");
+    }
+
+    function patientTableRows(items) {
+      return [
         new TableRow({
           children: [
-            bodyCell(patient.mrn || "", AlignmentType.CENTER),
-            bodyCell(getFullPatientName(patient) || "", AlignmentType.LEFT),
-            bodyCell(formatDobForSummary(patient.dob) || "", AlignmentType.CENTER),
-            bodyCell("", AlignmentType.CENTER),
+            headerCell("MRN"),
+            headerCell("NAME"),
+            headerCell("DOB"),
+            headerCell("INSURANCE?"),
           ],
-        })
-      ),
-    ];
-  }
-
-  const summaryTable = new Table({
-    width: {
-      size: 100,
-      type: WidthType.PERCENTAGE,
-    },
-    borders: tableBorders,
-    rows: [
-      new TableRow({
-        children: [
-          new TableCell({
-            columnSpan: 2,
+        }),
+        ...items.map(({ patient }) =>
+          new TableRow({
             children: [
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                children: [new TextRun({ text: "Clinic Staff", bold: true })],
-              }),
+              bodyCell(patient.mrn || "", AlignmentType.CENTER),
+              bodyCell(getFullPatientName(patient) || "", AlignmentType.LEFT),
+              bodyCell(formatDobForSummary(patient.dob) || "", AlignmentType.CENTER),
+              bodyCell("", AlignmentType.CENTER),
             ],
-          }),
-          new TableCell({
-            columnSpan: 2,
-            children: [
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                children: [new TextRun({ text: "Clinic Numbers", bold: true })],
-              }),
-            ],
-          }),
-        ],
-      }),
+          })
+        ),
+      ];
+    }
 
-      new TableRow({
-        children: [
-          bodyCell("Attendings"),
-          bodyCell(clinicSummary.attendingNames || ""),
-          bodyCell("Returning"),
-          bodyCell(returningPatientCount, AlignmentType.CENTER),
-        ],
-      }),
-      new TableRow({
-        children: [
-          bodyCell("Residents:"),
-          bodyCell(clinicSummary.residentNames || ""),
-          bodyCell("New"),
-          bodyCell(newPatientCount, AlignmentType.CENTER),
-        ],
-      }),
-      new TableRow({
-        children: [
-          bodyCell("MS3 / MS4"),
-          bodyCell(clinicSummary.ms34Names || ""),
-          bodyCell("Refill"),
-          bodyCell(clinicSummary.refillCount || "", AlignmentType.CENTER),
-        ],
-      }),
-      new TableRow({
-        children: [
-          bodyCell("MS1 / MS2"),
-          bodyCell(clinicSummary.ms12Names || ""),
-          bodyCell("LWOBS"),
-          bodyCell(clinicSummary.lwobsCount || "", AlignmentType.CENTER),
-        ],
-      }),
-      new TableRow({
-        children: [
-          bodyCell(""),
-          bodyCell(""),
-          bodyCell("Labs"),
-          bodyCell(clinicSummary.labsCount || "", AlignmentType.CENTER),
-        ],
-      }),
-      new TableRow({
-        children: [
-          bodyCell(""),
-          bodyCell(""),
-          bodyCell("Mental Health"),
-          bodyCell(clinicSummary.mentalHealthCount || "", AlignmentType.CENTER),
-        ],
-      }),
-      new TableRow({
-        children: [
-          bodyCell(""),
-          bodyCell(""),
-          bodyCell("Ophthalmology"),
-          bodyCell(clinicSummary.ophthalmologyCount || "", AlignmentType.CENTER),
-        ],
-      }),
-      new TableRow({
-        children: [
-          bodyCell(""),
-          bodyCell(""),
-          bodyCell("Social Work"),
-          bodyCell(clinicSummary.socialWorkCount || "", AlignmentType.CENTER),
-        ],
-      }),
-      new TableRow({
-        children: [
-          bodyCell(""),
-          bodyCell(""),
-          bodyCell("Zoom"),
-          bodyCell(clinicSummary.zoomCount || "", AlignmentType.CENTER),
-        ],
-      }),
-      new TableRow({
-        children: [
-          bodyCell(""),
-          bodyCell(""),
-          bodyCell("Phone"),
-          bodyCell(clinicSummary.phoneCount || "", AlignmentType.CENTER),
-        ],
-      }),
-    ],
-  });
+    const summaryTable = new Table({
+      width: {
+        size: 100,
+        type: WidthType.PERCENTAGE,
+      },
+      borders: tableBorders,
+      rows: [
+        new TableRow({
+          children: [
+            new TableCell({
+              columnSpan: 2,
+              children: [
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  children: [new TextRun({ text: "Clinic Staff", bold: true })],
+                }),
+              ],
+            }),
+            new TableCell({
+              columnSpan: 2,
+              children: [
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  children: [new TextRun({ text: "Clinic Numbers", bold: true })],
+                }),
+              ],
+            }),
+          ],
+        }),
 
-  async function handleDeleteUser(userId) {
-  const confirmed = window.confirm(
-    "Delete this user completely? This removes login access."
-  );
-  if (!confirmed) return;
-
-  try {
-    const { error } = await supabase.functions.invoke("delete-user", {
-      body: { userId },
+        new TableRow({
+          children: [
+            bodyCell("Attendings"),
+            bodyCell(clinicSummary.attendingNames || ""),
+            bodyCell("Returning"),
+            bodyCell(returningPatientCount, AlignmentType.CENTER),
+          ],
+        }),
+        new TableRow({
+          children: [
+            bodyCell("Residents:"),
+            bodyCell(clinicSummary.residentNames || ""),
+            bodyCell("New"),
+            bodyCell(newPatientCount, AlignmentType.CENTER),
+          ],
+        }),
+        new TableRow({
+          children: [
+            bodyCell("MS3 / MS4"),
+            bodyCell(clinicSummary.ms34Names || ""),
+            bodyCell("Refill"),
+            bodyCell(clinicSummary.refillCount || "", AlignmentType.CENTER),
+          ],
+        }),
+        new TableRow({
+          children: [
+            bodyCell("MS1 / MS2"),
+            bodyCell(clinicSummary.ms12Names || ""),
+            bodyCell("LWOBS"),
+            bodyCell(clinicSummary.lwobsCount || "", AlignmentType.CENTER),
+          ],
+        }),
+        new TableRow({
+          children: [
+            bodyCell(""),
+            bodyCell(""),
+            bodyCell("Labs"),
+            bodyCell(clinicSummary.labsCount || "", AlignmentType.CENTER),
+          ],
+        }),
+        new TableRow({
+          children: [
+            bodyCell(""),
+            bodyCell(""),
+            bodyCell("Mental Health"),
+            bodyCell(clinicSummary.mentalHealthCount || "", AlignmentType.CENTER),
+          ],
+        }),
+        new TableRow({
+          children: [
+            bodyCell(""),
+            bodyCell(""),
+            bodyCell("Ophthalmology"),
+            bodyCell(clinicSummary.ophthalmologyCount || "", AlignmentType.CENTER),
+          ],
+        }),
+        new TableRow({
+          children: [
+            bodyCell(""),
+            bodyCell(""),
+            bodyCell("Social Work"),
+            bodyCell(clinicSummary.socialWorkCount || "", AlignmentType.CENTER),
+          ],
+        }),
+        new TableRow({
+          children: [
+            bodyCell(""),
+            bodyCell(""),
+            bodyCell("Zoom"),
+            bodyCell(clinicSummary.zoomCount || "", AlignmentType.CENTER),
+          ],
+        }),
+        new TableRow({
+          children: [
+            bodyCell(""),
+            bodyCell(""),
+            bodyCell("Phone"),
+            bodyCell(clinicSummary.phoneCount || "", AlignmentType.CENTER),
+          ],
+        }),
+      ],
     });
 
-    if (error) throw error;
+    async function handleDeleteUser(userId) {
+      const confirmed = window.confirm(
+        "Delete this user completely? This removes login access."
+      );
+      if (!confirmed) return;
 
-    setProfiles((prev) => prev.filter((p) => p.id !== userId));
-  } catch (error) {
-    console.error("Failed to delete user:", error);
-    alert(error.message);
+      try {
+        const { error } = await supabase.functions.invoke("delete-user", {
+          body: { userId },
+        });
+
+        if (error) throw error;
+
+        setProfiles((prev) => prev.filter((p) => p.id !== userId));
+      } catch (error) {
+        console.error("Failed to delete user:", error);
+        alert(error.message);
+      }
+    }
+
+    const doc = new Document({
+      sections: [
+        {
+          children: [
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "Patients Seen: ",
+                  bold: true,
+                  underline: {},
+                }),
+              ],
+            }),
+
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [new TextRun({ text: "RETURNING PATIENTS", bold: true })],
+            }),
+
+            new Table({
+              width: {
+                size: 100,
+                type: WidthType.PERCENTAGE,
+              },
+              borders: tableBorders,
+              rows: patientTableRows(returningRows),
+            }),
+
+            new Paragraph({ text: "" }),
+
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [new TextRun({ text: "NEW PATIENTS", bold: true })],
+            }),
+
+            new Table({
+              width: {
+                size: 100,
+                type: WidthType.PERCENTAGE,
+              },
+              borders: tableBorders,
+              rows: patientTableRows(newRows),
+            }),
+
+            new Paragraph({ text: "" }),
+
+            summaryTable,
+
+            new Paragraph({ text: "" }),
+
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "(#) = number of patients seen for clinic AND specialty",
+                }),
+              ],
+            }),
+          ],
+        },
+      ],
+    });
+
+    const blob = await Packer.toBlob(doc);
+    saveAs(blob, `Clinic Summary - ${clinicDateLabel}.docx`);
   }
-}
-
-  const doc = new Document({
-    sections: [
-      {
-        children: [
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: "Patients Seen: ",
-                bold: true,
-                underline: {},
-              }),
-            ],
-          }),
-
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            children: [new TextRun({ text: "RETURNING PATIENTS", bold: true })],
-          }),
-
-          new Table({
-            width: {
-              size: 100,
-              type: WidthType.PERCENTAGE,
-            },
-            borders: tableBorders,
-            rows: patientTableRows(returningRows),
-          }),
-
-          new Paragraph({ text: "" }),
-
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            children: [new TextRun({ text: "NEW PATIENTS", bold: true })],
-          }),
-
-          new Table({
-            width: {
-              size: 100,
-              type: WidthType.PERCENTAGE,
-            },
-            borders: tableBorders,
-            rows: patientTableRows(newRows),
-          }),
-
-          new Paragraph({ text: "" }),
-
-          summaryTable,
-
-          new Paragraph({ text: "" }),
-
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: "(#) = number of patients seen for clinic AND specialty",
-              }),
-            ],
-          }),
-        ],
-      },
-    ],
-  });
-
-  const blob = await Packer.toBlob(doc);
-  saveAs(blob, `Clinic Summary - ${clinicDateLabel}.docx`);
-}
 
   const sortedMedications = selectedEncounter
     ? [...(selectedEncounter.medications || [])].sort((a, b) => {
@@ -3525,8 +3634,8 @@ async function exportClinicSummaryToWord() {
         sortedSelectedPatientEncounters[1]?.clinicDate
       )
       : "No prior visit";
-  
-    if (session && needsOnboarding) {
+
+  if (session && needsOnboarding) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
         <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow">
@@ -3601,146 +3710,146 @@ async function exportClinicSummaryToWord() {
   if (!session) {
     return (
       <div className="min-h-screen bg-slate-100">
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 px-4">
-            <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
-              <div className="mb-6 text-center">
-                <h1 className="text-2xl font-semibold text-slate-900">FC EMR</h1>
-                <p className="mt-2 text-sm text-slate-600">
-                  Log in to continue or create your account if this is your first time here.
-                </p>
-              </div>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 px-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-6 text-center">
+              <h1 className="text-2xl font-semibold text-slate-900">FC EMR</h1>
+              <p className="mt-2 text-sm text-slate-600">
+                Log in to continue or create your account if this is your first time here.
+              </p>
+            </div>
 
-              <div className="mb-6 flex rounded-xl bg-slate-100 p-1">
-                <button
-                  onClick={() => setAuthMode("login")}
-                  className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium ${authMode === "login"
-                      ? "bg-white text-slate-900 shadow-sm"
-                      : "text-slate-600"
-                    }`}
-                >
-                  Log In
-                </button>
-                <button
-                  onClick={() => setAuthMode("signup")}
-                  className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium ${authMode === "signup"
-                      ? "bg-white text-slate-900 shadow-sm"
-                      : "text-slate-600"
-                    }`}
-                >
-                  First-Time Sign Up
-                </button>
-              </div>
+            <div className="mb-6 flex rounded-xl bg-slate-100 p-1">
+              <button
+                onClick={() => setAuthMode("login")}
+                className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium ${authMode === "login"
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-600"
+                  }`}
+              >
+                Log In
+              </button>
+              <button
+                onClick={() => setAuthMode("signup")}
+                className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium ${authMode === "signup"
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-600"
+                  }`}
+              >
+                First-Time Sign Up
+              </button>
+            </div>
 
-              <div className="space-y-4">
-                {authMode === "signup" ? (
-                  <>
-                    <input
-                      className="w-full rounded-lg border px-3 py-3 text-sm"
-                      placeholder="Full name"
-                      value={authFullName}
-                      onChange={(e) => setAuthFullName(e.target.value)}
-                    />
+            <div className="space-y-4">
+              {authMode === "signup" ? (
+                <>
+                  <input
+                    className="w-full rounded-lg border px-3 py-3 text-sm"
+                    placeholder="Full name"
+                    value={authFullName}
+                    onChange={(e) => setAuthFullName(e.target.value)}
+                  />
 
+                  <select
+                    className="w-full rounded-lg border px-3 py-3 text-sm"
+                    value={authRole}
+                    onChange={(e) => setAuthRole(e.target.value)}
+                  >
+                    <option value="">Select role</option>
+                    <option value="student">Student</option>
+                    <option value="upper_level">Upper Level</option>
+                    <option value="attending">Attending</option>
+                    <option value="leadership">Leadership</option>
+                    <option value="undergraduate">Undergraduate</option>
+                  </select>
+
+                  {authRole === "student" || authRole === "upper_level" ? (
                     <select
                       className="w-full rounded-lg border px-3 py-3 text-sm"
-                      value={authRole}
-                      onChange={(e) => setAuthRole(e.target.value)}
+                      value={authClassification}
+                      onChange={(e) => setAuthClassification(e.target.value)}
                     >
-                      <option value="">Select role</option>
-                      <option value="student">Student</option>
-                      <option value="upper_level">Upper Level</option>
-                      <option value="attending">Attending</option>
-                      <option value="leadership">Leadership</option>
-                      <option value="undergraduate">Undergraduate</option>
+                      <option value="">Select classification</option>
+                      <option value="MS1">MS1</option>
+                      <option value="MS2">MS2</option>
+                      <option value="MS3">MS3</option>
+                      <option value="MS4">MS4</option>
                     </select>
+                  ) : null}
 
-                    {authRole === "student" || authRole === "upper_level" ? (
-                      <select
+                  {authRole === "attending" ? (
+                    <>
+                      <input
                         className="w-full rounded-lg border px-3 py-3 text-sm"
-                        value={authClassification}
-                        onChange={(e) => setAuthClassification(e.target.value)}
-                      >
-                        <option value="">Select classification</option>
-                        <option value="MS1">MS1</option>
-                        <option value="MS2">MS2</option>
-                        <option value="MS3">MS3</option>
-                        <option value="MS4">MS4</option>
-                      </select>
-                    ) : null}
+                        placeholder="4-digit PIN"
+                        value={authPin}
+                        onChange={(e) =>
+                          setAuthPin(e.target.value.replace(/\D/g, "").slice(0, 4))
+                        }
+                      />
 
-                    {authRole === "attending" ? (
-                      <>
-                        <input
-                          className="w-full rounded-lg border px-3 py-3 text-sm"
-                          placeholder="4-digit PIN"
-                          value={authPin}
-                          onChange={(e) =>
-                            setAuthPin(e.target.value.replace(/\D/g, "").slice(0, 4))
-                          }
-                        />
+                      <input
+                        className="w-full rounded-lg border px-3 py-3 text-sm"
+                        placeholder="Confirm 4-digit PIN"
+                        value={authPinConfirm}
+                        onChange={(e) =>
+                          setAuthPinConfirm(
+                            e.target.value.replace(/\D/g, "").slice(0, 4)
+                          )
+                        }
+                      />
+                    </>
+                  ) : null}
+                </>
+              ) : null}
 
-                        <input
-                          className="w-full rounded-lg border px-3 py-3 text-sm"
-                          placeholder="Confirm 4-digit PIN"
-                          value={authPinConfirm}
-                          onChange={(e) =>
-                            setAuthPinConfirm(
-                              e.target.value.replace(/\D/g, "").slice(0, 4)
-                            )
-                          }
-                        />
-                      </>
-                    ) : null}
-                  </>
-                ) : null}
+              <input
+                className="w-full rounded-lg border px-3 py-3 text-sm"
+                placeholder="Email"
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+              />
 
-                <input
-                  className="w-full rounded-lg border px-3 py-3 text-sm"
-                  placeholder="Email"
-                  value={authEmail}
-                  onChange={(e) => setAuthEmail(e.target.value)}
-                />
+              <input
+                className="w-full rounded-lg border px-3 py-3 text-sm"
+                placeholder="Password"
+                type="password"
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+              />
 
-                <input
-                  className="w-full rounded-lg border px-3 py-3 text-sm"
-                  placeholder="Password"
-                  type="password"
-                  value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
-                />
+              {authMessage ? (
+                <div className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700">
+                  {authMessage}
+                </div>
+              ) : null}
 
-                {authMessage ? (
-                  <div className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700">
-                    {authMessage}
-                  </div>
-                ) : null}
-
-                {authMode === "login" ? (
-                  <button
-                    onClick={handleSignIn}
-                    disabled={authLoading}
-                    className="w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {authLoading ? "Signing In..." : "Log In"}
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleSignUp}
-                    disabled={authLoading}
-                    className="w-full rounded-lg bg-slate-800 px-4 py-3 text-sm font-medium text-white hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {authLoading ? "Creating Account..." : "Create Account"}
-                  </button>
-                )}
-              </div>
+              {authMode === "login" ? (
+                <button
+                  onClick={handleSignIn}
+                  disabled={authLoading}
+                  className="w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {authLoading ? "Signing In..." : "Log In"}
+                </button>
+              ) : (
+                <button
+                  onClick={handleSignUp}
+                  disabled={authLoading}
+                  className="w-full rounded-lg bg-slate-800 px-4 py-3 text-sm font-medium text-white hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {authLoading ? "Creating Account..." : "Create Account"}
+                </button>
+              )}
             </div>
           </div>
+        </div>
       </div>
     );
   }
-  
-  
-      if (isBoardDisplayMode) {
+
+
+  if (isBoardDisplayMode) {
     return (
       <BoardDisplay
         ROOM_OPTIONS={ROOM_OPTIONS}
@@ -3755,7 +3864,7 @@ async function exportClinicSummaryToWord() {
     );
   }
 
-  
+
   return (
     <div className="min-h-screen bg-slate-100 md:flex md:h-screen">
       <AppSidebar
@@ -3790,8 +3899,8 @@ async function exportClinicSummaryToWord() {
           sidebarOpen={sidebarOpen}
           setSidebarOpen={setSidebarOpen}
         />
-<div>
-  {activeView === "dashboard" && (
+        <div>
+          {activeView === "dashboard" && (
             <DashboardView
               isLeadershipView={isLeadershipView}
               canEditMrn={userRole === "undergraduate" || isLeadershipView}
@@ -3800,13 +3909,13 @@ async function exportClinicSummaryToWord() {
               canEditPatient={isLeadershipView}
               canDeletePatient={isLeadershipView}
               deletePatientCompletely={deletePatientCompletely}
+              openPatientEditModal={openPatientEditModal}
+              dashboardSelectedPatient={dashboardSelectedPatient}
               endClinicReset={endClinicReset}
               selectedClinicDate={selectedClinicDate}
               setSelectedClinicDate={setSelectedClinicDate}
               filteredVisiblePatients={filteredVisiblePatients}
               visibleEncounterRows={visibleEncounterRows}
-              assignedCount={assignedCount}
-              inVisitCount={inVisitCount}
               searchForm={searchForm}
               setSearchForm={setSearchForm}
               patientRecordsTitle={patientRecordsTitle}
@@ -3816,21 +3925,21 @@ async function exportClinicSummaryToWord() {
           )}
 
           {activeView === "registration" && (
-  <RegistrationView
-  registrationRows={registrationRows}
-  openUndergradRegistration={openUndergradRegistration}
-  openLeadershipRegistration={openLeadershipRegistration}
-  getFullPatientName={getFullPatientName}
-  formatDate={formatDate}
-  userRole={userRole}
-  isLeadershipView={isLeadershipView}
-  onRemoveFromRegistration={removeFromRegistration}
-/>
-)}
+            <RegistrationView
+              registrationRows={registrationRows}
+              openUndergradRegistration={openUndergradRegistration}
+              openLeadershipRegistration={openLeadershipRegistration}
+              getFullPatientName={getFullPatientName}
+              formatDate={formatDate}
+              userRole={userRole}
+              isLeadershipView={isLeadershipView}
+              onRemoveFromRegistration={removeFromRegistration}
+            />
+          )}
 
-{activeView === "undergrad-intake" && userRole === "undergraduate" && (
-  <UndergradIntakeView onSave={handleUndergradStartEncounter} />
-)}
+          {activeView === "undergrad-intake" && userRole === "undergraduate" && (
+            <UndergradIntakeView onSave={handleUndergradStartEncounter} />
+          )}
 
           {activeView === "queue" && (
             <QueueView
@@ -3872,12 +3981,15 @@ async function exportClinicSummaryToWord() {
           )}
           {activeView === "formulary" && (
             <FormularyView
-              formulary={formulary}
-              setFormulary={setFormulary}
-              onPrescribeMedication={prescribeFromFormulary}
-              selectedPatient={selectedPatient}
-              isLeadershipView={canModifyFormulary}
-            />
+  formulary={formulary}
+  onAddMedication={addFormularyItem}
+  onEditMedication={editFormularyItem}
+  onDeleteMedication={removeFormularyItem}
+  onToggleStock={toggleFormularyStock}
+  onPrescribeMedication={prescribeFromFormulary}
+  selectedPatient={selectedPatient}
+  isLeadershipView={canModifyFormulary}
+/>
           )}
 
           {activeView === "users" && isLeadershipView && (
@@ -3994,13 +4106,13 @@ async function exportClinicSummaryToWord() {
 
           {activeView === "programs" && isLeadershipView && (
             <ProgramsView
-  programEntries={programEntries}
-  addProgramEntry={addProgramEntry}
-  updateProgramEntry={updateProgramEntry}
-  removeProgramEntry={removeProgramEntry}
-  patients={patients}
-  selectedClinicDate={selectedClinicDate}
-/>
+              programEntries={programEntries}
+              addProgramEntry={addProgramEntry}
+              updateProgramEntry={updateProgramEntry}
+              removeProgramEntry={removeProgramEntry}
+              patients={patients}
+              selectedClinicDate={selectedClinicDate}
+            />
           )}
         </div>
       </div>
@@ -4042,17 +4154,29 @@ async function exportClinicSummaryToWord() {
       />
 
       <UndergradRegistrationModal
-  show={showUndergradRegistrationModal}
-  form={undergradRegistrationForm}
-  setForm={setUndergradRegistrationForm}
-  onClose={() => {
-    setShowUndergradRegistrationModal(false);
-    setRegistrationPatientId(null);
-    setRegistrationEncounterId(null);
-    setUndergradRegistrationForm(EMPTY_UNDERGRAD_REGISTRATION_FORM);
-  }}
-  onSubmit={saveUndergradRegistration}
-/>
+        show={showUndergradRegistrationModal}
+        form={undergradRegistrationForm}
+        setForm={setUndergradRegistrationForm}
+        onClose={() => {
+          setShowUndergradRegistrationModal(false);
+          setRegistrationPatientId(null);
+          setRegistrationEncounterId(null);
+          setUndergradRegistrationForm(EMPTY_UNDERGRAD_REGISTRATION_FORM);
+        }}
+        onSubmit={saveUndergradRegistration}
+      />
+
+      <PatientInfoEditModal
+        show={showPatientInfoEditModal}
+        patient={dashboardSelectedPatient}
+        canEditUndergradFields={userRole === "undergraduate" || isLeadershipView}
+        canEditAllPatientFields={isLeadershipView}
+        onClose={() => setShowPatientInfoEditModal(false)}
+        onSave={async (patientId, updates) => {
+          await saveDashboardPatientEdits(patientId, updates);
+          setShowPatientInfoEditModal(false);
+        }}
+      />
     </div>
   );
 }
