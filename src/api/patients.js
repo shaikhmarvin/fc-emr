@@ -64,28 +64,7 @@ function mapPatientFromSupabase(row) {
   chronicConditionsOther: row.chronic_conditions_other ?? "",
   intakeStatus: row.intake_status ?? "",
     medications: [],
-    encounters: [
-      {
-        id: `temp-${row.id}`,
-        clinicDate: new Date().toLocaleDateString(),
-        createdAt: new Date().toISOString(),
-        status: "Waiting",
-        assignedStudent: "",
-        assignedUpperLevel: "",
-        roomNumber: "",
-        transportation: "",
-        needsElevator: false,
-        spanishSpeaking: false,
-        chiefComplaint: row.chief_complaint ?? "",
-        notes: "",
-        vitalsHistory: [],
-        soapSubjective: "",
-        soapObjective: "",
-        soapAssessment: "",
-        soapPlan: "",
-        soapSavedAt: "",
-      },
-    ],
+    encounters: [],
   };
 }
 
@@ -185,4 +164,13 @@ export async function updatePatientInSupabase(patientId, updates) {
   if (error) throw error;
 
   return mapPatientFromSupabase(data);
+}
+
+export async function deletePatientInSupabase(patientId) {
+  const { error } = await supabase
+    .from("patients")
+    .delete()
+    .eq("id", patientId);
+
+  if (error) throw error;
 }

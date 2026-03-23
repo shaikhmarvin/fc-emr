@@ -3,6 +3,10 @@ import PatientTable from "./PatientTable";
 
 export default function DashboardView({
   isLeadershipView,
+  canEditMrn,
+  canEditPatient,
+  canDeletePatient,
+  deletePatientCompletely,
   endClinicReset,
   selectedClinicDate,
   setSelectedClinicDate,
@@ -101,11 +105,15 @@ export default function DashboardView({
 </div>
 
       <PatientTable
-        title={patientRecordsTitle}
-        patients={filteredVisiblePatients}
-        onSelectPatient={openPatientFromFilteredView}
-        getFullPatientName={getFullPatientName}
-      />
+  title={patientRecordsTitle}
+  patients={filteredVisiblePatients}
+  onSelectPatient={openPatientFromFilteredView}
+  getFullPatientName={getFullPatientName}
+  canEditMrn={canEditMrn}
+  canEditPatient={canEditPatient}
+  canDeletePatient={canDeletePatient}
+  deletePatientCompletely={deletePatientCompletely}
+/>
     </div>
   );
 

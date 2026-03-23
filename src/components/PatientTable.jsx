@@ -1,8 +1,14 @@
+import { updatePatientInSupabase } from "../api/patients";
+
 export default function PatientTable({
-  title = "Patient Records",
+  title,
   patients,
   onSelectPatient,
   getFullPatientName,
+  canEditMrn,
+  canEditPatient,
+  canDeletePatient,
+  deletePatientCompletely,
 }) {
   return (
     <div className="rounded-2xl bg-white shadow">
@@ -20,6 +26,7 @@ export default function PatientTable({
               <th className="p-3">Last 4 SSN</th>
               <th className="p-3">Phone</th>
               <th className="p-3">Encounters</th>
+{canDeletePatient && <th className="p-3">Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -32,9 +39,47 @@ export default function PatientTable({
                 <td className="px-4 py-3 font-semibold text-slate-800">
   {getFullPatientName(patient)}
 </td>
-                <td className="px-4 py-3 text-sm text-slate-600">
-  {patient.mrn || "—"}
+                <td>
+  {canEditMrn ? (
+    <input
+      value={patient.mrn || ""}
+      onChange={(e) => {
+        const newMrn = e.target.value;
+
+        // optimistic update (UI updates instantly)
+        <input
+  value={patient.mrn || ""}
+  onChange={(e) => {
+    const newMrn = e.target.value;
+
+    updatePatientInSupabase(patient.id, { mrn: newMrn });
+  }}
+  className="border rounded px-2 py-1 text-sm w-24"
+/>
+
+        // save to supabase
+        updatePatientInSupabase(patient.id, { mrn: newMrn });
+      }}
+      className="border rounded px-2 py-1 text-sm w-24"
+    />
+  ) : (
+    patient.mrn
+  )}
 </td>
+
+{canDeletePatient && (
+  <td className="px-4 py-3">
+    <button
+      onClick={(e) => {
+        e.stopPropagation(); // 🔥 VERY IMPORTANT
+        deletePatientCompletely(patient.id);
+      }}
+      className="text-red-600 text-xs hover:underline"
+    >
+      Delete
+    </button>
+  </td>
+)}
                 <td className="px-4 py-3">{patient.dob || "—"}</td>
                 <td className="px-4 py-3">{patient.last4ssn || "—"}</td>
                 <td className="px-4 py-3">{patient.phone || "—"}</td>

@@ -249,9 +249,18 @@ export default function UserManagementView({
                         </div>
                       </td>
 
-                      <td className="px-3 py-3 text-slate-600">
-                        {savingProfileId === profile.id ? "Saving..." : "Ready"}
-                      </td>
+                      <td className="px-3 py-3 text-slate-600 space-x-2">
+  {savingProfileId === profile.id ? "Saving..." : "Ready"}
+
+  {!isCurrentUser && (
+    <button
+      onClick={() => onDeleteUser(profile.id)}
+      className="ml-2 text-red-600 text-xs"
+    >
+      Delete
+    </button>
+  )}
+</td>
                     </tr>
                   );
                 })}

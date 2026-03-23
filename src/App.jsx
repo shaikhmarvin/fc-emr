@@ -9,6 +9,7 @@ import { fetchProfiles, updateProfileRole, updateProfileDetails } from "./api/pr
 import { createAuditLog, fetchAuditLogForEncounter } from "./api/audit";
 import PatientSearch from "./components/PatientSearch";
 import PatientTable from "./components/PatientTable";
+import { deletePatientInSupabase } from "./api/patients";
 import QueueView from "./components/QueueView";
 import RoomBoard from "./components/RoomBoard";
 import MedicationModal from "./components/MedicationModal";
@@ -673,15 +674,54 @@ useEffect(() => {
 
 const registrationRows = useMemo(() => {
   return allEncounterRows
-    .filter(({ encounter }) =>
-      encounter.status === "started" || encounter.status === "undergrad_complete"
-    )
+    .filter(({ encounter }) => {
+      if (userRole === "undergraduate") {
+        return encounter.status === "started";
+      }
+
+      if (isLeadershipView) {
+        return encounter.status === "undergrad_complete";
+      }
+
+      return false;
+    })
     .sort((a, b) => {
       const aTime = new Date(a.encounter.createdAt || 0).getTime();
       const bTime = new Date(b.encounter.createdAt || 0).getTime();
       return aTime - bTime;
     });
-}, [allEncounterRows]);
+}, [allEncounterRows, userRole, isLeadershipView]);
+
+async function removeFromRegistration(patientId, encounterId) {
+  const confirmed = window.confirm(
+    "Remove this patient from registration? This will mark the encounter as cancelled."
+  );
+  if (!confirmed) return;
+
+  try {
+    await updateEncounterInSupabase(encounterId, {
+      status: "cancelled",
+    });
+
+    setPatients((prev) =>
+      prev.map((patient) =>
+        patient.id === patientId
+          ? {
+              ...patient,
+              encounters: patient.encounters.map((encounter) =>
+                encounter.id === encounterId
+                  ? { ...encounter, status: "cancelled" }
+                  : encounter
+              ),
+            }
+          : patient
+      )
+    );
+  } catch (error) {
+    console.error("Failed to remove registration encounter:", error);
+    alert(`Failed to remove patient from registration: ${error.message}`);
+  }
+}
 
   const visibleEncounterRows = useMemo(() => {
     if (!selectedClinicDate) {
@@ -880,7 +920,9 @@ const totalPatientCount = visibleEncounterRows.length;
         ethnicity: data.ethnicity || "",
         ttuStudent: data.ttuStudent || false,
         address: data.address || "",
-        emergencyContact: data.emergencyContact || {},
+        emergencyContactName: data.emergencyContactName || "",
+        emergencyContactRelation: data.emergencyContactRelation || "",
+        emergencyContactPhone: data.emergencyContactPhone || "",
         incomeRange: data.incomeRange || "",
         spanishOnly: data.spanishOnly || "",
         chronicConditions: data.chronicConditions || [],
@@ -895,6 +937,9 @@ const totalPatientCount = visibleEncounterRows.length;
       },
       ...prev,
     ]);
+
+    setSelectedPatientId(savedPatient.id);
+    setSelectedEncounterId(savedEncounter.id);
 
     setActiveView("registration");
   } catch (error) {
@@ -913,19 +958,19 @@ const totalPatientCount = visibleEncounterRows.length;
   setRegistrationEncounterId(encounterId);
 
   setUndergradRegistrationForm({
-    addressLine1: patient.addressLine1 || "",
-    city: patient.city || "",
-    state: patient.state || "",
-    zipCode: patient.zipCode || "",
-    emergencyContactName: patient.emergencyContact?.name || "",
-    emergencyContactRelation: patient.emergencyContact?.relation || "",
-    emergencyContactPhone: patient.emergencyContact?.phone || "",
-    last4Ssn: patient.last4ssn || "",
-    incomeRange: patient.incomeRange || "",
-    spanishOnly: patient.spanishOnly || "",
-    chronicConditions: patient.chronicConditions || [],
-    chronicConditionsOther: patient.chronicConditionsOther || "",
-  });
+  addressLine1: patient.address || "",
+  city: patient.city || "",
+  state: patient.state || "",
+  zipCode: patient.zipCode || "",
+  emergencyContactName: patient.emergencyContactName || "",
+  emergencyContactRelation: patient.emergencyContactRelation || "",
+  emergencyContactPhone: patient.emergencyContactPhone || "",
+  last4Ssn: patient.last4ssn || "",
+  incomeRange: patient.incomeRange || "",
+  spanishOnly: patient.spanishOnly || "",
+  chronicConditions: patient.chronicConditions || [],
+  chronicConditionsOther: patient.chronicConditionsOther || "",
+});
 
   setShowUndergradRegistrationModal(true);
 }
@@ -937,21 +982,19 @@ async function saveUndergradRegistration() {
   if (!patient || !encounter) return;
 
   const patientUpdates = {
-    last4ssn: undergradRegistrationForm.last4Ssn,
-    addressLine1: undergradRegistrationForm.addressLine1,
-    city: undergradRegistrationForm.city,
-    state: undergradRegistrationForm.state,
-    zipCode: undergradRegistrationForm.zipCode,
-    emergencyContact: {
-      name: undergradRegistrationForm.emergencyContactName,
-      relation: undergradRegistrationForm.emergencyContactRelation,
-      phone: undergradRegistrationForm.emergencyContactPhone,
-    },
-    incomeRange: undergradRegistrationForm.incomeRange,
-    spanishOnly: undergradRegistrationForm.spanishOnly,
-    chronicConditions: undergradRegistrationForm.chronicConditions,
-    chronicConditionsOther: undergradRegistrationForm.chronicConditionsOther,
-  };
+  last4ssn: undergradRegistrationForm.last4Ssn,
+  address: undergradRegistrationForm.addressLine1,
+  city: undergradRegistrationForm.city,
+  state: undergradRegistrationForm.state,
+  zipCode: undergradRegistrationForm.zipCode,
+  emergencyContactName: undergradRegistrationForm.emergencyContactName,
+  emergencyContactRelation: undergradRegistrationForm.emergencyContactRelation,
+  emergencyContactPhone: undergradRegistrationForm.emergencyContactPhone,
+  incomeRange: undergradRegistrationForm.incomeRange,
+  spanishOnly: undergradRegistrationForm.spanishOnly,
+  chronicConditions: undergradRegistrationForm.chronicConditions,
+  chronicConditionsOther: undergradRegistrationForm.chronicConditionsOther,
+};
 
   try {
     await updatePatientInSupabase(registrationPatientId, patientUpdates);
@@ -1782,7 +1825,7 @@ function openLeadershipRegistration(patientId, encounterId) {
       mentalHealthCombined: "N/A",
       counseling: "N/A",
       anyMentalHealthPositive: false,
-      status: "Waiting",
+      status: "started",
       assignedStudent: "",
       assignedUpperLevel: "",
       roomNumber: "",
@@ -1915,9 +1958,9 @@ function openLeadershipRegistration(patientId, encounterId) {
         assignedUpperLevel: nextUpperLevel,
         roomNumber: nextRoomNumber || null,
         status: hasAnyAssignment
-          ? encounter.status === "Waiting"
-            ? "Assigned"
-            : encounter.status
+  ? encounter.status === "ready"
+    ? "roomed"
+    : encounter.status
           : encounter.status,
       });
 
@@ -1934,10 +1977,10 @@ function openLeadershipRegistration(patientId, encounterId) {
                     assignedUpperLevel: nextUpperLevel,
                     roomNumber: nextRoomNumber || "",
                     status: hasAnyAssignment
-                      ? e.status === "Waiting"
-                        ? "Assigned"
-                        : e.status
-                      : e.status,
+  ? e.status === "ready"
+    ? "roomed"
+    : e.status
+  : e.status,
                   }
                   : e
               ),
@@ -1990,7 +2033,7 @@ function openLeadershipRegistration(patientId, encounterId) {
     try {
       await updateEncounterInSupabase(selectedEncounter.id, {
         roomNumber: roomNumber !== null ? String(roomNumber) : null,
-        status: "Assigned",
+        status: "roomed",
         assignedStudent: assignmentForm.studentName,
         assignedUpperLevel: assignmentForm.upperLevelName,
       });
@@ -2007,7 +2050,7 @@ function openLeadershipRegistration(patientId, encounterId) {
                     assignedStudent: assignmentForm.studentName,
                     assignedUpperLevel: assignmentForm.upperLevelName,
                     roomNumber: roomNumber !== null ? String(roomNumber) : null,
-                    status: "Assigned",
+                    status: "roomed",
                   }
                   : encounter
               ),
@@ -2054,7 +2097,7 @@ function openLeadershipRegistration(patientId, encounterId) {
     try {
       await updateEncounterInSupabase(selectedEncounter.id, {
         roomNumber: String(numericRoom),
-        status: "Assigned",
+        status: "roomed",
         assignedStudent:
           assignmentForm.studentName || selectedEncounter.assignedStudent || "",
         assignedUpperLevel:
@@ -2079,7 +2122,7 @@ function openLeadershipRegistration(patientId, encounterId) {
                     assignmentForm.studentName || encounter.assignedStudent || "",
                   assignedUpperLevel:
                     assignmentForm.upperLevelName || encounter.assignedUpperLevel || "",
-                  status: "Assigned",
+                  status: "roomed",
                 }
                 : encounter
             ),
@@ -2090,6 +2133,43 @@ function openLeadershipRegistration(patientId, encounterId) {
 
     alert(`Assigned ${getFullPatientName(selectedPatient)} to room ${numericRoom}.`);
   }
+async function deletePatientCompletely(patientId) {
+  const confirmed = window.confirm(
+    "Delete this patient completely? This cannot be undone."
+  );
+  if (!confirmed) return;
+
+  try {
+    await deletePatientInSupabase(patientId); // let DB handle cascade
+
+    setPatients((prev) => prev.filter((p) => p.id !== patientId));
+  } catch (error) {
+    console.error("Delete failed:", error);
+    alert(error.message);
+  }
+}
+
+async function saveDashboardPatientEdits(patientId, updates) {
+  try {
+    const savedPatient = await updatePatientInSupabase(patientId, updates);
+
+    setPatients((prev) =>
+      prev.map((patient) =>
+        patient.id === patientId
+          ? {
+              ...patient,
+              ...savedPatient,
+              ...updates,
+            }
+          : patient
+      )
+    );
+  } catch (error) {
+    console.error("Failed to save patient edits:", error);
+    alert(`Failed to save patient edits: ${error.message}`);
+  }
+}
+
   async function updateEncounterStatus(status) {
     if (!canManageRooms) return;
     if (leadershipActionLocked) return;
@@ -2113,7 +2193,7 @@ function openLeadershipRegistration(patientId, encounterId) {
     try {
       await updateEncounterInSupabase(selectedEncounter.id, {
         roomNumber: "",
-        status: "Waiting",
+        status: "ready",
       });
     } catch (error) {
       console.error("Failed to clear encounter room:", error);
@@ -2133,7 +2213,7 @@ function openLeadershipRegistration(patientId, encounterId) {
                   roomNumber: "",
                   assignedStudent: "",
                   assignedUpperLevel: "",
-                  status: "Waiting",
+                  status: "ready",
                 }
                 : encounter
             ),
@@ -3115,7 +3195,7 @@ if (!attendingId || pin.length !== 4) return false;
     );
 
     if (!confirmed) return;
-    const activeStatuses = new Set(["Waiting", "Assigned", "In Visit"]);
+    const activeStatuses = new Set(["started", "undergrad_complete", "ready", "roomed", "in_visit"]);
 
     setPatients((prevPatients) =>
       prevPatients.map((patient) => ({
@@ -3127,7 +3207,7 @@ if (!attendingId || pin.length !== 4) return false;
 
           return {
             ...encounter,
-            status: "Completed",
+            status: "done",
             assignedStudent: "",
             assignedUpperLevel: "",
             roomNumber: "",
@@ -3341,6 +3421,26 @@ async function exportClinicSummaryToWord() {
       }),
     ],
   });
+
+  async function handleDeleteUser(userId) {
+  const confirmed = window.confirm(
+    "Delete this user completely? This removes login access."
+  );
+  if (!confirmed) return;
+
+  try {
+    const { error } = await supabase.functions.invoke("delete-user", {
+      body: { userId },
+    });
+
+    if (error) throw error;
+
+    setProfiles((prev) => prev.filter((p) => p.id !== userId));
+  } catch (error) {
+    console.error("Failed to delete user:", error);
+    alert(error.message);
+  }
+}
 
   const doc = new Document({
     sections: [
@@ -3694,6 +3794,12 @@ async function exportClinicSummaryToWord() {
   {activeView === "dashboard" && (
             <DashboardView
               isLeadershipView={isLeadershipView}
+              canEditMrn={userRole === "undergraduate" || isLeadershipView}
+              canEditUndergradFields={userRole === "undergraduate" || isLeadershipView}
+              canEditAllPatientFields={isLeadershipView}
+              canEditPatient={isLeadershipView}
+              canDeletePatient={isLeadershipView}
+              deletePatientCompletely={deletePatientCompletely}
               endClinicReset={endClinicReset}
               selectedClinicDate={selectedClinicDate}
               setSelectedClinicDate={setSelectedClinicDate}
@@ -3711,12 +3817,15 @@ async function exportClinicSummaryToWord() {
 
           {activeView === "registration" && (
   <RegistrationView
-    registrationRows={registrationRows}
-    openUndergradRegistration={openUndergradRegistration}
-    openLeadershipRegistration={openLeadershipRegistration}
-    getFullPatientName={getFullPatientName}
-    formatDate={formatDate}
-  />
+  registrationRows={registrationRows}
+  openUndergradRegistration={openUndergradRegistration}
+  openLeadershipRegistration={openLeadershipRegistration}
+  getFullPatientName={getFullPatientName}
+  formatDate={formatDate}
+  userRole={userRole}
+  isLeadershipView={isLeadershipView}
+  onRemoveFromRegistration={removeFromRegistration}
+/>
 )}
 
 {activeView === "undergrad-intake" && userRole === "undergraduate" && (
@@ -3790,6 +3899,7 @@ async function exportClinicSummaryToWord() {
               showOnlyActiveToday={showOnlyActiveToday}
               setShowOnlyActiveToday={setShowOnlyActiveToday}
               onApproveUser={handleApproveUser}
+              onDeleteUser={handleDeleteUser}
             />
           )}
 

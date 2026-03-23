@@ -1,11 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "../lib/supabase";
-import {
-  fetchEncounters,
-  fetchMedications,
-} from "../api/encounters";
+import { fetchEncounters, fetchMedications } from "../api/encounters";
 import { fetchPatients } from "../api/patients";
 import { fetchAllergies } from "../api/allergies";
+import { mapDbStatusToUi } from "../utils";
 
 function buildPatientMap(patientsData, encountersData, medicationsData, allergiesData) {
   const patientMap = {};
@@ -48,18 +46,7 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
       mentalHealthCombined: intake.mentalHealthCombined ?? "N/A",
       counseling: intake.counseling ?? "N/A",
       anyMentalHealthPositive: intake.anyMentalHealthPositive ?? false,
-      status:
-        encounter.status === "waiting"
-          ? "Waiting"
-          : encounter.status === "roomed"
-          ? "Assigned"
-          : encounter.status === "in_visit"
-          ? "In Visit"
-          : encounter.status === "done"
-          ? "Completed"
-          : encounter.status === "cancelled"
-          ? "Cancelled"
-          : "Waiting",
+      status: mapDbStatusToUi(encounter.status),
       assignedStudent: encounter.assigned_student || "",
       assignedUpperLevel: encounter.assigned_upper_level || "",
       roomNumber: encounter.room || "",
@@ -79,7 +66,14 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
       attendingSignedBy: encounter.attending_signed_by || null,
       attendingSignedAt: encounter.attending_signed_at || null,
     });
+    
   });
+
+  Object.values(patientMap).forEach((patient) => {
+  patient.encounters.sort(
+    (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+  );
+});
 
   medicationsData.forEach((medication) => {
     Object.values(patientMap).forEach((patient) => {
@@ -117,85 +111,20 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
   return Object.values(patientMap);
 }
 
-function mapEncounterRow(encounter) {
-  const intake = encounter.intake_data || {};
-
-  return {
-    id: encounter.id,
-    clinicDate: encounter.clinic_date,
-    createdAt: encounter.created_at,
-    newReturning: intake.newReturning ?? "Returning",
-    visitLocation: intake.visitLocation ?? "In Clinic",
-    chiefComplaint: encounter.chief_complaint || "",
-    transportation: intake.transportation ?? "",
-    needsElevator: intake.needsElevator ?? false,
-    spanishSpeaking: intake.spanishSpeaking ?? false,
-    mammogramPapSmear: intake.mammogramPapSmear ?? "",
-    fluShot: intake.fluShot ?? "",
-    htn: intake.htn ?? false,
-    dm: intake.dm ?? false,
-    labsLast6Months: intake.labsLast6Months ?? "",
-    tobaccoScreening: intake.tobaccoScreening ?? "",
-    dermatology: intake.dermatology ?? "N/A",
-    ophthalmology: intake.ophthalmology ?? "N/A",
-    optometry: intake.optometry ?? "N/A",
-    diabeticEyeExamPastYear: intake.diabeticEyeExamPastYear ?? "N/A",
-    physicalTherapy: intake.physicalTherapy ?? "N/A",
-    mentalHealthCombined: intake.mentalHealthCombined ?? "N/A",
-    counseling: intake.counseling ?? "N/A",
-    anyMentalHealthPositive: intake.anyMentalHealthPositive ?? false,
-    status:
-      encounter.status === "waiting"
-        ? "Waiting"
-        : encounter.status === "roomed"
-        ? "Assigned"
-        : encounter.status === "in_visit"
-        ? "In Visit"
-        : encounter.status === "done"
-        ? "Completed"
-        : encounter.status === "cancelled"
-        ? "Cancelled"
-        : "Waiting",
-    assignedStudent: encounter.assigned_student || "",
-    assignedUpperLevel: encounter.assigned_upper_level || "",
-    roomNumber: encounter.room || "",
-    notes: encounter.notes || "",
-    medications: [],
-    vitalsHistory: encounter.vitals || [],
-    soapSubjective: encounter.hpi || "",
-    soapObjective: encounter.objective || "",
-    soapAssessment: encounter.assessment || "",
-    soapPlan: encounter.plan || "",
-    soapSavedAt: "",
-    soapStatus: encounter.soap_status || "draft",
-    soapAuthorId: encounter.soap_author_id || null,
-    soapAuthorRole: encounter.soap_author_role || null,
-    upperLevelSignedBy: encounter.upper_level_signed_by || null,
-    upperLevelSignedAt: encounter.upper_level_signed_at || null,
-    attendingSignedBy: encounter.attending_signed_by || null,
-    attendingSignedAt: encounter.attending_signed_at || null,
-  };
-}
-
-export function useClinicData({
-  authReady,
-  session,
-  userRole,
-  selectedEncounterId,
-}) {
+export function useClinicData({ authReady, session, userRole }) {
   const [patients, setPatients] = useState([]);
+  const timeoutRef = useRef(null);
+  const loadData = useCallback(async () => {
+    if (!authReady || !session || !userRole) return;
 
-const [isLoaded, setIsLoaded] = useState(false);
-
-useEffect(() => {
-  if (!authReady || !session || !userRole || isLoaded) return;
-
-  async function loadData() {
     try {
-      const patientsData = await fetchPatients();
-      const encountersData = await fetchEncounters();
-      const medicationsData = await fetchMedications();
-      const allergiesData = await fetchAllergies();
+      const [patientsData, encountersData, medicationsData, allergiesData] =
+        await Promise.all([
+          fetchPatients(),
+          fetchEncounters(),
+          fetchMedications(),
+          fetchAllergies(),
+        ]);
 
       setPatients(
         buildPatientMap(
@@ -205,18 +134,65 @@ useEffect(() => {
           allergiesData
         )
       );
-
-      setIsLoaded(true); // 👈 IMPORTANT
     } catch (error) {
       console.error("Failed loading data:", error);
     }
+  }, [authReady, session, userRole]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    if (!authReady || !session || !userRole) return;
+
+
+
+const triggerReload = () => {
+  if (timeoutRef.current) {
+    clearTimeout(timeoutRef.current);
   }
 
-  loadData();
-}, [authReady, session, userRole, isLoaded]);
+  timeoutRef.current = setTimeout(() => {
+    loadData();
+  }, 300);
+};
+
+const channel = supabase
+  .channel("clinic-data-realtime")
+  .on(
+    "postgres_changes",
+    { event: "*", schema: "public", table: "patients" },
+    triggerReload
+  )
+  .on(
+    "postgres_changes",
+    { event: "*", schema: "public", table: "encounters" },
+    triggerReload
+  )
+  .on(
+    "postgres_changes",
+    { event: "*", schema: "public", table: "medications" },
+    triggerReload
+  )
+  .on(
+    "postgres_changes",
+    { event: "*", schema: "public", table: "allergies" },
+    triggerReload
+  )
+  .subscribe();
+
+    return () => {
+  if (timeoutRef.current) {
+    clearTimeout(timeoutRef.current);
+  }
+  supabase.removeChannel(channel);
+};
+  }, [authReady, session, userRole, loadData]);
 
   return {
     patients,
     setPatients,
+    refreshClinicData: loadData,
   };
 }

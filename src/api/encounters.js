@@ -196,23 +196,50 @@ export async function updateEncounterInSupabase(encounterId, updates) {
 
 function mapUiStatusToDb(status) {
   switch (status) {
-    case "Waiting":
-    case "waiting":
-      return "waiting";
+    case "started":
+      return "started";
+    case "undergrad_complete":
+      return "undergrad_complete";
+    case "ready":
+      return "ready";
+    case "roomed":
     case "Assigned":
+      return "roomed";
+    case "in_visit":
+    case "In Visit":
+      return "in_visit";
+    case "done":
+    case "Completed":
+      return "done";
+    case "cancelled":
+    case "Cancelled":
+      return "cancelled";
+    case "waiting":
+    case "Waiting":
+      return "started";
+    default:
+      return "started";
+  }
+}
+
+function mapDbStatusToUi(status) {
+  switch (status) {
+    case "started":
+      return "started";
+    case "undergrad_complete":
+      return "undergrad_complete";
+    case "ready":
+      return "ready";
     case "roomed":
       return "roomed";
-    case "In Visit":
     case "in_visit":
       return "in_visit";
-    case "Completed":
     case "done":
       return "done";
-    case "Cancelled":
     case "cancelled":
       return "cancelled";
     default:
-      return "waiting";
+      return "started";
   }
 }
 
@@ -274,6 +301,15 @@ export async function deleteMedicationInSupabase(medicationId) {
     .from("medications")
     .delete()
     .eq("id", medicationId);
+
+  if (error) throw error;
+}
+
+export async function deleteEncounterInSupabase(encounterId) {
+  const { error } = await supabase
+    .from("encounters")
+    .delete()
+    .eq("id", encounterId);
 
   if (error) throw error;
 }

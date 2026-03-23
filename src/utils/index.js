@@ -170,7 +170,7 @@ export function createEncounterFromIntake(form) {
     mentalHealthCombined: form.mentalHealthCombined,
     counseling: form.counseling,
     anyMentalHealthPositive: form.anyMentalHealthPositive,
-    status: "Waiting",
+    status: "started",
     assignedStudent: "",
     assignedUpperLevel: "",
     roomNumber: "",
@@ -195,18 +195,24 @@ export function canAssignRoom(encounter, roomNumber) {
 
 export function mapDbStatusToUi(status) {
   switch (status) {
-    case "waiting":
-      return "Waiting";
+    case "started":
+      return "started";
+    case "undergrad_complete":
+      return "undergrad_complete";
+    case "ready":
+      return "ready";
     case "roomed":
-      return "Assigned";
+      return "roomed";
     case "in_visit":
-      return "In Visit";
+      return "in_visit";
     case "done":
-      return "Completed";
+      return "done";
     case "cancelled":
-      return "Cancelled";
+      return "cancelled";
+    case "waiting":
+      return "started";
     default:
-      return "Waiting";
+      return "started";
   }
 }
 
