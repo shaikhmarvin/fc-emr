@@ -150,6 +150,13 @@ function elevatorBadge(encounter) {
   return null;
 }
 
+function getLocalDateInputValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export default function App() {
   async function testSupabaseConnection() {
 
@@ -788,7 +795,7 @@ useEffect(() => {
   ]);
 
   const [selectedClinicDate, setSelectedClinicDate] = useState(
-  new Date().toISOString().slice(0, 10)
+  getLocalDateInputValue()
 );
   const [, setNow] = useState(Date.now());
   const selectedPatient = patients.find((p) => p.id === selectedPatientId) || null;

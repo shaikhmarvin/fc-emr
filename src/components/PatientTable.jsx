@@ -1,3 +1,5 @@
+import { formatDate } from "../utils";
+
 export default function PatientTable({
   title,
   patients,
@@ -31,52 +33,51 @@ export default function PatientTable({
           <tbody>
             {patients.map((patient) => (
               <tr
-  key={patient.id}
-  onClick={() => onSelectPatient(patient.id)}
-  className={`cursor-pointer border-t hover:bg-slate-50 active:bg-slate-100 ${
-  selectedPatientId === patient.id
-    ? "bg-blue-50 border-l-4 border-blue-500"
-    : ""
-}`}
->
-  <td className="px-4 py-3 font-semibold text-slate-800">
-    {getFullPatientName(patient)}
-  </td>
+                key={patient.id}
+                onClick={() => onSelectPatient(patient.id)}
+                className={`cursor-pointer border-t hover:bg-slate-50 active:bg-slate-100 ${selectedPatientId === patient.id
+                    ? "bg-blue-50 border-l-4 border-blue-500"
+                    : ""
+                  }`}
+              >
+                <td className="px-4 py-3 font-semibold text-slate-800">
+                  {getFullPatientName(patient)}
+                </td>
 
-  <td className="px-4 py-3">{patient.mrn || "—"}</td>
+                <td className="px-4 py-3">{patient.mrn || "—"}</td>
 
-  <td className="px-4 py-3">{patient.dob || "—"}</td>
+                <td className="px-4 py-3">{formatDate(patient.dob) || "—"}</td>
 
-  <td className="px-4 py-3">{patient.last4ssn || "—"}</td>
+                <td className="px-4 py-3">{patient.last4ssn || "—"}</td>
 
-  <td className="px-4 py-3">{patient.phone || "—"}</td>
+                <td className="px-4 py-3">{patient.phone || "—"}</td>
 
-  <td className="px-4 py-3">{patient.encounters.length}</td>
+                <td className="px-4 py-3">{patient.encounters.length}</td>
 
-  {canDeletePatient && (
-    <td className="px-4 py-3">
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          deletePatientCompletely(patient.id);
-        }}
-        className="text-red-600 text-xs hover:underline"
-      >
-        Delete
-      </button>
-    </td>
-  )}
-</tr>
+                {canDeletePatient && (
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deletePatientCompletely(patient.id);
+                      }}
+                      className="text-red-600 text-xs hover:underline"
+                    >
+                      Delete
+                    </button>
+                  </td>
+                )}
+              </tr>
             ))}
 
             {patients.length === 0 && (
               <tr>
                 <td
-  className="p-4 text-slate-500"
-  colSpan={canDeletePatient ? 7 : 6}
->
-  No matching patients found.
-</td>
+                  className="p-4 text-slate-500"
+                  colSpan={canDeletePatient ? 7 : 6}
+                >
+                  No matching patients found.
+                </td>
               </tr>
             )}
           </tbody>
@@ -97,7 +98,7 @@ export default function PatientTable({
               </p>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-slate-600">
                 <span>MRN: {patient.mrn || "—"}</span>
-                <span>DOB: {patient.dob || "—"}</span>
+                <span>DOB: {formatDate(patient.dob) || "—"}</span>
                 <span>SSN: {patient.last4ssn || "—"}</span>
                 <span>Phone: {patient.phone || "—"}</span>
                 <span className="col-span-2">
