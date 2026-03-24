@@ -6,7 +6,9 @@ export default function QueueView({
   getPatientBoardName,
   spanishBadge,
   priorityBadge,
+  diabetesBadge,
   elevatorBadge,
+  fluBadge,
   formatWaitTime,
   studentNameOptions,
   upperLevelNameOptions,
@@ -93,6 +95,8 @@ const assignedRows =
           {spanishBadge(encounter)}
           {priorityBadge(encounter)}
           {elevatorBadge(encounter)}
+          {diabetesBadge?.(encounter)}
+          {fluBadge?.(encounter)}
         </div>
       </div>
 
@@ -188,6 +192,8 @@ const assignedRows =
             {spanishBadge(encounter)}
             {priorityBadge(encounter)}
             {elevatorBadge(encounter)}
+            {diabetesBadge?.(encounter)}
+            {fluBadge?.(encounter)}
           </div>
         </div>
 

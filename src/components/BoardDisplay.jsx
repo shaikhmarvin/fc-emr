@@ -6,7 +6,9 @@ export default function BoardDisplay({
   getStudentBoardName,
   spanishBadge,
   priorityBadge,
+  diabetesBadge,
   elevatorBadge,
+  fluBadge,
   getStatusClasses,
 }) {
     const [now, setNow] = useState(new Date());
@@ -71,6 +73,9 @@ export default function BoardDisplay({
                     {spanishBadge(slot.encounter)}
                     {priorityBadge(slot.encounter)}
                     {elevatorBadge(slot.encounter)}
+                    {diabetesBadge(slot.encounter)}
+                    {fluBadge?.(slot.encounter)}
+
                   </div>
 
                   <span

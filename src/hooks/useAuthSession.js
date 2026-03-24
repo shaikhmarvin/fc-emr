@@ -33,12 +33,12 @@ const [authPinConfirm, setAuthPinConfirm] = useState("");
   if (error) throw error;
 
   const role = profile?.role || null;
-  const classification = profile?.classification || "";
+  const classification = profile?.classification ?? null;
   const roleRequiresClassification =
     role === "student" || role === "upper_level";
 
   const profileReady =
-    !!role && (!roleRequiresClassification || !!classification);
+  !!role && (!roleRequiresClassification || classification !== null);
 
   if (profileReady) {
     return profile;
@@ -293,7 +293,7 @@ await supabase
             console.log("PROFILE FROM onAuthStateChange:", profile, "EVENT:", event);
 
             const role = profile?.role || null;
-            const classification = profile?.classification || "";
+            const classification = profile?.classification ?? null;
             const roleRequiresClassification =
                 role === "student" || role === "upper_level";
 
@@ -305,7 +305,10 @@ await supabase
               return;
             }
 
-if (role && (!roleRequiresClassification || classification)) {
+if (
+  role &&
+  (!roleRequiresClassification || classification !== null)
+) {
   setUserRole(role);
   setNeedsOnboarding(false);
   setOnboardingFullName(profile?.full_name || "");

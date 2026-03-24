@@ -110,6 +110,35 @@ function spanishBadge(encounter) {
   return null;
 }
 
+function diabetesBadge(encounter) {
+  const hasDM =
+    encounter.dm === true ||
+    encounter.intake_data?.dm === true;
+
+  if (hasDM) {
+    return (
+      <span className="rounded-full bg-orange-100 px-2 py-1 text-xs font-semibold text-orange-700">
+        DM
+      </span>
+    );
+  }
+  return null;
+}
+
+function fluBadge(encounter) {
+  const val = encounter.fluShot;
+
+  if (val === "Interested" || val === "Yes") {
+    return (
+      <span className="rounded-full bg-cyan-100 px-2 py-1 text-xs font-semibold text-cyan-700">
+        Flu
+      </span>
+    );
+  }
+
+  return null;
+}
+
 function elevatorBadge(encounter) {
   if (encounter.needsElevator) {
     return (
@@ -410,9 +439,15 @@ async function toggleFormularyStock(itemId) {
   const [registrationEncounterId, setRegistrationEncounterId] = useState(null);
 
   const [activeView, setActiveView] = useState("dashboard");
+  
   useEffect(() => {
   if (userRole === "undergraduate") {
     setActiveView("undergrad-intake");
+    return;
+  }
+
+  if (userRole === "pharmacy") {
+    setActiveView("formulary");
     return;
   }
 
@@ -427,7 +462,9 @@ async function toggleFormularyStock(itemId) {
 
   setActiveView("dashboard");
 }, [userRole]);
-  const [clinicSummary, setClinicSummary] = useState({
+  
+
+const [clinicSummary, setClinicSummary] = useState({
     refillCount: "",
     labsCount: "",
     mentalHealthCount: "",
@@ -1282,11 +1319,11 @@ useEffect(() => {
   ]);
 
   const assignedCount = filteredEncounterRows.filter(
-    ({ encounter }) => encounter.status === "Assigned"
+    ({ encounter }) => encounter.status === "roomed"
   ).length;
 
   const inVisitCount = filteredEncounterRows.filter(
-    ({ encounter }) => encounter.status === "In Visit"
+    ({ encounter }) => encounter.status === "in_visit"
   ).length;
 
 
@@ -2032,6 +2069,36 @@ useEffect(() => {
       )
     );
   }
+
+  async function saveInHouseLabs(nextLabs) {
+  if (!selectedPatient || !selectedEncounter) return;
+
+  try {
+    await updateEncounterInSupabase(selectedEncounter.id, {
+      inHouseLabs: nextLabs,
+    });
+
+    updateEncounterField("inHouseLabs", nextLabs);
+  } catch (error) {
+    console.error("Failed to save in-house labs:", error);
+    alert(`Failed to save in-house labs: ${error.message}`);
+  }
+}
+
+async function saveSendOutLabs(nextLabs) {
+  if (!selectedPatient || !selectedEncounter) return;
+
+  try {
+    await updateEncounterInSupabase(selectedEncounter.id, {
+      sendOutLabs: nextLabs,
+    });
+
+    updateEncounterField("sendOutLabs", nextLabs);
+  } catch (error) {
+    console.error("Failed to save send-out labs:", error);
+    alert(`Failed to save send-out labs: ${error.message}`);
+  }
+}
 
   async function assignEncounterFromQueue(encounterId, updates) {
     if (!canManageRooms) return;
@@ -3761,6 +3828,7 @@ useEffect(() => {
                     <option value="attending">Attending</option>
                     <option value="leadership">Leadership</option>
                     <option value="undergraduate">Undergraduate</option>
+                    <option value="pharmacy">Pharmacy</option>
                   </select>
 
                   {authRole === "student" || authRole === "upper_level" ? (
@@ -3859,6 +3927,8 @@ useEffect(() => {
         spanishBadge={spanishBadge}
         priorityBadge={priorityBadge}
         elevatorBadge={elevatorBadge}
+        diabetesBadge={diabetesBadge}
+        fluBadge={fluBadge}
         getStatusClasses={getStatusClasses}
       />
     );
@@ -3950,7 +4020,9 @@ useEffect(() => {
               getPatientBoardName={getPatientBoardName}
               spanishBadge={spanishBadge}
               priorityBadge={priorityBadge}
+              diabetesBadge={diabetesBadge}
               elevatorBadge={elevatorBadge}
+              fluBadge={fluBadge}
               formatWaitTime={formatWaitTime}
               studentNameOptions={studentNameOptions}
               upperLevelNameOptions={upperLevelNameOptions}
@@ -3971,6 +4043,8 @@ useEffect(() => {
               spanishBadge={spanishBadge}
               priorityBadge={priorityBadge}
               elevatorBadge={elevatorBadge}
+              diabetesBadge={diabetesBadge}
+              fluBadge={fluBadge}
               getStatusClasses={getStatusClasses}
               assignEncounterToRoom={assignEncounterToRoom}
               selectedPatient={selectedPatient}
@@ -4059,6 +4133,8 @@ useEffect(() => {
               currentVitals={currentVitals}
               updateVitalsField={updateVitalsField}
               saveVitals={saveVitals}
+              saveInHouseLabs={saveInHouseLabs}
+              saveSendOutLabs={saveSendOutLabs}
               editingVitalsIndex={editingVitalsIndex}
               startEditVitals={startEditVitals}
               saveSoapNote={saveSoapNote}

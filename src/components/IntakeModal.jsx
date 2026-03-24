@@ -256,7 +256,7 @@ export default function IntakeModal({
                 onChange={(e) => updateIntakeField("fluShot", e.target.value)}
               >
                 <option value="">Flu Shot</option>
-                <option>Yes</option>
+                <option>Interested</option>
                 <option>Not Interested</option>
                 <option>UTD</option>
               </select>

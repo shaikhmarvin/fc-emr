@@ -7,7 +7,7 @@ export function canManageRoomBoard(role) {
 }
 
 export function canEditFormulary(role) {
-  return role === "leadership";
+  return role === "leadership" || role === "pharmacy";
 }
 
 export function canPrescribe(role) {

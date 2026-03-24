@@ -92,6 +92,14 @@ export async function updateEncounterInSupabase(encounterId, updates) {
     payload.vitals = updates.vitalsHistory;
   }
 
+    if (updates.inHouseLabs !== undefined) {
+    payload.in_house_labs = updates.inHouseLabs;
+  }
+
+  if (updates.sendOutLabs !== undefined) {
+    payload.send_out_labs = updates.sendOutLabs;
+  }
+
   if (updates.status !== undefined) {
     payload.status = mapUiStatusToDb(updates.status);
   }

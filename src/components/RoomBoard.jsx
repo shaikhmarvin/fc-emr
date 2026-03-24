@@ -8,7 +8,9 @@ export default function RoomBoard({
   getStudentBoardName,
   spanishBadge,
   priorityBadge,
+  diabetesBadge,
   elevatorBadge,
+  fluBadge,
   getStatusClasses,
   assignEncounterToRoom,
   selectedPatient,
@@ -129,6 +131,8 @@ export default function RoomBoard({
                     {spanishBadge(slot.encounter)}
                     {priorityBadge(slot.encounter)}
                     {elevatorBadge(slot.encounter)}
+                    {diabetesBadge?.(slot.encounter)}
+                    {fluBadge?.(slot.encounter)}
                   </div>
 
                   <div className="pt-1">

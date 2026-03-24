@@ -17,6 +17,7 @@ export default function UserManagementView({
   showOnlyActiveToday,
   setShowOnlyActiveToday,
   onApproveUser,
+  onDeleteUser,
 }) {
   return (
     <div className="p-4 md:p-6">
@@ -160,19 +161,21 @@ export default function UserManagementView({
                           className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                           value={profile.classification || ""}
                           onChange={(e) => {
-  const nextClassification = e.target.value;
-  const mappedRole = getRoleFromClassification(nextClassification);
+                            const nextClassification = e.target.value;
+                            const mappedRole = getRoleFromClassification(nextClassification);
 
-  onChangeRole(
-    profile.id,
-    mappedRole || profile.role,
-    nextClassification
-  );
-}}
+                            onChangeRole(
+                              profile.id,
+                              mappedRole || profile.role,
+                              nextClassification
+                            );
+                          }}
                           disabled={
                             savingProfileId === profile.id ||
                             profile.role === "leadership" ||
-                            profile.role === "attending"
+                            profile.role === "attending" ||
+                            profile.role === "pharmacy" ||
+                            profile.role === "undergraduate"
                           }
                         >
                           <option value="">—</option>
@@ -184,6 +187,7 @@ export default function UserManagementView({
                         {!profile.classification &&
                           profile.role !== "leadership" &&
                           profile.role !== "attending" &&
+                          profile.role !== "pharmacy" &&
                           profile.role !== "undergraduate" ? (
                           <div className="mt-1 text-xs text-red-500">
                             Missing classification
@@ -203,7 +207,8 @@ export default function UserManagementView({
                             (
                               profile.classification &&
                               profile.role !== "leadership" &&
-                              profile.role !== "attending"
+                              profile.role !== "attending" &&
+                              profile.role !== "pharmacy"
                             ) ||
                             (isCurrentUser && profile.role === "leadership")
                           }
@@ -213,24 +218,25 @@ export default function UserManagementView({
                           <option value="attending">attending</option>
                           <option value="leadership">leadership</option>
                           <option value="undergraduate">undergraduate</option>
+                          <option value="pharmacy">pharmacy</option>
                         </select>
                       </td>
 
-                       <td className="px-3 py-3">
-  {profile.approval_status === "approved" ? (
-    <span className="inline-block rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-700">
-      Approved
-    </span>
-  ) : (
-    <button
-      onClick={() => onApproveUser(profile.id)}
-      disabled={savingProfileId === profile.id}
-      className="rounded-lg bg-green-600 px-3 py-1 text-xs text-white disabled:opacity-60"
-    >
-      Approve
-    </button>
-  )}
-</td>
+                      <td className="px-3 py-3">
+                        {profile.approval_status === "approved" ? (
+                          <span className="inline-block rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-700">
+                            Approved
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => onApproveUser(profile.id)}
+                            disabled={savingProfileId === profile.id}
+                            className="rounded-lg bg-green-600 px-3 py-1 text-xs text-white disabled:opacity-60"
+                          >
+                            Approve
+                          </button>
+                        )}
+                      </td>
 
                       <td className="px-3 py-3 text-sm text-slate-600">
                         <div className="space-y-1">
@@ -250,17 +256,17 @@ export default function UserManagementView({
                       </td>
 
                       <td className="px-3 py-3 text-slate-600 space-x-2">
-  {savingProfileId === profile.id ? "Saving..." : "Ready"}
+                        {savingProfileId === profile.id ? "Saving..." : "Ready"}
 
-  {!isCurrentUser && (
-    <button
-      onClick={() => onDeleteUser(profile.id)}
-      className="ml-2 text-red-600 text-xs"
-    >
-      Delete
-    </button>
-  )}
-</td>
+                        {!isCurrentUser && (
+                          <button
+                            onClick={() => onDeleteUser(profile.id)}
+                            className="ml-2 text-red-600 text-xs"
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}

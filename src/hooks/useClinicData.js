@@ -51,6 +51,8 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
       assignedUpperLevel: encounter.assigned_upper_level || "",
       roomNumber: encounter.room || "",
       notes: encounter.notes || "",
+      inHouseLabs: encounter.in_house_labs || {},
+      sendOutLabs: encounter.send_out_labs || {},
       medications: [],
       vitalsHistory: encounter.vitals || [],
       soapSubjective: encounter.hpi || "",
@@ -114,6 +116,7 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
 export function useClinicData({ authReady, session, userRole }) {
   const [patients, setPatients] = useState([]);
   const timeoutRef = useRef(null);
+  const isInitialLoadRef = useRef(true);
   const loadData = useCallback(async () => {
     if (!authReady || !session || !userRole) return;
 
@@ -139,9 +142,11 @@ export function useClinicData({ authReady, session, userRole }) {
     }
   }, [authReady, session, userRole]);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+useEffect(() => {
+  loadData().then(() => {
+    isInitialLoadRef.current = false;
+  });
+}, [loadData]);
 
   useEffect(() => {
     if (!authReady || !session || !userRole) return;
@@ -149,14 +154,17 @@ export function useClinicData({ authReady, session, userRole }) {
 
 
 const triggerReload = () => {
+  if (isInitialLoadRef.current) return;
+
   if (timeoutRef.current) {
     clearTimeout(timeoutRef.current);
   }
 
   timeoutRef.current = setTimeout(() => {
     loadData();
-  }, 300);
+  }, 50);
 };
+
 
 const channel = supabase
   .channel("clinic-data-realtime")

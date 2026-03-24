@@ -70,98 +70,100 @@ export default function ChartView({
   activeStudents,
   activeUpperLevels,
   activeAttendings,
-signSoapAsAttendingWithPin,
+  signSoapAsAttendingWithPin,
+  saveInHouseLabs,
+  saveSendOutLabs,
 }) {
 
   function formatAuditAction(action) {
-  switch (action) {
-    case "soap_saved":
-      return "SOAP note saved";
-    case "soap_submitted_upper":
-  return "Submitted to upper level";
-case "soap_submitted_attending":
-  return "Submitted to attending";
-    case "soap_signed_upper":
-      return "Signed by upper level";
-    case "soap_signed_attending":
-      return "Signed by attending";
-    case "soap_reopened":
-      return "SOAP note reopened";
-    default:
-      return action;
+    switch (action) {
+      case "soap_saved":
+        return "SOAP note saved";
+      case "soap_submitted_upper":
+        return "Submitted to upper level";
+      case "soap_submitted_attending":
+        return "Submitted to attending";
+      case "soap_signed_upper":
+        return "Signed by upper level";
+      case "soap_signed_attending":
+        return "Signed by attending";
+      case "soap_reopened":
+        return "SOAP note reopened";
+      default:
+        return action;
+    }
   }
-}
 
   function getNumericValue(value) {
-  if (value === null || value === undefined) return null;
-  const match = String(value).match(/-?\d+(\.\d+)?/);
-  return match ? Number(match[0]) : null;
-}
-
-function getBpNumbers(bp) {
-  if (!bp) return null;
-  const match = String(bp).match(/(\d{2,3})\s*\/\s*(\d{2,3})/);
-  if (!match) return null;
-
-  return {
-    systolic: Number(match[1]),
-    diastolic: Number(match[2]),
-  };
-}
-
-function getTrendDirection(current, previous) {
-  if (current === null || previous === null) return null;
-  if (current > previous) return "up";
-  if (current < previous) return "down";
-  return "same";
-}
-
-function renderTrendArrow(direction) {
-  if (direction === "up") return "↑";
-  if (direction === "down") return "↓";
-  if (direction === "same") return "→";
-  return "—";
-}
-
-function getBpCategory(bp) {
-  const parsed = getBpNumbers(bp);
-  if (!parsed) return null;
-
-  const { systolic, diastolic } = parsed;
-
-  if (systolic < 120 && diastolic < 80) return "green";
-  if (systolic < 140 && diastolic < 90) return "yellow";
-  return "red";
-}
-
-function getHrCategory(hr) {
-  const value = getNumericValue(hr);
-  if (value === null) return null;
-
-  if (value < 60 || value > 100) return "red";
-  return "green";
-}
-
-function getSpo2Category(spo2) {
-  const value = getNumericValue(spo2);
-  if (value === null) return null;
-
-  if (value < 94) return "red";
-  return "green";
-}
-
-function getColorClasses(category) {
-  switch (category) {
-    case "green":
-      return "text-green-700";
-    case "yellow":
-      return "text-yellow-700";
-    case "red":
-      return "text-red-700";
-    default:
-      return "text-slate-800";
+    if (value === null || value === undefined) return null;
+    const match = String(value).match(/-?\d+(\.\d+)?/);
+    return match ? Number(match[0]) : null;
   }
-}
+
+  function getBpNumbers(bp) {
+    if (!bp) return null;
+    const match = String(bp).match(/(\d{2,3})\s*\/\s*(\d{2,3})/);
+    if (!match) return null;
+
+    return {
+      systolic: Number(match[1]),
+      diastolic: Number(match[2]),
+    };
+  }
+
+  function getTrendDirection(current, previous) {
+    if (current === null || previous === null) return null;
+    if (current > previous) return "up";
+    if (current < previous) return "down";
+    return "same";
+  }
+
+  function renderTrendArrow(direction) {
+    if (direction === "up") return "↑";
+    if (direction === "down") return "↓";
+    if (direction === "same") return "→";
+    return "—";
+  }
+
+  function getBpCategory(bp) {
+    const parsed = getBpNumbers(bp);
+    if (!parsed) return null;
+
+    const { systolic, diastolic } = parsed;
+
+    if (systolic < 120 && diastolic < 80) return "green";
+    if (systolic < 140 && diastolic < 90) return "yellow";
+    return "red";
+  }
+
+  function getHrCategory(hr) {
+    const value = getNumericValue(hr);
+    if (value === null) return null;
+
+    if (value < 60 || value > 100) return "red";
+    return "green";
+  }
+
+  function getSpo2Category(spo2) {
+    const value = getNumericValue(spo2);
+    if (value === null) return null;
+
+    if (value < 94) return "red";
+    return "green";
+  }
+
+  function getColorClasses(category) {
+    switch (category) {
+      case "green":
+        return "text-green-700";
+      case "yellow":
+        return "text-yellow-700";
+      case "red":
+        return "text-red-700";
+      default:
+        return "text-slate-800";
+    }
+  }
 
   function formatSoapStatus(status) {
     switch (status) {
@@ -180,7 +182,7 @@ function getColorClasses(category) {
 
 
   useEffect(() => {
-  if (!soapAutoSaveEnabled || !selectedEncounter || soapStatus === "signed") return;
+    if (!soapAutoSaveEnabled || !selectedEncounter || soapStatus === "signed") return;
 
     const timeout = window.setTimeout(() => {
       saveSoapNote(false);
@@ -197,9 +199,73 @@ function getColorClasses(category) {
     saveSoapNote,
   ]);
   const [showTimeline, setShowTimeline] = useState(false);
+  const [showLabs, setShowLabs] = useState(false);
+  const [showSendOutLabs, setShowSendOutLabs] = useState(false);
   const [showSignModal, setShowSignModal] = useState(false);
-const [selectedAttendingId, setSelectedAttendingId] = useState("");
-const [attendingPin, setAttendingPin] = useState("");
+  const [selectedAttendingId, setSelectedAttendingId] = useState("");
+  const [attendingPin, setAttendingPin] = useState("");
+  const rapidResultOptions = [
+    { value: "", label: "—" },
+    { value: "positive", label: "Positive" },
+    { value: "negative", label: "Negative" },
+  ];
+
+  const hivOptions = [
+    { value: "", label: "—" },
+    { value: "negative", label: "Negative" },
+    { value: "positive", label: "Positive" },
+    { value: "indeterminate", label: "Indeterminate" },
+  ];
+
+  const uaOptions = {
+    leukocytes: ["", "Neg", "Trace", "Small", "Mod", "Large"],
+    nitrite: ["", "Neg", "Positive"],
+    urobilinogen: ["", "0.2", "1", "2", "4", "8"],
+    protein: ["", "Neg", "Trace", "30", "100", "800", ">2000"],
+    ph: ["", "5.0", "6.0", "6.5", "7.0", "7.5", "8.0", "8.5"],
+    blood: ["", "Neg", "Trace", "Small", "Mod", "Large"],
+    specificGravity: ["", "1.000", "1.005", "1.010", "1.015", "1.020", "1.025", "1.030"],
+    ketones: ["", "Neg", "Trace/5", "Small/15", "Mod/40", "Large/80", "Very Large/160"],
+    bilirubin: ["", "Neg", "Small", "Mod", "Large"],
+    glucose: ["", "Neg", "100", "250", "500", "1000", ">2000"],
+  };
+
+  function updateInHouseLabSection(sectionKey, fieldKey, value) {
+    const currentLabs = selectedEncounter?.inHouseLabs || {};
+
+    saveInHouseLabs({
+      ...currentLabs,
+      [sectionKey]: {
+        ...(currentLabs[sectionKey] || {}),
+        [fieldKey]: value,
+      },
+    });
+  }
+
+  function updateInHouseNestedLabSection(sectionKey, subsectionKey, fieldKey, value) {
+    const currentLabs = selectedEncounter?.inHouseLabs || {};
+    const currentSection = currentLabs[sectionKey] || {};
+
+    saveInHouseLabs({
+      ...currentLabs,
+      [sectionKey]: {
+        ...currentSection,
+        [subsectionKey]: {
+          ...(currentSection[subsectionKey] || {}),
+          [fieldKey]: value,
+        },
+      },
+    });
+  }
+
+  function updateInHouseLabRoot(fieldKey, value) {
+    const currentLabs = selectedEncounter?.inHouseLabs || {};
+
+    saveInHouseLabs({
+      ...currentLabs,
+      [fieldKey]: value,
+    });
+  }
 
   if (!selectedPatient) return null;
 
@@ -211,35 +277,35 @@ const [attendingPin, setAttendingPin] = useState("");
 
   const isSoapLocked = soapStatus === "signed";
   const vitalsHistory = selectedEncounter?.vitalsHistory || [];
-const latestVitals = vitalsHistory[0] || null;
-const previousVitals = vitalsHistory[1] || null;
+  const latestVitals = vitalsHistory[0] || null;
+  const previousVitals = vitalsHistory[1] || null;
 
-const latestBp = getBpNumbers(latestVitals?.bp);
-const previousBp = getBpNumbers(previousVitals?.bp);
+  const latestBp = getBpNumbers(latestVitals?.bp);
+  const previousBp = getBpNumbers(previousVitals?.bp);
 
-const latestHr = getNumericValue(latestVitals?.hr);
-const previousHr = getNumericValue(previousVitals?.hr);
+  const latestHr = getNumericValue(latestVitals?.hr);
+  const previousHr = getNumericValue(previousVitals?.hr);
 
-const latestWeight = getNumericValue(latestVitals?.weight);
-const previousWeight = getNumericValue(previousVitals?.weight);
+  const latestWeight = getNumericValue(latestVitals?.weight);
+  const previousWeight = getNumericValue(previousVitals?.weight);
 
-const latestPain = getNumericValue(latestVitals?.pain);
-const previousPain = getNumericValue(previousVitals?.pain);
+  const latestPain = getNumericValue(latestVitals?.pain);
+  const previousPain = getNumericValue(previousVitals?.pain);
 
-const bpTrend =
-  latestBp && previousBp
-    ? {
+  const bpTrend =
+    latestBp && previousBp
+      ? {
         systolic: getTrendDirection(latestBp.systolic, previousBp.systolic),
         diastolic: getTrendDirection(latestBp.diastolic, previousBp.diastolic),
       }
-    : null;
+      : null;
 
-const hrTrend = getTrendDirection(latestHr, previousHr);
-const weightTrend = getTrendDirection(latestWeight, previousWeight);
-const painTrend = getTrendDirection(latestPain, previousPain);
-const bpCategory = getBpCategory(latestVitals?.bp);
-const hrCategory = getHrCategory(latestVitals?.hr);
-const spo2Category = getSpo2Category(latestVitals?.spo2);
+  const hrTrend = getTrendDirection(latestHr, previousHr);
+  const weightTrend = getTrendDirection(latestWeight, previousWeight);
+  const painTrend = getTrendDirection(latestPain, previousPain);
+  const bpCategory = getBpCategory(latestVitals?.bp);
+  const hrCategory = getHrCategory(latestVitals?.hr);
+  const spo2Category = getSpo2Category(latestVitals?.spo2);
 
   return (
     <div className="space-y-4 p-3 sm:p-4 lg:space-y-6 lg:p-6">
@@ -249,7 +315,7 @@ const spo2Category = getSpo2Category(latestVitals?.spo2);
       >
         ← Back to Patients
       </button>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <div className="rounded-2xl bg-white p-3 shadow sm:p-4">
           <p className="text-sm text-slate-500">Patient</p>
           <p className="mt-1 text-lg font-semibold text-slate-800">
@@ -277,8 +343,8 @@ const spo2Category = getSpo2Category(latestVitals?.spo2);
           <p className="text-sm text-slate-500">Clinical Snapshot</p>
           <p className="mt-1 text-sm text-slate-700">
             Allergies: {(selectedPatient.allergyList || []).length > 0
-  ? `${selectedPatient.allergyList.filter((a) => a.isActive).length} active`
-  : "None listed"}
+              ? `${selectedPatient.allergyList.filter((a) => a.isActive).length} active`
+              : "None listed"}
           </p>
           <p className="text-sm text-slate-700">
             Active meds: {activeMedicationCount}
@@ -392,75 +458,73 @@ const spo2Category = getSpo2Category(latestVitals?.spo2);
             Visit Timeline
             <span>{showTimeline ? "▲" : "▼"}</span>
           </button>
-        
-        {showTimeline && (
-          <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1 lg:max-h-[560px]">
-            {sortedEncounters.map((encounter, index) => (
-              <button
-                key={encounter.id}
-                onClick={() => openPatientChart(selectedPatient.id, encounter.id)}
-                className={`w-full rounded-xl border p-3 text-left transition ${
-                  selectedEncounterId === encounter.id
+
+          {showTimeline && (
+            <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1 lg:max-h-[560px]">
+              {sortedEncounters.map((encounter, index) => (
+                <button
+                  key={encounter.id}
+                  onClick={() => openPatientChart(selectedPatient.id, encounter.id)}
+                  className={`w-full rounded-xl border p-3 text-left transition ${selectedEncounterId === encounter.id
                     ? "border-blue-400 bg-blue-50 ring-2 ring-blue-100"
                     : "border-slate-200 bg-white hover:bg-slate-50"
-                }`}
-              >
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="flex gap-3">
-                    <div className="mt-1 h-3 w-3 shrink-0 rounded-full bg-blue-500" />
-
-                    <div className="space-y-1">
-                      <p className="font-semibold text-slate-800">
-                        Encounter #{selectedPatient.encounters.length - index}
-                      </p>
-
-                      <p className="text-sm text-slate-500">
-                        {normalizeClinicDate
-                          ? normalizeClinicDate(encounter.clinicDate)
-                          : encounter.clinicDate}
-                      </p>
-
-                      <p className="text-sm text-slate-700">
-                        {encounter.chiefComplaint || "No chief complaint recorded"}
-                      </p>
-
-                      <p className="text-xs text-slate-500">
-                        {encounter.visitLocation || "—"} •{" "}
-                        {encounter.newReturning || "—"}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        Room: {encounter.roomNumber || "—"} • Student: {encounter.assignedStudent || "—"}
-                      </p>
-
-                      <p className="text-xs text-slate-500">
-                        Vitals: {encounter.vitalsHistory?.length || 0} • SOAP saved: {encounter.soapSavedAt || "Not yet"}
-                      </p>
-                    </div>
-                    
-                  </div>
-                  
-                  <span
-                    className={`inline-block rounded-full border px-3 py-1 text-xs ${
-                      encounter.status === "started" ||
-encounter.status === "undergrad_complete" ||
-encounter.status === "ready"
-  ? "border-yellow-200 bg-yellow-100 text-yellow-800"
-  : encounter.status === "roomed"
-  ? "border-green-200 bg-green-100 text-green-800"
-  : encounter.status === "in_visit"
-  ? "border-blue-200 bg-blue-100 text-blue-800"
-  : encounter.status === "done"
-  ? "border-slate-300 bg-slate-100 text-slate-700"
-  : "border-slate-300 bg-slate-100 text-slate-700"
                     }`}
-                  >
-                    {encounter.status}
-                  </span>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
+                >
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="flex gap-3">
+                      <div className="mt-1 h-3 w-3 shrink-0 rounded-full bg-blue-500" />
+
+                      <div className="space-y-1">
+                        <p className="font-semibold text-slate-800">
+                          Encounter #{selectedPatient.encounters.length - index}
+                        </p>
+
+                        <p className="text-sm text-slate-500">
+                          {normalizeClinicDate
+                            ? normalizeClinicDate(encounter.clinicDate)
+                            : encounter.clinicDate}
+                        </p>
+
+                        <p className="text-sm text-slate-700">
+                          {encounter.chiefComplaint || "No chief complaint recorded"}
+                        </p>
+
+                        <p className="text-xs text-slate-500">
+                          {encounter.visitLocation || "—"} •{" "}
+                          {encounter.newReturning || "—"}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Room: {encounter.roomNumber || "—"} • Student: {encounter.assignedStudent || "—"}
+                        </p>
+
+                        <p className="text-xs text-slate-500">
+                          Vitals: {encounter.vitalsHistory?.length || 0} • SOAP saved: {encounter.soapSavedAt || "Not yet"}
+                        </p>
+                      </div>
+
+                    </div>
+
+                    <span
+                      className={`inline-block rounded-full border px-3 py-1 text-xs ${encounter.status === "started" ||
+                        encounter.status === "undergrad_complete" ||
+                        encounter.status === "ready"
+                        ? "border-yellow-200 bg-yellow-100 text-yellow-800"
+                        : encounter.status === "roomed"
+                          ? "border-green-200 bg-green-100 text-green-800"
+                          : encounter.status === "in_visit"
+                            ? "border-blue-200 bg-blue-100 text-blue-800"
+                            : encounter.status === "done"
+                              ? "border-slate-300 bg-slate-100 text-slate-700"
+                              : "border-slate-300 bg-slate-100 text-slate-700"
+                        }`}
+                    >
+                      {encounter.status}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -472,9 +536,8 @@ encounter.status === "ready"
           </div>
 
           <div
-            className={`grid gap-4 xl:gap-6 ${
-              isLeadershipView ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1"
-            }`}
+            className={`grid gap-4 xl:gap-6 ${isLeadershipView ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1"
+              }`}
           >
             <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
               <h3 className="mb-4 text-lg font-semibold">Encounter Details</h3>
@@ -583,7 +646,7 @@ encounter.status === "ready"
                       ))}
                     </select>
                   </div>
-               
+
                   <div>
                     <label className="mb-1 block text-sm font-medium text-slate-700">
                       Room
@@ -677,21 +740,19 @@ encounter.status === "ready"
               </div>
 
               <div
-  className={`space-y-3 ${
-    sortedMedications.length > 6
-      ? "max-h-[300px] overflow-y-auto pr-1"
-      : ""
-  }`}
->
+                className={`space-y-3 ${sortedMedications.length > 6
+                  ? "max-h-[300px] overflow-y-auto pr-1"
+                  : ""
+                  }`}
+              >
                 {sortedMedications.length > 0 ? (
                   sortedMedications.map((med) => (
                     <div
                       key={med.id}
-                      className={`rounded-xl border p-4 ${
-                        med.isActive
-                          ? "border-slate-200 bg-white"
-                          : "border-slate-200 bg-slate-100 text-slate-400"
-                      }`}
+                      className={`rounded-xl border p-4 ${med.isActive
+                        ? "border-slate-200 bg-white"
+                        : "border-slate-200 bg-slate-100 text-slate-400"
+                        }`}
                     >
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                         <div className="space-y-1">
@@ -706,11 +767,10 @@ encounter.status === "ready"
                         <div className="grid grid-cols-3 gap-2 lg:grid-cols-1">
                           <button
                             onClick={() => toggleMedicationActive(med.id)}
-                            className={`rounded-lg px-4 py-3 text-sm ${
-                              med.isActive
-                                ? "bg-green-100 text-green-700"
-                                : "bg-slate-200 text-slate-600"
-                            }`}
+                            className={`rounded-lg px-4 py-3 text-sm ${med.isActive
+                              ? "bg-green-100 text-green-700"
+                              : "bg-slate-200 text-slate-600"
+                              }`}
                           >
                             {med.isActive ? "Active" : "Inactive"}
                           </button>
@@ -762,8 +822,8 @@ encounter.status === "ready"
                     <div
                       key={allergy.id}
                       className={`rounded-xl border p-4 ${allergy.isActive
-                          ? "border-slate-200 bg-white"
-                          : "border-slate-200 bg-slate-100 text-slate-400"
+                        ? "border-slate-200 bg-white"
+                        : "border-slate-200 bg-slate-100 text-slate-400"
                         }`}
                     >
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -870,74 +930,74 @@ encounter.status === "ready"
               />
             </div>
 
-           <div className="mt-6">
-  <h4 className="mb-3 font-semibold">Vitals Trend</h4>
+            <div className="mt-6">
+              <h4 className="mb-3 font-semibold">Vitals Trend</h4>
 
-  {vitalsHistory.length >= 2 ? (
-    <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-        <p className="text-xs font-medium text-slate-500">Blood Pressure</p>
-        <p className={`mt-1 text-sm font-semibold ${getColorClasses(bpCategory)}`}>
-  {latestVitals?.bp || "—"}
-</p>
-        <p className="text-xs text-slate-600">
-          Prev: {previousVitals?.bp || "—"} •{" "}
-          {bpTrend
-            ? `${renderTrendArrow(bpTrend.systolic)} Sys / ${renderTrendArrow(bpTrend.diastolic)} Dia`
-            : "—"}
-        </p>
-      </div>
+              {vitalsHistory.length >= 2 ? (
+                <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs font-medium text-slate-500">Blood Pressure</p>
+                    <p className={`mt-1 text-sm font-semibold ${getColorClasses(bpCategory)}`}>
+                      {latestVitals?.bp || "—"}
+                    </p>
+                    <p className="text-xs text-slate-600">
+                      Prev: {previousVitals?.bp || "—"} •{" "}
+                      {bpTrend
+                        ? `${renderTrendArrow(bpTrend.systolic)} Sys / ${renderTrendArrow(bpTrend.diastolic)} Dia`
+                        : "—"}
+                    </p>
+                  </div>
 
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-        <p className="text-xs font-medium text-slate-500">Heart Rate</p>
-        <p className={`mt-1 text-sm font-semibold ${getColorClasses(hrCategory)}`}>
-          {latestVitals?.hr || "—"}
-        </p>
-        <p className="text-xs text-slate-600">
-          Prev: {previousVitals?.hr || "—"} • {renderTrendArrow(hrTrend)}
-        </p>
-      </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs font-medium text-slate-500">Heart Rate</p>
+                    <p className={`mt-1 text-sm font-semibold ${getColorClasses(hrCategory)}`}>
+                      {latestVitals?.hr || "—"}
+                    </p>
+                    <p className="text-xs text-slate-600">
+                      Prev: {previousVitals?.hr || "—"} • {renderTrendArrow(hrTrend)}
+                    </p>
+                  </div>
 
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-  <p className="text-xs font-medium text-slate-500">SpO2</p>
-  <p className={`mt-1 text-sm font-semibold ${getColorClasses(spo2Category)}`}>
-    {latestVitals?.spo2 ? `${latestVitals.spo2}%` : "—"}
-  </p>
-  <p className="text-xs text-slate-600">
-    Prev: {previousVitals?.spo2 ? `${previousVitals.spo2}%` : "—"}
-  </p>
-</div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs font-medium text-slate-500">SpO2</p>
+                    <p className={`mt-1 text-sm font-semibold ${getColorClasses(spo2Category)}`}>
+                      {latestVitals?.spo2 ? `${latestVitals.spo2}%` : "—"}
+                    </p>
+                    <p className="text-xs text-slate-600">
+                      Prev: {previousVitals?.spo2 ? `${previousVitals.spo2}%` : "—"}
+                    </p>
+                  </div>
 
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-        <p className="text-xs font-medium text-slate-500">Weight</p>
-        <p className="mt-1 text-sm font-semibold text-slate-800">
-          {latestVitals?.weight ? `${latestVitals.weight} lb` : "—"}
-        </p>
-        <p className="text-xs text-slate-600">
-          Prev: {previousVitals?.weight ? `${previousVitals.weight} lb` : "—"} •{" "}
-          {renderTrendArrow(weightTrend)}
-        </p>
-      </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs font-medium text-slate-500">Weight</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">
+                      {latestVitals?.weight ? `${latestVitals.weight} lb` : "—"}
+                    </p>
+                    <p className="text-xs text-slate-600">
+                      Prev: {previousVitals?.weight ? `${previousVitals.weight} lb` : "—"} •{" "}
+                      {renderTrendArrow(weightTrend)}
+                    </p>
+                  </div>
 
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-        <p className="text-xs font-medium text-slate-500">Pain</p>
-        <p className="mt-1 text-sm font-semibold text-slate-800">
-          {latestVitals?.pain || "—"}
-        </p>
-        <p className="text-xs text-slate-600">
-          Prev: {previousVitals?.pain || "—"} • {renderTrendArrow(painTrend)}
-        </p>
-      </div>
-    </div>
-  ) : (
-    <p className="mb-6 text-sm text-slate-500">
-      Need at least 2 vitals entries to show a trend.
-    </p>
-  )}
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs font-medium text-slate-500">Pain</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">
+                      {latestVitals?.pain || "—"}
+                    </p>
+                    <p className="text-xs text-slate-600">
+                      Prev: {previousVitals?.pain || "—"} • {renderTrendArrow(painTrend)}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <p className="mb-6 text-sm text-slate-500">
+                  Need at least 2 vitals entries to show a trend.
+                </p>
+              )}
 
-  
 
-  <h4 className="mb-3 font-semibold">Vitals History</h4>
+
+              <h4 className="mb-3 font-semibold">Vitals History</h4>
 
               {selectedEncounter.vitalsHistory?.length > 0 ? (
                 <>
@@ -1057,6 +1117,585 @@ encounter.status === "ready"
           </div>
 
           <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
+            <button
+              onClick={() => setShowLabs((prev) => !prev)}
+              className="flex w-full items-center justify-between text-left text-lg font-semibold"
+            >
+              In-House Labs
+              <span>{showLabs ? "▲" : "▼"}</span>
+            </button>
+
+            {showLabs && (
+              <div className="mt-4 space-y-6">
+
+                <div>
+                  <h4 className="mb-3 font-semibold text-slate-800">iSTAT Panel</h4>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">Na</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.istat?.na || ""}
+                        onChange={(e) => updateInHouseLabSection("istat", "na", e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">K</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.istat?.k || ""}
+                        onChange={(e) => updateInHouseLabSection("istat", "k", e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">Cl</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.istat?.cl || ""}
+                        onChange={(e) => updateInHouseLabSection("istat", "cl", e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">iCa</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.istat?.ica || ""}
+                        onChange={(e) => updateInHouseLabSection("istat", "ica", e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">Glucose</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.istat?.glucose || ""}
+                        onChange={(e) => updateInHouseLabSection("istat", "glucose", e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">TCO2</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.istat?.tco2 || ""}
+                        onChange={(e) => updateInHouseLabSection("istat", "tco2", e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">BUN</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.istat?.bun || ""}
+                        onChange={(e) => updateInHouseLabSection("istat", "bun", e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">Creatinine</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.istat?.creatinine || ""}
+                        onChange={(e) => updateInHouseLabSection("istat", "creatinine", e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">HCT</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.istat?.hct || ""}
+                        onChange={(e) => updateInHouseLabSection("istat", "hct", e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">Hgb</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.istat?.hgb || ""}
+                        onChange={(e) => updateInHouseLabSection("istat", "hgb", e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">Anion Gap</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.istat?.anionGap || ""}
+                        onChange={(e) => updateInHouseLabSection("istat", "anionGap", e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="mb-3 font-semibold text-slate-800">Core Labs</h4>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">Blood Glucose</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.core?.bloodGlucose || ""}
+                        onChange={(e) => updateInHouseLabSection("core", "bloodGlucose", e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">HbA1C</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.core?.a1c || ""}
+                        onChange={(e) => updateInHouseLabSection("core", "a1c", e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">HIV</label>
+                      <select
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.core?.hiv || ""}
+                        onChange={(e) => updateInHouseLabSection("core", "hiv", e.target.value)}
+                      >
+                        <option value="">Select</option>
+                        <option value="negative">Negative</option>
+                        <option value="positive">Positive</option>
+                        <option value="indeterminate">Indeterminate</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="mb-3 font-semibold text-slate-800">Lipids</h4>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">HDL</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.lipids?.hdl || ""}
+                        onChange={(e) => updateInHouseLabSection("lipids", "hdl", e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">Triglycerides</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.lipids?.triglycerides || ""}
+                        onChange={(e) => updateInHouseLabSection("lipids", "triglycerides", e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">LDL</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.lipids?.ldl || ""}
+                        onChange={(e) => updateInHouseLabSection("lipids", "ldl", e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">TC/HDL</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.lipids?.tcHdl || ""}
+                        onChange={(e) => updateInHouseLabSection("lipids", "tcHdl", e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">Total Cholesterol</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.lipids?.totalCholesterol || ""}
+                        onChange={(e) => updateInHouseLabSection("lipids", "totalCholesterol", e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="mb-3 font-semibold text-slate-800">Microalbumin / Creatinine</h4>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">Albumin</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.microalbumin?.albumin || ""}
+                        onChange={(e) => updateInHouseLabSection("microalbumin", "albumin", e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">Creatinine</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.microalbumin?.creatinine || ""}
+                        onChange={(e) => updateInHouseLabSection("microalbumin", "creatinine", e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">A/C Ratio</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.microalbumin?.acRatio || ""}
+                        onChange={(e) => updateInHouseLabSection("microalbumin", "acRatio", e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="mb-3 font-semibold text-slate-800">Urinalysis</h4>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">Leukocytes</label>
+                      <select
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.urinalysis?.leukocytes || ""}
+                        onChange={(e) => updateInHouseLabSection("urinalysis", "leukocytes", e.target.value)}
+                      >
+                        {uaOptions.leukocytes.map((option) => (
+                          <option key={option || "blank-leukocytes"} value={option}>
+                            {option || "Select"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">Nitrite</label>
+                      <select
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.urinalysis?.nitrite || ""}
+                        onChange={(e) => updateInHouseLabSection("urinalysis", "nitrite", e.target.value)}
+                      >
+                        {uaOptions.nitrite.map((option) => (
+                          <option key={option || "blank-nitrite"} value={option}>
+                            {option || "Select"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">Urobilinogen</label>
+                      <select
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.urinalysis?.urobilinogen || ""}
+                        onChange={(e) => updateInHouseLabSection("urinalysis", "urobilinogen", e.target.value)}
+                      >
+                        {uaOptions.urobilinogen.map((option) => (
+                          <option key={option || "blank-urobilinogen"} value={option}>
+                            {option || "Select"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">Protein</label>
+                      <select
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.urinalysis?.protein || ""}
+                        onChange={(e) => updateInHouseLabSection("urinalysis", "protein", e.target.value)}
+                      >
+                        {uaOptions.protein.map((option) => (
+                          <option key={option || "blank-protein"} value={option}>
+                            {option || "Select"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">pH</label>
+                      <select
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.urinalysis?.ph || ""}
+                        onChange={(e) => updateInHouseLabSection("urinalysis", "ph", e.target.value)}
+                      >
+                        {uaOptions.ph.map((option) => (
+                          <option key={option || "blank-ph"} value={option}>
+                            {option || "Select"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">Blood</label>
+                      <select
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.urinalysis?.blood || ""}
+                        onChange={(e) => updateInHouseLabSection("urinalysis", "blood", e.target.value)}
+                      >
+                        {uaOptions.blood.map((option) => (
+                          <option key={option || "blank-blood"} value={option}>
+                            {option || "Select"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">Specific Gravity</label>
+                      <select
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.urinalysis?.specificGravity || ""}
+                        onChange={(e) => updateInHouseLabSection("urinalysis", "specificGravity", e.target.value)}
+                      >
+                        {uaOptions.specificGravity.map((option) => (
+                          <option key={option || "blank-sg"} value={option}>
+                            {option || "Select"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">Ketones</label>
+                      <select
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.urinalysis?.ketones || ""}
+                        onChange={(e) => updateInHouseLabSection("urinalysis", "ketones", e.target.value)}
+                      >
+                        {uaOptions.ketones.map((option) => (
+                          <option key={option || "blank-ketones"} value={option}>
+                            {option || "Select"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">Bilirubin</label>
+                      <select
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.urinalysis?.bilirubin || ""}
+                        onChange={(e) => updateInHouseLabSection("urinalysis", "bilirubin", e.target.value)}
+                      >
+                        {uaOptions.bilirubin.map((option) => (
+                          <option key={option || "blank-bilirubin"} value={option}>
+                            {option || "Select"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">Urine Glucose</label>
+                      <select
+                        className="w-full rounded-lg border p-2"
+                        value={selectedEncounter.inHouseLabs?.urinalysis?.glucose || ""}
+                        onChange={(e) => updateInHouseLabSection("urinalysis", "glucose", e.target.value)}
+                      >
+                        {uaOptions.glucose.map((option) => (
+                          <option key={option || "blank-ua-glucose"} value={option}>
+                            {option || "Select"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+  <h4 className="mb-3 font-semibold text-slate-800">Rapid Tests</h4>
+  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+    {[
+      { key: "flu", label: "Flu" },
+      { key: "strep", label: "Strep" },
+      { key: "guaiac", label: "Guaiac" },
+      { key: "hcg", label: "HCG" },
+      { key: "mono", label: "Mono" },
+    ].map((test) => {
+      const currentValue = selectedEncounter.inHouseLabs?.rapid?.[test.key] || "";
+
+      return (
+        <div key={test.key}>
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            {test.label}
+          </label>
+
+          <div className="flex gap-2">
+            {["positive", "negative"].map((val) => {
+              const isActive = currentValue === val;
+
+              return (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() =>
+                    updateInHouseLabSection(
+                      "rapid",
+                      test.key,
+                      currentValue === val ? "" : val
+                    )
+                  }
+                  className={`rounded-lg border px-3 py-2 text-sm ${
+                    isActive
+                      ? "border-blue-600 bg-blue-100 text-blue-800"
+                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  {val === "positive" ? "Positive" : "Negative"}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
+    })}
+  </div>
+</div>
+
+                <div>
+                  <h4 className="mb-3 font-semibold text-slate-800">Nursing Notes</h4>
+                  <textarea
+                    className="w-full rounded-lg border p-3"
+                    rows={4}
+                    placeholder="Nursing notes"
+                    value={selectedEncounter.inHouseLabs?.nursingNotes || ""}
+                    onChange={(e) => updateInHouseLabRoot("nursingNotes", e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
+            <button
+              onClick={() => setShowSendOutLabs((prev) => !prev)}
+              className="flex w-full items-center justify-between text-left text-lg font-semibold"
+            >
+              Send-Out Labs
+              <span>{showSendOutLabs ? "▲" : "▼"}</span>
+            </button>
+
+            {showSendOutLabs && (
+              <div className="mt-4 space-y-4">
+
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedEncounter.sendOutLabs?.ordered || false}
+                    onChange={(e) =>
+                      saveSendOutLabs({
+                        ...selectedEncounter.sendOutLabs,
+                        ordered: e.target.checked,
+                      })
+                    }
+                  />
+                  Send-Out Labs Ordered
+                </label>
+
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedEncounter.sendOutLabs?.received || false}
+                    onChange={(e) =>
+                      saveSendOutLabs({
+                        ...selectedEncounter.sendOutLabs,
+                        received: e.target.checked,
+                      })
+                    }
+                  />
+                  Results Received
+                </label>
+
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    disabled={!selectedEncounter.sendOutLabs?.received}
+                    checked={selectedEncounter.sendOutLabs?.patientNotified || false}
+                    onChange={(e) =>
+                      saveSendOutLabs({
+                        ...selectedEncounter.sendOutLabs,
+                        patientNotified: e.target.checked,
+                      })
+                    }
+                  />
+                  Patient Notified
+                </label>
+
+                <textarea
+                  className="w-full rounded-lg border p-3"
+                  placeholder="Labs ordered / notes"
+                  value={selectedEncounter.sendOutLabs?.notes || ""}
+                  onChange={(e) =>
+                    saveSendOutLabs({
+                      ...selectedEncounter.sendOutLabs,
+                      notes: e.target.value,
+                    })
+                  }
+                />
+
+                <textarea
+                  className="w-full rounded-lg border p-3"
+                  placeholder="Result summary"
+                  value={selectedEncounter.sendOutLabs?.resultSummary || ""}
+                  onChange={(e) =>
+                    saveSendOutLabs({
+                      ...selectedEncounter.sendOutLabs,
+                      resultSummary: e.target.value,
+                    })
+                  }
+                />
+
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <h3 className="text-lg font-semibold">SOAP Note</h3>
 
@@ -1144,18 +1783,18 @@ encounter.status === "ready"
                 ) : null}
 
                 {canSignAsAttending ? (
-  <button
-    onClick={() => {
-      setSelectedAttendingId("");
-      setAttendingPin("");
-      setShowSignModal(true);
-    }}
-    disabled={soapBusy}
-    className="rounded-lg bg-emerald-600 px-4 py-3 text-sm font-medium text-white"
-  >
-    Sign as Attending
-  </button>
-) : null}
+                  <button
+                    onClick={() => {
+                      setSelectedAttendingId("");
+                      setAttendingPin("");
+                      setShowSignModal(true);
+                    }}
+                    disabled={soapBusy}
+                    className="rounded-lg bg-emerald-600 px-4 py-3 text-sm font-medium text-white"
+                  >
+                    Sign as Attending
+                  </button>
+                ) : null}
               </div>
 
               <div className="space-y-1 text-sm text-slate-600">
@@ -1253,97 +1892,97 @@ Follow-up`}
               </div>
             </div>
           </div>
-           <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
-        <h3 className="mb-4 text-lg font-semibold">Audit Trail</h3>
+          <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
+            <h3 className="mb-4 text-lg font-semibold">Audit Trail</h3>
 
-        {auditLoading ? (
-          <p className="text-sm text-slate-500">Loading audit trail...</p>
-        ) : auditEntries.length === 0 ? (
-          <p className="text-sm text-slate-500">No audit history yet.</p>
-        ) : (
-          <div className="space-y-3">
-            {auditEntries.map((entry) => (
-              <div
-                key={entry.id}
-                className="rounded-xl border border-slate-200 bg-slate-50 p-3"
-              >
-                <p className="text-sm font-medium text-slate-800">
-                  {formatAuditAction(entry.action)}
-                </p>
-                <p className="text-xs text-slate-500">
-                  {entry.actor_name || "Unknown User"} •{" "}
-{new Date(entry.created_at).toLocaleString()}
-                </p>
+            {auditLoading ? (
+              <p className="text-sm text-slate-500">Loading audit trail...</p>
+            ) : auditEntries.length === 0 ? (
+              <p className="text-sm text-slate-500">No audit history yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {auditEntries.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="rounded-xl border border-slate-200 bg-slate-50 p-3"
+                  >
+                    <p className="text-sm font-medium text-slate-800">
+                      {formatAuditAction(entry.action)}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {entry.actor_name || "Unknown User"} •{" "}
+                      {new Date(entry.created_at).toLocaleString()}
+                    </p>
 
-                {![
-  "soap_saved",
-  "soap_submitted_upper",
-  "soap_submitted_attending",
-  "soap_signed_upper",
-  "soap_signed_attending",
-  "soap_reopened",
-].includes(entry.action) &&
-entry.details &&
-Object.keys(entry.details).length > 0 ? (
-  <pre className="mt-2 overflow-x-auto rounded bg-white p-2 text-xs text-slate-600">
-    {JSON.stringify(entry.details, null, 2)}
-  </pre>
-) : null}
+                    {![
+                      "soap_saved",
+                      "soap_submitted_upper",
+                      "soap_submitted_attending",
+                      "soap_signed_upper",
+                      "soap_signed_attending",
+                      "soap_reopened",
+                    ].includes(entry.action) &&
+                      entry.details &&
+                      Object.keys(entry.details).length > 0 ? (
+                      <pre className="mt-2 overflow-x-auto rounded bg-white p-2 text-xs text-slate-600">
+                        {JSON.stringify(entry.details, null, 2)}
+                      </pre>
+                    ) : null}
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
-        )}
-      </div>
         </>
       )}
       {showSignModal && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-    <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-      <h3 className="text-lg font-semibold text-slate-900">
-        Attending Signature
-      </h3>
-      <p className="mt-1 text-sm text-slate-600">
-        Select the attending and enter their 4-digit PIN to sign this note.
-      </p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-900">
+              Attending Signature
+            </h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Select the attending and enter their 4-digit PIN to sign this note.
+            </p>
 
-      <div className="mt-4 space-y-4">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">
-            Attending
-          </label>
-          <select
-            value={selectedAttendingId}
-            onChange={(e) => setSelectedAttendingId(e.target.value)}
-            className="w-full rounded-lg border p-3"
-          >
-            <option value="">Select attending</option>
-            {activeAttendings?.map((attending) => (
-              <option key={attending.id} value={attending.id}>
-                {attending.full_name}
-              </option>
-            ))}
-          </select>
-        </div>
+            <div className="mt-4 space-y-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Attending
+                </label>
+                <select
+                  value={selectedAttendingId}
+                  onChange={(e) => setSelectedAttendingId(e.target.value)}
+                  className="w-full rounded-lg border p-3"
+                >
+                  <option value="">Select attending</option>
+                  {activeAttendings?.map((attending) => (
+                    <option key={attending.id} value={attending.id}>
+                      {attending.full_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">
-            4-Digit PIN
-          </label>
-          <input
-            type="password"
-            inputMode="numeric"
-            maxLength={4}
-            value={attendingPin}
-            onChange={(e) =>
-              setAttendingPin(e.target.value.replace(/\D/g, "").slice(0, 4))
-            }
-            className="w-full rounded-lg border p-3"
-            placeholder="Enter PIN"
-          />
-        </div>
-      </div>
-{soapUiMessage ? (
-  <p className="mt-3 text-sm text-red-600">{soapUiMessage}</p>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  4-Digit PIN
+                </label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={attendingPin}
+                  onChange={(e) =>
+                    setAttendingPin(e.target.value.replace(/\D/g, "").slice(0, 4))
+                  }
+                  className="w-full rounded-lg border p-3"
+                  placeholder="Enter PIN"
+                />
+              </div>
+            </div>
+            {soapUiMessage ? (
+              <p className="mt-3 text-sm text-red-600">{soapUiMessage}</p>
             ) : null}
             <div className="mt-6 flex gap-3">
               <button
@@ -1377,10 +2016,10 @@ Object.keys(entry.details).length > 0 ? (
               >
                 {soapBusy ? "Signing..." : "Sign Note"}
               </button>
-      </div>
-    </div>
-  </div>
-)}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
