@@ -206,6 +206,7 @@ export default function ChartView({
   const [showLabs, setShowLabs] = useState(false);
   const [showSendOutLabs, setShowSendOutLabs] = useState(false);
   const [showSignModal, setShowSignModal] = useState(false);
+  const [showAudit, setShowAudit] = useState(false);
   const [selectedAttendingId, setSelectedAttendingId] = useState("");
   const [attendingPin, setAttendingPin] = useState("");
   const rapidResultOptions = [
@@ -320,7 +321,7 @@ export default function ChartView({
       >
         ← Back to Patients
       </button>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
         <div className="rounded-2xl bg-white p-3 shadow sm:p-4">
           <p className="text-sm text-slate-500">Patient</p>
           <p className="mt-1 text-lg font-semibold text-slate-800">
@@ -395,7 +396,7 @@ export default function ChartView({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 text-sm md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 text-sm lg:grid-cols-2">
             <p className="md:col-span-2">
               <span className="font-medium">Last 4 SSN:</span>{" "}
               {selectedPatient.last4ssn || "—"}
@@ -409,7 +410,7 @@ export default function ChartView({
                 type="text"
                 value={selectedPatient.phone || ""}
                 onChange={(e) => updatePatientField("phone", e.target.value)}
-                className="w-full rounded-lg border p-3"
+                className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                 placeholder="Phone number"
               />
             </div>
@@ -422,7 +423,7 @@ export default function ChartView({
                 type="text"
                 value={selectedPatient.pronouns || ""}
                 onChange={(e) => updatePatientField("pronouns", e.target.value)}
-                className="w-full rounded-lg border p-3"
+                className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                 placeholder="Pronouns"
               />
             </div>
@@ -435,7 +436,7 @@ export default function ChartView({
                 type="text"
                 value={selectedPatient.sex || ""}
                 onChange={(e) => updatePatientField("sex", e.target.value)}
-                className="w-full rounded-lg border p-3"
+                className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                 placeholder="Sex"
               />
             </div>
@@ -447,7 +448,7 @@ export default function ChartView({
               <select
                 value={selectedPatient.ethnicity || ""}
                 onChange={(e) => updatePatientField("ethnicity", e.target.value)}
-                className="w-full rounded-lg border p-3"
+                className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
               >
                 <option value="">Select Ethnicity</option>
                 <option>Hispanic or Latino</option>
@@ -576,7 +577,7 @@ export default function ChartView({
                       updateEncounterField("chiefComplaint", e.target.value);
                     }}
                     disabled={isEncounterLocked}
-                    className="w-full rounded-lg border p-3 disabled:bg-slate-100"
+                    className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base disabled:bg-slate-100"
                   />
                 </div>
 
@@ -629,7 +630,7 @@ export default function ChartView({
                           studentName: e.target.value,
                         }))
                       }
-                      className="w-full rounded-lg border p-3"
+                      className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                     >
                       <option value="">Select medical student</option>
                       {studentNameOptions?.map((name) => {
@@ -662,7 +663,7 @@ export default function ChartView({
                           upperLevelName: e.target.value,
                         }))
                       }
-                      className="w-full rounded-lg border p-3"
+                      className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                     >
                       <option value="">Select upper level</option>
                       {upperLevelNameOptions?.map((name) => (
@@ -714,7 +715,7 @@ export default function ChartView({
                           roomNumber: e.target.value,
                         }))
                       }
-                      className="w-full rounded-lg border p-3"
+                      className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                     >
                       <option value="">Select room</option>
                       {ROOM_OPTIONS.map((room) => (
@@ -954,62 +955,62 @@ export default function ChartView({
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
               <input
-                className="rounded-lg border p-3"
+                className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                 placeholder="BP (e.g. 120/80)"
                 value={currentVitals.bp}
                 onChange={(e) => updateVitalsField("bp", e.target.value)}
                 disabled={isEncounterLocked}
               />
               <input
-                className="rounded-lg border p-3"
+                className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                 placeholder="HR"
                 value={currentVitals.hr}
                 onChange={(e) => updateVitalsField("hr", e.target.value)}
                 disabled={isEncounterLocked}
               />
               <input
-                className="rounded-lg border p-3"
+                className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                 placeholder="Temp °F"
                 value={currentVitals.temp}
                 onChange={(e) => updateVitalsField("temp", e.target.value)}
                 disabled={isEncounterLocked}
               />
               <input
-                className="rounded-lg border p-3"
+                className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                 placeholder="RR"
                 value={currentVitals.rr}
                 onChange={(e) => updateVitalsField("rr", e.target.value)}
                 disabled={isEncounterLocked}
               />
               <input
-                className="rounded-lg border p-3"
+                className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                 placeholder="SpO2 %"
                 value={currentVitals.spo2}
                 onChange={(e) => updateVitalsField("spo2", e.target.value)}
                 disabled={isEncounterLocked}
               />
               <input
-                className="rounded-lg border p-3"
+                className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                 placeholder="Weight (lb)"
                 value={currentVitals.weight}
                 onChange={(e) => updateVitalsField("weight", e.target.value)}
                 disabled={isEncounterLocked}
               />
               <input
-                className="rounded-lg border p-3"
+                className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                 placeholder={`Height (e.g. 5'11")`}
                 value={currentVitals.height}
                 onChange={(e) => updateVitalsField("height", e.target.value)}
                 disabled={isEncounterLocked}
               />
               <input
-                className="rounded-lg border bg-slate-50 p-3"
+                className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                 placeholder="BMI"
                 value={currentVitals.bmi}
                 readOnly
               />
               <input
-                className="rounded-lg border p-3"
+                className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                 placeholder="Pain Score (e.g. 4/10)"
                 value={currentVitals.pain}
                 onChange={(e) => updateVitalsField("pain", e.target.value)}
@@ -1230,7 +1231,7 @@ export default function ChartView({
                       <input
                         type="number"
                         step="any"
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.istat?.na || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1245,7 +1246,7 @@ export default function ChartView({
                       <input
                         type="number"
                         step="any"
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.istat?.k || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1260,7 +1261,7 @@ export default function ChartView({
                       <input
                         type="number"
                         step="any"
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.istat?.cl || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1275,7 +1276,7 @@ export default function ChartView({
                       <input
                         type="number"
                         step="any"
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.istat?.ica || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1290,7 +1291,7 @@ export default function ChartView({
                       <input
                         type="number"
                         step="any"
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.istat?.glucose || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1305,7 +1306,7 @@ export default function ChartView({
                       <input
                         type="number"
                         step="any"
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.istat?.tco2 || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1320,7 +1321,7 @@ export default function ChartView({
                       <input
                         type="number"
                         step="any"
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.istat?.bun || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1335,7 +1336,7 @@ export default function ChartView({
                       <input
                         type="number"
                         step="any"
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.istat?.creatinine || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1350,7 +1351,7 @@ export default function ChartView({
                       <input
                         type="number"
                         step="any"
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.istat?.hct || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1365,7 +1366,7 @@ export default function ChartView({
                       <input
                         type="number"
                         step="any"
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.istat?.hgb || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1380,7 +1381,7 @@ export default function ChartView({
                       <input
                         type="number"
                         step="any"
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.istat?.anionGap || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1400,7 +1401,7 @@ export default function ChartView({
                       <input
                         type="number"
                         step="any"
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.core?.bloodGlucose || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1415,7 +1416,7 @@ export default function ChartView({
                       <input
                         type="number"
                         step="any"
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.core?.a1c || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1428,7 +1429,7 @@ export default function ChartView({
                     <div>
                       <label className="mb-1 block text-sm font-medium text-slate-700">HIV</label>
                       <select
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.core?.hiv || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1452,7 +1453,7 @@ export default function ChartView({
                       <input
                         type="number"
                         step="any"
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.lipids?.hdl || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1467,7 +1468,7 @@ export default function ChartView({
                       <input
                         type="number"
                         step="any"
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.lipids?.triglycerides || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1482,7 +1483,7 @@ export default function ChartView({
                       <input
                         type="number"
                         step="any"
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.lipids?.ldl || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1497,7 +1498,7 @@ export default function ChartView({
                       <input
                         type="number"
                         step="any"
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.lipids?.tcHdl || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1512,7 +1513,7 @@ export default function ChartView({
                       <input
                         type="number"
                         step="any"
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.lipids?.totalCholesterol || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1532,7 +1533,7 @@ export default function ChartView({
                       <input
                         type="number"
                         step="any"
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.microalbumin?.albumin || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1547,7 +1548,7 @@ export default function ChartView({
                       <input
                         type="number"
                         step="any"
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.microalbumin?.creatinine || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1562,7 +1563,7 @@ export default function ChartView({
                       <input
                         type="number"
                         step="any"
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.microalbumin?.acRatio || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1580,7 +1581,7 @@ export default function ChartView({
                     <div>
                       <label className="mb-1 block text-sm font-medium text-slate-700">Leukocytes</label>
                       <select
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.urinalysis?.leukocytes || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1599,7 +1600,7 @@ export default function ChartView({
                     <div>
                       <label className="mb-1 block text-sm font-medium text-slate-700">Nitrite</label>
                       <select
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.urinalysis?.nitrite || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1618,7 +1619,7 @@ export default function ChartView({
                     <div>
                       <label className="mb-1 block text-sm font-medium text-slate-700">Urobilinogen</label>
                       <select
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.urinalysis?.urobilinogen || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1637,7 +1638,7 @@ export default function ChartView({
                     <div>
                       <label className="mb-1 block text-sm font-medium text-slate-700">Protein</label>
                       <select
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.urinalysis?.protein || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1656,7 +1657,7 @@ export default function ChartView({
                     <div>
                       <label className="mb-1 block text-sm font-medium text-slate-700">pH</label>
                       <select
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.urinalysis?.ph || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1675,7 +1676,7 @@ export default function ChartView({
                     <div>
                       <label className="mb-1 block text-sm font-medium text-slate-700">Blood</label>
                       <select
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.urinalysis?.blood || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1694,7 +1695,7 @@ export default function ChartView({
                     <div>
                       <label className="mb-1 block text-sm font-medium text-slate-700">Specific Gravity</label>
                       <select
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.urinalysis?.specificGravity || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1713,7 +1714,7 @@ export default function ChartView({
                     <div>
                       <label className="mb-1 block text-sm font-medium text-slate-700">Ketones</label>
                       <select
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.urinalysis?.ketones || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1732,7 +1733,7 @@ export default function ChartView({
                     <div>
                       <label className="mb-1 block text-sm font-medium text-slate-700">Bilirubin</label>
                       <select
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.urinalysis?.bilirubin || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1751,7 +1752,7 @@ export default function ChartView({
                     <div>
                       <label className="mb-1 block text-sm font-medium text-slate-700">Urine Glucose</label>
                       <select
-                        className="w-full rounded-lg border p-2"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                         value={selectedEncounter.inHouseLabs?.urinalysis?.glucose || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1823,7 +1824,7 @@ export default function ChartView({
                 <div>
                   <h4 className="mb-3 font-semibold text-slate-800">Nursing Notes</h4>
                   <textarea
-                    className="w-full rounded-lg border p-3"
+                    className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                     rows={4}
                     placeholder="Nursing notes"
                     value={selectedEncounter.inHouseLabs?.nursingNotes || ""}
@@ -1894,7 +1895,7 @@ export default function ChartView({
                 </label>
 
                 <textarea
-                  className="w-full rounded-lg border p-3"
+                  className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                   placeholder="Labs ordered / notes"
                   value={selectedEncounter.sendOutLabs?.notes || ""}
                   onChange={(e) =>
@@ -1906,7 +1907,7 @@ export default function ChartView({
                 />
 
                 <textarea
-                  className="w-full rounded-lg border p-3"
+                  className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                   placeholder="Result summary"
                   value={selectedEncounter.sendOutLabs?.resultSummary || ""}
                   onChange={(e) =>
@@ -1957,7 +1958,7 @@ export default function ChartView({
               </div>
             )}
 
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
               {canSubmitForUpperLevel ? (
                 <button
                   onClick={submitSoapForUpperLevel}
@@ -1997,7 +1998,7 @@ export default function ChartView({
 
 
             <div className="mt-4 space-y-2">
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
                 {canSignAsUpperLevel ? (
                   <button
                     onClick={signSoapAsUpperLevel}
@@ -2052,7 +2053,7 @@ export default function ChartView({
                   Subjective
                 </label>
                 <textarea
-                  className="min-h-[180px] w-full rounded-lg border p-3 disabled:cursor-not-allowed disabled:bg-slate-100"
+                  className="min-h-[180px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base disabled:cursor-not-allowed disabled:bg-slate-100"
                   placeholder={`Chief complaint / HPI
 Pertinent history, meds, allergies
 Relevant ROS`}
@@ -2069,7 +2070,7 @@ Relevant ROS`}
                   Objective
                 </label>
                 <textarea
-                  className="min-h-[180px] w-full rounded-lg border p-3 disabled:cursor-not-allowed disabled:bg-slate-100"
+                  className="min-h-[180px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base disabled:cursor-not-allowed disabled:bg-slate-100"
                   placeholder={`Physical exam findings
 General appearance
 Focused exam
@@ -2087,7 +2088,7 @@ Relevant test results`}
                   Assessment
                 </label>
                 <textarea
-                  className="min-h-[180px] w-full rounded-lg border p-3 disabled:cursor-not-allowed disabled:bg-slate-100"
+                  className="min-h-[180px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base disabled:cursor-not-allowed disabled:bg-slate-100"
                   placeholder={`Most likely diagnosis
 Differential
 Problem list`}
@@ -2104,7 +2105,7 @@ Problem list`}
                   Plan
                 </label>
                 <textarea
-                  className="min-h-[180px] w-full rounded-lg border p-3 disabled:cursor-not-allowed disabled:bg-slate-100"
+                  className="min-h-[180px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base disabled:cursor-not-allowed disabled:bg-slate-100"
                   placeholder={`Treatment
 Labs / referrals
 Patient education
@@ -2119,44 +2120,54 @@ Follow-up`}
             </div>
           </div>
           <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
-            <h3 className="mb-4 text-lg font-semibold">Audit Trail</h3>
+            <button
+              onClick={() => setShowAudit((prev) => !prev)}
+              className="mb-4 flex w-full items-center justify-between text-left text-lg font-semibold"
+            >
+              Audit Trail
+              <span>{showAudit ? "▲" : "▼"}</span>
+            </button>
 
-            {auditLoading ? (
-              <p className="text-sm text-slate-500">Loading audit trail...</p>
-            ) : auditEntries.length === 0 ? (
-              <p className="text-sm text-slate-500">No audit history yet.</p>
-            ) : (
-              <div className="space-y-3">
-                {auditEntries.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="rounded-xl border border-slate-200 bg-slate-50 p-3"
-                  >
-                    <p className="text-sm font-medium text-slate-800">
-                      {formatAuditAction(entry.action)}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {entry.actor_name || "Unknown User"} •{" "}
-                      {new Date(entry.created_at).toLocaleString()}
-                    </p>
+            {showAudit && (
+              <>
+                {auditLoading ? (
+                  <p className="text-sm text-slate-500">Loading audit trail...</p>
+                ) : auditEntries.length === 0 ? (
+                  <p className="text-sm text-slate-500">No audit history yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {auditEntries.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className="rounded-xl border border-slate-200 bg-slate-50 p-3"
+                      >
+                        <p className="text-sm font-medium text-slate-800">
+                          {formatAuditAction(entry.action)}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {entry.actor_name || "Unknown User"} •{" "}
+                          {new Date(entry.created_at).toLocaleString()}
+                        </p>
 
-                    {![
-                      "soap_saved",
-                      "soap_submitted_upper",
-                      "soap_submitted_attending",
-                      "soap_signed_upper",
-                      "soap_signed_attending",
-                      "soap_reopened",
-                    ].includes(entry.action) &&
-                      entry.details &&
-                      Object.keys(entry.details).length > 0 ? (
-                      <pre className="mt-2 overflow-x-auto rounded bg-white p-2 text-xs text-slate-600">
-                        {JSON.stringify(entry.details, null, 2)}
-                      </pre>
-                    ) : null}
+                        {![
+                          "soap_saved",
+                          "soap_submitted_upper",
+                          "soap_submitted_attending",
+                          "soap_signed_upper",
+                          "soap_signed_attending",
+                          "soap_reopened",
+                        ].includes(entry.action) &&
+                          entry.details &&
+                          Object.keys(entry.details).length > 0 ? (
+                          <pre className="mt-2 overflow-x-auto rounded bg-white p-2 text-xs text-slate-600">
+                            {JSON.stringify(entry.details, null, 2)}
+                          </pre>
+                        ) : null}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                )}
+              </>
             )}
           </div>
         </>
@@ -2179,7 +2190,7 @@ Follow-up`}
                 <select
                   value={selectedAttendingId}
                   onChange={(e) => setSelectedAttendingId(e.target.value)}
-                  className="w-full rounded-lg border p-3"
+                  className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                 >
                   <option value="">Select attending</option>
                   {activeAttendings?.map((attending) => (
@@ -2202,7 +2213,7 @@ Follow-up`}
                   onChange={(e) =>
                     setAttendingPin(e.target.value.replace(/\D/g, "").slice(0, 4))
                   }
-                  className="w-full rounded-lg border p-3"
+                  className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                   placeholder="Enter PIN"
                 />
               </div>

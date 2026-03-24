@@ -102,7 +102,7 @@ export default function QueueView({
               <div
                 key={encounter.id}
                 onClick={(e) => {
-                  if (e.target.tagName === "SELECT" || e.target.tagName === "BUTTON") return;
+                  if (e.target.closest("select, button")) return;
                   openPatientChart(patient.id, encounter.id);
                 }}
                 className="flex cursor-pointer flex-col gap-3 px-2 py-4 hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between"
@@ -143,61 +143,61 @@ export default function QueueView({
                   {/* 👇 LEADERSHIP ASSIGNMENT UI */}
 
                   {userRole === "leadership" && (
-  <div className="flex flex-col gap-2 sm:min-w-[220px]">
-    <select
-      className="rounded border p-1 text-xs"
-      value={getDraftValue(encounter, "assignedStudent")}
-      onChange={(e) =>
-        updateDraft(encounter.id, "assignedStudent", e.target.value)
-      }
-    >
-      <option value="">Assign Student</option>
-      {studentNameOptions.map((name) => (
-        <option key={name} value={name}>
-          {name}
-        </option>
-      ))}
-    </select>
+                    <div className="flex flex-col gap-2 sm:min-w-[220px]">
+                      <select
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
+                        value={getDraftValue(encounter, "assignedStudent")}
+                        onChange={(e) =>
+                          updateDraft(encounter.id, "assignedStudent", e.target.value)
+                        }
+                      >
+                        <option value="">Assign Student</option>
+                        {studentNameOptions.map((name) => (
+                          <option key={name} value={name}>
+                            {name}
+                          </option>
+                        ))}
+                      </select>
 
-    <select
-      className="rounded border p-1 text-xs"
-      value={getDraftValue(encounter, "assignedUpperLevel")}
-      onChange={(e) =>
-        updateDraft(encounter.id, "assignedUpperLevel", e.target.value)
-      }
-    >
-      <option value="">Assign Upper</option>
-      {upperLevelNameOptions.map((name) => (
-        <option key={name} value={name}>
-          {name}
-        </option>
-      ))}
-    </select>
+                      <select
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
+                        value={getDraftValue(encounter, "assignedUpperLevel")}
+                        onChange={(e) =>
+                          updateDraft(encounter.id, "assignedUpperLevel", e.target.value)
+                        }
+                      >
+                        <option value="">Assign Upper</option>
+                        {upperLevelNameOptions.map((name) => (
+                          <option key={name} value={name}>
+                            {name}
+                          </option>
+                        ))}
+                      </select>
 
-    <select
-      className="rounded border p-1 text-xs"
-      value={getDraftValue(encounter, "roomNumber")}
-      onChange={(e) =>
-        updateDraft(encounter.id, "roomNumber", e.target.value)
-      }
-    >
-      <option value="">Assign Room</option>
-      {ROOM_OPTIONS.map((room) => (
-        <option key={room.number} value={room.number}>
-          {room.displayLabel || `${room.label} — ${room.area}`}
-        </option>
-      ))}
-    </select>
+                      <select
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
+                        value={getDraftValue(encounter, "roomNumber")}
+                        onChange={(e) =>
+                          updateDraft(encounter.id, "roomNumber", e.target.value)
+                        }
+                      >
+                        <option value="">Assign Room</option>
+                        {ROOM_OPTIONS.map((room) => (
+                          <option key={room.number} value={room.number}>
+                            {room.displayLabel || `${room.label} — ${room.area}`}
+                          </option>
+                        ))}
+                      </select>
 
-    <button
-      type="button"
-      onClick={() => submitDraft(encounter)}
-      className="rounded bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700"
-    >
-      Assign / Start Visit
-    </button>
-  </div>
-)}
+                      <button
+                        type="button"
+                        onClick={() => submitDraft(encounter)}
+                        className="rounded bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700"
+                      >
+                        Assign / Start Visit
+                      </button>
+                    </div>
+                  )}
 
                 </div>
               </div>
@@ -218,7 +218,7 @@ export default function QueueView({
                 <div
                   key={encounter.id}
                   onClick={(e) => {
-                    if (e.target.tagName === "SELECT" || e.target.tagName === "BUTTON") return;
+                    if (e.target.closest("select, button")) return;
                     openPatientChart(patient.id, encounter.id);
                   }}
                   className="flex cursor-pointer flex-col gap-3 px-2 py-4 hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between"

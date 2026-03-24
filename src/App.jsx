@@ -4035,7 +4035,7 @@ export default function App() {
 
 
   return (
-    <div className="min-h-screen bg-slate-100 md:flex md:h-screen">
+    <div className="min-h-screen bg-slate-100 lg:flex lg:h-screen">
       <AppSidebar
         activeView={activeView}
         setActiveView={setActiveView}
@@ -4051,7 +4051,7 @@ export default function App() {
         userRole={userRole}
       />
 
-      <div className="min-w-0 flex-1 md:ml-64 md:flex md:min-h-0 md:flex-col">
+      <div className="min-w-0 flex-1 lg:ml-64 lg:flex lg:min-h-0 lg:flex-col">
         <AppHeader
           activeView={activeView}
           selectedPatient={selectedPatient}

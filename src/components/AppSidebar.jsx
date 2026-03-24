@@ -21,13 +21,14 @@ export default function AppSidebar({
     <>
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 transform bg-white shadow-lg transition-transform duration-300 md:translate-x-0 md:overflow-y-auto ${sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
-          }`}
+        className={`fixed inset-y-0 left-0 z-50 w-64 transform bg-white shadow-lg transition-transform duration-300 lg:translate-x-0 lg:overflow-y-auto ${
+  sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+}`}
       >
         <div className="border-b px-6 py-5">
           <h1 className="text-2xl font-bold text-red-700">Free Clinic</h1>
