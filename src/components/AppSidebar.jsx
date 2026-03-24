@@ -17,15 +17,6 @@ export default function AppSidebar({
     setSidebarOpen(false);
   }
 
-  function handleNewIntake() {
-    setIsEditingIntake(false);
-    setEditingPatientId(null);
-    setIntakeForm(EMPTY_FORM);
-    setIntakeTab(0);
-    setShowIntakeModal(true);
-    setSidebarOpen(false);
-  }
-
   return (
     <>
       {sidebarOpen && (
@@ -184,15 +175,6 @@ export default function AppSidebar({
           }`}
         >
           Programs
-        </button>
-      )}
-
-      {isLeadershipView && (
-        <button
-          onClick={handleNewIntake}
-          className="w-full rounded-lg bg-red-700 px-4 py-3 text-left text-white hover:bg-red-800"
-        >
-          + New Intake
         </button>
       )}
     </>

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import PatientSearch from "./PatientSearch";
 import PatientTable from "./PatientTable";
 
@@ -16,6 +17,7 @@ export default function DashboardView({
   setSelectedClinicDate,
   filteredVisiblePatients,
   visibleEncounterRows,
+  allEncounterRows,
   searchForm,
   setSearchForm,
   patientRecordsTitle,
@@ -23,17 +25,22 @@ export default function DashboardView({
   getFullPatientName,
 }) {
 
-const pendingLabEncounters = visibleEncounterRows.filter(
+const pendingLabEncounters = allEncounterRows.filter(
   ({ encounter }) =>
     encounter.sendOutLabs?.ordered &&
     !encounter.sendOutLabs?.received
 );
 
-const notifyPatientEncounters = visibleEncounterRows.filter(
+const notifyPatientEncounters = allEncounterRows.filter(
   ({ encounter }) =>
     encounter.sendOutLabs?.received &&
     !encounter.sendOutLabs?.patientNotified
 );
+
+const [showLabFollowUp, setShowLabFollowUp] = useState(false);
+
+const labFollowUpCount =
+  pendingLabEncounters.length + notifyPatientEncounters.length;
 
 function formatPhone(phone) {
   if (!phone) return "No phone on file";
@@ -106,9 +113,10 @@ function formatPhone(phone) {
             {
               visibleEncounterRows.filter(
   ({ encounter }) =>
-    encounter.status === "started" ||
-    encounter.status === "undergrad_complete" ||
-    encounter.status === "ready"
+    (encounter.status === "started" ||
+  encounter.status === "undergrad_complete" ||
+  encounter.status === "ready") &&
+encounter.soapStatus !== "signed"
 ).length
             }
           </p>
@@ -117,14 +125,16 @@ function formatPhone(phone) {
         <div className="rounded-2xl bg-white p-3 shadow sm:p-4">
           <p className="text-sm text-slate-500">Assigned</p>
           <p className="mt-1 text-2xl font-bold sm:text-3xl">{visibleEncounterRows.filter(
-  ({ encounter }) => encounter.status === "roomed"
+  ({ encounter }) => encounter.status === "roomed" &&
+encounter.soapStatus !== "signed"
 ).length}</p>
         </div>
 
         <div className="rounded-2xl bg-white p-3 shadow sm:p-4">
           <p className="text-sm text-slate-500">In Visit</p>
           <p className="mt-1 text-2xl font-bold sm:text-3xl">{visibleEncounterRows.filter(
-  ({ encounter }) => encounter.status === "in_visit"
+  ({ encounter }) => encounter.status === "in_visit" &&
+encounter.soapStatus !== "signed"
 ).length}</p>
         </div>
       </div>
@@ -155,71 +165,88 @@ function formatPhone(phone) {
   </div>
 </div>
 <div className="rounded-2xl bg-white p-4 shadow">
-  <h3 className="mb-4 text-lg font-semibold">Lab Follow-Up</h3>
+  <button
+    onClick={() => setShowLabFollowUp((prev) => !prev)}
+    className="flex w-full items-center justify-between text-left"
+  >
+    <div className="flex items-center gap-3">
+      <h3 className="text-lg font-semibold">Lab Follow-Up</h3>
 
-  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-
-    {/* Awaiting Results */}
-    <div>
-      <h4 className="mb-2 text-sm font-semibold text-yellow-700">
-        Awaiting Results
-      </h4>
-
-      {pendingLabEncounters.length === 0 ? (
-        <p className="text-sm text-slate-500">None</p>
+      {labFollowUpCount > 0 ? (
+        <span className="rounded-full bg-red-100 px-2 py-1 text-xs font-semibold text-red-700">
+          {labFollowUpCount}
+        </span>
       ) : (
-        <div className="space-y-2">
-          {pendingLabEncounters.map(({ patient, encounter }) => (
-            <button
-              key={encounter.id}
-              onClick={() => openPatientFromFilteredView(patient.id, encounter.id)}
-              className="w-full rounded-lg border p-2 text-left hover:bg-yellow-50"
-            >
-              <p className="font-medium">
-                {getFullPatientName(patient)}
-              </p>
-              <p className="text-xs text-slate-500">
-                {encounter.sendOutLabs?.notes || "Send-out labs ordered"}
-              </p>
-            </button>
-          ))}
-        </div>
+        <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
+          0
+        </span>
       )}
     </div>
 
-    {/* Notify Patient */}
-    <div>
-      <h4 className="mb-2 text-sm font-semibold text-red-700">
-        Notify Patient
-      </h4>
+    <span className="text-sm text-slate-500">
+      {showLabFollowUp ? "▲" : "▼"}
+    </span>
+  </button>
 
-      {notifyPatientEncounters.length === 0 ? (
-        <p className="text-sm text-slate-500">None</p>
-      ) : (
-        <div className="space-y-2">
-          {notifyPatientEncounters.map(({ patient, encounter }) => (
-            <button
-              key={encounter.id}
-              onClick={() => openPatientFromFilteredView(patient.id, encounter.id)}
-              className="w-full rounded-lg border p-2 text-left hover:bg-red-50"
-            >
-              <p className="font-medium">
-  {getFullPatientName(patient)}
-</p>
+  {showLabFollowUp && (
+    <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div>
+        <h4 className="mb-2 text-sm font-semibold text-yellow-700">
+          Awaiting Results
+        </h4>
 
-<p className="text-sm text-slate-600">
-  {formatPhone(patient.phone) || "No phone on file"}
-</p>
-              <p className="text-xs text-slate-500">
-                {encounter.sendOutLabs?.resultSummary || "Results received"}
-              </p>
-            </button>
-          ))}
-        </div>
-      )}
+        {pendingLabEncounters.length === 0 ? (
+          <p className="text-sm text-slate-500">None</p>
+        ) : (
+          <div className="space-y-2">
+            {pendingLabEncounters.map(({ patient, encounter }) => (
+              <button
+                key={encounter.id}
+                onClick={() => openPatientFromFilteredView(patient.id, encounter.id)}
+                className="w-full rounded-lg border p-2 text-left hover:bg-yellow-50"
+              >
+                <p className="font-medium">{getFullPatientName(patient)}</p>
+                <p className="text-sm text-slate-600">
+                  {formatPhone(patient.phone)}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {encounter.sendOutLabs?.notes || "Send-out labs ordered"}
+                </p>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h4 className="mb-2 text-sm font-semibold text-red-700">
+          Notify Patient
+        </h4>
+
+        {notifyPatientEncounters.length === 0 ? (
+          <p className="text-sm text-slate-500">None</p>
+        ) : (
+          <div className="space-y-2">
+            {notifyPatientEncounters.map(({ patient, encounter }) => (
+              <button
+                key={encounter.id}
+                onClick={() => openPatientFromFilteredView(patient.id, encounter.id)}
+                className="w-full rounded-lg border p-2 text-left hover:bg-red-50"
+              >
+                <p className="font-medium">{getFullPatientName(patient)}</p>
+                <p className="text-sm text-slate-600">
+                  {formatPhone(patient.phone)}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {encounter.sendOutLabs?.resultSummary || "Results received"}
+                </p>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
-
-  </div>
+  )}
 </div>
 
       <PatientTable

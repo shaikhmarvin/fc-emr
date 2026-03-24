@@ -1,3 +1,4 @@
+import { getStatusClasses, getStatusLabel } from "../utils";
 import { useEffect, useState } from "react";
 export default function ChartView({
   selectedPatient,
@@ -6,6 +7,8 @@ export default function ChartView({
   normalizeClinicDate,
   setActiveView,
   startNewEncounter,
+  deleteEncounter,
+  canStartEncounter,
   isLeadershipView,
   getFullPatientName,
   lastVisitLabel,
@@ -15,6 +18,7 @@ export default function ChartView({
   assignmentForm,
   setAssignmentForm,
   studentNameOptions,
+  assignedStudentNames,
   upperLevelNameOptions,
   ROOM_OPTIONS,
   isPapRestricted,
@@ -275,7 +279,8 @@ export default function ChartView({
     return bTime - aTime;
   });
 
-  const isSoapLocked = soapStatus === "signed";
+  const isEncounterLocked = selectedEncounter?.soapStatus === "signed";
+  const isSoapLocked = isEncounterLocked; // keep for compatibility
   const vitalsHistory = selectedEncounter?.vitalsHistory || [];
   const latestVitals = vitalsHistory[0] || null;
   const previousVitals = vitalsHistory[1] || null;
@@ -376,12 +381,17 @@ export default function ChartView({
                 </button>
               )}
 
-              <button
-                onClick={startNewEncounter}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-              >
-                Start New Encounter
-              </button>
+              {canStartEncounter ? (
+                <button
+                  onClick={() => {
+                    setShowTimeline(true);
+                    startNewEncounter();
+                  }}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+                >
+                  Start New Encounter
+                </button>
+              ) : null}
             </div>
           </div>
 
@@ -504,22 +514,26 @@ export default function ChartView({
 
                     </div>
 
-                    <span
-                      className={`inline-block rounded-full border px-3 py-1 text-xs ${encounter.status === "started" ||
-                        encounter.status === "undergrad_complete" ||
-                        encounter.status === "ready"
-                        ? "border-yellow-200 bg-yellow-100 text-yellow-800"
-                        : encounter.status === "roomed"
-                          ? "border-green-200 bg-green-100 text-green-800"
-                          : encounter.status === "in_visit"
-                            ? "border-blue-200 bg-blue-100 text-blue-800"
-                            : encounter.status === "done"
-                              ? "border-slate-300 bg-slate-100 text-slate-700"
-                              : "border-slate-300 bg-slate-100 text-slate-700"
-                        }`}
-                    >
-                      {encounter.status}
-                    </span>
+                    <div className="flex flex-col items-start gap-2 sm:items-end">
+                      <span
+                        className={`inline-block rounded-full border px-3 py-1 text-xs ${getStatusClasses(encounter.status)}`}
+                      >
+                        {getStatusLabel(encounter.status, encounter.soapStatus)}
+                      </span>
+
+                      {canStartEncounter ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteEncounter(encounter.id);
+                          }}
+                          className="rounded-lg bg-red-100 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-200"
+                        >
+                          Delete Encounter
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 </button>
               ))}
@@ -557,11 +571,12 @@ export default function ChartView({
                   <input
                     type="text"
                     value={selectedEncounter.chiefComplaint || ""}
-                    onChange={(e) =>
-                      updateEncounterField("chiefComplaint", e.target.value)
-                    }
-                    className="w-full rounded-lg border p-3"
-                    placeholder="Chief complaint"
+                    onChange={(e) => {
+                      if (isEncounterLocked) return;
+                      updateEncounterField("chiefComplaint", e.target.value);
+                    }}
+                    disabled={isEncounterLocked}
+                    className="w-full rounded-lg border p-3 disabled:bg-slate-100"
                   />
                 </div>
 
@@ -576,8 +591,13 @@ export default function ChartView({
                 </p>
 
                 <p>
-                  <span className="font-medium">Current Status:</span>{" "}
+                  <span className="font-medium">Encounter Status:</span>{" "}
                   {selectedEncounter.status}
+                </p>
+
+                <p>
+                  <span className="font-medium">SOAP Status:</span>{" "}
+                  {formatSoapStatus(soapStatus).label}
                 </p>
               </div>
             </div>
@@ -612,11 +632,17 @@ export default function ChartView({
                       className="w-full rounded-lg border p-3"
                     >
                       <option value="">Select medical student</option>
-                      {studentNameOptions?.map((name) => (
-                        <option key={name} value={name}>
-                          {name}
-                        </option>
-                      ))}
+                      {studentNameOptions?.map((name) => {
+                        const isAssigned =
+                          assignedStudentNames?.has(name) &&
+                          assignmentForm.studentName !== name;
+
+                        return (
+                          <option key={name} value={name}>
+                            {isAssigned ? `${name} (Assigned)` : name}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
 
@@ -648,9 +674,38 @@ export default function ChartView({
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-700">
-                      Room
-                    </label>
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <label className="block text-sm font-medium text-slate-700">
+                        Room
+                      </label>
+
+                      {(() => {
+                        const selectedRoom = ROOM_OPTIONS.find(
+                          (room) => String(room.number) === String(assignmentForm.roomNumber)
+                        );
+
+                        if (!selectedRoom) return null;
+
+                        return (
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`inline-block h-2.5 w-2.5 rounded-full ${selectedRoom.occupied ? "bg-red-500" : "bg-green-500"
+                                }`}
+                            />
+
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-xs font-medium ${selectedRoom.occupied
+                                ? "bg-red-100 text-red-700"
+                                : "bg-green-100 text-green-700"
+                                }`}
+                            >
+                              {selectedRoom.occupied ? "Occupied" : "Available"}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
                     <select
                       value={assignmentForm.roomNumber}
                       onChange={(e) =>
@@ -664,10 +719,24 @@ export default function ChartView({
                       <option value="">Select room</option>
                       {ROOM_OPTIONS.map((room) => (
                         <option key={room.number} value={room.number}>
-                          {room.label} — {room.area}
+                          {room.displayLabel || `${room.label} — ${room.area}`}
                         </option>
                       ))}
                     </select>
+
+                    {(() => {
+                      const selectedRoom = ROOM_OPTIONS.find(
+                        (room) => String(room.number) === String(assignmentForm.roomNumber)
+                      );
+
+                      if (!selectedRoom?.occupied || !selectedRoom.occupiedBy) return null;
+
+                      return (
+                        <p className="mt-1 text-right text-xs text-slate-500">
+                          Currently occupied by {selectedRoom.occupiedBy}
+                        </p>
+                      );
+                    })()}
                   </div>
 
                   {isPapRestricted(selectedEncounter) && (
@@ -676,21 +745,21 @@ export default function ChartView({
                     </p>
                   )}
 
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <button
                       onClick={assignEncounter}
                       disabled={leadershipActionLocked}
                       className="rounded-lg bg-green-600 px-4 py-3 text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {leadershipActionLocked ? "Saving..." : "Save Assignment"}
+                      {leadershipActionLocked ? "Saving..." : "Assign / Start Visit"}
                     </button>
 
                     <button
-                      onClick={() => updateEncounterStatus("in_visit")}
+                      onClick={clearEncounterRoom}
                       disabled={leadershipActionLocked}
                       className="rounded-lg bg-blue-600 px-4 py-3 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      Mark In Visit
+                      Complete Visit / Free Room
                     </button>
 
                     <button
@@ -698,23 +767,7 @@ export default function ChartView({
                       disabled={leadershipActionLocked}
                       className="rounded-lg bg-yellow-500 px-4 py-3 text-white hover:bg-yellow-600 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      Mark Ready
-                    </button>
-
-                    <button
-                      onClick={() => updateEncounterStatus("done")}
-                      disabled={leadershipActionLocked}
-                      className="rounded-lg bg-slate-600 px-4 py-3 text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      Mark Completed
-                    </button>
-
-                    <button
-                      onClick={clearEncounterRoom}
-                      disabled={leadershipActionLocked}
-                      className="rounded-lg bg-red-100 px-4 py-3 text-red-700 hover:bg-red-200 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      Clear Room
+                      Return to Ready
                     </button>
                   </div>
                 </div>
@@ -729,11 +782,16 @@ export default function ChartView({
 
                 <button
                   onClick={() => {
+                    if (isEncounterLocked) return;
                     setEditingMedicationId(null);
                     setNewMedication(EMPTY_MEDICATION);
                     setShowMedicationModal(true);
                   }}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+                  disabled={isEncounterLocked}
+                  className={`rounded-lg px-4 py-2 text-white ${isEncounterLocked
+                    ? "bg-slate-400 cursor-not-allowed"
+                    : "bg-blue-600 hover:bg-blue-700"
+                    }`}
                 >
                   + Add Medication
                 </button>
@@ -766,7 +824,10 @@ export default function ChartView({
 
                         <div className="grid grid-cols-3 gap-2 lg:grid-cols-1">
                           <button
-                            onClick={() => toggleMedicationActive(med.id)}
+                            onClick={() => {
+                              if (isEncounterLocked) return;
+                              toggleMedicationActive(med.id);
+                            }}
                             className={`rounded-lg px-4 py-3 text-sm ${med.isActive
                               ? "bg-green-100 text-green-700"
                               : "bg-slate-200 text-slate-600"
@@ -776,14 +837,20 @@ export default function ChartView({
                           </button>
 
                           <button
-                            onClick={() => startEditMedication(med)}
+                            onClick={() => {
+                              if (isEncounterLocked) return;
+                              startEditMedication(med);
+                            }}
                             className="rounded-lg bg-slate-200 px-4 py-3 text-sm text-slate-700"
                           >
                             Edit
                           </button>
 
                           <button
-                            onClick={() => deleteMedication(med.id)}
+                            onClick={() => {
+                              if (isEncounterLocked) return;
+                              deleteMedication(med.id);
+                            }}
                             className="rounded-lg bg-red-100 px-4 py-3 text-sm text-red-700"
                           >
                             Delete
@@ -806,10 +873,12 @@ export default function ChartView({
 
                 <button
                   onClick={() => {
+                    if (isEncounterLocked) return;
                     setEditingAllergyId(null);
                     setNewAllergy(EMPTY_ALLERGY);
                     setShowAllergyModal(true);
                   }}
+                  disabled={isEncounterLocked}
                   className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
                 >
                   + Add Allergy
@@ -838,14 +907,20 @@ export default function ChartView({
 
                         <div className="grid grid-cols-2 gap-2 lg:grid-cols-1">
                           <button
-                            onClick={() => startEditAllergy(allergy)}
+                            onClick={() => {
+                              if (isEncounterLocked) return;
+                              startEditAllergy(allergy);
+                            }}
                             className="rounded-lg bg-slate-200 px-4 py-3 text-sm text-slate-700"
                           >
                             Edit
                           </button>
 
                           <button
-                            onClick={() => deleteAllergy(allergy.id)}
+                            onClick={() => {
+                              if (isEncounterLocked) return;
+                              deleteAllergy(allergy.id);
+                            }}
                             className="rounded-lg bg-red-100 px-4 py-3 text-sm text-red-700"
                           >
                             Delete
@@ -866,7 +941,11 @@ export default function ChartView({
               <h3 className="text-lg font-semibold">Vitals</h3>
 
               <button
-                onClick={saveVitals}
+                onClick={() => {
+                  if (isEncounterLocked) return;
+                  saveVitals();
+                }}
+                disabled={isEncounterLocked}
                 className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
               >
                 {editingVitalsIndex !== null ? "Update Vitals" : "Save Vitals"}
@@ -879,42 +958,49 @@ export default function ChartView({
                 placeholder="BP (e.g. 120/80)"
                 value={currentVitals.bp}
                 onChange={(e) => updateVitalsField("bp", e.target.value)}
+                disabled={isEncounterLocked}
               />
               <input
                 className="rounded-lg border p-3"
                 placeholder="HR"
                 value={currentVitals.hr}
                 onChange={(e) => updateVitalsField("hr", e.target.value)}
+                disabled={isEncounterLocked}
               />
               <input
                 className="rounded-lg border p-3"
                 placeholder="Temp °F"
                 value={currentVitals.temp}
                 onChange={(e) => updateVitalsField("temp", e.target.value)}
+                disabled={isEncounterLocked}
               />
               <input
                 className="rounded-lg border p-3"
                 placeholder="RR"
                 value={currentVitals.rr}
                 onChange={(e) => updateVitalsField("rr", e.target.value)}
+                disabled={isEncounterLocked}
               />
               <input
                 className="rounded-lg border p-3"
                 placeholder="SpO2 %"
                 value={currentVitals.spo2}
                 onChange={(e) => updateVitalsField("spo2", e.target.value)}
+                disabled={isEncounterLocked}
               />
               <input
                 className="rounded-lg border p-3"
                 placeholder="Weight (lb)"
                 value={currentVitals.weight}
                 onChange={(e) => updateVitalsField("weight", e.target.value)}
+                disabled={isEncounterLocked}
               />
               <input
                 className="rounded-lg border p-3"
                 placeholder={`Height (e.g. 5'11")`}
                 value={currentVitals.height}
                 onChange={(e) => updateVitalsField("height", e.target.value)}
+                disabled={isEncounterLocked}
               />
               <input
                 className="rounded-lg border bg-slate-50 p-3"
@@ -927,6 +1013,7 @@ export default function ChartView({
                 placeholder="Pain Score (e.g. 4/10)"
                 value={currentVitals.pain}
                 onChange={(e) => updateVitalsField("pain", e.target.value)}
+                disabled={isEncounterLocked}
               />
             </div>
 
@@ -1039,7 +1126,10 @@ export default function ChartView({
                             <td className="p-3">{entry.pain || "—"}</td>
                             <td className="p-3">
                               <button
-                                onClick={() => startEditVitals(entry, index)}
+                                onClick={() => {
+                                  if (isEncounterLocked) return;
+                                  startEditVitals(entry, index);
+                                }}
                                 className="rounded-lg bg-slate-200 px-4 py-3 text-sm text-slate-700"
                               >
                                 Edit
@@ -1101,8 +1191,12 @@ export default function ChartView({
                         </div>
 
                         <button
-                          onClick={() => startEditVitals(entry, index)}
-                          className="mt-3 rounded-lg bg-slate-200 px-4 py-3 text-sm text-slate-700"
+                          onClick={() => {
+                            if (isEncounterLocked) return;
+                            startEditVitals(entry, index);
+                          }}
+                          disabled={isEncounterLocked}
+                          className="mt-3 rounded-lg bg-slate-200 px-4 py-3 text-sm text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           Edit
                         </button>
@@ -1138,7 +1232,11 @@ export default function ChartView({
                         step="any"
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.istat?.na || ""}
-                        onChange={(e) => updateInHouseLabSection("istat", "na", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("istat", "na", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       />
                     </div>
 
@@ -1149,7 +1247,11 @@ export default function ChartView({
                         step="any"
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.istat?.k || ""}
-                        onChange={(e) => updateInHouseLabSection("istat", "k", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("istat", "k", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       />
                     </div>
 
@@ -1160,7 +1262,11 @@ export default function ChartView({
                         step="any"
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.istat?.cl || ""}
-                        onChange={(e) => updateInHouseLabSection("istat", "cl", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("istat", "cl", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       />
                     </div>
 
@@ -1171,7 +1277,11 @@ export default function ChartView({
                         step="any"
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.istat?.ica || ""}
-                        onChange={(e) => updateInHouseLabSection("istat", "ica", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("istat", "ica", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       />
                     </div>
 
@@ -1182,7 +1292,11 @@ export default function ChartView({
                         step="any"
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.istat?.glucose || ""}
-                        onChange={(e) => updateInHouseLabSection("istat", "glucose", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("istat", "glucose", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       />
                     </div>
 
@@ -1193,7 +1307,11 @@ export default function ChartView({
                         step="any"
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.istat?.tco2 || ""}
-                        onChange={(e) => updateInHouseLabSection("istat", "tco2", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("istat", "tco2", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       />
                     </div>
 
@@ -1204,7 +1322,11 @@ export default function ChartView({
                         step="any"
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.istat?.bun || ""}
-                        onChange={(e) => updateInHouseLabSection("istat", "bun", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("istat", "bun", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       />
                     </div>
 
@@ -1215,7 +1337,11 @@ export default function ChartView({
                         step="any"
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.istat?.creatinine || ""}
-                        onChange={(e) => updateInHouseLabSection("istat", "creatinine", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("istat", "creatinine", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       />
                     </div>
 
@@ -1226,7 +1352,11 @@ export default function ChartView({
                         step="any"
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.istat?.hct || ""}
-                        onChange={(e) => updateInHouseLabSection("istat", "hct", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("istat", "hct", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       />
                     </div>
 
@@ -1237,7 +1367,11 @@ export default function ChartView({
                         step="any"
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.istat?.hgb || ""}
-                        onChange={(e) => updateInHouseLabSection("istat", "hgb", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("istat", "hgb", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       />
                     </div>
 
@@ -1248,7 +1382,11 @@ export default function ChartView({
                         step="any"
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.istat?.anionGap || ""}
-                        onChange={(e) => updateInHouseLabSection("istat", "anionGap", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("istat", "anionGap", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       />
                     </div>
                   </div>
@@ -1264,7 +1402,11 @@ export default function ChartView({
                         step="any"
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.core?.bloodGlucose || ""}
-                        onChange={(e) => updateInHouseLabSection("core", "bloodGlucose", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("core", "bloodGlucose", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       />
                     </div>
 
@@ -1275,7 +1417,11 @@ export default function ChartView({
                         step="any"
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.core?.a1c || ""}
-                        onChange={(e) => updateInHouseLabSection("core", "a1c", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("core", "a1c", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       />
                     </div>
 
@@ -1284,7 +1430,10 @@ export default function ChartView({
                       <select
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.core?.hiv || ""}
-                        onChange={(e) => updateInHouseLabSection("core", "hiv", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("core", "hiv", e.target.value);
+                        }}
                       >
                         <option value="">Select</option>
                         <option value="negative">Negative</option>
@@ -1305,7 +1454,11 @@ export default function ChartView({
                         step="any"
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.lipids?.hdl || ""}
-                        onChange={(e) => updateInHouseLabSection("lipids", "hdl", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("lipids", "hdl", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       />
                     </div>
 
@@ -1316,7 +1469,11 @@ export default function ChartView({
                         step="any"
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.lipids?.triglycerides || ""}
-                        onChange={(e) => updateInHouseLabSection("lipids", "triglycerides", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("lipids", "triglycerides", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       />
                     </div>
 
@@ -1327,7 +1484,11 @@ export default function ChartView({
                         step="any"
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.lipids?.ldl || ""}
-                        onChange={(e) => updateInHouseLabSection("lipids", "ldl", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("lipids", "ldl", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       />
                     </div>
 
@@ -1338,7 +1499,11 @@ export default function ChartView({
                         step="any"
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.lipids?.tcHdl || ""}
-                        onChange={(e) => updateInHouseLabSection("lipids", "tcHdl", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("lipids", "tcHdl", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       />
                     </div>
 
@@ -1349,7 +1514,11 @@ export default function ChartView({
                         step="any"
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.lipids?.totalCholesterol || ""}
-                        onChange={(e) => updateInHouseLabSection("lipids", "totalCholesterol", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("lipids", "totalCholesterol", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       />
                     </div>
                   </div>
@@ -1365,7 +1534,11 @@ export default function ChartView({
                         step="any"
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.microalbumin?.albumin || ""}
-                        onChange={(e) => updateInHouseLabSection("microalbumin", "albumin", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("microalbumin", "albumin", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       />
                     </div>
 
@@ -1376,7 +1549,11 @@ export default function ChartView({
                         step="any"
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.microalbumin?.creatinine || ""}
-                        onChange={(e) => updateInHouseLabSection("microalbumin", "creatinine", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("microalbumin", "creatinine", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       />
                     </div>
 
@@ -1387,7 +1564,11 @@ export default function ChartView({
                         step="any"
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.microalbumin?.acRatio || ""}
-                        onChange={(e) => updateInHouseLabSection("microalbumin", "acRatio", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("microalbumin", "acRatio", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       />
                     </div>
                   </div>
@@ -1401,7 +1582,11 @@ export default function ChartView({
                       <select
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.urinalysis?.leukocytes || ""}
-                        onChange={(e) => updateInHouseLabSection("urinalysis", "leukocytes", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("urinalysis", "leukocytes", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       >
                         {uaOptions.leukocytes.map((option) => (
                           <option key={option || "blank-leukocytes"} value={option}>
@@ -1416,7 +1601,11 @@ export default function ChartView({
                       <select
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.urinalysis?.nitrite || ""}
-                        onChange={(e) => updateInHouseLabSection("urinalysis", "nitrite", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("urinalysis", "nitrite", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       >
                         {uaOptions.nitrite.map((option) => (
                           <option key={option || "blank-nitrite"} value={option}>
@@ -1431,7 +1620,11 @@ export default function ChartView({
                       <select
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.urinalysis?.urobilinogen || ""}
-                        onChange={(e) => updateInHouseLabSection("urinalysis", "urobilinogen", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("urinalysis", "urobilinogen", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       >
                         {uaOptions.urobilinogen.map((option) => (
                           <option key={option || "blank-urobilinogen"} value={option}>
@@ -1446,7 +1639,11 @@ export default function ChartView({
                       <select
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.urinalysis?.protein || ""}
-                        onChange={(e) => updateInHouseLabSection("urinalysis", "protein", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("urinalysis", "protein", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       >
                         {uaOptions.protein.map((option) => (
                           <option key={option || "blank-protein"} value={option}>
@@ -1461,7 +1658,11 @@ export default function ChartView({
                       <select
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.urinalysis?.ph || ""}
-                        onChange={(e) => updateInHouseLabSection("urinalysis", "ph", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("urinalysis", "ph", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       >
                         {uaOptions.ph.map((option) => (
                           <option key={option || "blank-ph"} value={option}>
@@ -1476,7 +1677,11 @@ export default function ChartView({
                       <select
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.urinalysis?.blood || ""}
-                        onChange={(e) => updateInHouseLabSection("urinalysis", "blood", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("urinalysis", "blood", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       >
                         {uaOptions.blood.map((option) => (
                           <option key={option || "blank-blood"} value={option}>
@@ -1491,7 +1696,11 @@ export default function ChartView({
                       <select
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.urinalysis?.specificGravity || ""}
-                        onChange={(e) => updateInHouseLabSection("urinalysis", "specificGravity", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("urinalysis", "specificGravity", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       >
                         {uaOptions.specificGravity.map((option) => (
                           <option key={option || "blank-sg"} value={option}>
@@ -1506,7 +1715,11 @@ export default function ChartView({
                       <select
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.urinalysis?.ketones || ""}
-                        onChange={(e) => updateInHouseLabSection("urinalysis", "ketones", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("urinalysis", "ketones", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       >
                         {uaOptions.ketones.map((option) => (
                           <option key={option || "blank-ketones"} value={option}>
@@ -1521,7 +1734,11 @@ export default function ChartView({
                       <select
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.urinalysis?.bilirubin || ""}
-                        onChange={(e) => updateInHouseLabSection("urinalysis", "bilirubin", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("urinalysis", "bilirubin", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       >
                         {uaOptions.bilirubin.map((option) => (
                           <option key={option || "blank-bilirubin"} value={option}>
@@ -1536,7 +1753,11 @@ export default function ChartView({
                       <select
                         className="w-full rounded-lg border p-2"
                         value={selectedEncounter.inHouseLabs?.urinalysis?.glucose || ""}
-                        onChange={(e) => updateInHouseLabSection("urinalysis", "glucose", e.target.value)}
+                        onChange={(e) => {
+                          if (isEncounterLocked) return;
+                          updateInHouseLabSection("urinalysis", "glucose", e.target.value);
+                        }}
+                        disabled={isEncounterLocked}
                       >
                         {uaOptions.glucose.map((option) => (
                           <option key={option || "blank-ua-glucose"} value={option}>
@@ -1549,54 +1770,55 @@ export default function ChartView({
                 </div>
 
                 <div>
-  <h4 className="mb-3 font-semibold text-slate-800">Rapid Tests</h4>
-  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-    {[
-      { key: "flu", label: "Flu" },
-      { key: "strep", label: "Strep" },
-      { key: "guaiac", label: "Guaiac" },
-      { key: "hcg", label: "HCG" },
-      { key: "mono", label: "Mono" },
-    ].map((test) => {
-      const currentValue = selectedEncounter.inHouseLabs?.rapid?.[test.key] || "";
+                  <h4 className="mb-3 font-semibold text-slate-800">Rapid Tests</h4>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+                    {[
+                      { key: "flu", label: "Flu" },
+                      { key: "strep", label: "Strep" },
+                      { key: "guaiac", label: "Guaiac" },
+                      { key: "hcg", label: "HCG" },
+                      { key: "mono", label: "Mono" },
+                    ].map((test) => {
+                      const currentValue = selectedEncounter.inHouseLabs?.rapid?.[test.key] || "";
 
-      return (
-        <div key={test.key}>
-          <label className="mb-1 block text-sm font-medium text-slate-700">
-            {test.label}
-          </label>
+                      return (
+                        <div key={test.key}>
+                          <label className="mb-1 block text-sm font-medium text-slate-700">
+                            {test.label}
+                          </label>
 
-          <div className="flex gap-2">
-            {["positive", "negative"].map((val) => {
-              const isActive = currentValue === val;
+                          <div className="flex gap-2">
+                            {["positive", "negative"].map((val) => {
+                              const isActive = currentValue === val;
 
-              return (
-                <button
-                  key={val}
-                  type="button"
-                  onClick={() =>
-                    updateInHouseLabSection(
-                      "rapid",
-                      test.key,
-                      currentValue === val ? "" : val
-                    )
-                  }
-                  className={`rounded-lg border px-3 py-2 text-sm ${
-                    isActive
-                      ? "border-blue-600 bg-blue-100 text-blue-800"
-                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  {val === "positive" ? "Positive" : "Negative"}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      );
-    })}
-  </div>
-</div>
+                              return (
+                                <button
+                                  key={val}
+                                  type="button"
+                                  onClick={() => {
+                                    if (isEncounterLocked) return;
+                                    updateInHouseLabSection(
+                                      "rapid",
+                                      test.key,
+                                      currentValue === val ? "" : val
+                                    )
+                                  }
+                                  }
+                                  className={`rounded-lg border px-3 py-2 text-sm ${isActive
+                                    ? "border-blue-600 bg-blue-100 text-blue-800"
+                                    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                                    }`}
+                                >
+                                  {val === "positive" ? "Positive" : "Negative"}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
 
                 <div>
                   <h4 className="mb-3 font-semibold text-slate-800">Nursing Notes</h4>
@@ -1605,7 +1827,11 @@ export default function ChartView({
                     rows={4}
                     placeholder="Nursing notes"
                     value={selectedEncounter.inHouseLabs?.nursingNotes || ""}
-                    onChange={(e) => updateInHouseLabRoot("nursingNotes", e.target.value)}
+                    onChange={(e) => {
+                      if (isEncounterLocked) return;
+                      updateInHouseLabRoot("nursingNotes", e.target.value);
+                    }}
+                    disabled={isEncounterLocked}
                   />
                 </div>
               </div>

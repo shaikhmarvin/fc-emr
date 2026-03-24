@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getStatusLabel } from "../utils";
 export default function BoardDisplay({
   ROOM_OPTIONS,
   roomMap,
@@ -11,15 +12,15 @@ export default function BoardDisplay({
   fluBadge,
   getStatusClasses,
 }) {
-    const [now, setNow] = useState(new Date());
+  const [now, setNow] = useState(new Date());
 
-    useEffect(() => {
-        const interval = setInterval(() => {
-            setNow(new Date());
-        }, 1000);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(new Date());
+    }, 1000);
 
-        return () => clearInterval(interval);
-    }, []);
+    return () => clearInterval(interval);
+  }, []);
   return (
     <div className="min-h-screen bg-slate-900 p-4 text-white">
       <div className="mb-4 flex items-center justify-between">
@@ -30,29 +31,31 @@ export default function BoardDisplay({
           </p>
         </div>
 
-              <div className="text-right text-sm text-slate-300">
-                  {now.toLocaleDateString()}<br />
-                  {now.toLocaleTimeString()}
-              </div>
+        <div className="text-right text-sm text-slate-300">
+          {now.toLocaleDateString()}<br />
+          {now.toLocaleTimeString()}
+        </div>
       </div>
 
       <div className="grid h-[calc(100vh-96px)] grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
         {ROOM_OPTIONS.map((room) => {
           const slot = roomMap[room.number];
-          const occupied = !!slot && slot.encounter.status !== "done";
+          const occupied =
+            !!slot &&
+            slot.encounter.status !== "done" &&
+            slot.encounter.soapStatus !== "signed";
 
           return (
             <div
               key={room.number}
-              className={`min-h-[180px] rounded-2xl border p-3 shadow ${
-                occupied
+              className={`min-h-[180px] rounded-2xl border p-3 shadow ${occupied
                   ? slot.encounter.status === "roomed"
-  ? "border-green-300 bg-green-100 text-slate-900"
-  : slot.encounter.status === "in_visit"
-  ? "border-blue-300 bg-blue-100 text-slate-900"
-  : "border-yellow-300 bg-yellow-100 text-slate-900"
+                    ? "border-green-300 bg-green-100 text-slate-900"
+                    : slot.encounter.status === "in_visit"
+                      ? "border-blue-300 bg-blue-100 text-slate-900"
+                      : "border-yellow-300 bg-yellow-100 text-slate-900"
                   : "border-slate-700 bg-slate-800 text-white"
-              }`}
+                }`}
             >
               <div className="mb-3">
                 <p className="text-xl font-bold">{room.label}</p>
@@ -83,7 +86,7 @@ export default function BoardDisplay({
                       slot.encounter.status
                     )}`}
                   >
-                    {slot.encounter.status}
+                    {getStatusLabel(slot.encounter.status, slot.encounter.soapStatus)}
                   </span>
                 </div>
               ) : (

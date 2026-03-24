@@ -67,11 +67,54 @@ export function isPapRestricted(encounter) {
 }
 
 export function getStatusClasses(status) {
-  if (status === "Waiting") return "bg-yellow-100 text-yellow-800 border-yellow-200";
-  if (status === "Assigned") return "bg-green-100 text-green-800 border-green-200";
-  if (status === "In Visit") return "bg-blue-100 text-blue-800 border-blue-200";
-  if (status === "Completed") return "bg-gray-200 text-gray-700 border-gray-300";
-  return "bg-white text-gray-700 border-gray-200";
+  switch (status) {
+    case "started":
+      return "bg-slate-100 text-slate-700 border-slate-200";
+
+    case "undergrad_complete":
+      return "bg-purple-100 text-purple-800 border-purple-200";
+
+    case "ready":
+      return "bg-blue-100 text-blue-800 border-blue-200";
+
+    case "roomed":
+      return "bg-green-100 text-green-800 border-green-200";
+
+    case "in_visit":
+      return "bg-indigo-100 text-indigo-800 border-indigo-200";
+
+    case "done":
+      return "bg-slate-200 text-slate-600 border-slate-300";
+
+    case "cancelled":
+      return "bg-red-100 text-red-800 border-red-200";
+
+    default:
+      return "bg-white text-slate-700 border-slate-200";
+  }
+}
+
+export function getStatusLabel(status, soapStatus) {
+  if (soapStatus === "signed") return "Closed";
+
+  switch (status) {
+    case "started":
+      return "Intake Started";
+    case "undergrad_complete":
+      return "Undergrad Complete";
+    case "ready":
+      return "Ready for Assignment";
+    case "roomed":
+      return "Roomed";
+    case "in_visit":
+      return "In Visit";
+    case "done":
+      return "Completed";
+    case "cancelled":
+      return "Cancelled";
+    default:
+      return status || "—";
+  }
 }
 
 export function parseHeightToInches(height) {
@@ -283,4 +326,11 @@ export function sortEncountersByDate(encounters = []) {
     const bTime = new Date(b.createdAt || b.clinicDate || 0).getTime();
     return bTime - aTime;
   });
+}
+
+export function isEncounterActive(encounter) {
+  return (
+    encounter.status !== "done" &&
+    encounter.soapStatus !== "signed"
+  );
 }

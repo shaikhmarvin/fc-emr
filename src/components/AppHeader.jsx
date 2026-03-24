@@ -3,8 +3,10 @@ export default function AppHeader({
   selectedPatient,
   getFullPatientName,
   formatDate,
+  user,
+  userRole,
+  handleResetSession,
   isLeadershipView,
-  setIsLeadershipView,
   setIsEditingIntake,
   setEditingPatientId,
   setIntakeForm,
@@ -49,18 +51,30 @@ export default function AppHeader({
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-          <button
-            onClick={() => setIsLeadershipView((prev) => !prev)}
-            className={`rounded-lg px-4 py-2 text-white ${
-              isLeadershipView
-                ? "bg-amber-600 hover:bg-amber-700"
-                : "bg-emerald-600 hover:bg-emerald-700"
-            }`}
-          >
-            {isLeadershipView ? "Leadership View" : "Student View"}
-          </button>
+         
+         <div className="flex items-center gap-3">
+  <div className="text-sm">
+    <p className="font-medium text-slate-800">
+      {user?.user_metadata?.full_name || "User"}
+    </p>
+    <p className="text-xs text-slate-500 capitalize">
+      {userRole?.replace("_", " ")}
+    </p>
+  </div>
 
-          {isLeadershipView && (
+  <span className="rounded-full bg-slate-200 px-3 py-1 text-xs font-medium text-slate-700 capitalize">
+    {userRole?.replace("_", " ")}
+  </span>
+
+  <button
+    onClick={handleResetSession}
+    className="rounded-lg bg-yellow-500 px-3 py-2 text-xs text-white hover:bg-yellow-600"
+  >
+    Refresh Session
+  </button>
+</div>
+
+          {userRole === "leadership" && (
             <button
               onClick={() => {
                 const url = `${window.location.origin}${window.location.pathname}?display=board`;
@@ -71,7 +85,7 @@ export default function AppHeader({
               Open Display Board
             </button>
           )}
-      {isLeadershipView && (
+      {userRole === "leadership" && (
           <button
             onClick={() => {
               setIsEditingIntake(false);

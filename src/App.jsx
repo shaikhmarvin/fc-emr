@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./lib/supabase";
 import { createPatientInSupabase, updatePatientInSupabase } from "./api/patients";
-import { createEncounterInSupabase, updateEncounterInSupabase, createMedicationInSupabase, updateMedicationInSupabase, deleteMedicationInSupabase, } from "./api/encounters";
+import { createEncounterInSupabase, updateEncounterInSupabase, createMedicationInSupabase, updateMedicationInSupabase, deleteMedicationInSupabase, deleteEncounterInSupabase, } from "./api/encounters";
 import { useAuthSession } from "./hooks/useAuthSession";
 import { useClinicData } from "./hooks/useClinicData";
 import { canStartIntake, canManageRoomBoard, canEditFormulary, canPrescribe, canChart, } from "./utils/permissions";
@@ -223,54 +223,54 @@ export default function App() {
   }, [session]);
 
   async function addFormularyItem(itemForm) {
-  try {
-    const saved = await createFormularyItemInSupabase(itemForm);
-    setFormulary((prev) => [saved, ...prev]);
-  } catch (error) {
-    console.error("Failed to add formulary item:", error);
-    alert(error.message);
+    try {
+      const saved = await createFormularyItemInSupabase(itemForm);
+      setFormulary((prev) => [saved, ...prev]);
+    } catch (error) {
+      console.error("Failed to add formulary item:", error);
+      alert(error.message);
+    }
   }
-}
 
-async function editFormularyItem(itemId, itemForm) {
-  try {
-    const saved = await updateFormularyItemInSupabase(itemId, itemForm);
-    setFormulary((prev) =>
-      prev.map((item) => (item.id === itemId ? saved : item))
-    );
-  } catch (error) {
-    console.error("Failed to update formulary item:", error);
-    alert(error.message);
+  async function editFormularyItem(itemId, itemForm) {
+    try {
+      const saved = await updateFormularyItemInSupabase(itemId, itemForm);
+      setFormulary((prev) =>
+        prev.map((item) => (item.id === itemId ? saved : item))
+      );
+    } catch (error) {
+      console.error("Failed to update formulary item:", error);
+      alert(error.message);
+    }
   }
-}
 
-async function removeFormularyItem(itemId) {
-  try {
-    await deleteFormularyItemInSupabase(itemId);
-    setFormulary((prev) => prev.filter((item) => item.id !== itemId));
-  } catch (error) {
-    console.error("Failed to delete formulary item:", error);
-    alert(error.message);
+  async function removeFormularyItem(itemId) {
+    try {
+      await deleteFormularyItemInSupabase(itemId);
+      setFormulary((prev) => prev.filter((item) => item.id !== itemId));
+    } catch (error) {
+      console.error("Failed to delete formulary item:", error);
+      alert(error.message);
+    }
   }
-}
 
-async function toggleFormularyStock(itemId) {
-  const item = formulary.find((entry) => entry.id === itemId);
-  if (!item) return;
+  async function toggleFormularyStock(itemId) {
+    const item = formulary.find((entry) => entry.id === itemId);
+    if (!item) return;
 
-  try {
-    const saved = await updateFormularyItemInSupabase(itemId, {
-      inStock: !item.inStock,
-    });
+    try {
+      const saved = await updateFormularyItemInSupabase(itemId, {
+        inStock: !item.inStock,
+      });
 
-    setFormulary((prev) =>
-      prev.map((entry) => (entry.id === itemId ? saved : entry))
-    );
-  } catch (error) {
-    console.error("Failed to toggle stock:", error);
-    alert(error.message);
+      setFormulary((prev) =>
+        prev.map((entry) => (entry.id === itemId ? saved : entry))
+      );
+    } catch (error) {
+      console.error("Failed to toggle stock:", error);
+      alert(error.message);
+    }
   }
-}
 
   useEffect(() => {
     if (!session?.user?.id) return;
@@ -280,8 +280,6 @@ async function toggleFormularyStock(itemId) {
         .from("profiles")
         .update({ last_seen_at: new Date().toISOString() })
         .eq("id", session.user.id);
-
-      loadProfiles(); // keep UI fresh
     }, 5 * 60 * 1000);
 
     return () => clearInterval(interval);
@@ -292,6 +290,7 @@ async function toggleFormularyStock(itemId) {
   const canModifyFormulary = canEditFormulary(userRole);
   const canPrescribeMeds = canPrescribe(userRole);
   const canChartInEncounter = canChart(userRole);
+  const isLeadership = userRole === "leadership";
   const [authMode, setAuthMode] = useState("login");
   const [showPatientInfoEditModal, setShowPatientInfoEditModal] = useState(false);
   const [dashboardSelectedPatientId, setDashboardSelectedPatientId] = useState(null);
@@ -339,7 +338,7 @@ async function toggleFormularyStock(itemId) {
     if (!encounter) return false;
 
     return (
-      encounter.soapStatus === "awaiting_attending" &&
+      !!encounter.upperLevelSignedAt && !encounter.attendingSignedAt &&
       (role === "student" ||
         role === "upper_level" ||
         role === "leadership" ||
@@ -446,32 +445,32 @@ async function toggleFormularyStock(itemId) {
   const [registrationEncounterId, setRegistrationEncounterId] = useState(null);
 
   const [activeView, setActiveView] = useState("dashboard");
-  
+
   useEffect(() => {
-  if (userRole === "undergraduate") {
-    setActiveView("undergrad-intake");
-    return;
-  }
+    if (userRole === "undergraduate") {
+      setActiveView("undergrad-intake");
+      return;
+    }
 
-  if (userRole === "pharmacy") {
-    setActiveView("formulary");
-    return;
-  }
+    if (userRole === "pharmacy") {
+      setActiveView("formulary");
+      return;
+    }
 
-  if (
-    userRole === "student" ||
-    userRole === "upper_level" ||
-    userRole === "attending"
-  ) {
-    setActiveView("queue");
-    return;
-  }
+    if (
+      userRole === "student" ||
+      userRole === "upper_level" ||
+      userRole === "attending"
+    ) {
+      setActiveView("queue");
+      return;
+    }
 
-  setActiveView("dashboard");
-}, [userRole]);
-  
+    setActiveView("dashboard");
+  }, [userRole]);
 
-const [clinicSummary, setClinicSummary] = useState({
+
+  const [clinicSummary, setClinicSummary] = useState({
     refillCount: "",
     labsCount: "",
     mentalHealthCount: "",
@@ -550,60 +549,105 @@ const [clinicSummary, setClinicSummary] = useState({
   }
 
   useEffect(() => {
-  if (!session || formularyLoaded) return;
+    if (!session || formularyLoaded) return;
 
-  async function loadFormulary() {
-    try {
-      const rows = await fetchFormularyItems();
-      console.log("FORMULARY FROM DB:", rows); // debug
-      setFormulary(rows);
-      setFormularyLoaded(true);
-    } catch (error) {
-      console.error("Failed to load formulary:", error);
+    async function loadFormulary() {
+      try {
+        const rows = await fetchFormularyItems();
+        console.log("FORMULARY FROM DB:", rows); // debug
+        setFormulary(rows);
+        setFormularyLoaded(true);
+      } catch (error) {
+        console.error("Failed to load formulary:", error);
+      }
     }
-  }
 
-  loadFormulary();
-}, [session, formularyLoaded]);
+    loadFormulary();
+  }, [session, formularyLoaded]);
 
-useEffect(() => {
-  if (!session) return;
+  useEffect(() => {
+    if (!session) return;
 
-  const channel = supabase
-    .channel("formulary-realtime")
-    .on(
-      "postgres_changes",
-      { event: "INSERT", schema: "public", table: "formulary_items" },
-      (payload) => {
-        setFormulary((prev) => [payload.new, ...prev]);
-      }
-    )
-    .on(
-      "postgres_changes",
-      { event: "UPDATE", schema: "public", table: "formulary_items" },
-      (payload) => {
-        setFormulary((prev) =>
-          prev.map((item) =>
-            item.id === payload.new.id ? payload.new : item
-          )
-        );
-      }
-    )
-    .on(
-      "postgres_changes",
-      { event: "DELETE", schema: "public", table: "formulary_items" },
-      (payload) => {
-        setFormulary((prev) =>
-          prev.filter((item) => item.id !== payload.old.id)
-        );
-      }
-    )
-    .subscribe();
+    const channel = supabase
+      .channel("formulary-realtime")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "formulary_items" },
+        (payload) => {
+          setFormulary((prev) => [payload.new, ...prev]);
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "formulary_items" },
+        (payload) => {
+          setFormulary((prev) =>
+            prev.map((item) =>
+              item.id === payload.new.id ? payload.new : item
+            )
+          );
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "formulary_items" },
+        (payload) => {
+          setFormulary((prev) =>
+            prev.filter((item) => item.id !== payload.old.id)
+          );
+        }
+      )
+      .subscribe();
 
-  return () => {
-    supabase.removeChannel(channel);
-  };
-}, [session]);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) return;
+
+    const channel = supabase
+      .channel("encounters-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "encounters" },
+        (payload) => {
+          const row = payload.new || payload.old;
+          if (!row) return;
+
+          setPatients((prev) =>
+            prev.map((patient) => {
+              if (patient.id !== row.patient_id) return patient;
+
+              return {
+                ...patient,
+                encounters: patient.encounters.map((encounter) =>
+                  encounter.id === row.id
+                    ? {
+                      ...encounter,
+                      status: row.status || encounter.status,
+                      soapStatus: row.soap_status || encounter.soapStatus,
+                      upperLevelSignedAt: row.upper_level_signed_at || null,
+                      upperLevelSignedBy: row.upper_level_signed_by || null,
+                      attendingSignedAt: row.attending_signed_at || null,
+                      attendingSignedBy: row.attending_signed_by || null,
+                      soapAuthorId: row.soap_author_id || encounter.soapAuthorId,
+                      soapAuthorRole: row.soap_author_role || encounter.soapAuthorRole,
+                    }
+                    : encounter
+                ),
+              };
+            })
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session]);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showIntakeModal, setShowIntakeModal] = useState(false);
@@ -795,8 +839,8 @@ useEffect(() => {
   ]);
 
   const [selectedClinicDate, setSelectedClinicDate] = useState(
-  getLocalDateInputValue()
-);
+    getLocalDateInputValue()
+  );
   const [, setNow] = useState(Date.now());
   const selectedPatient = patients.find((p) => p.id === selectedPatientId) || null;
   const selectedEncounter =
@@ -810,7 +854,9 @@ useEffect(() => {
   }, [selectedEncounter?.id]);
 
   const canSignAsUpperLevel = canUpperLevelSignSoap(userRole, selectedEncounter);
-  const canSignAsAttending = canAttendingSignSoap(userRole, selectedEncounter);
+  const canSignAsAttending =
+    selectedEncounter?.soapStatus === "awaiting_attending" &&
+    !selectedEncounter?.attendingSignedAt;
   const canSubmitForUpperLevel = canSubmitSoapForUpperLevel(
     userRole,
     selectedEncounter
@@ -1212,10 +1258,14 @@ useEffect(() => {
   }
 
   useEffect(() => {
-    if (session) {
+    loadProfiles(); // initial load
+
+    const interval = setInterval(() => {
       loadProfiles();
-    }
-  }, [session]);
+    }, 30000); // every 30 seconds
+
+    return () => clearInterval(interval);
+  }, []);
 
   const profileNameMap = useMemo(() => {
     const map = {};
@@ -1255,7 +1305,13 @@ useEffect(() => {
     const queueBaseRows = filteredEncounterRows.filter(
       ({ encounter }) =>
         normalizeClinicDate(encounter.clinicDate) === todayClinicDate &&
-        encounter.status === "ready"
+        (
+          encounter.status === "ready" ||
+          encounter.status === "roomed" ||
+          encounter.status === "in_visit"
+        ) &&
+        encounter.status !== "done" &&
+        encounter.soapStatus !== "signed"
     );
 
     const currentUserName = (
@@ -1326,11 +1382,15 @@ useEffect(() => {
   ]);
 
   const assignedCount = filteredEncounterRows.filter(
-    ({ encounter }) => encounter.status === "roomed"
+    ({ encounter }) =>
+      (encounter.status === "roomed" || encounter.status === "in_visit") &&
+      encounter.soapStatus !== "signed"
   ).length;
 
   const inVisitCount = filteredEncounterRows.filter(
-    ({ encounter }) => encounter.status === "in_visit"
+    ({ encounter }) =>
+      encounter.status === "in_visit" &&
+      encounter.soapStatus !== "signed"
   ).length;
 
 
@@ -1343,7 +1403,8 @@ useEffect(() => {
     visibleEncounterRows.forEach(({ patient, encounter }) => {
       if (
         encounter.roomNumber &&
-        encounter.status !== "Completed"
+        encounter.status !== "done" &&
+        encounter.soapStatus !== "signed"
       ) {
         map[Number(encounter.roomNumber)] = { patient, encounter };
       }
@@ -1351,6 +1412,31 @@ useEffect(() => {
 
     return map;
   }, [visibleEncounterRows]);
+
+  const roomDropdownOptions = useMemo(() => {
+    return ROOM_OPTIONS.map((room) => {
+      const slot = roomMap[room.number];
+      const occupied =
+        Boolean(slot) &&
+        slot?.encounter?.status !== "done" &&
+        slot?.encounter?.soapStatus !== "signed";
+
+      const occupiedBy =
+        occupied && slot?.patient
+          ? getPatientBoardName(slot.patient)
+          : "";
+
+      return {
+        ...room,
+        occupied,
+        occupiedBy,
+        statusLabel: occupied ? "Occupied" : "Available",
+        displayLabel: `${room.label} — ${room.area}`,
+      };
+    });
+  }, [roomMap]);
+
+
   function updateIntakeField(field, value) {
     if (field === "dob") {
       const age = calculateAge(value);
@@ -1423,7 +1509,9 @@ useEffect(() => {
   }, [profiles]);
 
   const activeStudents = useMemo(() => {
-    return activeTodayProfiles.filter((profile) => profile.role === "student");
+    return activeTodayProfiles.filter(
+      (profile) => profile.role === "student" || profile.role === "leadership"
+    );
   }, [activeTodayProfiles]);
 
   const studentNameOptions = useMemo(() => {
@@ -1434,14 +1522,35 @@ useEffect(() => {
     const inactiveNames = profiles
       .filter(
         (profile) =>
-          profile.role === "student" &&
+          (profile.role === "student" || profile.role === "leadership") &&
           !activeStudents.some((active) => active.id === profile.id)
       )
       .map((profile) => (profile.full_name || "").trim())
       .filter(Boolean);
 
-    return [...activeNames.sort((a, b) => a.localeCompare(b)), ...inactiveNames.sort((a, b) => a.localeCompare(b))];
+    return [
+      ...activeNames.sort((a, b) => a.localeCompare(b)),
+      ...inactiveNames.sort((a, b) => a.localeCompare(b)),
+    ];
   }, [profiles, activeStudents]);
+
+  const assignedStudentNames = useMemo(() => {
+    const names = new Set();
+
+    allEncounterRows.forEach(({ encounter }) => {
+      const name = (encounter.assignedStudent || "").trim();
+
+      if (
+        name &&
+        encounter.status !== "done" &&
+        encounter.soapStatus !== "signed"
+      ) {
+        names.add(name);
+      }
+    });
+
+    return names;
+  }, [allEncounterRows]);
 
   const activeUpperLevels = useMemo(() => {
     return activeTodayProfiles.filter((profile) => profile.role === "upper_level");
@@ -1973,6 +2082,7 @@ useEffect(() => {
   }
   async function startNewEncounter() {
     if (!selectedPatient) return;
+    if (!(userRole === "leadership" || userRole === "undergraduate")) return;
 
     const newEncounter = {
       id: Date.now(),
@@ -2052,6 +2162,43 @@ useEffect(() => {
       window.alert(`Supabase save error: ${error.message}`);
     }
   }
+
+  async function deleteEncounter(encounterId) {
+    if (!selectedPatient || !encounterId) return;
+    if (!(userRole === "leadership" || userRole === "undergraduate")) return;
+
+    const confirmed = window.confirm(
+      "Delete this encounter? This cannot be undone."
+    );
+    if (!confirmed) return;
+
+    try {
+      await deleteEncounterInSupabase(encounterId);
+
+      const remainingEncounters = selectedPatient.encounters.filter(
+        (encounter) => encounter.id !== encounterId
+      );
+
+      setPatients((prev) =>
+        prev.map((patient) =>
+          patient.id === selectedPatient.id
+            ? {
+              ...patient,
+              encounters: remainingEncounters,
+            }
+            : patient
+        )
+      );
+
+      if (selectedEncounterId === encounterId) {
+        setSelectedEncounterId(remainingEncounters[0]?.id || null);
+      }
+    } catch (error) {
+      console.error("Failed to delete encounter:", error);
+      alert(`Failed to delete encounter: ${error.message}`);
+    }
+  }
+
   function lockLeadershipActions() {
     setLeadershipActionLocked(true);
     window.setTimeout(() => {
@@ -2078,34 +2225,49 @@ useEffect(() => {
   }
 
   async function saveInHouseLabs(nextLabs) {
-  if (!selectedPatient || !selectedEncounter) return;
+    if (!selectedPatient || !selectedEncounter) return;
 
-  try {
-    await updateEncounterInSupabase(selectedEncounter.id, {
-      inHouseLabs: nextLabs,
-    });
+    try {
+      await updateEncounterInSupabase(selectedEncounter.id, {
+        inHouseLabs: nextLabs,
+      });
 
-    updateEncounterField("inHouseLabs", nextLabs);
-  } catch (error) {
-    console.error("Failed to save in-house labs:", error);
-    alert(`Failed to save in-house labs: ${error.message}`);
+      updateEncounterField("inHouseLabs", nextLabs);
+    } catch (error) {
+      console.error("Failed to save in-house labs:", error);
+      alert(`Failed to save in-house labs: ${error.message}`);
+    }
   }
-}
 
-async function saveSendOutLabs(nextLabs) {
-  if (!selectedPatient || !selectedEncounter) return;
+  async function saveSendOutLabs(nextLabs) {
+    if (!selectedPatient || !selectedEncounter) return;
 
-  try {
-    await updateEncounterInSupabase(selectedEncounter.id, {
-      sendOutLabs: nextLabs,
-    });
+    try {
+      await updateEncounterInSupabase(selectedEncounter.id, {
+        sendOutLabs: nextLabs,
+      });
 
-    updateEncounterField("sendOutLabs", nextLabs);
-  } catch (error) {
-    console.error("Failed to save send-out labs:", error);
-    alert(`Failed to save send-out labs: ${error.message}`);
+      updateEncounterField("sendOutLabs", nextLabs);
+    } catch (error) {
+      console.error("Failed to save send-out labs:", error);
+      alert(`Failed to save send-out labs: ${error.message}`);
+    }
   }
-}
+
+  async function applyEncounterTransition(encounterId, updates) {
+    await updateEncounterInSupabase(encounterId, updates);
+
+    setPatients((prev) =>
+      prev.map((patient) => ({
+        ...patient,
+        encounters: patient.encounters.map((encounter) =>
+          encounter.id === encounterId
+            ? { ...encounter, ...updates }
+            : encounter
+        ),
+      }))
+    );
+  }
 
   async function assignEncounterFromQueue(encounterId, updates) {
     if (!canManageRooms) return;
@@ -2132,66 +2294,45 @@ async function saveSendOutLabs(nextLabs) {
         ? updates.roomNumber
         : encounter.roomNumber || "";
 
-    const numericRoom = nextRoomNumber ? Number(nextRoomNumber) : null;
+    if (!nextRoomNumber) {
+      alert("Please select a room before assigning this patient.");
+      return;
+    }
 
-    if (numericRoom !== null && !canAssignRoom(encounter, numericRoom)) {
+    if (!nextStudent && !nextUpperLevel) {
+      alert("Please assign a student or upper level before starting the visit.");
+      return;
+    }
+
+    const numericRoom = Number(nextRoomNumber);
+
+    if (!canAssignRoom(encounter, numericRoom)) {
       alert("Pap smear patients cannot be assigned to Room 9 or Room 10.");
       return;
     }
 
-    if (numericRoom !== null) {
-      const takenByOtherEncounter = allEncounterRows.some(
-        ({ patient: otherPatient, encounter: otherEncounter }) =>
-          otherPatient.id !== patient.id &&
-          otherEncounter.id !== encounter.id &&
-          Number(otherEncounter.roomNumber) === numericRoom &&
-          otherEncounter.status !== "Completed"
-      );
+    const takenByOtherEncounter = allEncounterRows.some(
+      ({ patient: otherPatient, encounter: otherEncounter }) =>
+        otherPatient.id !== patient.id &&
+        otherEncounter.id !== encounter.id &&
+        Number(otherEncounter.roomNumber) === numericRoom &&
+        otherEncounter.status !== "done" &&
+        otherEncounter.soapStatus !== "signed"
+    );
 
-      if (takenByOtherEncounter) {
-        alert("That room is already in use.");
-        return;
-      }
+    if (takenByOtherEncounter) {
+      alert("That room is already in use.");
+      return;
     }
 
-    const hasAnyAssignment = !!nextStudent || !!nextUpperLevel || !!nextRoomNumber;
-
     try {
-      await updateEncounterInSupabase(encounterId, {
+      await applyEncounterTransition(encounterId, {
         assignedStudent: nextStudent,
         assignedUpperLevel: nextUpperLevel,
-        roomNumber: nextRoomNumber || null,
-        status: hasAnyAssignment
-          ? encounter.status === "ready"
-            ? "roomed"
-            : encounter.status
-          : encounter.status,
+        roomNumber: String(numericRoom),
+        status: "in_visit",
       });
 
-      setPatients((prev) =>
-        prev.map((p) =>
-          p.id === patient.id
-            ? {
-              ...p,
-              encounters: p.encounters.map((e) =>
-                e.id === encounterId
-                  ? {
-                    ...e,
-                    assignedStudent: nextStudent,
-                    assignedUpperLevel: nextUpperLevel,
-                    roomNumber: nextRoomNumber || "",
-                    status: hasAnyAssignment
-                      ? e.status === "ready"
-                        ? "roomed"
-                        : e.status
-                      : e.status,
-                  }
-                  : e
-              ),
-            }
-            : p
-        )
-      );
     } catch (error) {
       console.error("Failed to assign encounter from queue:", error);
       alert(`Failed to save assignment: ${error.message}`);
@@ -2202,66 +2343,48 @@ async function saveSendOutLabs(nextLabs) {
     if (!canManageRooms) return;
     if (leadershipActionLocked) return;
     if (!selectedPatient || !selectedEncounter) return;
-    if (
-      !assignmentForm.studentName &&
-      !assignmentForm.upperLevelName &&
-      !assignmentForm.roomNumber
-    ) return;
+
+    if (!assignmentForm.roomNumber) {
+      alert("Please select a room before assigning this patient.");
+      return;
+    }
+
+    if (!assignmentForm.studentName && !assignmentForm.upperLevelName) {
+      alert("Please assign a student or upper level before starting the visit.");
+      return;
+    }
 
     lockLeadershipActions();
 
-    const roomNumber = assignmentForm.roomNumber
-      ? Number(assignmentForm.roomNumber)
-      : null;
+    const roomNumber = Number(assignmentForm.roomNumber);
 
-    if (roomNumber !== null) {
-      if (!canAssignRoom(selectedEncounter, roomNumber)) {
-        alert("Pap smear patients cannot be assigned to Room 9 or Room 10.");
-        return;
-      }
+    if (!canAssignRoom(selectedEncounter, roomNumber)) {
+      alert("Pap smear patients cannot be assigned to Room 9 or Room 10.");
+      return;
+    }
 
-      const takenByOtherEncounter = allEncounterRows.some(
-        ({ patient, encounter }) =>
-          patient.id !== selectedPatient.id &&
-          encounter.id !== selectedEncounter.id &&
-          Number(encounter.roomNumber) === roomNumber &&
-          encounter.status !== "Completed"
-      );
+    const takenByOtherEncounter = allEncounterRows.some(
+      ({ patient, encounter }) =>
+        patient.id !== selectedPatient.id &&
+        encounter.id !== selectedEncounter.id &&
+        Number(encounter.roomNumber) === roomNumber &&
+        encounter.status !== "done" &&
+        encounter.soapStatus !== "signed"
+    );
 
-      if (takenByOtherEncounter) {
-        alert("That room is already in use.");
-        return;
-      }
+    if (takenByOtherEncounter) {
+      alert("That room is already in use.");
+      return;
     }
 
     try {
-      await updateEncounterInSupabase(selectedEncounter.id, {
-        roomNumber: roomNumber !== null ? String(roomNumber) : null,
-        status: "roomed",
+      await applyEncounterTransition(selectedEncounter.id, {
+        roomNumber: String(roomNumber),
+        status: "in_visit",
         assignedStudent: assignmentForm.studentName,
         assignedUpperLevel: assignmentForm.upperLevelName,
       });
 
-      setPatients((prev) =>
-        prev.map((patient) =>
-          patient.id === selectedPatient.id
-            ? {
-              ...patient,
-              encounters: patient.encounters.map((encounter) =>
-                encounter.id === selectedEncounter.id
-                  ? {
-                    ...encounter,
-                    assignedStudent: assignmentForm.studentName,
-                    assignedUpperLevel: assignmentForm.upperLevelName,
-                    roomNumber: roomNumber !== null ? String(roomNumber) : null,
-                    status: "roomed",
-                  }
-                  : encounter
-              ),
-            }
-            : patient
-        )
-      );
     } catch (error) {
       console.error("Failed to assign encounter:", error);
       alert(`Failed to assign room: ${error.message}`);
@@ -2286,7 +2409,8 @@ async function saveSendOutLabs(nextLabs) {
         patient.id !== selectedPatient.id &&
         encounter.id !== selectedEncounter.id &&
         Number(encounter.roomNumber) === numericRoom &&
-        encounter.status !== "Completed"
+        encounter.status !== "done" &&
+        encounter.soapStatus !== "signed"
     );
 
     if (takenByOtherEncounter) {
@@ -2298,44 +2422,6 @@ async function saveSendOutLabs(nextLabs) {
       ...prev,
       roomNumber: String(numericRoom),
     }));
-    try {
-      await updateEncounterInSupabase(selectedEncounter.id, {
-        roomNumber: String(numericRoom),
-        status: "roomed",
-        assignedStudent:
-          assignmentForm.studentName || selectedEncounter.assignedStudent || "",
-        assignedUpperLevel:
-          assignmentForm.upperLevelName || selectedEncounter.assignedUpperLevel || "",
-      });
-    } catch (error) {
-      console.error("Failed to assign encounter to room:", error);
-      alert(`Failed to assign room: ${error.message}`);
-      return;
-    }
-    setPatients((prev) =>
-      prev.map((patient) =>
-        patient.id === selectedPatient.id
-          ? {
-            ...patient,
-            encounters: patient.encounters.map((encounter) =>
-              encounter.id === selectedEncounter.id
-                ? {
-                  ...encounter,
-                  roomNumber: String(numericRoom),
-                  assignedStudent:
-                    assignmentForm.studentName || encounter.assignedStudent || "",
-                  assignedUpperLevel:
-                    assignmentForm.upperLevelName || encounter.assignedUpperLevel || "",
-                  status: "roomed",
-                }
-                : encounter
-            ),
-          }
-          : patient
-      )
-    );
-
-    alert(`Assigned ${getFullPatientName(selectedPatient)} to room ${numericRoom}.`);
   }
   async function deletePatientCompletely(patientId) {
     const confirmed = window.confirm(
@@ -2360,9 +2446,13 @@ async function saveSendOutLabs(nextLabs) {
 
     lockLeadershipActions();
 
+    const updates =
+      status === "ready"
+        ? { status: "ready", roomNumber: "" }
+        : { status };
+
     try {
-      await updateEncounterInSupabase(selectedEncounter.id, { status });
-      updateEncounterField("status", status);
+      await applyEncounterTransition(selectedEncounter.id, updates);
     } catch (error) {
       console.error("Failed to update encounter status:", error);
       alert(`Failed to update status: ${error.message}`);
@@ -2371,45 +2461,26 @@ async function saveSendOutLabs(nextLabs) {
   async function clearEncounterRoom() {
     if (!canManageRooms) return;
     if (leadershipActionLocked) return;
-    lockLeadershipActions();
     if (!selectedPatient || !selectedEncounter) return;
+
+    lockLeadershipActions();
+
     try {
-      await updateEncounterInSupabase(selectedEncounter.id, {
+      await applyEncounterTransition(selectedEncounter.id, {
         roomNumber: "",
-        status: "ready",
+        status: "done",
       });
+
     } catch (error) {
       console.error("Failed to clear encounter room:", error);
       alert(`Failed to clear room: ${error.message}`);
       return;
     }
 
-    setPatients((prev) =>
-      prev.map((patient) =>
-        patient.id === selectedPatient.id
-          ? {
-            ...patient,
-            encounters: patient.encounters.map((encounter) =>
-              encounter.id === selectedEncounter.id
-                ? {
-                  ...encounter,
-                  roomNumber: "",
-                  assignedStudent: "",
-                  assignedUpperLevel: "",
-                  status: "ready",
-                }
-                : encounter
-            ),
-          }
-          : patient
-      )
-    );
 
     setAssignmentForm((prev) => ({
       ...prev,
       roomNumber: "",
-      studentName: "",
-      upperLevelName: "",
     }));
   }
 
@@ -2915,9 +2986,15 @@ async function saveSendOutLabs(nextLabs) {
   async function saveSoapNote(showConfirmation = true) {
     if (!selectedPatient || !selectedEncounter || !session?.user?.id || !userRole) return;
 
-    const authorId = selectedEncounter.soapAuthorId || session.user.id;
-    const authorRole = selectedEncounter.soapAuthorRole || userRole;
     const currentSoapStatus = selectedEncounter.soapStatus || "draft";
+
+    const authorId = showConfirmation
+      ? session.user.id
+      : (selectedEncounter.soapAuthorId || session.user.id);
+
+    const authorRole = showConfirmation
+      ? userRole
+      : (selectedEncounter.soapAuthorRole || userRole);
 
     try {
       setSoapBusy(true);
@@ -3147,6 +3224,7 @@ async function saveSendOutLabs(nextLabs) {
         soapStatus: "awaiting_attending",
         signedAt,
       });
+      await loadProfiles();
       await loadAuditLog();
       showSoapMessage("SOAP note signed by upper-level reviewer.");
     } catch (error) {
@@ -3188,6 +3266,7 @@ async function saveSendOutLabs(nextLabs) {
         attendingSignedBy: session.user.id,
         attendingSignedAt: signedAt,
         soapStatus: "signed",
+        status: "done",
       });
 
       setPatients((prev) =>
@@ -3204,6 +3283,7 @@ async function saveSendOutLabs(nextLabs) {
                     attendingSignedBy: session.user.id,
                     attendingSignedAt: signedAt,
                     soapStatus: "signed",
+                    status: "done",
                     soapSavedAt: new Date().toLocaleString(),
                   }
                   : encounter
@@ -3239,9 +3319,16 @@ async function saveSendOutLabs(nextLabs) {
     }
 
     try {
-      const attending = activeAttendings.find(
+      const attending = profiles.find(
         (a) => String(a.id) === String(attendingId)
       );
+
+      console.log("PIN DEBUG", {
+        attendingIdPassedIn: attendingId,
+        pinPassedIn: pin,
+        matchedAttending: attending,
+        storedPin: attending?.signature_pin_hash,
+      });
 
       if (!attending) {
         showSoapMessage("Attending not found.");
@@ -3253,7 +3340,7 @@ async function saveSendOutLabs(nextLabs) {
         return false;
       }
 
-      if (String(attending.signature_pin_hash || "") !== String(pin)) {
+      if (String(attending.signature_pin_hash || "").trim() !== String(pin).trim()) {
         showSoapMessage("Incorrect PIN.");
         return false;
       }
@@ -3276,6 +3363,7 @@ async function saveSendOutLabs(nextLabs) {
         attendingSignedBy: attending.id,
         attendingSignedAt: signedAt,
         soapStatus: "signed",
+        status: "done",
       });
 
       setPatients((prev) =>
@@ -3292,6 +3380,7 @@ async function saveSendOutLabs(nextLabs) {
                     attendingSignedBy: attending.id,
                     attendingSignedAt: signedAt,
                     soapStatus: "signed",
+                    status: "done",
                     soapSavedAt: new Date().toLocaleString(),
                   }
                   : encounter
@@ -3317,6 +3406,7 @@ async function saveSendOutLabs(nextLabs) {
 
       await loadAuditLog();
       showSoapMessage("SOAP note signed by attending.");
+      return true;
     } catch (error) {
       console.error("Failed to sign SOAP with PIN:", error);
       showSoapMessage(`Failed to sign SOAP: ${error.message}`);
@@ -3605,25 +3695,7 @@ async function saveSendOutLabs(nextLabs) {
       ],
     });
 
-    async function handleDeleteUser(userId) {
-      const confirmed = window.confirm(
-        "Delete this user completely? This removes login access."
-      );
-      if (!confirmed) return;
 
-      try {
-        const { error } = await supabase.functions.invoke("delete-user", {
-          body: { userId },
-        });
-
-        if (error) throw error;
-
-        setProfiles((prev) => prev.filter((p) => p.id !== userId));
-      } catch (error) {
-        console.error("Failed to delete user:", error);
-        alert(error.message);
-      }
-    }
 
     const doc = new Document({
       sections: [
@@ -3689,6 +3761,26 @@ async function saveSendOutLabs(nextLabs) {
 
     const blob = await Packer.toBlob(doc);
     saveAs(blob, `Clinic Summary - ${clinicDateLabel}.docx`);
+  }
+
+  async function handleDeleteUser(userId) {
+    const confirmed = window.confirm(
+      "Delete this user completely? This removes login access."
+    );
+    if (!confirmed) return;
+
+    try {
+      const { error } = await supabase.functions.invoke("delete-user", {
+        body: { userId },
+      });
+
+      if (error) throw error;
+
+      setProfiles((prev) => prev.filter((p) => p.id !== userId));
+    } catch (error) {
+      console.error("Failed to delete user:", error);
+      alert(error.message);
+    }
   }
 
   const sortedMedications = selectedEncounter
@@ -3965,6 +4057,9 @@ async function saveSendOutLabs(nextLabs) {
           selectedPatient={selectedPatient}
           getFullPatientName={getFullPatientName}
           formatDate={formatDate}
+          user={session?.user}
+          userRole={userRole}
+          handleResetSession={handleResetSession}
           isLeadershipView={isLeadershipView}
           setIsLeadershipView={setIsLeadershipView}
           setIsEditingIntake={setIsEditingIntake}
@@ -3993,6 +4088,7 @@ async function saveSendOutLabs(nextLabs) {
               setSelectedClinicDate={setSelectedClinicDate}
               filteredVisiblePatients={filteredVisiblePatients}
               visibleEncounterRows={visibleEncounterRows}
+              allEncounterRows={allEncounterRows}
               searchForm={searchForm}
               setSearchForm={setSearchForm}
               patientRecordsTitle={patientRecordsTitle}
@@ -4033,7 +4129,7 @@ async function saveSendOutLabs(nextLabs) {
               formatWaitTime={formatWaitTime}
               studentNameOptions={studentNameOptions}
               upperLevelNameOptions={upperLevelNameOptions}
-
+              ROOM_OPTIONS={roomDropdownOptions}
               onAssignFromQueue={assignEncounterFromQueue}
             />
           )}
@@ -4062,15 +4158,15 @@ async function saveSendOutLabs(nextLabs) {
           )}
           {activeView === "formulary" && (
             <FormularyView
-  formulary={formulary}
-  onAddMedication={addFormularyItem}
-  onEditMedication={editFormularyItem}
-  onDeleteMedication={removeFormularyItem}
-  onToggleStock={toggleFormularyStock}
-  onPrescribeMedication={prescribeFromFormulary}
-  selectedPatient={selectedPatient}
-  isLeadershipView={canModifyFormulary}
-/>
+              formulary={formulary}
+              onAddMedication={addFormularyItem}
+              onEditMedication={editFormularyItem}
+              onDeleteMedication={removeFormularyItem}
+              onToggleStock={toggleFormularyStock}
+              onPrescribeMedication={prescribeFromFormulary}
+              selectedPatient={selectedPatient}
+              isLeadershipView={canModifyFormulary}
+            />
           )}
 
           {activeView === "users" && isLeadershipView && (
@@ -4104,6 +4200,8 @@ async function saveSendOutLabs(nextLabs) {
               normalizeClinicDate={normalizeClinicDate}
               setActiveView={setActiveView}
               startNewEncounter={startNewEncounter}
+              deleteEncounter={deleteEncounter}
+              canStartEncounter={userRole === "leadership" || userRole === "undergraduate"}
               openEditIntake={openEditIntake}
               isLeadershipView={isLeadershipView}
               getFullPatientName={getFullPatientName}
@@ -4114,8 +4212,9 @@ async function saveSendOutLabs(nextLabs) {
               assignmentForm={assignmentForm}
               setAssignmentForm={setAssignmentForm}
               studentNameOptions={studentNameOptions}
+              assignedStudentNames={assignedStudentNames}
               upperLevelNameOptions={upperLevelNameOptions}
-              ROOM_OPTIONS={ROOM_OPTIONS}
+              ROOM_OPTIONS={roomDropdownOptions}
               isPapRestricted={isPapRestricted}
               assignEncounter={assignEncounter}
               leadershipActionLocked={leadershipActionLocked}

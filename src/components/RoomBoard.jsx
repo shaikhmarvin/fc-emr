@@ -1,3 +1,4 @@
+import { getStatusLabel } from "../utils";
 export default function RoomBoard({
   ROOM_OPTIONS,
   roomMap,
@@ -28,7 +29,8 @@ export default function RoomBoard({
               ROOM_OPTIONS.filter(
                 (room) =>
                   !roomMap[room.number] ||
-                  roomMap[room.number]?.encounter.status === "done"
+                  roomMap[room.number]?.encounter.status === "done" ||
+                  roomMap[room.number]?.encounter.soapStatus === "signed"
               ).length
             }
           </p>
@@ -38,11 +40,12 @@ export default function RoomBoard({
           <p className="text-sm text-slate-500">Awaiting Assignment</p>
           <p className="mt-1 text-2xl font-bold">
             {allEncounterRows.filter(
-  ({ encounter }) =>
-    encounter.status === "started" ||
-    encounter.status === "undergrad_complete" ||
-    encounter.status === "ready"
-).length}
+              ({ encounter }) =>
+                (encounter.status === "started" ||
+                  encounter.status === "undergrad_complete" ||
+                  encounter.status === "ready") &&
+                encounter.soapStatus !== "signed"
+            ).length}
           </p>
         </div>
 
@@ -71,7 +74,9 @@ export default function RoomBoard({
         {ROOM_OPTIONS.map((room) => {
           const slot = roomMap[room.number];
           const occupied =
-            Boolean(slot) && slot?.encounter?.status !== "done";
+            Boolean(slot) &&
+            slot?.encounter?.status !== "done" &&
+            slot?.encounter?.soapStatus !== "signed";
 
           return (
             <button
@@ -79,6 +84,8 @@ export default function RoomBoard({
               type="button"
               disabled={isLeadershipView ? false : !occupied}
               onClick={() => {
+                if (selectedEncounter?.soapStatus === "signed") return;
+
                 if (isLeadershipView && selectedPatient && selectedEncounter) {
                   assignEncounterToRoom(room.number);
                   return;
@@ -88,15 +95,12 @@ export default function RoomBoard({
                   openPatientChart(slot.patient.id, slot.encounter.id);
                 }
               }}
-              className={`min-h-[180px] rounded-2xl border p-3 text-left shadow transition ${
-                occupied
-                  ? slot.encounter.status === "roomed"
-  ? "border-green-200 bg-green-50"
-  : slot.encounter.status === "in_visit"
-  ? "border-blue-200 bg-blue-50"
-  : "border-yellow-200 bg-yellow-50"
+              className={`min-h-[180px] rounded-2xl border p-3 text-left shadow transition ${occupied
+                  ? slot.encounter.status === "in_visit"
+                    ? "border-blue-200 bg-blue-50"
+                    : "border-yellow-200 bg-yellow-50"
                   : "border-slate-200 bg-white hover:bg-slate-50"
-              }`}
+                }`}
             >
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div>
@@ -107,11 +111,10 @@ export default function RoomBoard({
                 </div>
 
                 <span
-                  className={`rounded-full px-2 py-1 text-xs font-medium ${
-                    occupied
+                  className={`rounded-full px-2 py-1 text-xs font-medium ${occupied
                       ? "bg-slate-200 text-slate-700"
                       : "bg-emerald-100 text-emerald-700"
-                  }`}
+                    }`}
                 >
                   {occupied ? "Occupied" : "Available"}
                 </span>
@@ -137,16 +140,16 @@ export default function RoomBoard({
 
                   <div className="pt-1">
                     <span className={getStatusClasses(slot.encounter.status)}>
-                      {slot.encounter.status}
+                      {getStatusLabel(slot.encounter.status, slot.encounter.soapStatus)}
                     </span>
                   </div>
                 </div>
               ) : (
                 <div className="flex h-[110px] items-center justify-center">
                   <p className="text-center text-sm text-slate-400">
-                      {isLeadershipView && selectedPatient && selectedEncounter
-                        ? "Click to assign current patient"
-                        : "No patient assigned"}
+                    {isLeadershipView && selectedPatient && selectedEncounter
+                      ? "Click to assign current patient"
+                      : "No patient assigned"}
                   </p>
                 </div>
               )}
