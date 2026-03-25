@@ -10,6 +10,7 @@ export default function BoardDisplay({
   diabetesBadge,
   elevatorBadge,
   fluBadge,
+  papBadge,
   getStatusClasses,
 }) {
   const [now, setNow] = useState(new Date());
@@ -73,12 +74,12 @@ export default function BoardDisplay({
                   </p>
 
                   <div className="flex flex-wrap gap-1">
-                    {spanishBadge(slot.encounter)}
                     {priorityBadge(slot.encounter)}
-                    {elevatorBadge(slot.encounter)}
+                    {spanishBadge(slot.encounter)}
                     {diabetesBadge(slot.encounter)}
                     {fluBadge?.(slot.encounter)}
-
+                    {elevatorBadge(slot.encounter)}
+                    {papBadge?.(slot.encounter)}
                   </div>
 
                   <span

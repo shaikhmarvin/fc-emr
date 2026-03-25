@@ -12,6 +12,7 @@ export default function RoomBoard({
   diabetesBadge,
   elevatorBadge,
   fluBadge,
+  papBadge,
   getStatusClasses,
   assignEncounterToRoom,
   selectedPatient,
@@ -131,11 +132,12 @@ export default function RoomBoard({
                   </p>
 
                   <div className="flex flex-wrap gap-2">
-                    {spanishBadge(slot.encounter)}
                     {priorityBadge(slot.encounter)}
-                    {elevatorBadge(slot.encounter)}
+                    {spanishBadge(slot.encounter)}
                     {diabetesBadge?.(slot.encounter)}
-                    {fluBadge?.(slot.encounter)}
+                     {fluBadge?.(slot.encounter)}
+                    {elevatorBadge(slot.encounter)}
+                    {papBadge?.(slot.encounter)}
                   </div>
 
                   <div className="pt-1">

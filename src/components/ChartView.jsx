@@ -15,6 +15,10 @@ export default function ChartView({
   openPatientChart,
   spanishBadge,
   priorityBadge,
+  papBadge,
+  diabetesBadge,
+  elevatorBadge,
+  fluBadge,
   assignmentForm,
   setAssignmentForm,
   studentNameOptions,
@@ -546,8 +550,12 @@ export default function ChartView({
       {selectedEncounter && (
         <>
           <div className="flex flex-wrap gap-2">
-            {spanishBadge(selectedEncounter)}
             {priorityBadge(selectedEncounter)}
+            {spanishBadge(selectedEncounter)}
+            {diabetesBadge?.(selectedEncounter)}
+            {fluBadge?.(selectedEncounter)}
+            {elevatorBadge?.(selectedEncounter)}
+            {papBadge?.(selectedEncounter)}
           </div>
 
           <div

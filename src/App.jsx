@@ -157,6 +157,17 @@ function elevatorBadge(encounter) {
   return null;
 }
 
+function papBadge(encounter) {
+  if (encounter.papStatus === "Interested") {
+    return (
+      <span className="rounded-full bg-pink-100 px-2 py-1 text-xs font-semibold text-pink-700">
+        Pap
+      </span>
+    );
+  }
+  return null;
+}
+
 function getLocalDateInputValue(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -4457,6 +4468,7 @@ papStatus: "",
         elevatorBadge={elevatorBadge}
         diabetesBadge={diabetesBadge}
         fluBadge={fluBadge}
+        papBadge={papBadge}
         getStatusClasses={getStatusClasses}
       />
     );
@@ -4555,6 +4567,7 @@ papStatus: "",
               diabetesBadge={diabetesBadge}
               elevatorBadge={elevatorBadge}
               fluBadge={fluBadge}
+              papBadge={papBadge}
               formatWaitTime={formatWaitTime}
               studentNameOptions={studentNameOptions}
               upperLevelNameOptions={upperLevelNameOptions}
@@ -4577,6 +4590,7 @@ papStatus: "",
               elevatorBadge={elevatorBadge}
               diabetesBadge={diabetesBadge}
               fluBadge={fluBadge}
+              papBadge={papBadge}
               getStatusClasses={getStatusClasses}
               assignEncounterToRoom={assignEncounterToRoom}
               selectedPatient={selectedPatient}
@@ -4637,6 +4651,10 @@ papStatus: "",
               lastVisitLabel={lastVisitLabel}
               openPatientChart={openPatientChart}
               spanishBadge={spanishBadge}
+              papBadge={papBadge}
+              diabetesBadge={diabetesBadge}
+              elevatorBadge={elevatorBadge}
+              fluBadge={fluBadge}
               priorityBadge={priorityBadge}
               assignmentForm={assignmentForm}
               setAssignmentForm={setAssignmentForm}

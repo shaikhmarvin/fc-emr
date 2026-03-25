@@ -11,6 +11,7 @@ export default function QueueView({
   diabetesBadge,
   elevatorBadge,
   fluBadge,
+  papBadge,
   formatWaitTime,
   studentNameOptions,
   upperLevelNameOptions,
@@ -121,11 +122,12 @@ export default function QueueView({
                     Student: {encounter.assignedStudent || "—"} • Upper Level: {encounter.assignedUpperLevel || "—"}
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {spanishBadge(encounter)}
                     {priorityBadge(encounter)}
-                    {elevatorBadge(encounter)}
+                    {spanishBadge(encounter)}
                     {diabetesBadge?.(encounter)}
                     {fluBadge?.(encounter)}
+                    {elevatorBadge(encounter)}
+                    {papBadge?.(encounter)}
                   </div>
                 </div>
 
@@ -237,11 +239,12 @@ export default function QueueView({
                       Student: {encounter.assignedStudent || "—"} • Upper Level: {encounter.assignedUpperLevel || "—"}
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {spanishBadge(encounter)}
                       {priorityBadge(encounter)}
-                      {elevatorBadge(encounter)}
-                      {diabetesBadge?.(encounter)}
-                      {fluBadge?.(encounter)}
+                    {spanishBadge(encounter)}
+                    {diabetesBadge?.(encounter)}
+                    {fluBadge?.(encounter)}
+                    {elevatorBadge(encounter)}
+                    {papBadge?.(encounter)}
                     </div>
                   </div>
 
