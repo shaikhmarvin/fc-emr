@@ -37,7 +37,8 @@ export const EMPTY_FORM = {
   needsElevator: false,
   spanishSpeaking: false,
   over65: false,
-  mammogramPapSmear: "",
+  mammogramStatus: "",
+papStatus: "",
   fluShot: "",
   htn: false,
   dm: false,
@@ -92,6 +93,8 @@ export const PROGRAM_TYPES = [
   "Dermatology",
   "Mental Health",
   "Addiction Medicine",
+  "Counseling",
+  "Mammogram"
 ];
 
 export const PROGRAM_STATUSES = [

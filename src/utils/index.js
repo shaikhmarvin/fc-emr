@@ -63,7 +63,7 @@ export function formatWaitTime(createdAt) {
 }
 
 export function isPapRestricted(encounter) {
-  return encounter.mammogramPapSmear === "Pap Smear";
+  return encounter.papStatus === "Interested";
 }
 
 export function getStatusClasses(status) {
@@ -205,7 +205,8 @@ export function createEncounterFromIntake(form) {
     transportation: form.transportation,
     needsElevator: form.needsElevator,
     spanishSpeaking: form.spanishSpeaking,
-    mammogramPapSmear: form.mammogramPapSmear,
+    mammogramStatus: form.mammogramStatus,
+    papStatus: form.papStatus,
     fluShot: form.fluShot,
     htn: form.htn,
     dm: form.dm,

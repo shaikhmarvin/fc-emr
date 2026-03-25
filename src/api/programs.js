@@ -1,5 +1,26 @@
 import { supabase } from "../lib/supabase";
 
+function mapProgramRow(row) {
+  return {
+    id: row.id,
+    patientId: row.patient_id || "",
+    patientName: row.patient_name || "",
+    mrn: row.mrn || "",
+    dob: row.dob || "",
+    phone: row.phone || "",
+    programType: row.program_type || "",
+    reason: row.reason || "",
+    assignedCoordinator: row.assigned_coordinator || "",
+    status: row.status || "",
+    specialtyDate: row.specialty_date || "",
+    scheduleType: row.schedule_group || "",
+    schedulePosition: row.schedule_position ?? null,
+    appointmentSlot: row.appointment_slot || "",
+    notes: row.notes || "",
+    createdAt: row.created_at || "",
+  };
+}
+
 export async function fetchProgramEntries() {
   const { data, error } = await supabase
     .from("program_entries")
@@ -8,20 +29,7 @@ export async function fetchProgramEntries() {
 
   if (error) throw error;
 
-  return (data || []).map((row) => ({
-    id: row.id,
-    patientId: row.patient_id || "",
-    patientName: row.patient_name || "",
-    encounterId: row.encounter_id || "",
-    clinicDate: row.clinic_date || "",
-    programType: row.program_type || "",
-    reason: row.reason || "",
-    assignedCoordinator: row.assigned_coordinator || "",
-    status: row.status || "",
-    nextStep: row.next_step || "",
-    notes: row.notes || "",
-    createdAt: row.created_at || "",
-  }));
+  return (data || []).map(mapProgramRow);
 }
 
 export async function createProgramEntryInSupabase(entry) {
@@ -29,13 +37,20 @@ export async function createProgramEntryInSupabase(entry) {
     id: entry.id,
     patient_id: entry.patientId || null,
     patient_name: entry.patientName || "",
-    encounter_id: entry.encounterId || null,
-    clinic_date: entry.clinicDate || "",
+    mrn: entry.mrn || "",
+    dob: entry.dob || "",
+    phone: entry.phone || "",
     program_type: entry.programType || "",
     reason: entry.reason || "",
     assigned_coordinator: entry.assignedCoordinator || "",
     status: entry.status || "",
-    next_step: entry.nextStep || "",
+    specialty_date: entry.specialtyDate || "",
+    schedule_group: entry.scheduleType || "",
+    schedule_position:
+      entry.schedulePosition === null || entry.schedulePosition === undefined
+        ? null
+        : entry.schedulePosition,
+    appointment_slot: entry.appointmentSlot || "",
     notes: entry.notes || "",
     created_at: entry.createdAt || new Date().toISOString(),
   };
@@ -47,7 +62,8 @@ export async function createProgramEntryInSupabase(entry) {
     .single();
 
   if (error) throw error;
-  return data;
+
+  return mapProgramRow(data);
 }
 
 export async function updateProgramEntryInSupabase(entryId, updates) {
@@ -55,21 +71,38 @@ export async function updateProgramEntryInSupabase(entryId, updates) {
 
   if ("patientId" in updates) payload.patient_id = updates.patientId || null;
   if ("patientName" in updates) payload.patient_name = updates.patientName || "";
-  if ("encounterId" in updates) payload.encounter_id = updates.encounterId || null;
-  if ("clinicDate" in updates) payload.clinic_date = updates.clinicDate || "";
+  if ("mrn" in updates) payload.mrn = updates.mrn || "";
+  if ("dob" in updates) payload.dob = updates.dob || "";
+  if ("phone" in updates) payload.phone = updates.phone || "";
   if ("programType" in updates) payload.program_type = updates.programType || "";
   if ("reason" in updates) payload.reason = updates.reason || "";
-  if ("assignedCoordinator" in updates) payload.assigned_coordinator = updates.assignedCoordinator || "";
+  if ("assignedCoordinator" in updates) {
+    payload.assigned_coordinator = updates.assignedCoordinator || "";
+  }
   if ("status" in updates) payload.status = updates.status || "";
-  if ("nextStep" in updates) payload.next_step = updates.nextStep || "";
+  if ("specialtyDate" in updates) payload.specialty_date = updates.specialtyDate || "";
+  if ("scheduleType" in updates) payload.schedule_group = updates.scheduleType || "";
+  if ("schedulePosition" in updates) {
+    payload.schedule_position =
+      updates.schedulePosition === null || updates.schedulePosition === undefined
+        ? null
+        : updates.schedulePosition;
+  }
+  if ("appointmentSlot" in updates) {
+    payload.appointment_slot = updates.appointmentSlot || "";
+  }
   if ("notes" in updates) payload.notes = updates.notes || "";
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("program_entries")
     .update(payload)
-    .eq("id", entryId);
+    .eq("id", entryId)
+    .select()
+    .single();
 
   if (error) throw error;
+
+  return mapProgramRow(data);
 }
 
 export async function deleteProgramEntryInSupabase(entryId) {
