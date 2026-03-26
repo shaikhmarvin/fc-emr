@@ -7,6 +7,7 @@ import { useClinicData } from "./hooks/useClinicData";
 import { canStartIntake, canManageRoomBoard, canEditFormulary, canPrescribe, canChart, } from "./utils/permissions";
 import { fetchProfiles, updateProfileRole, updateProfileDetails } from "./api/profiles";
 import { createAuditLog, fetchAuditLogForEncounter } from "./api/audit";
+import { sendPasswordReset } from "./api/auth";
 import PatientSearch from "./components/PatientSearch";
 import PatientTable from "./components/PatientTable";
 import PatientInfoEditModal from "./components/PatientInfoEditModal";
@@ -1208,14 +1209,14 @@ async function removePapEntry(entryId) {
       const fullName = (profile.full_name || "").toLowerCase();
       const role = (profile.role || "").toLowerCase();
       const classification = (profile.classification || "").toLowerCase();
-      const id = (profile.id || "").toLowerCase();
+      const email = (profile.email || "").toLowerCase();
 
-      return (
-        fullName.includes(query) ||
-        role.includes(query) ||
-        classification.includes(query) ||
-        id.includes(query)
-      );
+return (
+  fullName.includes(query) ||
+  role.includes(query) ||
+  classification.includes(query) ||
+  email.includes(query)
+);
     });
   }, [profiles, userSearch, showOnlyActiveToday]);
 
@@ -4203,25 +4204,64 @@ papStatus: "",
     saveAs(blob, `Clinic Summary - ${clinicDateLabel}.docx`);
   }
 
-  async function handleDeleteUser(userId) {
-    const confirmed = window.confirm(
-      "Delete this user completely? This removes login access."
-    );
-    if (!confirmed) return;
-
-    try {
-      const { error } = await supabase.functions.invoke("delete-user", {
-        body: { userId },
-      });
-
-      if (error) throw error;
-
-      setProfiles((prev) => prev.filter((p) => p.id !== userId));
-    } catch (error) {
-      console.error("Failed to delete user:", error);
-      alert(error.message);
-    }
+  async function handleResetUserPassword(email) {
+  if (!email) {
+    setProfilesMessage("This user does not have an email saved.");
+    return;
   }
+
+  try {
+    setProfilesMessage("");
+    await sendPasswordReset(email);
+    setProfilesMessage(`Password reset email sent to ${email}.`);
+  } catch (error) {
+    console.error("Failed to send password reset:", error);
+    setProfilesMessage(`Failed to send password reset: ${error.message}`);
+  }
+}
+
+async function handleDeleteUser(userId) {
+  const confirmText = prompt(
+  "Type DELETE to confirm removing this user permanently:"
+);
+
+if (confirmText !== "DELETE") return;
+
+  try {
+    const {
+      data: { session: currentSession },
+    } = await supabase.auth.getSession();
+
+    if (!currentSession?.access_token) {
+      throw new Error("Your session expired. Please sign out and sign back in.");
+    }
+
+    const { data, error } = await supabase.functions.invoke("delete-user", {
+      body: { userId },
+      headers: {
+        Authorization: `Bearer ${currentSession.access_token}`,
+      },
+    });
+
+    if (error) {
+      let details = null;
+
+      try {
+        details = await error.context.json();
+      } catch {
+        details = null;
+      }
+
+      throw new Error(details?.error || error.message || "Delete failed");
+    }
+
+    setProfiles((prev) => prev.filter((p) => p.id !== userId));
+    setProfilesMessage("User deleted successfully.");
+  } catch (error) {
+    console.error("Failed to delete user:", error);
+    alert(error.message);
+  }
+}
 
   const sortedMedications = selectedEncounter
     ? [...(selectedEncounter.medications || [])].sort((a, b) => {
@@ -4632,6 +4672,7 @@ papStatus: "",
               setShowOnlyActiveToday={setShowOnlyActiveToday}
               onApproveUser={handleApproveUser}
               onDeleteUser={handleDeleteUser}
+              onResetPassword={handleResetUserPassword}
             />
           )}
 

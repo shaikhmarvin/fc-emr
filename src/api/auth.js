@@ -15,6 +15,7 @@ export async function signUp(email, password, profileData) {
 
   const { error: profileError } = await supabase.from("profiles").upsert({
     id: user.id,
+    email: email,
     full_name: profileData.full_name || "",
     classification: profileData.classification || null,
     role: profileData.role || null,
@@ -36,6 +37,14 @@ export async function signIn(email, password) {
 
   if (error) throw error;
   return data;
+}
+
+export async function sendPasswordReset(email) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin,
+  });
+
+  if (error) throw error;
 }
 
 export async function signOut() {
