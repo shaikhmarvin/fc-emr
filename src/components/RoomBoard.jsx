@@ -19,6 +19,7 @@ export default function RoomBoard({
   selectedEncounter,
   openPatientChart,
   isLeadershipView,
+  SPECIALTY_ROOM_RULES,
 }) {
   return (
     <div className="space-y-4 p-3 sm:p-4 lg:p-6">
@@ -79,6 +80,23 @@ export default function RoomBoard({
             slot?.encounter?.status !== "done" &&
             slot?.encounter?.soapStatus !== "signed";
 
+          const reservedSpecialty = Object.values(SPECIALTY_ROOM_RULES || {}).find(
+            (rule) => rule.allowedRooms?.includes(String(room.number))
+          );
+
+          const specialtyType = slot?.encounter?.specialtyType;
+          const specialtyLabelMap = {
+            pt: "Physical Therapy",
+            dermatology: "Dermatology",
+            mental_health: "Mental Health",
+            addiction: "Addiction Medicine",
+          };
+          const isSpecialty = slot?.encounter?.visitType !== "general";
+          const rules = SPECIALTY_ROOM_RULES?.[specialtyType];
+          const isRestrictedRoom =
+            rules?.allowedRooms?.length > 0 &&
+            !rules.allowedRooms.includes(String(room.number));
+
           return (
             <button
               key={room.number}
@@ -88,6 +106,19 @@ export default function RoomBoard({
                 if (selectedEncounter?.soapStatus === "signed") return;
 
                 if (isLeadershipView && selectedPatient && selectedEncounter) {
+                  const selectedSpecialtyType = selectedEncounter.specialtyType;
+                  const selectedRules = SPECIALTY_ROOM_RULES?.[selectedSpecialtyType];
+
+                  if (
+                    selectedRules?.allowedRooms?.length > 0 &&
+                    !selectedRules.allowedRooms.includes(String(room.number))
+                  ) {
+                    const confirmAssign = window.confirm(
+                      `This room is not preferred for ${selectedRules.label}. Assign anyway?`
+                    );
+                    if (!confirmAssign) return;
+                  }
+
                   assignEncounterToRoom(room.number);
                   return;
                 }
@@ -97,18 +128,26 @@ export default function RoomBoard({
                 }
               }}
               className={`min-h-[180px] rounded-2xl border p-3 text-left shadow transition ${occupied
-                  ? slot.encounter.status === "in_visit"
-                    ? "border-blue-200 bg-blue-50"
-                    : "border-yellow-200 bg-yellow-50"
+                ? slot.encounter.status === "in_visit"
+                  ? "border-blue-200 bg-blue-50"
+                  : "border-yellow-200 bg-yellow-50"
+                : reservedSpecialty
+                  ? "border-violet-300 bg-violet-50 hover:bg-violet-100"
                   : "border-slate-200 bg-white hover:bg-slate-50"
                 }`}
             >
-              <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="mb-2 flex items-start justify-between gap-2">
                 <div>
                   <p className="text-sm font-semibold text-slate-800">
                     {room.label}
                   </p>
                   <p className="text-xs text-slate-500">{room.area}</p>
+
+                  {reservedSpecialty && (
+                    <p className="mt-1 text-xs font-medium text-violet-700">
+                      {reservedSpecialty.label} Reserved
+                    </p>
+                  )}
                 </div>
 
                 <span
@@ -127,15 +166,33 @@ export default function RoomBoard({
                     {getPatientBoardName(slot.patient)}
                   </p>
 
+                  {isSpecialty && rules && rules.allowedRooms.length > 0 && isRestrictedRoom && (
+                    <div className="rounded-md bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
+                      Not preferred room for {rules.label}
+                    </div>
+                  )}
+
                   <p className="text-sm text-slate-600">
                     Student: {getStudentBoardName(slot.encounter.assignedStudent)}
                   </p>
 
                   <div className="flex flex-wrap gap-2">
+                    {slot.encounter.visitType !== "general" && (
+                      <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-800">
+                        {rules?.label || specialtyLabelMap[slot.encounter.specialtyType] || "Specialty"}
+                      </span>
+                    )}
+
+                    {slot.encounter.visitType === "both" && (
+                      <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                        Dual Visit
+                      </span>
+                    )}
+
                     {priorityBadge(slot.encounter)}
                     {spanishBadge(slot.encounter)}
                     {diabetesBadge?.(slot.encounter)}
-                     {fluBadge?.(slot.encounter)}
+                    {fluBadge?.(slot.encounter)}
                     {elevatorBadge(slot.encounter)}
                     {papBadge?.(slot.encounter)}
                   </div>

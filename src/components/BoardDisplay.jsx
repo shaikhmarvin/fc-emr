@@ -74,14 +74,19 @@ export default function BoardDisplay({
                   </p>
 
                   <div className="flex flex-wrap gap-1">
-                    {priorityBadge(slot.encounter)}
-                    {spanishBadge(slot.encounter)}
-                    {diabetesBadge(slot.encounter)}
-                    {fluBadge?.(slot.encounter)}
-                    {elevatorBadge(slot.encounter)}
-                    {papBadge?.(slot.encounter)}
-                  </div>
+  {slot.encounter.visitType === "both" && (
+    <span className="rounded-full bg-amber-200 px-2 py-1 text-xs font-semibold text-amber-900">
+      Dual Visit
+    </span>
+  )}
 
+  {priorityBadge(slot.encounter)}
+  {spanishBadge(slot.encounter)}
+  {diabetesBadge(slot.encounter)}
+  {fluBadge?.(slot.encounter)}
+  {elevatorBadge(slot.encounter)}
+  {papBadge?.(slot.encounter)}
+</div>
                   <span
                     className={`inline-block rounded-full border px-2 py-1 text-xs ${getStatusClasses(
                       slot.encounter.status

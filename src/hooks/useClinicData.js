@@ -21,6 +21,8 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
     if (!patient) return;
 
     const intake = encounter.intake_data || {};
+    const visitType = intake.visitType || "general";
+    const specialtyType = intake.specialtyType || "";
 
     patient.encounters.push({
       id: encounter.id,
@@ -33,17 +35,17 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
       needsElevator: intake.needsElevator ?? false,
       spanishSpeaking: intake.spanishSpeaking ?? false,
       mammogramStatus:
-  intake.mammogramStatus ?? intake.mammogramPapSmear ?? "",
-papStatus: intake.papStatus ?? "",
+        intake.mammogramStatus ?? intake.mammogramPapSmear ?? "",
+      papStatus: intake.papStatus ?? "",
       fluShot: intake.fluShot ?? "",
       htn: intake.htn ?? false,
       dm: intake.dm ?? false,
       labsLast6Months: intake.labsLast6Months ?? "",
       nicotineUse: intake.nicotineUse ?? "",
-nicotineDetails: intake.nicotineDetails ?? "",
-substanceUseConcern: intake.substanceUseConcern ?? "",
-substanceUseTreatment: intake.substanceUseTreatment ?? "",
-substanceUseNotes: intake.substanceUseNotes ?? "",
+      nicotineDetails: intake.nicotineDetails ?? "",
+      substanceUseConcern: intake.substanceUseConcern ?? "",
+      substanceUseTreatment: intake.substanceUseTreatment ?? "",
+      substanceUseNotes: intake.substanceUseNotes ?? "",
       dermatology: intake.dermatology ?? "N/A",
       ophthalmology: intake.ophthalmology ?? "N/A",
       optometry: intake.optometry ?? "N/A",
@@ -73,15 +75,18 @@ substanceUseNotes: intake.substanceUseNotes ?? "",
       upperLevelSignedAt: encounter.upper_level_signed_at || null,
       attendingSignedBy: encounter.attending_signed_by || null,
       attendingSignedAt: encounter.attending_signed_at || null,
+      visitType,
+      specialtyType,
+      leadershipIntakeComplete: encounter.leadership_intake_complete ?? false,
     });
-    
+
   });
 
   Object.values(patientMap).forEach((patient) => {
-  patient.encounters.sort(
-    (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-  );
-});
+    patient.encounters.sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+    );
+  });
 
   medicationsData.forEach((medication) => {
     Object.values(patientMap).forEach((patient) => {
@@ -122,7 +127,6 @@ substanceUseNotes: intake.substanceUseNotes ?? "",
 export function useClinicData({ authReady, session, userRole }) {
   const [patients, setPatients] = useState([]);
   const timeoutRef = useRef(null);
-  const isInitialLoadRef = useRef(true);
   const loadData = useCallback(async () => {
     if (!authReady || !session || !userRole) return;
 
@@ -148,61 +152,82 @@ export function useClinicData({ authReady, session, userRole }) {
     }
   }, [authReady, session, userRole]);
 
-useEffect(() => {
-  loadData().then(() => {
-    isInitialLoadRef.current = false;
-  });
-}, [loadData]);
+  useEffect(() => {
+    loadData().then(() => {
+    });
+  }, [loadData]);
 
   useEffect(() => {
     if (!authReady || !session || !userRole) return;
 
 
 
-const triggerReload = () => {
-  if (isInitialLoadRef.current) return;
+    const triggerReload = () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
 
-  if (timeoutRef.current) {
-    clearTimeout(timeoutRef.current);
-  }
-
-  timeoutRef.current = setTimeout(() => {
-    loadData();
-  }, 50);
-};
+      timeoutRef.current = setTimeout(() => {
+        loadData();
+      }, 50);
+    };
 
 
-const channel = supabase
-  .channel("clinic-data-realtime")
-  .on(
-    "postgres_changes",
-    { event: "*", schema: "public", table: "patients" },
-    triggerReload
-  )
-  .on(
-    "postgres_changes",
-    { event: "*", schema: "public", table: "encounters" },
-    triggerReload
-  )
-  .on(
-    "postgres_changes",
-    { event: "*", schema: "public", table: "medications" },
-    triggerReload
-  )
-  .on(
-    "postgres_changes",
-    { event: "*", schema: "public", table: "allergies" },
-    triggerReload
-  )
-  .subscribe();
+    const channel = supabase
+      .channel("clinic-data-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "patients" },
+        (payload) => {
+          console.log("REALTIME patients:", payload);
+          triggerReload();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "encounters" },
+        (payload) => {
+          console.log("REALTIME encounters:", payload);
+          triggerReload();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "medications" },
+        (payload) => {
+          console.log("REALTIME medications:", payload);
+          triggerReload();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "allergies" },
+        (payload) => {
+          console.log("REALTIME allergies:", payload);
+          triggerReload();
+        }
+      )
+      .subscribe((status) => {
+        console.log("clinic-data-realtime status:", status);
+      });
 
     return () => {
-  if (timeoutRef.current) {
-    clearTimeout(timeoutRef.current);
-  }
-  supabase.removeChannel(channel);
-};
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      supabase.removeChannel(channel);
+    };
   }, [authReady, session, userRole, loadData]);
+
+  useEffect(() => {
+  if (!authReady || !session || !userRole) return;
+
+  const interval = setInterval(() => {
+    loadData();
+  }, 3000);
+
+  return () => clearInterval(interval);
+}, [authReady, session, userRole, loadData]);
 
   return {
     patients,

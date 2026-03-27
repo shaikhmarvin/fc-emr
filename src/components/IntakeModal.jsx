@@ -69,11 +69,10 @@ export default function IntakeModal({
               <button
                 key={tab}
                 onClick={() => setIntakeTab(index)}
-                className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-                  intakeTab === index
-                    ? "bg-blue-600 text-white shadow-sm"
-                    : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
-                }`}
+                className={`rounded-full px-4 py-2 text-sm font-medium transition ${intakeTab === index
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
+                  }`}
               >
                 {tab}
               </button>
@@ -97,8 +96,8 @@ export default function IntakeModal({
 
           {intakeTab === 0 && (
             <div className="space-y-4">
-  <SectionCard title="Patient Information">
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <SectionCard title="Patient Information">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                   <Field label="First Name">
                     <input
                       className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
@@ -213,19 +212,19 @@ export default function IntakeModal({
               </SectionCard>
 
               <Field label="Patient Flags" className="xl:col-span-3">
-  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-    <CheckboxCard
-      label="Patient is over 65"
-      checked={intakeForm.over65}
-      onChange={(checked) => updateIntakeField("over65", checked)}
-    />
-    <CheckboxCard
-      label="TTU Student"
-      checked={intakeForm.ttuStudent}
-      onChange={(checked) => updateIntakeField("ttuStudent", checked)}
-    />
-  </div>
-</Field>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <CheckboxCard
+                    label="Patient is over 65"
+                    checked={intakeForm.over65}
+                    onChange={(checked) => updateIntakeField("over65", checked)}
+                  />
+                  <CheckboxCard
+                    label="TTU Student"
+                    checked={intakeForm.ttuStudent}
+                    onChange={(checked) => updateIntakeField("ttuStudent", checked)}
+                  />
+                </div>
+              </Field>
             </div>
           )}
 
@@ -262,6 +261,16 @@ export default function IntakeModal({
                     </select>
                   </Field>
 
+                  <ReadOnlyField
+                    label="Visit Type"
+                    value={intakeForm.visitType}
+                  />
+
+                  <ReadOnlyField
+                    label="Specialty"
+                    value={intakeForm.specialtyType || "—"}
+                  />
+
                   <Field label="Chief Complaint" className="md:col-span-2">
                     <input
                       className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
@@ -290,36 +299,36 @@ export default function IntakeModal({
               <SectionCard title="Screenings">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <Field label="Mammogram">
-  <select
-    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-    value={intakeForm.mammogramStatus}
-    onChange={(e) =>
-      updateIntakeField("mammogramStatus", e.target.value)
-    }
-  >
-    <option value="">Select one</option>
-    <option>Interested</option>
-    <option>Not Interested</option>
-    <option>UTD</option>
-    <option>N/A</option>
-  </select>
-</Field>
+                    <select
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                      value={intakeForm.mammogramStatus}
+                      onChange={(e) =>
+                        updateIntakeField("mammogramStatus", e.target.value)
+                      }
+                    >
+                      <option value="">Select one</option>
+                      <option>Interested</option>
+                      <option>Not Interested</option>
+                      <option>UTD</option>
+                      <option>N/A</option>
+                    </select>
+                  </Field>
 
-<Field label="Pap Smear">
-  <select
-    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-    value={intakeForm.papStatus}
-    onChange={(e) =>
-      updateIntakeField("papStatus", e.target.value)
-    }
-  >
-    <option value="">Select one</option>
-    <option>Interested</option>
-    <option>Not Interested</option>
-    <option>UTD</option>
-    <option>N/A</option>
-  </select>
-</Field>
+                  <Field label="Pap Smear">
+                    <select
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                      value={intakeForm.papStatus}
+                      onChange={(e) =>
+                        updateIntakeField("papStatus", e.target.value)
+                      }
+                    >
+                      <option value="">Select one</option>
+                      <option>Interested</option>
+                      <option>Not Interested</option>
+                      <option>UTD</option>
+                      <option>N/A</option>
+                    </select>
+                  </Field>
 
                   <Field label="Flu Shot">
                     <select
@@ -350,11 +359,10 @@ export default function IntakeModal({
 
                   <Field label="Labs drawn in the last 6 months">
                     <select
-                      className={`w-full rounded-xl border px-3 py-2.5 ${
-                        intakeForm.htn || intakeForm.dm
-                          ? "border-slate-200"
-                          : "border-slate-200 bg-slate-50 text-slate-400"
-                      }`}
+                      className={`w-full rounded-xl border px-3 py-2.5 ${intakeForm.htn || intakeForm.dm
+                        ? "border-slate-200"
+                        : "border-slate-200 bg-slate-50 text-slate-400"
+                        }`}
                       value={intakeForm.labsLast6Months}
                       onChange={(e) =>
                         updateIntakeField("labsLast6Months", e.target.value)
@@ -690,6 +698,19 @@ function Field({ label, children, className = "" }) {
         {label}
       </label>
       {children}
+    </div>
+  );
+}
+
+function ReadOnlyField({ label, value, className = "" }) {
+  return (
+    <div className={className}>
+      <label className="mb-2 block text-sm font-medium text-slate-700">
+        {label}
+      </label>
+      <div className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
+        {value || "—"}
+      </div>
     </div>
   );
 }

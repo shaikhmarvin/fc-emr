@@ -7,7 +7,19 @@ export default function ClinicSummaryView({
   returningPatientCount,
   totalPatientCount,
   exportClinicSummaryToWord,
+  specialtyCounts,
 }) {
+function SummaryCard({ label, value }) {
+  return (
+    <div className="rounded-xl bg-slate-50 p-4">
+      <p className="text-sm text-slate-500">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-slate-900">
+        {value}
+      </p>
+    </div>
+  );
+}
+  
   return (
     <div className="space-y-4 p-3 sm:p-4 lg:space-y-6 lg:p-6">
       <div className="rounded-2xl bg-white p-4 shadow">
@@ -99,33 +111,46 @@ export default function ClinicSummaryView({
   </h3>
 
   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-    {[
-      { label: "Refill", key: "refillCount" },
-      { label: "LWOBS", key: "lwobsCount" },
-      { label: "Labs", key: "labsCount" },
-      { label: "Mental Health", key: "mentalHealthCount" },
-      { label: "Ophthalmology", key: "ophthalmologyCount" },
-      { label: "Social Work", key: "socialWorkCount" },
-      { label: "Zoom", key: "zoomCount" },
-      { label: "Phone", key: "phoneCount" },
-    ].map(({ label, key }) => (
-      <div key={key}>
-        <label className="mb-1 block text-sm font-medium text-slate-700">
-          {label}
-        </label>
-        <input
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          value={clinicSummary[key]}
-          onChange={(e) =>
-            setClinicSummary((prev) => ({
-              ...prev,
-              [key]: e.target.value,
-            }))
-          }
-        />
-      </div>
-    ))}
+  {[
+    { label: "Refill", key: "refillCount" },
+    { label: "LWOBS", key: "lwobsCount" },
+    { label: "Labs", key: "labsCount" },
+    { label: "Ophthalmology", key: "ophthalmologyCount" },
+    { label: "Social Work", key: "socialWorkCount" },
+    { label: "Zoom", key: "zoomCount" },
+    { label: "Phone", key: "phoneCount" },
+  ].map(({ label, key }) => (
+    <div key={key}>
+      <label className="mb-1 block text-sm font-medium text-slate-700">
+        {label}
+      </label>
+      <input
+        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        value={clinicSummary[key]}
+        onChange={(e) =>
+          setClinicSummary((prev) => ({
+            ...prev,
+            [key]: e.target.value,
+          }))
+        }
+      />
+    </div>
+  ))}
+</div>
+
+{/* 🔥 SPECIALTY COUNTS (AUTO) */}
+<div className="mt-6">
+  <h3 className="mb-2 text-md font-semibold text-slate-800">
+    Specialty Totals
+  </h3>
+
+  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <SummaryCard label="Physical Therapy" value={specialtyCounts.pt} />
+    <SummaryCard label="Dermatology" value={specialtyCounts.dermatology} />
+    <SummaryCard label="Mental Health" value={specialtyCounts.mental_health} />
+    <SummaryCard label="Addiction Medicine" value={specialtyCounts.addiction} />
   </div>
+</div>
 </div>
       </div>
     </div>

@@ -46,9 +46,8 @@ export default function AppSidebar({
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 transform border-r border-slate-200 bg-white transition-transform duration-300 lg:translate-x-0 lg:overflow-y-auto ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-        }`}
+        className={`fixed inset-y-0 left-0 z-50 w-64 transform border-r border-slate-200 bg-white transition-transform duration-300 lg:translate-x-0 lg:overflow-y-auto ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+          }`}
       >
         <div className="border-b border-slate-200 px-6 py-6">
           <h1 className="text-2xl font-bold text-red-700">Free Clinic</h1>
@@ -109,6 +108,15 @@ export default function AppSidebar({
 
                 {userRole !== "undergraduate" && (
                   <button
+                    onClick={() => handleViewChange("specialty-queue")}
+                    className={getNavItemClass("specialty-queue")}
+                  >
+                    Specialty Queue
+                  </button>
+                )}
+
+                {userRole !== "undergraduate" && (
+                  <button
                     onClick={() => handleViewChange("board")}
                     className={getNavItemClass("board")}
                   >
@@ -139,13 +147,13 @@ export default function AppSidebar({
                 )}
 
                 {isLeadershipView && (
-  <button
-    onClick={() => handleViewChange("pap")}
-    className={getNavItemClass("pap")}
-  >
-    PAP
-  </button>
-)}
+                  <button
+                    onClick={() => handleViewChange("pap")}
+                    className={getNavItemClass("pap")}
+                  >
+                    PAP
+                  </button>
+                )}
               </div>
 
               {isLeadershipView && (

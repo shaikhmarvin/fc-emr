@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { PT_TIME_SLOTS } from "../constants";
+import { PT_TIME_SLOTS, ROOM_OPTIONS } from "../constants";
 import { fetchProgramSettings, updateProgramSetting } from "../api/programSettings";
 
 const PROGRAM_TYPES = [
@@ -104,6 +104,7 @@ export default function ProgramsView({
 
   const [programSettings, setProgramSettings] = useState([]);
   const [editingSettings, setEditingSettings] = useState({});
+  const [programRooms, setProgramRooms] = useState({});
 
   useEffect(() => {
     loadProgramSettings();
@@ -121,6 +122,12 @@ export default function ProgramsView({
         return acc;
       }, {})
     );
+    setProgramRooms(
+  rows.reduce((acc, row) => {
+    acc[row.program_type] = row.rooms_assigned?.rooms || [];
+    return acc;
+  }, {})
+);
   }
 
   const trackerEntries = useMemo(() => {
@@ -973,6 +980,56 @@ const entries = (specialtyEntries[programType] || []).filter((entry) => {
                 </div>
               </div>
             </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+  <h4 className="mb-3 text-sm font-semibold text-slate-900">
+    Assigned Rooms
+  </h4>
+
+  <div className="flex flex-wrap gap-2">
+    {ROOM_OPTIONS.map((room) => {
+      const isSelected = (programRooms[programType] || []).includes(room.number);
+
+      return (
+        <button
+          key={room.number}
+          onClick={() => {
+            const current = programRooms[programType] || [];
+
+            const updated = isSelected
+              ? current.filter((r) => r !== room.number)
+              : [...current, room.number];
+
+            setProgramRooms((prev) => ({
+              ...prev,
+              [programType]: updated,
+            }));
+          }}
+          className={`px-3 py-2 rounded-lg text-sm border ${
+            isSelected
+              ? "bg-blue-600 text-white"
+              : "bg-white text-slate-700"
+          }`}
+        >
+          {room.label}
+        </button>
+      );
+    })}
+  </div>
+
+  <button
+    className="mt-3 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm"
+    onClick={async () => {
+      await updateProgramSetting(programType, {
+        rooms_assigned: {
+          rooms: programRooms[programType] || [],
+        },
+      });
+      await loadProgramSettings();
+    }}
+  >
+    Save Rooms
+  </button>
+</div>
           </div>
         </Card>
 

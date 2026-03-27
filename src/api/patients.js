@@ -123,36 +123,96 @@ export async function createPatientInSupabase(intakeForm) {
 }
 
 export async function updatePatientInSupabase(patientId, updates) {
-  const fullName = `${updates.firstName || ""} ${updates.lastName || ""}`.trim();
+  const rowToUpdate = {};
 
-  const rowToUpdate = {
-  name: fullName,
-  preferred_name: updates.preferredName || "",
-  dob: updates.dob,
-  mrn: updates.mrn?.trim() || "",
-  last4ssn: updates.last4ssn || "",
-  phone: updates.phone || "",
-  pronouns: updates.pronouns || "",
-  ethnicity: updates.ethnicity || "",
-  sex: updates.sex || "",
-  ttu_student: updates.ttuStudent || false,
+  if (updates.firstName !== undefined || updates.lastName !== undefined) {
+    const fullName = `${updates.firstName || ""} ${updates.lastName || ""}`.trim();
+    rowToUpdate.name = fullName;
+  }
 
-  address: updates.address || "",
-  city: updates.city || "",
-  state: updates.state || "",
-  zip_code: updates.zipCode || "",
+  if (updates.preferredName !== undefined) {
+    rowToUpdate.preferred_name = updates.preferredName || "";
+  }
 
-  emergency_contact_name: updates.emergencyContactName || "",
-  emergency_contact_relation: updates.emergencyContactRelation || "",
-  emergency_contact_phone: updates.emergencyContactPhone || "",
+  if (updates.dob !== undefined) {
+    rowToUpdate.dob = updates.dob || null;
+  }
 
-  income_range: updates.incomeRange || "",
-  spanish_only: updates.spanishOnly || "",
-  chronic_conditions: updates.chronicConditions || [],
-  chronic_conditions_other: updates.chronicConditionsOther || "",
+  if (updates.mrn !== undefined) {
+    rowToUpdate.mrn = updates.mrn?.trim() || "";
+  }
 
-  intake_status: updates.intakeStatus || "",
-};
+  if (updates.last4ssn !== undefined) {
+    rowToUpdate.last4ssn = updates.last4ssn || "";
+  }
+
+  if (updates.phone !== undefined) {
+    rowToUpdate.phone = updates.phone || "";
+  }
+
+  if (updates.pronouns !== undefined) {
+    rowToUpdate.pronouns = updates.pronouns || "";
+  }
+
+  if (updates.ethnicity !== undefined) {
+    rowToUpdate.ethnicity = updates.ethnicity || "";
+  }
+
+  if (updates.sex !== undefined) {
+    rowToUpdate.sex = updates.sex || "";
+  }
+
+  if (updates.ttuStudent !== undefined) {
+    rowToUpdate.ttu_student = updates.ttuStudent || false;
+  }
+
+  if (updates.address !== undefined) {
+    rowToUpdate.address = updates.address || "";
+  }
+
+  if (updates.city !== undefined) {
+    rowToUpdate.city = updates.city || "";
+  }
+
+  if (updates.state !== undefined) {
+    rowToUpdate.state = updates.state || "";
+  }
+
+  if (updates.zipCode !== undefined) {
+    rowToUpdate.zip_code = updates.zipCode || "";
+  }
+
+  if (updates.emergencyContactName !== undefined) {
+    rowToUpdate.emergency_contact_name = updates.emergencyContactName || "";
+  }
+
+  if (updates.emergencyContactRelation !== undefined) {
+    rowToUpdate.emergency_contact_relation = updates.emergencyContactRelation || "";
+  }
+
+  if (updates.emergencyContactPhone !== undefined) {
+    rowToUpdate.emergency_contact_phone = updates.emergencyContactPhone || "";
+  }
+
+  if (updates.incomeRange !== undefined) {
+    rowToUpdate.income_range = updates.incomeRange || "";
+  }
+
+  if (updates.spanishOnly !== undefined) {
+    rowToUpdate.spanish_only = updates.spanishOnly || "";
+  }
+
+  if (updates.chronicConditions !== undefined) {
+    rowToUpdate.chronic_conditions = updates.chronicConditions || [];
+  }
+
+  if (updates.chronicConditionsOther !== undefined) {
+    rowToUpdate.chronic_conditions_other = updates.chronicConditionsOther || "";
+  }
+
+  if (updates.intakeStatus !== undefined) {
+    rowToUpdate.intake_status = updates.intakeStatus || "";
+  }
 
   const { data, error } = await supabase
     .from("patients")

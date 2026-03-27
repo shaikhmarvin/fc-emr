@@ -188,6 +188,32 @@ export default function ChartView({
     }
   }
 
+  function getSpecialtyTypeLabel(type) {
+  switch (type) {
+    case "pt":
+      return "Physical Therapy";
+    case "dermatology":
+      return "Dermatology";
+    case "mental_health":
+      return "Mental Health";
+    case "addiction":
+      return "Addiction Medicine";
+    default:
+      return type || "Specialty";
+  }
+}
+
+function getVisitTypeLabel(visitType) {
+  switch (visitType) {
+    case "specialty_only":
+      return "Specialty Only";
+    case "both":
+      return "General + Specialty";
+    default:
+      return "General Clinic";
+  }
+}
+
 
   useEffect(() => {
     if (!soapAutoSaveEnabled || !selectedEncounter || soapStatus === "signed") return;
@@ -316,6 +342,17 @@ export default function ChartView({
   const bpCategory = getBpCategory(latestVitals?.bp);
   const hrCategory = getHrCategory(latestVitals?.hr);
   const spo2Category = getSpo2Category(latestVitals?.spo2);
+  const isSpecialtyVisit =
+  selectedEncounter?.visitType === "specialty_only" ||
+  selectedEncounter?.visitType === "both";
+
+const specialtyBadgeText = isSpecialtyVisit
+  ? `${getVisitTypeLabel(selectedEncounter?.visitType)}${
+      selectedEncounter?.specialtyType
+        ? ` • ${getSpecialtyTypeLabel(selectedEncounter.specialtyType)}`
+        : ""
+    }`
+  : "";
 
   return (
     <div className="space-y-4 p-3 sm:p-4 lg:space-y-6 lg:p-6">
@@ -371,6 +408,20 @@ export default function ChartView({
           </p>
         </div>
       </div>
+
+     {isSpecialtyVisit && (
+  <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
+    <div className="flex items-center gap-2">
+      <span className="text-sm font-semibold text-violet-800">
+        Specialty Visit
+      </span>
+    </div>
+
+    <div className="mt-1 text-sm text-violet-700">
+      {specialtyBadgeText}
+    </div>
+  </div>
+)}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:gap-6">
         <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
           <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">

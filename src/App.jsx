@@ -20,6 +20,7 @@ import AllergyModal from "./components/AllergyModal";
 import IntakeModal from "./components/IntakeModal";
 import UndergradIntakeView from "./components/UndergradIntakeView";
 import RegistrationView from "./components/RegistrationView";
+import SpecialtyQueueView from "./components/SpecialtyQueueView";
 import UndergradRegistrationModal from "./components/UndergradRegistrationModal";
 import ChartView from "./components/ChartView";
 import BoardDisplay from "./components/BoardDisplay";
@@ -36,6 +37,7 @@ import AppHeader from "./components/AppHeader";
 import DashboardView from "./components/DashboardView";
 import ClinicSummaryView from "./components/ClinicSummaryView";
 import ProgramsView from "./components/ProgramsView";
+import { fetchProgramSettings } from "./api/programSettings";
 import PAPView from "./components/PAPView";
 import {
   fetchProgramEntries,
@@ -505,6 +507,7 @@ export default function App() {
   });
   const [programEntries, setProgramEntries] = useState([]);
   const [programsLoaded, setProgramsLoaded] = useState(false);
+  const [programSettings, setProgramSettings] = useState([]);
   const [papEntries, setPapEntries] = useState([]);
   const [papLoaded, setPapLoaded] = useState(false);
 
@@ -526,20 +529,35 @@ export default function App() {
   }, [session, programsLoaded]);
 
   useEffect(() => {
-  if (!session || papLoaded) return;
+    if (!session || papLoaded) return;
 
-  async function loadPapEntries() {
+    async function loadPapEntries() {
+      try {
+        const rows = await fetchPapEntries();
+        setPapEntries(rows);
+        setPapLoaded(true);
+      } catch (error) {
+        console.error("Failed to load PAP entries:", error);
+      }
+    }
+
+    loadPapEntries();
+  }, [session, papLoaded]);
+
+  useEffect(() => {
+  if (!session) return;
+
+  async function loadProgramSettingsForBoard() {
     try {
-      const rows = await fetchPapEntries();
-      setPapEntries(rows);
-      setPapLoaded(true);
+      const rows = await fetchProgramSettings();
+      setProgramSettings(rows || []);
     } catch (error) {
-      console.error("Failed to load PAP entries:", error);
+      console.error("Failed to load program settings:", error);
     }
   }
 
-  loadPapEntries();
-}, [session, papLoaded]);
+  loadProgramSettingsForBoard();
+}, [session]);
 
 
   async function addProgramEntry(entry) {
@@ -596,57 +614,57 @@ export default function App() {
   }
 
   async function addPapEntry(entry) {
-  setPapEntries((prev) => [entry, ...prev]);
+    setPapEntries((prev) => [entry, ...prev]);
 
-  try {
-    const saved = await createPapEntryInSupabase(entry);
+    try {
+      const saved = await createPapEntryInSupabase(entry);
+
+      setPapEntries((prev) =>
+        prev.map((item) => (item.id === entry.id ? saved : item))
+      );
+    } catch (error) {
+      console.error("Failed to create PAP entry:", error);
+      alert(`Failed to save PAP entry: ${error.message}`);
+
+      setPapEntries((prev) => prev.filter((item) => item.id !== entry.id));
+    }
+  }
+
+  async function updatePapEntry(entryId, field, value) {
+    const previousEntries = [...papEntries];
 
     setPapEntries((prev) =>
-      prev.map((item) => (item.id === entry.id ? saved : item))
+      prev.map((entry) =>
+        entry.id === entryId ? { ...entry, [field]: value } : entry
+      )
     );
-  } catch (error) {
-    console.error("Failed to create PAP entry:", error);
-    alert(`Failed to save PAP entry: ${error.message}`);
 
-    setPapEntries((prev) => prev.filter((item) => item.id !== entry.id));
+    try {
+      const saved = await updatePapEntryInSupabase(entryId, { [field]: value });
+
+      setPapEntries((prev) =>
+        prev.map((entry) => (entry.id === entryId ? saved : entry))
+      );
+    } catch (error) {
+      console.error("Failed to update PAP entry:", error);
+      alert(`Failed to update PAP entry: ${error.message}`);
+      setPapEntries(previousEntries);
+    }
   }
-}
 
-async function updatePapEntry(entryId, field, value) {
-  const previousEntries = [...papEntries];
+  async function removePapEntry(entryId) {
+    const previousEntries = [...papEntries];
 
-  setPapEntries((prev) =>
-    prev.map((entry) =>
-      entry.id === entryId ? { ...entry, [field]: value } : entry
-    )
-  );
+    setPapEntries((prev) => prev.filter((entry) => entry.id !== entryId));
 
-  try {
-    const saved = await updatePapEntryInSupabase(entryId, { [field]: value });
-
-    setPapEntries((prev) =>
-      prev.map((entry) => (entry.id === entryId ? saved : entry))
-    );
-  } catch (error) {
-    console.error("Failed to update PAP entry:", error);
-    alert(`Failed to update PAP entry: ${error.message}`);
-    setPapEntries(previousEntries);
+    try {
+      await deletePapEntryInSupabase(entryId);
+    } catch (error) {
+      console.error("Failed to delete PAP entry:", error);
+      alert(`Failed to delete PAP entry: ${error.message}`);
+      setPapEntries(previousEntries);
+    }
   }
-}
-
-async function removePapEntry(entryId) {
-  const previousEntries = [...papEntries];
-
-  setPapEntries((prev) => prev.filter((entry) => entry.id !== entryId));
-
-  try {
-    await deletePapEntryInSupabase(entryId);
-  } catch (error) {
-    console.error("Failed to delete PAP entry:", error);
-    alert(`Failed to delete PAP entry: ${error.message}`);
-    setPapEntries(previousEntries);
-  }
-}
 
   useEffect(() => {
     if (!session || formularyLoaded) return;
@@ -704,50 +722,7 @@ async function removePapEntry(entryId) {
     };
   }, [session]);
 
-  useEffect(() => {
-    if (!session) return;
 
-    const channel = supabase
-      .channel("encounters-realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "encounters" },
-        (payload) => {
-          const row = payload.new || payload.old;
-          if (!row) return;
-
-          setPatients((prev) =>
-            prev.map((patient) => {
-              if (patient.id !== row.patient_id) return patient;
-
-              return {
-                ...patient,
-                encounters: patient.encounters.map((encounter) =>
-                  encounter.id === row.id
-                    ? {
-                      ...encounter,
-                      status: row.status || encounter.status,
-                      soapStatus: row.soap_status || encounter.soapStatus,
-                      upperLevelSignedAt: row.upper_level_signed_at || null,
-                      upperLevelSignedBy: row.upper_level_signed_by || null,
-                      attendingSignedAt: row.attending_signed_at || null,
-                      attendingSignedBy: row.attending_signed_by || null,
-                      soapAuthorId: row.soap_author_id || encounter.soapAuthorId,
-                      soapAuthorRole: row.soap_author_role || encounter.soapAuthorRole,
-                    }
-                    : encounter
-                ),
-              };
-            })
-          );
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [session]);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showIntakeModal, setShowIntakeModal] = useState(false);
@@ -759,15 +734,15 @@ async function removePapEntry(entryId) {
     new URLSearchParams(window.location.search).get("display") === "board";
   const [selectedPatientId, setSelectedPatientId] = useState(null);
   const [selectedEncounterId, setSelectedEncounterId] = useState(null);
-  const { patients, setPatients } = useClinicData({
+  const { patients, setPatients, refreshClinicData } = useClinicData({
     authReady,
     session,
     userRole,
   });
   const dashboardSelectedPatient =
     patients.find((p) => p.id === dashboardSelectedPatientId) || null;
-  
-    useEffect(() => {
+
+  useEffect(() => {
     if (!session) return;
 
     const channel = supabase
@@ -835,75 +810,75 @@ async function removePapEntry(entryId) {
   }, [session]);
 
   useEffect(() => {
-  if (!session) return;
+    if (!session) return;
 
-  const channel = supabase
-    .channel("pap-entries-realtime")
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "pap_entries",
-      },
-      (payload) => {
-        const eventType = payload.eventType;
-        const row = payload.new || payload.old;
+    const channel = supabase
+      .channel("pap-entries-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "pap_entries",
+        },
+        (payload) => {
+          const eventType = payload.eventType;
+          const row = payload.new || payload.old;
 
-        if (!row) return;
+          if (!row) return;
 
-        const mappedRow = {
-          id: row.id,
-          patientId: row.patient_id || "",
-          patientName: row.patient_name || "",
-          mrn: row.mrn || "",
-          phone: row.phone || "",
-          medication: row.medication || "",
-          company: row.company || "",
-          status: row.status || "Pending Application",
-          startedDate: row.started_date || "",
-          assignedLeadership: row.assigned_leadership || "",
-          approvalUntilDate: row.approval_until_date || "",
-          nextFollowUpDate: row.next_follow_up_date || "",
-          nextRefillDate: row.next_refill_date || "",
-          denialReason: row.denial_reason || "",
-          discontinuedReason: row.discontinued_reason || "",
-          prescriptionChangeNotes: row.prescription_change_notes || "",
-          todoNotes: row.todo_notes || "",
-          generalNotes: row.general_notes || "",
-          createdAt: row.created_at || "",
-          updatedAt: row.updated_at || "",
-        };
+          const mappedRow = {
+            id: row.id,
+            patientId: row.patient_id || "",
+            patientName: row.patient_name || "",
+            mrn: row.mrn || "",
+            phone: row.phone || "",
+            medication: row.medication || "",
+            company: row.company || "",
+            status: row.status || "Pending Application",
+            startedDate: row.started_date || "",
+            assignedLeadership: row.assigned_leadership || "",
+            approvalUntilDate: row.approval_until_date || "",
+            nextFollowUpDate: row.next_follow_up_date || "",
+            nextRefillDate: row.next_refill_date || "",
+            denialReason: row.denial_reason || "",
+            discontinuedReason: row.discontinued_reason || "",
+            prescriptionChangeNotes: row.prescription_change_notes || "",
+            todoNotes: row.todo_notes || "",
+            generalNotes: row.general_notes || "",
+            createdAt: row.created_at || "",
+            updatedAt: row.updated_at || "",
+          };
 
-        if (eventType === "INSERT") {
-          setPapEntries((prev) => {
-            const exists = prev.some((entry) => entry.id === mappedRow.id);
-            if (exists) return prev;
-            return [mappedRow, ...prev];
-          });
+          if (eventType === "INSERT") {
+            setPapEntries((prev) => {
+              const exists = prev.some((entry) => entry.id === mappedRow.id);
+              if (exists) return prev;
+              return [mappedRow, ...prev];
+            });
+          }
+
+          if (eventType === "UPDATE") {
+            setPapEntries((prev) =>
+              prev.map((entry) =>
+                entry.id === mappedRow.id ? mappedRow : entry
+              )
+            );
+          }
+
+          if (eventType === "DELETE") {
+            setPapEntries((prev) =>
+              prev.filter((entry) => entry.id !== row.id)
+            );
+          }
         }
+      )
+      .subscribe();
 
-        if (eventType === "UPDATE") {
-          setPapEntries((prev) =>
-            prev.map((entry) =>
-              entry.id === mappedRow.id ? mappedRow : entry
-            )
-          );
-        }
-
-        if (eventType === "DELETE") {
-          setPapEntries((prev) =>
-            prev.filter((entry) => entry.id !== row.id)
-          );
-        }
-      }
-    )
-    .subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
-}, [session]);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session]);
 
   const [assignmentForm, setAssignmentForm] = useState({
     studentName: "",
@@ -1073,6 +1048,39 @@ async function removePapEntry(entryId) {
     );
   }, [patients]);
 
+  const specialtyEncounterRows = allEncounterRows.filter(
+    ({ encounter }) =>
+      encounter.visitType === "specialty_only" ||
+      encounter.visitType === "both"
+  );
+
+  const specialtyRoomRulesForBoard = useMemo(() => {
+  const today = formatClinicDate();
+
+  const mapProgramTypeToEncounterType = {
+    "Physical Therapy": "pt",
+    Dermatology: "dermatology",
+    "Mental Health": "mental_health",
+    "Addiction Medicine": "addiction",
+  };
+
+  const rules = {};
+
+  programSettings.forEach((row) => {
+    const encounterType = mapProgramTypeToEncounterType[row.program_type];
+    if (!encounterType) return;
+
+    if (row.next_specialty_date !== today) return;
+
+    rules[encounterType] = {
+      label: row.program_type,
+      allowedRooms: (row.rooms_assigned?.rooms || []).map((room) => String(room)),
+    };
+  });
+
+  return rules;
+}, [programSettings]);
+
   const registrationRows = useMemo(() => {
     return allEncounterRows
       .filter(({ encounter }) => {
@@ -1081,7 +1089,11 @@ async function removePapEntry(entryId) {
         }
 
         if (isLeadershipView) {
-          return encounter.status === "undergrad_complete";
+          return (
+            (encounter.status === "started" ||
+              encounter.status === "undergrad_complete") &&
+            encounter.visitType !== "specialty_only"
+          );
         }
 
         return false;
@@ -1183,6 +1195,42 @@ async function removePapEntry(entryId) {
 
   const totalPatientCount = visibleEncounterRows.length;
 
+  const specialtyCounts = useMemo(() => {
+  const counts = {
+    pt: 0,
+    dermatology: 0,
+    mental_health: 0,
+    addiction: 0,
+  };
+
+  patients.forEach((patient) => {
+    patient.encounters.forEach((encounter) => {
+      if (encounter.clinicDate !== selectedClinicDate) return;
+
+      const { visitType, specialtyType } = encounter;
+
+      if (
+  (encounter.visitType === "specialty_only" || encounter.visitType === "both") &&
+  encounter.specialtyType
+) {
+  counts[encounter.specialtyType] =
+    (counts[encounter.specialtyType] || 0) + 1;
+}
+
+      // 👇 dual visit counts twice (general + specialty)
+      if (visitType === "both") {
+        if (counts[specialtyType] !== undefined) {
+          // already counted above, no extra needed
+          // BUT we are intentionally counting specialty once per encounter
+          // (dual visit already included in both categories)
+        }
+      }
+    });
+  });
+
+  return counts;
+}, [patients, selectedClinicDate]);
+
   const [profiles, setProfiles] = useState([]);
   const [loadingProfiles, setLoadingProfiles] = useState(false);
   const [savingProfileId, setSavingProfileId] = useState(null);
@@ -1211,101 +1259,105 @@ async function removePapEntry(entryId) {
       const classification = (profile.classification || "").toLowerCase();
       const email = (profile.email || "").toLowerCase();
 
-return (
-  fullName.includes(query) ||
-  role.includes(query) ||
-  classification.includes(query) ||
-  email.includes(query)
-);
+      return (
+        fullName.includes(query) ||
+        role.includes(query) ||
+        classification.includes(query) ||
+        email.includes(query)
+      );
     });
   }, [profiles, userSearch, showOnlyActiveToday]);
 
   async function handleUndergradStartEncounter(data) {
-    try {
+  try {
+    let targetPatient = null;
+
+    if (data.matchedPatientId) {
+      const existingPatient = patients.find((p) => p.id === data.matchedPatientId);
+
+      if (!existingPatient) {
+        throw new Error("Matched patient was not found.");
+      }
+
+      const patientUpdates = {
+        preferredName: data.preferredName,
+        phone: data.phone,
+        sex: data.sex,
+        ethnicity: data.ethnicity,
+        address: data.addressLine1,
+        city: data.city,
+        state: data.state,
+        zipCode: data.zipCode,
+        emergencyContactName: data.emergencyContactName,
+        emergencyContactRelation: data.emergencyContactRelation,
+        emergencyContactPhone: data.emergencyContactPhone,
+        last4ssn: data.last4Ssn,
+        incomeRange: data.incomeRange,
+        spanishOnly: data.spanishOnly,
+        chronicConditions: data.chronicConditions,
+        chronicConditionsOther: data.chronicConditionsOther,
+      };
+
+      targetPatient = await updatePatientInSupabase(existingPatient.id, patientUpdates);
+    } else {
       const patientToSave = {
         ...data,
         mrn: "",
       };
 
-      const savedPatient = await createPatientInSupabase(patientToSave);
-
-      const encounter = {
-        clinicDate: formatClinicDate(),
-        createdAt: new Date().toISOString(),
-        newReturning: data.isReturning || "New",
-        visitLocation: "In Clinic",
-        chiefComplaint: "",
-        notes: "",
-        transportation: "",
-        needsElevator: false,
-        spanishSpeaking: false,
-        mammogramStatus: "",
-papStatus: "",
-        fluShot: "",
-        htn: false,
-        dm: false,
-        labsLast6Months: "",
-        nicotineUse: "",
-        nicotineDetails: "",
-        substanceUseConcern: "",
-        substanceUseTreatment: "",
-        substanceUseNotes: "",
-        dermatology: "N/A",
-        ophthalmology: "N/A",
-        optometry: "N/A",
-        diabeticEyeExamPastYear: "N/A",
-        physicalTherapy: "N/A",
-        mentalHealthCombined: "N/A",
-        counseling: "N/A",
-        anyMentalHealthPositive: false,
-        status: "started",
-        assignedStudent: "",
-        assignedUpperLevel: "",
-        roomNumber: "",
-      };
-
-      const savedEncounter = await createEncounterInSupabase(
-        savedPatient.id,
-        encounter
-      );
-
-      setPatients((prev) => [
-        {
-          ...savedPatient,
-          preferredName: data.preferredName || "",
-          last4ssn: data.last4Ssn || "",
-          phone: data.phone || "",
-          sex: data.sex || "",
-          ethnicity: data.ethnicity || "",
-          ttuStudent: data.ttuStudent || false,
-          address: data.address || "",
-          emergencyContactName: data.emergencyContactName || "",
-          emergencyContactRelation: data.emergencyContactRelation || "",
-          emergencyContactPhone: data.emergencyContactPhone || "",
-          incomeRange: data.incomeRange || "",
-          spanishOnly: data.spanishOnly || "",
-          chronicConditions: data.chronicConditions || [],
-          intakeStatus: "started",
-          encounters: [
-            {
-              ...encounter,
-              id: savedEncounter.id,
-              status: "started",
-            },
-          ],
-        },
-        ...prev,
-      ]);
-
-      setSelectedPatientId(savedPatient.id);
-      setSelectedEncounterId(savedEncounter.id);
-
-      setActiveView("registration");
-    } catch (error) {
-      console.error("Failed to save undergrad intake:", error);
-      alert(`Failed to save intake: ${error.message}`);
+      targetPatient = await createPatientInSupabase(patientToSave);
     }
+
+    const encounter = {
+      clinicDate: formatClinicDate(),
+      createdAt: new Date().toISOString(),
+      newReturning: data.matchedPatientId ? "Returning" : (data.isReturning || "New"),
+      visitLocation: "In Clinic",
+      chiefComplaint: "",
+      notes: "",
+      transportation: "",
+      needsElevator: false,
+      spanishSpeaking: false,
+      mammogramStatus: "",
+      papStatus: "",
+      fluShot: "",
+      htn: false,
+      dm: false,
+      labsLast6Months: "",
+      nicotineUse: "",
+      nicotineDetails: "",
+      substanceUseConcern: "",
+      substanceUseTreatment: "",
+      substanceUseNotes: "",
+      dermatology: "N/A",
+      ophthalmology: "N/A",
+      optometry: "N/A",
+      diabeticEyeExamPastYear: "N/A",
+      physicalTherapy: "N/A",
+      mentalHealthCombined: "N/A",
+      counseling: "N/A",
+      anyMentalHealthPositive: false,
+      visitType: data.visitType || "general",
+      specialtyType: data.specialtyType || "",
+      status: "started",
+      assignedStudent: "",
+      assignedUpperLevel: "",
+      roomNumber: "",
+      leadershipIntakeComplete: false,
+    };
+
+    const savedEncounter = await createEncounterInSupabase(targetPatient.id, encounter);
+
+    await refreshClinicData();
+
+    setSelectedPatientId(targetPatient.id);
+    setSelectedEncounterId(savedEncounter.id);
+    setActiveView("registration");
+  } catch (error) {
+    console.error("Failed to save undergrad intake:", error);
+    alert(`Failed to save intake: ${error.message}`);
   }
+}
 
   function openUndergradRegistration(patientId, encounterId) {
     const patient = patients.find((p) => p.id === patientId);
@@ -1358,8 +1410,10 @@ papStatus: "",
     try {
       await updatePatientInSupabase(registrationPatientId, patientUpdates);
 
+      const nextStatus = encounter.leadershipIntakeComplete ? "ready" : "undergrad_complete";
+
       await updateEncounterInSupabase(registrationEncounterId, {
-        status: "undergrad_complete",
+        status: nextStatus,
       });
 
       setPatients((prev) =>
@@ -1370,7 +1424,7 @@ papStatus: "",
               ...patientUpdates,
               encounters: p.encounters.map((e) =>
                 e.id === registrationEncounterId
-                  ? { ...e, status: "undergrad_complete" }
+                  ? { ...e, status: nextStatus }
                   : e
               ),
             }
@@ -1418,7 +1472,7 @@ papStatus: "",
       spanishSpeaking: encounter.spanishSpeaking || "",
       over65: patient.age ? Number(patient.age) > 65 : false,
       mammogramStatus: encounter.mammogramStatus || encounter.mammogramPapSmear || "",
-papStatus: encounter.papStatus || "",
+      papStatus: encounter.papStatus || "",
       fluShot: encounter.fluShot || "",
       htn: encounter.htn || false,
       dm: encounter.dm || false,
@@ -1436,11 +1490,14 @@ papStatus: encounter.papStatus || "",
       mentalHealthCombined: encounter.mentalHealthCombined || "N/A",
       counseling: encounter.counseling || "N/A",
       anyMentalHealthPositive: encounter.anyMentalHealthPositive || false,
+      visitType: encounter.visitType || "general",
+      specialtyType: encounter.specialtyType || "",
+      leadershipIntakeComplete: false,
     });
 
     setEditingPatientId(patientId);
     setIsEditingIntake(true);
-    setIntakeTab(1);
+    setIntakeTab(0);
     setShowIntakeModal(true);
   }
 
@@ -1911,8 +1968,8 @@ papStatus: encounter.papStatus || "",
       spanishSpeaking: selectedEncounter.spanishSpeaking || false,
       over65: selectedPatient.age ? Number(selectedPatient.age) > 65 : false,
       mammogramStatus:
-  selectedEncounter.mammogramStatus || selectedEncounter.mammogramPapSmear || "",
-papStatus: selectedEncounter.papStatus || "",
+        selectedEncounter.mammogramStatus || selectedEncounter.mammogramPapSmear || "",
+      papStatus: selectedEncounter.papStatus || "",
       fluShot: selectedEncounter.fluShot || "",
       htn: selectedEncounter.htn || false,
       dm: selectedEncounter.dm || false,
@@ -1930,6 +1987,8 @@ papStatus: selectedEncounter.papStatus || "",
       mentalHealthCombined: selectedEncounter.mentalHealthCombined || "N/A",
       counseling: selectedEncounter.counseling || "N/A",
       anyMentalHealthPositive: selectedEncounter.anyMentalHealthPositive || false,
+      visitType: selectedEncounter.visitType || "general",
+      specialtyType: selectedEncounter.specialtyType || "",
     });
 
     setEditingPatientId(selectedPatient.id);
@@ -2005,16 +2064,16 @@ papStatus: selectedEncounter.papStatus || "",
         chiefComplaint,
         "Substance use treatment requested"
       );
-      
+
     }
     if (intakeForm.mammogramStatus === "Interested") {
-  pushEntry(
-    "Mammogram",
-    "Mammogram screening requested",
-    chiefComplaint,
-    "Mammogram screening requested"
-  );
-}
+      pushEntry(
+        "Mammogram",
+        "Mammogram screening requested",
+        chiefComplaint,
+        "Mammogram screening requested"
+      );
+    }
 
     return entries;
   }
@@ -2028,19 +2087,19 @@ papStatus: selectedEncounter.papStatus || "",
     if (entries.length === 0) return;
 
     const hasOpenReferral = (patientId, programType) => {
-  return programEntries.some(
-    (entry) =>
-      String(entry.patientId) === String(patientId) &&
-      entry.programType === programType &&
-      entry.status !== "Completed" &&
-      entry.status !== "Declined"
-  );
-};
+      return programEntries.some(
+        (entry) =>
+          String(entry.patientId) === String(patientId) &&
+          entry.programType === programType &&
+          entry.status !== "Completed" &&
+          entry.status !== "Declined"
+      );
+    };
 
-for (const entry of entries) {
-  if (hasOpenReferral(entry.patientId, entry.programType)) continue;
-  await addProgramEntry(entry);
-}
+    for (const entry of entries) {
+      if (hasOpenReferral(entry.patientId, entry.programType)) continue;
+      await addProgramEntry(entry);
+    }
   }
 
   async function submitPatient() {
@@ -2087,6 +2146,8 @@ for (const entry of entries) {
         });
 
         console.log("savedPatient update worked:", savedPatient);
+        const nextStatus =
+          selectedEncounter.status === "undergrad_complete" ? "ready" : "started";
 
         const savedEncounter = await updateEncounterInSupabase(selectedEncounter.id, {
           chiefComplaint: intakeForm.chiefComplaint,
@@ -2097,7 +2158,7 @@ for (const entry of entries) {
           needsElevator: intakeForm.needsElevator,
           spanishSpeaking: intakeForm.spanishSpeaking,
           mammogramStatus: intakeForm.mammogramStatus,
-papStatus: intakeForm.papStatus,
+          papStatus: intakeForm.papStatus,
           fluShot: intakeForm.fluShot,
           htn: intakeForm.htn,
           dm: intakeForm.dm,
@@ -2115,7 +2176,10 @@ papStatus: intakeForm.papStatus,
           mentalHealthCombined: intakeForm.mentalHealthCombined,
           counseling: intakeForm.counseling,
           anyMentalHealthPositive: intakeForm.anyMentalHealthPositive,
-          status: "ready",
+          visitType: intakeForm.visitType,
+          specialtyType: intakeForm.specialtyType,
+          leadershipIntakeComplete: true,
+          status: nextStatus,
         });
 
         console.log("savedEncounter update worked:", savedEncounter);
@@ -2138,7 +2202,8 @@ papStatus: intakeForm.papStatus,
                   encounter.id === selectedEncounter.id
                     ? {
                       ...encounter,
-                      status: "ready",
+                      status: nextStatus,
+                      leadershipIntakeComplete: true,
                       newReturning: intakeForm.newReturning,
                       visitLocation: intakeForm.visitLocation,
                       chiefComplaint: intakeForm.chiefComplaint,
@@ -2147,7 +2212,7 @@ papStatus: intakeForm.papStatus,
                       needsElevator: intakeForm.needsElevator,
                       spanishSpeaking: intakeForm.spanishSpeaking,
                       mammogramStatus: intakeForm.mammogramStatus,
-papStatus: intakeForm.papStatus,
+                      papStatus: intakeForm.papStatus,
                       fluShot: intakeForm.fluShot,
                       htn: intakeForm.htn,
                       dm: intakeForm.dm,
@@ -2165,6 +2230,8 @@ papStatus: intakeForm.papStatus,
                       mentalHealthCombined: intakeForm.mentalHealthCombined,
                       counseling: intakeForm.counseling,
                       anyMentalHealthPositive: intakeForm.anyMentalHealthPositive,
+                      visitType: intakeForm.visitType,
+                      specialtyType: intakeForm.specialtyType,
                     }
                     : encounter
                 ),
@@ -2190,7 +2257,7 @@ papStatus: intakeForm.papStatus,
         setAutoFilledMatchPatientId(null);
         setIsEditingIntake(false);
         setEditingPatientId(null);
-        setActiveView("chart");
+        setActiveView("queue");
         return;
       } catch (error) {
         console.error("Failed to update intake in Supabase:", error);
@@ -2233,15 +2300,15 @@ papStatus: intakeForm.papStatus,
           needsElevator: intakeData.needsElevator ?? encounter.needsElevator ?? false,
           spanishSpeaking: intakeData.spanishSpeaking ?? encounter.spanishSpeaking ?? false,
           mammogramStatus:
-  intakeData.mammogramStatus ??
-  intakeData.mammogramPapSmear ??
-  encounter.mammogramStatus ??
-  encounter.mammogramPapSmear ??
-  "",
-papStatus:
-  intakeData.papStatus ??
-  encounter.papStatus ??
-  "",
+            intakeData.mammogramStatus ??
+            intakeData.mammogramPapSmear ??
+            encounter.mammogramStatus ??
+            encounter.mammogramPapSmear ??
+            "",
+          papStatus:
+            intakeData.papStatus ??
+            encounter.papStatus ??
+            "",
           fluShot: intakeData.fluShot ?? encounter.fluShot ?? "",
           htn: intakeData.htn ?? encounter.htn ?? false,
           dm: intakeData.dm ?? encounter.dm ?? false,
@@ -2270,6 +2337,8 @@ papStatus:
             intakeData.anyMentalHealthPositive ??
             encounter.anyMentalHealthPositive ??
             false,
+          visitType: intakeData.visitType ?? encounter.visitType ?? "general",
+          specialtyType: intakeData.specialtyType ?? encounter.specialtyType ?? "",
         };
 
         setPatients((prev) =>
@@ -2360,15 +2429,15 @@ papStatus:
                 spanishSpeaking:
                   intakeData.spanishSpeaking ?? encounter.spanishSpeaking ?? false,
                 mammogramStatus:
-  intakeData.mammogramStatus ??
-  intakeData.mammogramPapSmear ??
-  encounter.mammogramStatus ??
-  encounter.mammogramPapSmear ??
-  "",
-papStatus:
-  intakeData.papStatus ??
-  encounter.papStatus ??
-  "",
+                  intakeData.mammogramStatus ??
+                  intakeData.mammogramPapSmear ??
+                  encounter.mammogramStatus ??
+                  encounter.mammogramPapSmear ??
+                  "",
+                papStatus:
+                  intakeData.papStatus ??
+                  encounter.papStatus ??
+                  "",
                 fluShot: intakeData.fluShot ?? encounter.fluShot ?? "",
                 htn: intakeData.htn ?? encounter.htn ?? false,
                 dm: intakeData.dm ?? encounter.dm ?? false,
@@ -2401,6 +2470,8 @@ papStatus:
                   intakeData.anyMentalHealthPositive ??
                   encounter.anyMentalHealthPositive ??
                   false,
+                visitType: intakeData.visitType ?? encounter.visitType ?? "",
+                specialtyType: intakeData.specialtyType ?? encounter.specialtyType ?? "",
               };
             })(),
           ],
@@ -2532,7 +2603,7 @@ papStatus:
       needsElevator: false,
       spanishSpeaking: false,
       mammogramStatus: "",
-papStatus: "",
+      papStatus: "",
       fluShot: "",
       htn: false,
       dm: false,
@@ -4205,63 +4276,63 @@ papStatus: "",
   }
 
   async function handleResetUserPassword(email) {
-  if (!email) {
-    setProfilesMessage("This user does not have an email saved.");
-    return;
-  }
-
-  try {
-    setProfilesMessage("");
-    await sendPasswordReset(email);
-    setProfilesMessage(`Password reset email sent to ${email}.`);
-  } catch (error) {
-    console.error("Failed to send password reset:", error);
-    setProfilesMessage(`Failed to send password reset: ${error.message}`);
-  }
-}
-
-async function handleDeleteUser(userId) {
-  const confirmText = prompt(
-  "Type DELETE to confirm removing this user permanently:"
-);
-
-if (confirmText !== "DELETE") return;
-
-  try {
-    const {
-      data: { session: currentSession },
-    } = await supabase.auth.getSession();
-
-    if (!currentSession?.access_token) {
-      throw new Error("Your session expired. Please sign out and sign back in.");
+    if (!email) {
+      setProfilesMessage("This user does not have an email saved.");
+      return;
     }
 
-    const { data, error } = await supabase.functions.invoke("delete-user", {
-      body: { userId },
-      headers: {
-        Authorization: `Bearer ${currentSession.access_token}`,
-      },
-    });
+    try {
+      setProfilesMessage("");
+      await sendPasswordReset(email);
+      setProfilesMessage(`Password reset email sent to ${email}.`);
+    } catch (error) {
+      console.error("Failed to send password reset:", error);
+      setProfilesMessage(`Failed to send password reset: ${error.message}`);
+    }
+  }
 
-    if (error) {
-      let details = null;
+  async function handleDeleteUser(userId) {
+    const confirmText = prompt(
+      "Type DELETE to confirm removing this user permanently:"
+    );
 
-      try {
-        details = await error.context.json();
-      } catch {
-        details = null;
+    if (confirmText !== "DELETE") return;
+
+    try {
+      const {
+        data: { session: currentSession },
+      } = await supabase.auth.getSession();
+
+      if (!currentSession?.access_token) {
+        throw new Error("Your session expired. Please sign out and sign back in.");
       }
 
-      throw new Error(details?.error || error.message || "Delete failed");
-    }
+      const { data, error } = await supabase.functions.invoke("delete-user", {
+        body: { userId },
+        headers: {
+          Authorization: `Bearer ${currentSession.access_token}`,
+        },
+      });
 
-    setProfiles((prev) => prev.filter((p) => p.id !== userId));
-    setProfilesMessage("User deleted successfully.");
-  } catch (error) {
-    console.error("Failed to delete user:", error);
-    alert(error.message);
+      if (error) {
+        let details = null;
+
+        try {
+          details = await error.context.json();
+        } catch {
+          details = null;
+        }
+
+        throw new Error(details?.error || error.message || "Delete failed");
+      }
+
+      setProfiles((prev) => prev.filter((p) => p.id !== userId));
+      setProfilesMessage("User deleted successfully.");
+    } catch (error) {
+      console.error("Failed to delete user:", error);
+      alert(error.message);
+    }
   }
-}
 
   const sortedMedications = selectedEncounter
     ? [...(selectedEncounter.medications || [])].sort((a, b) => {
@@ -4592,7 +4663,10 @@ if (confirmText !== "DELETE") return;
           )}
 
           {activeView === "undergrad-intake" && userRole === "undergraduate" && (
-            <UndergradIntakeView onSave={handleUndergradStartEncounter} />
+            <UndergradIntakeView
+  onSave={handleUndergradStartEncounter}
+  patients={patients}
+/>
           )}
 
           {activeView === "queue" && (
@@ -4613,6 +4687,16 @@ if (confirmText !== "DELETE") return;
               upperLevelNameOptions={upperLevelNameOptions}
               ROOM_OPTIONS={roomDropdownOptions}
               onAssignFromQueue={assignEncounterFromQueue}
+            />
+          )}
+
+          {activeView === "specialty-queue" && (
+            <SpecialtyQueueView
+              specialtyEncounterRows={specialtyEncounterRows}
+              openPatientChart={openPatientChart}
+              getFullPatientName={getFullPatientName}
+              formatDate={formatDate}
+              isLeadershipView={isLeadershipView}
             />
           )}
 
@@ -4637,6 +4721,7 @@ if (confirmText !== "DELETE") return;
               selectedEncounter={selectedEncounter}
               openPatientChart={openPatientChart}
               isLeadershipView={canManageRooms}
+              SPECIALTY_ROOM_RULES={specialtyRoomRulesForBoard}
             />
           )}
           {activeView === "formulary" && (
@@ -4771,6 +4856,7 @@ if (confirmText !== "DELETE") return;
               returningPatientCount={returningPatientCount}
               totalPatientCount={totalPatientCount}
               exportClinicSummaryToWord={exportClinicSummaryToWord}
+              specialtyCounts={specialtyCounts}
             />
           )}
 
@@ -4791,19 +4877,19 @@ if (confirmText !== "DELETE") return;
           )}
 
           {activeView === "pap" && isLeadershipView && (
-  <PAPView
-    papEntries={papEntries}
-    addPapEntry={addPapEntry}
-    updatePapEntry={updatePapEntry}
-    removePapEntry={removePapEntry}
-    patients={patients}
-    leadershipOptions={profiles
-      .filter((profile) => profile.role === "leadership")
-      .map((profile) => (profile.full_name || "").trim())
-      .filter(Boolean)
-      .sort((a, b) => a.localeCompare(b))}
-  />
-)}
+            <PAPView
+              papEntries={papEntries}
+              addPapEntry={addPapEntry}
+              updatePapEntry={updatePapEntry}
+              removePapEntry={removePapEntry}
+              patients={patients}
+              leadershipOptions={profiles
+                .filter((profile) => profile.role === "leadership")
+                .map((profile) => (profile.full_name || "").trim())
+                .filter(Boolean)
+                .sort((a, b) => a.localeCompare(b))}
+            />
+          )}
         </div>
       </div>
 

@@ -45,6 +45,16 @@ export default function QueueView({
       roomNumber: draft.roomNumber ?? encounter.roomNumber ?? "",
     });
   }
+  function dualVisitBadge(encounter) {
+  if (encounter.visitType === "both") {
+    return (
+      <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
+        Dual Visit
+      </span>
+    );
+  }
+  return null;
+}
 
   const unassignedRows =
     userRole === "leadership"
@@ -122,6 +132,7 @@ export default function QueueView({
                     Student: {encounter.assignedStudent || "—"} • Upper Level: {encounter.assignedUpperLevel || "—"}
                   </p>
                   <div className="flex flex-wrap gap-2">
+                    {dualVisitBadge(encounter)}
                     {priorityBadge(encounter)}
                     {spanishBadge(encounter)}
                     {diabetesBadge?.(encounter)}
@@ -239,6 +250,7 @@ export default function QueueView({
                       Student: {encounter.assignedStudent || "—"} • Upper Level: {encounter.assignedUpperLevel || "—"}
                     </p>
                     <div className="flex flex-wrap gap-2">
+                      {dualVisitBadge(encounter)}
                       {priorityBadge(encounter)}
                     {spanishBadge(encounter)}
                     {diabetesBadge?.(encounter)}

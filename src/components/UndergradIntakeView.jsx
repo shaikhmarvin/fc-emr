@@ -1,4 +1,6 @@
-import { useMemo, useState } from "react";
+
+import { useEffect, useMemo, useState } from "react";
+import { findPotentialDuplicatePatient } from "../utils";
 
 const ETHNICITY_OPTIONS = [
   "Hispanic or Latino",
@@ -118,10 +120,14 @@ const EMPTY_FORM = {
   spanishOnly: "",
   chronicConditions: [],
   chronicConditionsOther: "",
+  visitType: "general",
+  specialtyType: "",
 };
 
-export default function UndergradIntakeView({ onSave }) {
+export default function UndergradIntakeView({ onSave, patients }) {
   const [form, setForm] = useState(EMPTY_FORM);
+  const [matchPatientId, setMatchPatientId] = useState(null);
+const [autoFilledMatchPatientId, setAutoFilledMatchPatientId] = useState(null);
 
   function handleChange(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -166,23 +172,92 @@ export default function UndergradIntakeView({ onSave }) {
 
   const age = useMemo(() => calculateAge(form.dob), [form.dob]);
 
+  useEffect(() => {
+  if (!form.firstName || !form.lastName || !form.dob) {
+    setMatchPatientId(null);
+    return;
+  }
+
+  const possibleMatch = findPotentialDuplicatePatient(
+    patients || [],
+    form.firstName,
+    form.lastName,
+    form.dob,
+    form.last4Ssn,
+    null
+  );
+
+  setMatchPatientId(possibleMatch ? possibleMatch.id : null);
+}, [form.firstName, form.lastName, form.dob, form.last4Ssn, patients]);
+
+useEffect(() => {
+  if (!matchPatientId) return;
+
+  setForm((prev) => ({
+    ...prev,
+    isReturning: "Returning",
+  }));
+}, [matchPatientId]);
+
+useEffect(() => {
+  if (!matchPatientId) return;
+  if (autoFilledMatchPatientId === matchPatientId) return;
+
+  const matchedPatient = (patients || []).find((p) => p.id === matchPatientId);
+  if (!matchedPatient) return;
+
+  setAutoFilledMatchPatientId(matchPatientId);
+
+  setForm((prev) => ({
+    ...prev,
+    firstName: prev.firstName || matchedPatient.firstName || "",
+    preferredName: prev.preferredName || matchedPatient.preferredName || "",
+    lastName: prev.lastName || matchedPatient.lastName || "",
+    dob: prev.dob || matchedPatient.dob || "",
+    phone: prev.phone || matchedPatient.phone || "",
+    sex: prev.sex || matchedPatient.sex || "",
+    ethnicity: prev.ethnicity || matchedPatient.ethnicity || "",
+    addressLine1: prev.addressLine1 || matchedPatient.address || "",
+city: prev.city || matchedPatient.city || "",
+state: prev.state || matchedPatient.state || "",
+zipCode: prev.zipCode || matchedPatient.zipCode || "",
+    emergencyContactName:
+      prev.emergencyContactName || matchedPatient.emergencyContactName || "",
+    emergencyContactRelation:
+      prev.emergencyContactRelation || matchedPatient.emergencyContactRelation || "",
+    emergencyContactPhone:
+      prev.emergencyContactPhone || matchedPatient.emergencyContactPhone || "",
+    last4Ssn: prev.last4Ssn || matchedPatient.last4ssn || "",
+    incomeRange: prev.incomeRange || matchedPatient.incomeRange || "",
+    spanishOnly: prev.spanishOnly || matchedPatient.spanishOnly || "",
+    chronicConditions: prev.chronicConditions?.length
+      ? prev.chronicConditions
+      : matchedPatient.chronicConditions || [],
+    chronicConditionsOther:
+      prev.chronicConditionsOther || matchedPatient.chronicConditionsOther || "",
+  }));
+}, [matchPatientId, autoFilledMatchPatientId, patients]);
+
   function handleSubmit() {
     const payload = {
-      ...form,
-      age,
-      address: [form.addressLine1, form.city, form.state, form.zipCode]
-        .filter(Boolean)
-        .join(", "),
-      emergencyContact: {
-        name: form.emergencyContactName,
-        relation: form.emergencyContactRelation,
-        phone: form.emergencyContactPhone,
-      },
-      intakeStatus: "started",
-    };
+  ...form,
+  age,
+  matchedPatientId: matchPatientId || null,
+  address: [form.addressLine1, form.city, form.state, form.zipCode]
+    .filter(Boolean)
+    .join(", "),
+  emergencyContact: {
+    name: form.emergencyContactName,
+    relation: form.emergencyContactRelation,
+    phone: form.emergencyContactPhone,
+  },
+  intakeStatus: "started",
+};
 
     onSave(payload);
-    setForm(EMPTY_FORM);
+setForm(EMPTY_FORM);
+setMatchPatientId(null);
+setAutoFilledMatchPatientId(null);
   }
 
   return (
@@ -196,6 +271,13 @@ export default function UndergradIntakeView({ onSave }) {
             Enter patient demographics and form details before full registration.
           </p>
         </div>
+
+        {matchPatientId && (
+  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+    Possible duplicate found. Existing patient data has been filled in where available.
+    Submitting will create a new encounter on the matched patient instead of creating a duplicate chart.
+  </div>
+)}
 
         <div className="grid gap-6">
           <div className="rounded-2xl bg-white p-5 shadow-sm md:p-6">
@@ -262,6 +344,41 @@ export default function UndergradIntakeView({ onSave }) {
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Visit Type
+                </label>
+                <select
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={form.visitType || "general"}
+                  onChange={(e) => handleChange("visitType", e.target.value)}
+                >
+                  <option value="general">General Clinic</option>
+                  <option value="specialty_only">Specialty Clinic Only</option>
+                  <option value="both">General + Specialty Clinic</option>
+                </select>
+              </div>
+
+              {form.visitType !== "general" && (
+  <div>
+    <label className="mb-1 block text-sm font-medium text-slate-700">
+      Specialty Type
+    </label>
+    <select
+      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+      value={form.specialtyType || ""}
+      onChange={(e) => handleChange("specialtyType", e.target.value)}
+    >
+      <option value="">Select Specialty</option>
+      <option value="pt">Physical Therapy</option>
+      <option value="dermatology">Dermatology</option>
+      <option value="mental_health">Mental Health</option>
+      <option value="addiction">Addiction Medicine</option>
+    </select>
+  </div>
+)}
+              
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
                   Phone Number
                 </label>
                 <input
@@ -287,39 +404,39 @@ export default function UndergradIntakeView({ onSave }) {
               </div>
 
               <div>
-  <label className="mb-1 block text-sm font-medium text-slate-700">
-    Sex
-  </label>
-  <select
-    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-    value={form.sex}
-    onChange={(e) => handleChange("sex", e.target.value)}
-  >
-    <option value="">Select</option>
-    {SEX_OPTIONS.map((option) => (
-      <option key={option} value={option}>
-        {option}
-      </option>
-    ))}
-  </select>
-</div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Sex
+                </label>
+                <select
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={form.sex}
+                  onChange={(e) => handleChange("sex", e.target.value)}
+                >
+                  <option value="">Select</option>
+                  {SEX_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
               <div className="md:col-span-2">
                 <label className="mb-1 block text-sm font-medium text-slate-700">
                   Ethnicity
                 </label>
                 <select
-  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-  value={form.ethnicity}
-  onChange={(e) => handleChange("ethnicity", e.target.value)}
->
-  <option value="">Select</option>
-  {ETHNICITY_OPTIONS.map((option) => (
-    <option key={option} value={option}>
-      {option}
-    </option>
-  ))}
-</select>
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={form.ethnicity}
+                  onChange={(e) => handleChange("ethnicity", e.target.value)}
+                >
+                  <option value="">Select</option>
+                  {ETHNICITY_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -338,7 +455,11 @@ export default function UndergradIntakeView({ onSave }) {
         <div className="rounded-2xl bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
             <button
-              onClick={() => setForm(EMPTY_FORM)}
+              onClick={() => {
+  setForm(EMPTY_FORM);
+  setMatchPatientId(null);
+  setAutoFilledMatchPatientId(null);
+}}
               className="rounded-lg bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-300"
             >
               Clear Form
