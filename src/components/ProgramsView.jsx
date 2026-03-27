@@ -5,6 +5,7 @@ import { fetchProgramSettings, updateProgramSetting } from "../api/programSettin
 const PROGRAM_TYPES = [
   "Physical Therapy",
   "Dermatology",
+  "Ophthalmology",
   "Mental Health",
   "Counseling",
   "Addiction Medicine",
@@ -242,6 +243,14 @@ export default function ProgramsView({
         return {
           schedulingType: "count",
           primaryCount: 7,
+          backupCount: 3,
+        };
+      }
+
+      if (type === "Ophthalmology") {
+        return {
+          schedulingType: "count",
+          primaryCount: 8,
           backupCount: 3,
         };
       }

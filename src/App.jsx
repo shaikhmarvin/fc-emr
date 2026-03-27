@@ -1057,9 +1057,10 @@ export default function App() {
   const specialtyRoomRulesForBoard = useMemo(() => {
   const today = formatClinicDate();
 
-  const mapProgramTypeToEncounterType = {
+    const mapProgramTypeToEncounterType = {
     "Physical Therapy": "pt",
     Dermatology: "dermatology",
+    Ophthalmology: "ophthalmology",
     "Mental Health": "mental_health",
     "Addiction Medicine": "addiction",
   };
@@ -1199,6 +1200,7 @@ export default function App() {
   const counts = {
     pt: 0,
     dermatology: 0,
+    ophthalmology: 0,
     mental_health: 0,
     addiction: 0,
   };

@@ -10,6 +10,8 @@ function getSpecialtyLabel(type) {
             return "Physical Therapy";
         case "dermatology":
             return "Dermatology";
+        case "ophthalmology":
+            return "Ophthalmology";
         case "mental_health":
             return "Mental Health";
         case "addiction":
@@ -223,6 +225,10 @@ export default function SpecialtyQueueView({
         ({ encounter }) => encounter.specialtyType === "dermatology"
     );
 
+    const ophthalmologyRows = specialtyEncounterRows.filter(
+        ({ encounter }) => encounter.specialtyType === "ophthalmology"
+    );
+
     const mentalHealthRows = specialtyEncounterRows.filter(
         ({ encounter }) => encounter.specialtyType === "mental_health"
     );
@@ -276,10 +282,11 @@ export default function SpecialtyQueueView({
             </div>
 
             {!isLeadershipView && !selectedSpecialty && (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
                     {[
                         { key: "pt", label: "Physical Therapy" },
                         { key: "dermatology", label: "Dermatology" },
+                        { key: "ophthalmology", label: "Ophthalmology" },
                         { key: "mental_health", label: "Mental Health" },
                         { key: "addiction", label: "Addiction Medicine" },
                     ].map((item) => (
@@ -319,6 +326,17 @@ export default function SpecialtyQueueView({
                         <SpecialtyTable
                             title="Dermatology"
                             rows={dermRows}
+                            search={search}
+                            openPatientChart={openPatientChart}
+                            getFullPatientName={getFullPatientName}
+                            formatDate={formatDate}
+                        />
+                    )}
+
+                    {selectedSpecialty === "ophthalmology" && (
+                        <SpecialtyTable
+                            title="Ophthalmology"
+                            rows={ophthalmologyRows}
                             search={search}
                             openPatientChart={openPatientChart}
                             getFullPatientName={getFullPatientName}
@@ -369,6 +387,16 @@ export default function SpecialtyQueueView({
                         getFullPatientName={getFullPatientName}
                         formatDate={formatDate}
                     />
+
+                    <SpecialtyTable
+                        title="Ophthalmology"
+                        rows={ophthalmologyRows}
+                        search={search}
+                        openPatientChart={openPatientChart}
+                        getFullPatientName={getFullPatientName}
+                        formatDate={formatDate}
+                    />
+
 
                     <SpecialtyTable
                         title="Mental Health"

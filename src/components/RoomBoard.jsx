@@ -88,6 +88,7 @@ export default function RoomBoard({
           const specialtyLabelMap = {
             pt: "Physical Therapy",
             dermatology: "Dermatology",
+            ophthalmology: "Ophthalmology",
             mental_health: "Mental Health",
             addiction: "Addiction Medicine",
           };

@@ -370,6 +370,7 @@ setAutoFilledMatchPatientId(null);
       <option value="">Select Specialty</option>
       <option value="pt">Physical Therapy</option>
       <option value="dermatology">Dermatology</option>
+      <option value="ophthalmology">Ophthalmology</option>
       <option value="mental_health">Mental Health</option>
       <option value="addiction">Addiction Medicine</option>
     </select>
