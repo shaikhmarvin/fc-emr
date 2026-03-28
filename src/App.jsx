@@ -382,15 +382,15 @@ export default function App() {
     }
   }
 
-  function getMissingSoapFields(encounter) {
-    if (!encounter) return [];
+  function getMissingSoapFields(source) {
+    if (!source) return [];
 
     const missing = [];
 
-    if (!(encounter.soapSubjective || "").trim()) missing.push("Subjective");
-    if (!(encounter.soapObjective || "").trim()) missing.push("Objective");
-    if (!(encounter.soapAssessment || "").trim()) missing.push("Assessment");
-    if (!(encounter.soapPlan || "").trim()) missing.push("Plan");
+    if (!(source.soapSubjective || "").trim()) missing.push("Subjective");
+    if (!(source.soapObjective || "").trim()) missing.push("Objective");
+    if (!(source.soapAssessment || "").trim()) missing.push("Assessment");
+    if (!(source.soapPlan || "").trim()) missing.push("Plan");
 
     return missing;
   }
@@ -545,19 +545,19 @@ export default function App() {
   }, [session, papLoaded]);
 
   useEffect(() => {
-  if (!session) return;
+    if (!session) return;
 
-  async function loadProgramSettingsForBoard() {
-    try {
-      const rows = await fetchProgramSettings();
-      setProgramSettings(rows || []);
-    } catch (error) {
-      console.error("Failed to load program settings:", error);
+    async function loadProgramSettingsForBoard() {
+      try {
+        const rows = await fetchProgramSettings();
+        setProgramSettings(rows || []);
+      } catch (error) {
+        console.error("Failed to load program settings:", error);
+      }
     }
-  }
 
-  loadProgramSettingsForBoard();
-}, [session]);
+    loadProgramSettingsForBoard();
+  }, [session]);
 
 
   async function addProgramEntry(entry) {
@@ -904,6 +904,14 @@ export default function App() {
 
   const [soapBusy, setSoapBusy] = useState(false);
   const [soapUiMessage, setSoapUiMessage] = useState("");
+  const [soapDraft, setSoapDraft] = useState({
+    encounterId: null,
+    soapSubjective: "",
+    soapObjective: "",
+    soapAssessment: "",
+    soapPlan: "",
+    notes: "",
+  });
   const [auditEntries, setAuditEntries] = useState([]);
   const [auditLoading, setAuditLoading] = useState(false);
 
@@ -997,6 +1005,30 @@ export default function App() {
   const selectedPatient = patients.find((p) => p.id === selectedPatientId) || null;
   const selectedEncounter =
     selectedPatient?.encounters.find((e) => e.id === selectedEncounterId) || null;
+
+  useEffect(() => {
+    if (!selectedEncounter?.id) {
+      setSoapDraft({
+        encounterId: null,
+        soapSubjective: "",
+        soapObjective: "",
+        soapAssessment: "",
+        soapPlan: "",
+        notes: "",
+      });
+      return;
+    }
+
+    setSoapDraft({
+      encounterId: selectedEncounter.id,
+      soapSubjective: selectedEncounter.soapSubjective || "",
+      soapObjective: selectedEncounter.soapObjective || "",
+      soapAssessment: selectedEncounter.soapAssessment || "",
+      soapPlan: selectedEncounter.soapPlan || "",
+      notes: selectedEncounter.notes || "",
+    });
+  }, [selectedEncounter?.id]);
+
   useEffect(() => {
     if (selectedEncounter?.id) {
       loadAuditLog();
@@ -1055,32 +1087,32 @@ export default function App() {
   );
 
   const specialtyRoomRulesForBoard = useMemo(() => {
-  const today = formatClinicDate();
+    const today = formatClinicDate();
 
     const mapProgramTypeToEncounterType = {
-    "Physical Therapy": "pt",
-    Dermatology: "dermatology",
-    Ophthalmology: "ophthalmology",
-    "Mental Health": "mental_health",
-    "Addiction Medicine": "addiction",
-  };
-
-  const rules = {};
-
-  programSettings.forEach((row) => {
-    const encounterType = mapProgramTypeToEncounterType[row.program_type];
-    if (!encounterType) return;
-
-    if (row.next_specialty_date !== today) return;
-
-    rules[encounterType] = {
-      label: row.program_type,
-      allowedRooms: (row.rooms_assigned?.rooms || []).map((room) => String(room)),
+      "Physical Therapy": "pt",
+      Dermatology: "dermatology",
+      Ophthalmology: "ophthalmology",
+      "Mental Health": "mental_health",
+      "Addiction Medicine": "addiction",
     };
-  });
 
-  return rules;
-}, [programSettings]);
+    const rules = {};
+
+    programSettings.forEach((row) => {
+      const encounterType = mapProgramTypeToEncounterType[row.program_type];
+      if (!encounterType) return;
+
+      if (row.next_specialty_date !== today) return;
+
+      rules[encounterType] = {
+        label: row.program_type,
+        allowedRooms: (row.rooms_assigned?.rooms || []).map((room) => String(room)),
+      };
+    });
+
+    return rules;
+  }, [programSettings]);
 
   const registrationRows = useMemo(() => {
     return allEncounterRows
@@ -1197,41 +1229,41 @@ export default function App() {
   const totalPatientCount = visibleEncounterRows.length;
 
   const specialtyCounts = useMemo(() => {
-  const counts = {
-    pt: 0,
-    dermatology: 0,
-    ophthalmology: 0,
-    mental_health: 0,
-    addiction: 0,
-  };
+    const counts = {
+      pt: 0,
+      dermatology: 0,
+      ophthalmology: 0,
+      mental_health: 0,
+      addiction: 0,
+    };
 
-  patients.forEach((patient) => {
-    patient.encounters.forEach((encounter) => {
-      if (encounter.clinicDate !== selectedClinicDate) return;
+    patients.forEach((patient) => {
+      patient.encounters.forEach((encounter) => {
+        if (encounter.clinicDate !== selectedClinicDate) return;
 
-      const { visitType, specialtyType } = encounter;
+        const { visitType, specialtyType } = encounter;
 
-      if (
-  (encounter.visitType === "specialty_only" || encounter.visitType === "both") &&
-  encounter.specialtyType
-) {
-  counts[encounter.specialtyType] =
-    (counts[encounter.specialtyType] || 0) + 1;
-}
-
-      // 👇 dual visit counts twice (general + specialty)
-      if (visitType === "both") {
-        if (counts[specialtyType] !== undefined) {
-          // already counted above, no extra needed
-          // BUT we are intentionally counting specialty once per encounter
-          // (dual visit already included in both categories)
+        if (
+          (encounter.visitType === "specialty_only" || encounter.visitType === "both") &&
+          encounter.specialtyType
+        ) {
+          counts[encounter.specialtyType] =
+            (counts[encounter.specialtyType] || 0) + 1;
         }
-      }
-    });
-  });
 
-  return counts;
-}, [patients, selectedClinicDate]);
+        // 👇 dual visit counts twice (general + specialty)
+        if (visitType === "both") {
+          if (counts[specialtyType] !== undefined) {
+            // already counted above, no extra needed
+            // BUT we are intentionally counting specialty once per encounter
+            // (dual visit already included in both categories)
+          }
+        }
+      });
+    });
+
+    return counts;
+  }, [patients, selectedClinicDate]);
 
   const [profiles, setProfiles] = useState([]);
   const [loadingProfiles, setLoadingProfiles] = useState(false);
@@ -1271,95 +1303,95 @@ export default function App() {
   }, [profiles, userSearch, showOnlyActiveToday]);
 
   async function handleUndergradStartEncounter(data) {
-  try {
-    let targetPatient = null;
+    try {
+      let targetPatient = null;
 
-    if (data.matchedPatientId) {
-      const existingPatient = patients.find((p) => p.id === data.matchedPatientId);
+      if (data.matchedPatientId) {
+        const existingPatient = patients.find((p) => p.id === data.matchedPatientId);
 
-      if (!existingPatient) {
-        throw new Error("Matched patient was not found.");
+        if (!existingPatient) {
+          throw new Error("Matched patient was not found.");
+        }
+
+        const patientUpdates = {
+          preferredName: data.preferredName,
+          phone: data.phone,
+          sex: data.sex,
+          ethnicity: data.ethnicity,
+          address: data.addressLine1,
+          city: data.city,
+          state: data.state,
+          zipCode: data.zipCode,
+          emergencyContactName: data.emergencyContactName,
+          emergencyContactRelation: data.emergencyContactRelation,
+          emergencyContactPhone: data.emergencyContactPhone,
+          last4ssn: data.last4Ssn,
+          incomeRange: data.incomeRange,
+          spanishOnly: data.spanishOnly,
+          chronicConditions: data.chronicConditions,
+          chronicConditionsOther: data.chronicConditionsOther,
+        };
+
+        targetPatient = await updatePatientInSupabase(existingPatient.id, patientUpdates);
+      } else {
+        const patientToSave = {
+          ...data,
+          mrn: "",
+        };
+
+        targetPatient = await createPatientInSupabase(patientToSave);
       }
 
-      const patientUpdates = {
-        preferredName: data.preferredName,
-        phone: data.phone,
-        sex: data.sex,
-        ethnicity: data.ethnicity,
-        address: data.addressLine1,
-        city: data.city,
-        state: data.state,
-        zipCode: data.zipCode,
-        emergencyContactName: data.emergencyContactName,
-        emergencyContactRelation: data.emergencyContactRelation,
-        emergencyContactPhone: data.emergencyContactPhone,
-        last4ssn: data.last4Ssn,
-        incomeRange: data.incomeRange,
-        spanishOnly: data.spanishOnly,
-        chronicConditions: data.chronicConditions,
-        chronicConditionsOther: data.chronicConditionsOther,
+      const encounter = {
+        clinicDate: formatClinicDate(),
+        createdAt: new Date().toISOString(),
+        newReturning: data.matchedPatientId ? "Returning" : (data.isReturning || "New"),
+        visitLocation: "In Clinic",
+        chiefComplaint: "",
+        notes: "",
+        transportation: "",
+        needsElevator: false,
+        spanishSpeaking: false,
+        mammogramStatus: "",
+        papStatus: "",
+        fluShot: "",
+        htn: false,
+        dm: false,
+        labsLast6Months: "",
+        nicotineUse: "",
+        nicotineDetails: "",
+        substanceUseConcern: "",
+        substanceUseTreatment: "",
+        substanceUseNotes: "",
+        dermatology: "N/A",
+        ophthalmology: "N/A",
+        optometry: "N/A",
+        diabeticEyeExamPastYear: "N/A",
+        physicalTherapy: "N/A",
+        mentalHealthCombined: "N/A",
+        counseling: "N/A",
+        anyMentalHealthPositive: false,
+        visitType: data.visitType || "general",
+        specialtyType: data.specialtyType || "",
+        status: "started",
+        assignedStudent: "",
+        assignedUpperLevel: "",
+        roomNumber: "",
+        leadershipIntakeComplete: false,
       };
 
-      targetPatient = await updatePatientInSupabase(existingPatient.id, patientUpdates);
-    } else {
-      const patientToSave = {
-        ...data,
-        mrn: "",
-      };
+      const savedEncounter = await createEncounterInSupabase(targetPatient.id, encounter);
 
-      targetPatient = await createPatientInSupabase(patientToSave);
+      await refreshClinicData();
+
+      setSelectedPatientId(targetPatient.id);
+      setSelectedEncounterId(savedEncounter.id);
+      setActiveView("registration");
+    } catch (error) {
+      console.error("Failed to save undergrad intake:", error);
+      alert(`Failed to save intake: ${error.message}`);
     }
-
-    const encounter = {
-      clinicDate: formatClinicDate(),
-      createdAt: new Date().toISOString(),
-      newReturning: data.matchedPatientId ? "Returning" : (data.isReturning || "New"),
-      visitLocation: "In Clinic",
-      chiefComplaint: "",
-      notes: "",
-      transportation: "",
-      needsElevator: false,
-      spanishSpeaking: false,
-      mammogramStatus: "",
-      papStatus: "",
-      fluShot: "",
-      htn: false,
-      dm: false,
-      labsLast6Months: "",
-      nicotineUse: "",
-      nicotineDetails: "",
-      substanceUseConcern: "",
-      substanceUseTreatment: "",
-      substanceUseNotes: "",
-      dermatology: "N/A",
-      ophthalmology: "N/A",
-      optometry: "N/A",
-      diabeticEyeExamPastYear: "N/A",
-      physicalTherapy: "N/A",
-      mentalHealthCombined: "N/A",
-      counseling: "N/A",
-      anyMentalHealthPositive: false,
-      visitType: data.visitType || "general",
-      specialtyType: data.specialtyType || "",
-      status: "started",
-      assignedStudent: "",
-      assignedUpperLevel: "",
-      roomNumber: "",
-      leadershipIntakeComplete: false,
-    };
-
-    const savedEncounter = await createEncounterInSupabase(targetPatient.id, encounter);
-
-    await refreshClinicData();
-
-    setSelectedPatientId(targetPatient.id);
-    setSelectedEncounterId(savedEncounter.id);
-    setActiveView("registration");
-  } catch (error) {
-    console.error("Failed to save undergrad intake:", error);
-    alert(`Failed to save intake: ${error.message}`);
   }
-}
 
   function openUndergradRegistration(patientId, encounterId) {
     const patient = patients.find((p) => p.id === patientId);
@@ -2738,6 +2770,13 @@ export default function App() {
     );
   }
 
+  function updateSoapDraftField(field, value) {
+    setSoapDraft((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  }
+
   async function saveInHouseLabs(nextLabs) {
     if (!selectedPatient || !selectedEncounter) return;
 
@@ -3518,11 +3557,11 @@ export default function App() {
       }
 
       await updateEncounterInSupabase(selectedEncounter.id, {
-        soapSubjective: selectedEncounter.soapSubjective || "",
-        soapObjective: selectedEncounter.soapObjective || "",
-        soapAssessment: selectedEncounter.soapAssessment || "",
-        soapPlan: selectedEncounter.soapPlan || "",
-        notes: selectedEncounter.notes || "",
+        soapSubjective: soapDraft.soapSubjective || "",
+        soapObjective: soapDraft.soapObjective || "",
+        soapAssessment: soapDraft.soapAssessment || "",
+        soapPlan: soapDraft.soapPlan || "",
+        notes: soapDraft.notes || "",
         soapAuthorId: authorId,
         soapAuthorRole: authorRole,
         soapStatus: currentSoapStatus,
@@ -3537,6 +3576,11 @@ export default function App() {
                 encounter.id === selectedEncounter.id
                   ? {
                     ...encounter,
+                    soapSubjective: soapDraft.soapSubjective || "",
+                    soapObjective: soapDraft.soapObjective || "",
+                    soapAssessment: soapDraft.soapAssessment || "",
+                    soapPlan: soapDraft.soapPlan || "",
+                    notes: soapDraft.notes || "",
                     soapAuthorId: authorId,
                     soapAuthorRole: authorRole,
                     soapStatus: currentSoapStatus,
@@ -3563,7 +3607,7 @@ export default function App() {
   async function submitSoapForUpperLevel() {
     if (!selectedPatient || !selectedEncounter || !session?.user?.id || !userRole) return;
 
-    const missingFields = getMissingSoapFields(selectedEncounter);
+    const missingFields = getMissingSoapFields(soapDraft);
     if (missingFields.length > 0) {
       showSoapMessage(`Complete before submitting: ${missingFields.join(", ")}`);
       return false;
@@ -3577,11 +3621,11 @@ export default function App() {
       setSoapUiMessage("Saving...");
 
       await updateEncounterInSupabase(selectedEncounter.id, {
-        soapSubjective: selectedEncounter.soapSubjective || "",
-        soapObjective: selectedEncounter.soapObjective || "",
-        soapAssessment: selectedEncounter.soapAssessment || "",
-        soapPlan: selectedEncounter.soapPlan || "",
-        notes: selectedEncounter.notes || "",
+        soapSubjective: soapDraft.soapSubjective || "",
+        soapObjective: soapDraft.soapObjective || "",
+        soapAssessment: soapDraft.soapAssessment || "",
+        soapPlan: soapDraft.soapPlan || "",
+        notes: soapDraft.notes || "",
         soapAuthorId: authorId,
         soapAuthorRole: authorRole,
         soapStatus: "awaiting_upper",
@@ -3596,6 +3640,11 @@ export default function App() {
                 encounter.id === selectedEncounter.id
                   ? {
                     ...encounter,
+                    soapSubjective: soapDraft.soapSubjective || "",
+                    soapObjective: soapDraft.soapObjective || "",
+                    soapAssessment: soapDraft.soapAssessment || "",
+                    soapPlan: soapDraft.soapPlan || "",
+                    notes: soapDraft.notes || "",
                     soapAuthorId: authorId,
                     soapAuthorRole: authorRole,
                     soapStatus: "awaiting_upper",
@@ -3623,7 +3672,7 @@ export default function App() {
   async function submitSoapForAttending() {
     if (!selectedPatient || !selectedEncounter || !session?.user?.id || !userRole) return;
 
-    const missingFields = getMissingSoapFields(selectedEncounter);
+    const missingFields = getMissingSoapFields(soapDraft);
     if (missingFields.length > 0) {
       showSoapMessage(`Complete before submitting: ${missingFields.join(", ")}`);
       return;
@@ -3637,11 +3686,11 @@ export default function App() {
       setSoapUiMessage("Saving...");
 
       await updateEncounterInSupabase(selectedEncounter.id, {
-        soapSubjective: selectedEncounter.soapSubjective || "",
-        soapObjective: selectedEncounter.soapObjective || "",
-        soapAssessment: selectedEncounter.soapAssessment || "",
-        soapPlan: selectedEncounter.soapPlan || "",
-        notes: selectedEncounter.notes || "",
+        soapSubjective: soapDraft.soapSubjective || "",
+        soapObjective: soapDraft.soapObjective || "",
+        soapAssessment: soapDraft.soapAssessment || "",
+        soapPlan: soapDraft.soapPlan || "",
+        notes: soapDraft.notes || "",
         soapAuthorId: authorId,
         soapAuthorRole: authorRole,
         soapStatus: "awaiting_attending",
@@ -3656,6 +3705,11 @@ export default function App() {
                 encounter.id === selectedEncounter.id
                   ? {
                     ...encounter,
+                    soapSubjective: soapDraft.soapSubjective || "",
+                    soapObjective: soapDraft.soapObjective || "",
+                    soapAssessment: soapDraft.soapAssessment || "",
+                    soapPlan: soapDraft.soapPlan || "",
+                    notes: soapDraft.notes || "",
                     soapAuthorId: authorId,
                     soapAuthorRole: authorRole,
                     soapStatus: "awaiting_attending",
@@ -3685,7 +3739,7 @@ export default function App() {
     if (!selectedPatient || !selectedEncounter || !session?.user?.id || !userRole) return;
     if (!canSignAsUpperLevel) return;
 
-    const missingFields = getMissingSoapFields(selectedEncounter);
+    const missingFields = getMissingSoapFields(soapDraft);
     if (missingFields.length > 0) {
       showSoapMessage(`Complete before submitting: ${missingFields.join(", ")}`);
       return;
@@ -3700,11 +3754,11 @@ export default function App() {
       setSoapUiMessage("Saving...");
 
       await updateEncounterInSupabase(selectedEncounter.id, {
-        soapSubjective: selectedEncounter.soapSubjective || "",
-        soapObjective: selectedEncounter.soapObjective || "",
-        soapAssessment: selectedEncounter.soapAssessment || "",
-        soapPlan: selectedEncounter.soapPlan || "",
-        notes: selectedEncounter.notes || "",
+        soapSubjective: soapDraft.soapSubjective || "",
+        soapObjective: soapDraft.soapObjective || "",
+        soapAssessment: soapDraft.soapAssessment || "",
+        soapPlan: soapDraft.soapPlan || "",
+        notes: soapDraft.notes || "",
         soapAuthorId: authorId,
         soapAuthorRole: authorRole,
         upperLevelSignedBy: session.user.id,
@@ -3721,10 +3775,13 @@ export default function App() {
                 encounter.id === selectedEncounter.id
                   ? {
                     ...encounter,
+                    soapSubjective: soapDraft.soapSubjective || "",
+                    soapObjective: soapDraft.soapObjective || "",
+                    soapAssessment: soapDraft.soapAssessment || "",
+                    soapPlan: soapDraft.soapPlan || "",
+                    notes: soapDraft.notes || "",
                     soapAuthorId: authorId,
                     soapAuthorRole: authorRole,
-                    upperLevelSignedBy: session.user.id,
-                    upperLevelSignedAt: signedAt,
                     soapStatus: "awaiting_attending",
                     soapSavedAt: new Date().toLocaleString(),
                   }
@@ -3753,7 +3810,7 @@ export default function App() {
     if (!selectedPatient || !selectedEncounter || !session?.user?.id || !userRole) return;
     if (!canSignAsAttending) return;
 
-    const missingFields = getMissingSoapFields(selectedEncounter);
+    const missingFields = getMissingSoapFields(soapDraft);
     if (missingFields.length > 0) {
       showSoapMessage(`Complete before submitting: ${missingFields.join(", ")}`);
       return;
@@ -3770,11 +3827,11 @@ export default function App() {
       setSoapUiMessage("Saving...");
 
       await updateEncounterInSupabase(selectedEncounter.id, {
-        soapSubjective: selectedEncounter.soapSubjective || "",
-        soapObjective: selectedEncounter.soapObjective || "",
-        soapAssessment: selectedEncounter.soapAssessment || "",
-        soapPlan: selectedEncounter.soapPlan || "",
-        notes: selectedEncounter.notes || "",
+        soapSubjective: soapDraft.soapSubjective || "",
+        soapObjective: soapDraft.soapObjective || "",
+        soapAssessment: soapDraft.soapAssessment || "",
+        soapPlan: soapDraft.soapPlan || "",
+        notes: soapDraft.notes || "",
         soapAuthorId: authorId,
         soapAuthorRole: authorRole,
         attendingSignedBy: session.user.id,
@@ -3792,12 +3849,17 @@ export default function App() {
                 encounter.id === selectedEncounter.id
                   ? {
                     ...encounter,
+                    soapSubjective: soapDraft.soapSubjective || "",
+                    soapObjective: soapDraft.soapObjective || "",
+                    soapAssessment: soapDraft.soapAssessment || "",
+                    soapPlan: soapDraft.soapPlan || "",
+                    notes: soapDraft.notes || "",
                     soapAuthorId: authorId,
                     soapAuthorRole: authorRole,
-                    attendingSignedBy: session.user.id,
-                    attendingSignedAt: signedAt,
                     soapStatus: "signed",
                     status: "done",
+                    attendingSignedBy: session.user.id,
+                    attendingSignedAt: signedAt,
                     soapSavedAt: new Date().toLocaleString(),
                   }
                   : encounter
@@ -3826,7 +3888,7 @@ export default function App() {
     if (!selectedPatient || !selectedEncounter) return false;
     if (!attendingId || pin.length !== 4) return false;
 
-    const missingFields = getMissingSoapFields(selectedEncounter);
+    const missingFields = getMissingSoapFields(soapDraft);
     if (missingFields.length > 0) {
       showSoapMessage(`Complete before submitting: ${missingFields.join(", ")}`);
       return;
@@ -3836,13 +3898,6 @@ export default function App() {
       const attending = profiles.find(
         (a) => String(a.id) === String(attendingId)
       );
-
-      console.log("PIN DEBUG", {
-        attendingIdPassedIn: attendingId,
-        pinPassedIn: pin,
-        matchedAttending: attending,
-        storedPin: attending?.signature_pin_hash,
-      });
 
       if (!attending) {
         showSoapMessage("Attending not found.");
@@ -3854,7 +3909,21 @@ export default function App() {
         return false;
       }
 
-      if (String(attending.signature_pin_hash || "").trim() !== String(pin).trim()) {
+      const { data: pinValid, error: pinError } = await supabase.rpc(
+        "verify_signature_pin",
+        {
+          target_user_id: attendingId,
+          raw_pin: pin,
+        }
+      );
+
+      if (pinError) {
+        console.error("PIN verification failed:", pinError);
+        showSoapMessage(`Could not verify PIN: ${pinError.message}`);
+        return false;
+      }
+
+      if (!pinValid) {
         showSoapMessage("Incorrect PIN.");
         return false;
       }
@@ -3867,11 +3936,11 @@ export default function App() {
       setSoapUiMessage("Saving...");
 
       await updateEncounterInSupabase(selectedEncounter.id, {
-        soapSubjective: selectedEncounter.soapSubjective || "",
-        soapObjective: selectedEncounter.soapObjective || "",
-        soapAssessment: selectedEncounter.soapAssessment || "",
-        soapPlan: selectedEncounter.soapPlan || "",
-        notes: selectedEncounter.notes || "",
+        soapSubjective: soapDraft.soapSubjective || "",
+        soapObjective: soapDraft.soapObjective || "",
+        soapAssessment: soapDraft.soapAssessment || "",
+        soapPlan: soapDraft.soapPlan || "",
+        notes: soapDraft.notes || "",
         soapAuthorId: authorId,
         soapAuthorRole: authorRole,
         attendingSignedBy: attending.id,
@@ -3889,6 +3958,11 @@ export default function App() {
                 encounter.id === selectedEncounter.id
                   ? {
                     ...encounter,
+                    soapSubjective: soapDraft.soapSubjective || "",
+                    soapObjective: soapDraft.soapObjective || "",
+                    soapAssessment: soapDraft.soapAssessment || "",
+                    soapPlan: soapDraft.soapPlan || "",
+                    notes: soapDraft.notes || "",
                     soapAuthorId: authorId,
                     soapAuthorRole: authorRole,
                     attendingSignedBy: attending.id,
@@ -4500,6 +4574,14 @@ export default function App() {
                   {authRole === "attending" ? (
                     <>
                       <input
+                        type="password"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        autoComplete="new-password"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck={false}
+                        maxLength={4}
                         className="w-full rounded-lg border px-3 py-3 text-sm"
                         placeholder="4-digit PIN"
                         value={authPin}
@@ -4509,13 +4591,19 @@ export default function App() {
                       />
 
                       <input
+                        type="password"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        autoComplete="new-password"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck={false}
+                        maxLength={4}
                         className="w-full rounded-lg border px-3 py-3 text-sm"
                         placeholder="Confirm 4-digit PIN"
                         value={authPinConfirm}
                         onChange={(e) =>
-                          setAuthPinConfirm(
-                            e.target.value.replace(/\D/g, "").slice(0, 4)
-                          )
+                          setAuthPinConfirm(e.target.value.replace(/\D/g, "").slice(0, 4))
                         }
                       />
                     </>
@@ -4666,9 +4754,9 @@ export default function App() {
 
           {activeView === "undergrad-intake" && userRole === "undergraduate" && (
             <UndergradIntakeView
-  onSave={handleUndergradStartEncounter}
-  patients={patients}
-/>
+              onSave={handleUndergradStartEncounter}
+              patients={patients}
+            />
           )}
 
           {activeView === "queue" && (
@@ -4845,6 +4933,8 @@ export default function App() {
               activeUpperLevels={activeUpperLevels}
               activeAttendings={activeAttendings}
               signSoapAsAttendingWithPin={signSoapAsAttendingWithPin}
+              soapDraft={soapDraft}
+              updateSoapDraftField={updateSoapDraftField}
             />
           )}
 

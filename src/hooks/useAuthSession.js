@@ -26,7 +26,7 @@ const [authPinConfirm, setAuthPinConfirm] = useState("");
  async function fetchProfileWithRetry(userId, attempt = 1) {
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("id, full_name, role, classification, approval_status, signature_pin_set, signature_pin_hash")
+    .select("id, full_name, role, classification, approval_status, signature_pin_set")
     .eq("id", userId)
     .maybeSingle();
 
@@ -97,11 +97,9 @@ if (authRole === "attending") {
   classification: authClassification || null,
   role: authRole,
   approval_status: "pending",
-  signature_pin_hash: authRole === "attending" ? authPin : null,
-  signature_pin_set: authRole === "attending",
+  signature_pin: authRole === "attending" ? authPin : null,
 });
       setAuthMessage("Signup successful. You can now sign in.");
-      setAuthMode("login");
       setAuthPassword("");
 setAuthPin("");
 setAuthPinConfirm("");

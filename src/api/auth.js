@@ -15,16 +15,43 @@ export async function signUp(email, password, profileData) {
 
   const { error: profileError } = await supabase.from("profiles").upsert({
     id: user.id,
-    email: email,
+    email,
     full_name: profileData.full_name || "",
     classification: profileData.classification || null,
     role: profileData.role || null,
     approval_status: profileData.approval_status || "pending",
-    signature_pin_hash: profileData.signature_pin_hash || null,
-    signature_pin_set: !!profileData.signature_pin_set,
+    signature_pin_set: false,
+    signature_pin_hash: null,
   });
 
   if (profileError) throw profileError;
+
+  if (profileData.role === "attending" && profileData.signature_pin) {
+    let session = data.session;
+
+    if (!session) {
+      const { data: signInData, error: signInError } =
+        await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+      if (signInError) {
+        throw new Error(
+          "Account created, but PIN could not be set automatically. Sign in first, then set the PIN."
+        );
+      }
+
+      session = signInData.session;
+    }
+
+    const { error: pinError } = await supabase.rpc("set_signature_pin", {
+      target_user_id: user.id,
+      raw_pin: profileData.signature_pin,
+    });
+
+    if (pinError) throw pinError;
+  }
 
   return user;
 }

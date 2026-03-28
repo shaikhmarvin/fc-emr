@@ -81,7 +81,10 @@ export default function ChartView({
   signSoapAsAttendingWithPin,
   saveInHouseLabs,
   saveSendOutLabs,
+  soapDraft,
+updateSoapDraftField,
 }) {
+  
 
   function formatAuditAction(action) {
     switch (action) {
@@ -215,29 +218,12 @@ function getVisitTypeLabel(visitType) {
 }
 
 
-  useEffect(() => {
-    if (!soapAutoSaveEnabled || !selectedEncounter || soapStatus === "signed") return;
 
-    const timeout = window.setTimeout(() => {
-      saveSoapNote(false);
-    }, 5000);
-
-    return () => window.clearTimeout(timeout);
-  }, [
-    soapAutoSaveEnabled,
-    selectedEncounter?.id,
-    selectedEncounter?.soapSubjective,
-    selectedEncounter?.soapObjective,
-    selectedEncounter?.soapAssessment,
-    selectedEncounter?.soapPlan,
-    saveSoapNote,
-  ]);
-    const [showTimeline, setShowTimeline] = useState(false);
+  const [showTimeline, setShowTimeline] = useState(false);
   const [showLabs, setShowLabs] = useState(false);
   const [showSendOutLabs, setShowSendOutLabs] = useState(false);
   const [showSignModal, setShowSignModal] = useState(false);
   const [showAudit, setShowAudit] = useState(false);
-  const [outsideLabBatches, setOutsideLabBatches] = useState([]);
   const [selectedAttendingId, setSelectedAttendingId] = useState("");
   const [attendingPin, setAttendingPin] = useState("");
   const rapidResultOptions = [
@@ -312,13 +298,6 @@ function getVisitTypeLabel(visitType) {
     return bTime - aTime;
   });
 
-    const sortedOutsideLabBatches = useMemo(() => {
-    return [...outsideLabBatches].sort((a, b) => {
-      const aTime = new Date(a.collection_date || a.created_at || 0).getTime();
-      const bTime = new Date(b.collection_date || b.created_at || 0).getTime();
-      return bTime - aTime;
-    });
-  }, [outsideLabBatches]);
 
   const isEncounterLocked = selectedEncounter?.soapStatus === "signed";
   const isSoapLocked = isEncounterLocked; // keep for compatibility
@@ -2126,10 +2105,10 @@ const specialtyBadgeText = isSpecialtyVisit
                   placeholder={`Chief complaint / HPI
 Pertinent history, meds, allergies
 Relevant ROS`}
-                  value={selectedEncounter.soapSubjective || ""}
-                  onChange={(e) =>
-                    updateEncounterField("soapSubjective", e.target.value)
-                  }
+                  value={soapDraft.soapSubjective || ""}
+onChange={(e) =>
+  updateSoapDraftField("soapSubjective", e.target.value)
+}
                   disabled={isSoapLocked}
                 />
               </div>
@@ -2144,10 +2123,10 @@ Relevant ROS`}
 General appearance
 Focused exam
 Relevant test results`}
-                  value={selectedEncounter.soapObjective || ""}
-                  onChange={(e) =>
-                    updateEncounterField("soapObjective", e.target.value)
-                  }
+                  value={soapDraft.soapObjective || ""}
+onChange={(e) =>
+  updateSoapDraftField("soapObjective", e.target.value)
+}
                   disabled={isSoapLocked}
                 />
               </div>
@@ -2161,9 +2140,9 @@ Relevant test results`}
                   placeholder={`Most likely diagnosis
 Differential
 Problem list`}
-                  value={selectedEncounter.soapAssessment || ""}
+                  value={soapDraft.soapAssessment || ""}
                   onChange={(e) =>
-                    updateEncounterField("soapAssessment", e.target.value)
+                    updateSoapDraftField("soapAssessment", e.target.value)
                   }
                   disabled={isSoapLocked}
                 />
@@ -2179,9 +2158,9 @@ Problem list`}
 Labs / referrals
 Patient education
 Follow-up`}
-                  value={selectedEncounter.soapPlan || ""}
+                  value={soapDraft.soapPlan || ""}
                   onChange={(e) =>
-                    updateEncounterField("soapPlan", e.target.value)
+                    updateSoapDraftField("soapPlan", e.target.value)
                   }
                   disabled={isSoapLocked}
                 />
@@ -2275,16 +2254,22 @@ Follow-up`}
                   4-Digit PIN
                 </label>
                 <input
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={4}
-                  value={attendingPin}
-                  onChange={(e) =>
-                    setAttendingPin(e.target.value.replace(/\D/g, "").slice(0, 4))
-                  }
-                  className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                  placeholder="Enter PIN"
-                />
+  type="password"
+  inputMode="numeric"
+  pattern="[0-9]*"
+  autoComplete="new-password"
+  autoCorrect="off"
+  autoCapitalize="off"
+  spellCheck={false}
+  maxLength={4}
+  name="attending-signature-pin"
+  value={attendingPin}
+  onChange={(e) =>
+    setAttendingPin(e.target.value.replace(/\D/g, "").slice(0, 4))
+  }
+  className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
+  placeholder="Enter PIN"
+/>
               </div>
             </div>
             {soapUiMessage ? (
