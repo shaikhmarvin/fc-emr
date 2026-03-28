@@ -46,15 +46,15 @@ export default function QueueView({
     });
   }
   function dualVisitBadge(encounter) {
-  if (encounter.visitType === "both") {
-    return (
-      <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
-        Dual Visit
-      </span>
-    );
+    if (encounter.visitType === "both") {
+      return (
+        <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
+          Dual Visit
+        </span>
+      );
+    }
+    return null;
   }
-  return null;
-}
 
   const unassignedRows =
     userRole === "leadership"
@@ -102,7 +102,7 @@ export default function QueueView({
           />
         </div>
 
-        <div className="divide-y">
+        <div className="space-y-4">
           {userRole === "leadership" && unassignedRows.length > 0 && (
             <div className="px-2 py-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
               Unassigned / New Patients
@@ -116,21 +116,39 @@ export default function QueueView({
                   if (e.target.closest("select, button")) return;
                   openPatientChart(patient.id, encounter.id);
                 }}
-                className="flex cursor-pointer flex-col gap-3 px-2 py-4 hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between"
+                className="cursor-pointer rounded-xl border bg-white p-3 shadow-sm hover:bg-slate-50"
               >
-                <div className="space-y-1">
-                  <p className="font-semibold text-slate-800">
-                    {getPatientBoardName(patient)} ({patient.age})
-                  </p>
-                  <p className="text-sm text-slate-500">
-                    MRN: {patient.mrn || "—"}
-                  </p>
-                  <p className="text-sm text-slate-500">
+                <div className="flex flex-col gap-2">
+                  {/* Top row */}
+                  <div className="flex items-center justify-between">
+                    <p className="font-semibold text-slate-800">
+                      {getPatientBoardName(patient)} ({patient.age})
+                    </p>
+
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-xs ${getStatusClasses(encounter.status)}`}
+                    >
+                      {getStatusLabel(encounter.status, encounter.soapStatus)}
+                    </span>
+                  </div>
+
+                  {/* Chief complaint */}
+                  <p className="text-sm text-slate-600">
                     {encounter.chiefComplaint || "No chief complaint"}
                   </p>
-                  <p className="text-sm text-slate-500">
-                    Student: {encounter.assignedStudent || "—"} • Upper Level: {encounter.assignedUpperLevel || "—"}
+
+                  {/* Secondary info */}
+                  <div className="flex flex-wrap gap-x-3 text-xs text-slate-500">
+                    <span>MRN: {patient.mrn || "—"}</span>
+                    <span>Wait: {formatWaitTime(encounter.createdAt)}</span>
+                  </div>
+
+                  {/* Assignment info */}
+                  <p className="text-xs text-slate-500">
+                    Student: {encounter.assignedStudent || "—"} • Upper: {encounter.assignedUpperLevel || "—"}
                   </p>
+
+                  {/* Badges */}
                   <div className="flex flex-wrap gap-2">
                     {dualVisitBadge(encounter)}
                     {priorityBadge(encounter)}
@@ -140,25 +158,12 @@ export default function QueueView({
                     {elevatorBadge(encounter)}
                     {papBadge?.(encounter)}
                   </div>
-                </div>
 
-                <div className="flex flex-col gap-2 text-left sm:items-end sm:text-right">
-                  <span
-                    className={`inline-block rounded-full border px-3 py-1 text-xs ${getStatusClasses(encounter.status)}`}
-                  >
-                    {getStatusLabel(encounter.status, encounter.soapStatus)}
-                  </span>
-
-                  <p className="text-sm text-slate-500">
-                    {formatWaitTime(encounter.createdAt)}
-                  </p>
-
-                  {/* 👇 LEADERSHIP ASSIGNMENT UI */}
-
+                  {/* Leadership controls */}
                   {userRole === "leadership" && (
-                    <div className="flex flex-col gap-2 sm:min-w-[220px]">
+                    <div className="mt-2 flex flex-col gap-2">
                       <select
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm"
                         value={getDraftValue(encounter, "assignedStudent")}
                         onChange={(e) =>
                           updateDraft(encounter.id, "assignedStudent", e.target.value)
@@ -173,7 +178,7 @@ export default function QueueView({
                       </select>
 
                       <select
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm"
                         value={getDraftValue(encounter, "assignedUpperLevel")}
                         onChange={(e) =>
                           updateDraft(encounter.id, "assignedUpperLevel", e.target.value)
@@ -188,7 +193,7 @@ export default function QueueView({
                       </select>
 
                       <select
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm"
                         value={getDraftValue(encounter, "roomNumber")}
                         onChange={(e) =>
                           updateDraft(encounter.id, "roomNumber", e.target.value)
@@ -205,13 +210,12 @@ export default function QueueView({
                       <button
                         type="button"
                         onClick={() => submitDraft(encounter)}
-                        className="rounded bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700"
+                        className="rounded-lg bg-green-600 py-2 text-sm font-medium text-white hover:bg-green-700"
                       >
                         Assign / Start Visit
                       </button>
                     </div>
                   )}
-
                 </div>
               </div>
             ))}
@@ -234,43 +238,43 @@ export default function QueueView({
                     if (e.target.closest("select, button")) return;
                     openPatientChart(patient.id, encounter.id);
                   }}
-                  className="flex cursor-pointer flex-col gap-3 px-2 py-4 hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between"
+                  className="cursor-pointer rounded-xl border bg-white p-3 shadow-sm hover:bg-slate-50"
                 >
-                  <div className="space-y-1">
-                    <p className="font-semibold text-slate-800">
-                      {getPatientBoardName(patient)} ({patient.age})
-                    </p>
-                    <p className="text-sm text-slate-500">
-                      MRN: {patient.mrn || "—"}
-                    </p>
-                    <p className="text-sm text-slate-500">
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <p className="font-semibold text-slate-800">
+                        {getPatientBoardName(patient)} ({patient.age})
+                      </p>
+
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-xs ${getStatusClasses(encounter.status)}`}
+                      >
+                        {getStatusLabel(encounter.status, encounter.soapStatus)}
+                      </span>
+                    </div>
+
+                    <p className="text-sm text-slate-600">
                       {encounter.chiefComplaint || "No chief complaint"}
                     </p>
-                    <p className="text-sm text-slate-500">
-                      Student: {encounter.assignedStudent || "—"} • Upper Level: {encounter.assignedUpperLevel || "—"}
+
+                    <div className="flex flex-wrap gap-x-3 text-xs text-slate-500">
+                      <span>MRN: {patient.mrn || "—"}</span>
+                      <span>Wait: {formatWaitTime(encounter.createdAt)}</span>
+                    </div>
+
+                    <p className="text-xs text-slate-500">
+                      Student: {encounter.assignedStudent || "—"} • Upper: {encounter.assignedUpperLevel || "—"}
                     </p>
+
                     <div className="flex flex-wrap gap-2">
                       {dualVisitBadge(encounter)}
                       {priorityBadge(encounter)}
-                    {spanishBadge(encounter)}
-                    {diabetesBadge?.(encounter)}
-                    {fluBadge?.(encounter)}
-                    {elevatorBadge(encounter)}
-                    {papBadge?.(encounter)}
+                      {spanishBadge(encounter)}
+                      {diabetesBadge?.(encounter)}
+                      {fluBadge?.(encounter)}
+                      {elevatorBadge(encounter)}
+                      {papBadge?.(encounter)}
                     </div>
-                  </div>
-
-                  <div className="flex flex-col gap-2 text-left sm:items-end sm:text-right">
-                    <span
-                      className={`inline-block rounded-full border px-3 py-1 text-xs ${getStatusClasses(encounter.status)}`}
-                    >
-                      {getStatusLabel(encounter.status, encounter.soapStatus)}
-                    </span>
-
-                    <p className="text-sm text-slate-500">
-                      {formatWaitTime(encounter.createdAt)}
-                    </p>
-
                   </div>
                 </div>
               ))}
