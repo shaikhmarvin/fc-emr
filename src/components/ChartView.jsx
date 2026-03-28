@@ -1,5 +1,5 @@
 import { getStatusClasses, getStatusLabel } from "../utils";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 export default function ChartView({
   selectedPatient,
   selectedEncounter,
@@ -232,11 +232,12 @@ function getVisitTypeLabel(visitType) {
     selectedEncounter?.soapPlan,
     saveSoapNote,
   ]);
-  const [showTimeline, setShowTimeline] = useState(false);
+    const [showTimeline, setShowTimeline] = useState(false);
   const [showLabs, setShowLabs] = useState(false);
   const [showSendOutLabs, setShowSendOutLabs] = useState(false);
   const [showSignModal, setShowSignModal] = useState(false);
   const [showAudit, setShowAudit] = useState(false);
+  const [outsideLabBatches, setOutsideLabBatches] = useState([]);
   const [selectedAttendingId, setSelectedAttendingId] = useState("");
   const [attendingPin, setAttendingPin] = useState("");
   const rapidResultOptions = [
@@ -264,6 +265,7 @@ function getVisitTypeLabel(visitType) {
     bilirubin: ["", "Neg", "Small", "Mod", "Large"],
     glucose: ["", "Neg", "100", "250", "500", "1000", ">2000"],
   };
+
 
   function updateInHouseLabSection(sectionKey, fieldKey, value) {
     const currentLabs = selectedEncounter?.inHouseLabs || {};
@@ -309,6 +311,14 @@ function getVisitTypeLabel(visitType) {
     const bTime = new Date(b.createdAt || b.clinicDate || 0).getTime();
     return bTime - aTime;
   });
+
+    const sortedOutsideLabBatches = useMemo(() => {
+    return [...outsideLabBatches].sort((a, b) => {
+      const aTime = new Date(a.collection_date || a.created_at || 0).getTime();
+      const bTime = new Date(b.collection_date || b.created_at || 0).getTime();
+      return bTime - aTime;
+    });
+  }, [outsideLabBatches]);
 
   const isEncounterLocked = selectedEncounter?.soapStatus === "signed";
   const isSoapLocked = isEncounterLocked; // keep for compatibility

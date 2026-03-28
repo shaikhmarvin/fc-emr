@@ -46,8 +46,8 @@ export default function PatientInfoEditModal({
 }) {
   const [form, setForm] = useState(EMPTY_FORM);
 
-  useEffect(() => {
-    if (!show || !patient) return;
+    useEffect(() => {
+    if (!show || !patient?.id) return;
 
     setForm({
       firstName: patient.firstName || "",
@@ -73,7 +73,7 @@ export default function PatientInfoEditModal({
       chronicConditions: patient.chronicConditions || [],
       chronicConditionsOther: patient.chronicConditionsOther || "",
     });
-  }, [show, patient]);
+  }, [show, patient?.id]);
 
   const visibleFields = useMemo(() => {
     if (canEditAllPatientFields) {
