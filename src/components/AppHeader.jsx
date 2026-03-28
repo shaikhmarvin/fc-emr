@@ -50,55 +50,39 @@ export default function AppHeader({
           </div>
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 
           <div className="flex items-center gap-3">
-            <div className="text-sm">
-              <p className="font-medium text-slate-800">
-                {user?.user_metadata?.full_name || "User"}
-              </p>
-              <p className="text-xs text-slate-500 capitalize">
-                {userRole?.replace("_", " ")}
-              </p>
-            </div>
+  <div className="text-sm">
+    <p className="font-medium text-slate-800">
+      {user?.user_metadata?.full_name || "User"}
+    </p>
+    <p className="text-xs text-slate-500 capitalize">
+      {userRole?.replace("_", " ")}
+    </p>
+  </div>
 
-            <span className="rounded-full bg-slate-200 px-3 py-1 text-xs font-medium text-slate-700 capitalize">
-              {userRole?.replace("_", " ")}
-            </span>
+  <button
+    onClick={handleResetSession}
+    className="rounded-lg bg-yellow-500 px-3 py-2 text-xs text-white hover:bg-yellow-600"
+  >
+    Refresh Session
+  </button>
+</div>
 
-            <button
-              onClick={handleResetSession}
-              className="rounded-lg bg-yellow-500 px-3 py-2 text-xs text-white hover:bg-yellow-600"
-            >
-              Refresh Session
-            </button>
-          </div>
-
-          {userRole === "leadership" && (
-            <button
-              onClick={() => {
-                const url = `${window.location.origin}${window.location.pathname}?display=board`;
-                window.open(url, "_blank", "width=1600,height=900");
-              }}
-              className="rounded-lg bg-slate-700 px-4 py-2 text-white hover:bg-slate-800"
-            >
-              Open Display Board
-            </button>
-          )}
-          {userRole === "leadership" && (
-            <button
-              onClick={() => {
-                setIsEditingIntake(false);
-                setEditingPatientId(null);
-                setIntakeForm(EMPTY_FORM);
-                setIntakeTab(0);
-                setShowIntakeModal(true);
-              }}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-            >
-              + Add Patient
-            </button>
-          )}
+<div className="flex items-center gap-2">
+  {userRole === "leadership" && (
+    <button
+      onClick={() => {
+        const url = `${window.location.origin}${window.location.pathname}?display=board`;
+        window.open(url, "_blank", "width=1600,height=900");
+      }}
+      className="rounded-lg bg-slate-700 px-4 py-2 text-white hover:bg-slate-800"
+    >
+      Open Display Board
+    </button>
+  )}
+</div>
         </div>
       </div>
     </div>

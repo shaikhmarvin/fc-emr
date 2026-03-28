@@ -10,10 +10,11 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
 
   patientsData.forEach((patient) => {
     patientMap[patient.id] = {
-      ...patient,
-      encounters: [],
-      allergyList: [],
-    };
+  ...patient,
+  encounters: [],
+  allergyList: [],
+  medicationList: [],
+};
   });
 
   encountersData.forEach((encounter) => {
@@ -89,23 +90,26 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
   });
 
   medicationsData.forEach((medication) => {
-    Object.values(patientMap).forEach((patient) => {
-      const encounter = patient.encounters.find(
-        (enc) => enc.id === medication.encounter_id
-      );
+  const patient = patientMap[medication.patient_id];
+  if (!patient) return;
 
-      if (!encounter) return;
+  if (!patient.medicationList) {
+    patient.medicationList = [];
+  }
 
-      encounter.medications.push({
-        id: medication.id,
-        name: medication.name || "",
-        dosage: medication.dosage || "",
-        frequency: medication.frequency || "",
-        route: medication.route || "",
-        isActive: medication.is_active ?? true,
-      });
-    });
-  });
+ patient.medicationList.push({
+  id: medication.id,
+  name: medication.name || "",
+  dosage: medication.dosage || "",
+  frequency: medication.frequency || "",
+  route: medication.route || "",
+  dispenseAmount: medication.dispense_amount ?? "",
+  refillCount: medication.refill_count ?? "",
+  instructions: medication.instructions || "",
+  lastUpdatedEncounterId: medication.last_updated_encounter_id || null,
+  isActive: medication.is_active ?? true,
+});
+});
 
   allergiesData.forEach((allergy) => {
     const patient = patientMap[allergy.patient_id];

@@ -67,15 +67,21 @@ export default function MedicationModal({
             <label className="mb-1 block text-sm font-medium text-slate-700">
               Frequency
             </label>
-            <input
-              type="text"
+            <select
               value={newMedication.frequency}
               onChange={(e) =>
                 setNewMedication((prev) => ({ ...prev, frequency: e.target.value }))
               }
               className="w-full rounded-lg border p-3"
-              placeholder="e.g. Twice daily"
-            />
+            >
+              <option value="">Select frequency</option>
+              <option value="Daily">Daily</option>
+              <option value="BID">BID</option>
+              <option value="TID">TID</option>
+              <option value="QID">QID</option>
+              <option value="PRN">PRN</option>
+              <option value="Weekly">Weekly</option>
+            </select>
           </div>
 
           <div>
@@ -98,6 +104,62 @@ export default function MedicationModal({
               <option value="Inhaled">Inhaled</option>
               <option value="Other">Other</option>
             </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Dispense Amount (#)
+              </label>
+              <input
+                type="number"
+                value={newMedication.dispenseAmount}
+                onChange={(e) =>
+                  setNewMedication((prev) => ({
+                    ...prev,
+                    dispenseAmount: e.target.value,
+                  }))
+                }
+                className="w-full rounded-lg border p-3"
+                placeholder="e.g. 30"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Refills
+              </label>
+              <input
+                type="number"
+                value={newMedication.refillCount}
+                onChange={(e) =>
+                  setNewMedication((prev) => ({
+                    ...prev,
+                    refillCount: e.target.value,
+                  }))
+                }
+                className="w-full rounded-lg border p-3"
+                placeholder="e.g. 2"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Instructions / Notes
+            </label>
+            <textarea
+              value={newMedication.instructions}
+              onChange={(e) =>
+                setNewMedication((prev) => ({
+                  ...prev,
+                  instructions: e.target.value,
+                }))
+              }
+              className="w-full rounded-lg border p-3"
+              rows={3}
+              placeholder="e.g. Take with food, 2 tabs in morning, PRN for pain"
+            />
           </div>
 
           <div className="flex items-center gap-2">

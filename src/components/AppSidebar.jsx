@@ -70,9 +70,9 @@ export default function AppSidebar({
               <div className="space-y-2">
                 <SectionLabel>Workflow</SectionLabel>
 
-                {isLeadershipView && (
-                  <button
-                    onClick={() => handleViewChange("dashboard")}
+                {(isLeadershipView || userRole === "undergraduate") && (
+  <button
+    onClick={() => handleViewChange("dashboard")}
                     className={getNavItemClass("dashboard")}
                   >
                     Dashboard
@@ -111,7 +111,7 @@ export default function AppSidebar({
                     onClick={() => handleViewChange("specialty-queue")}
                     className={getNavItemClass("specialty-queue")}
                   >
-                    Specialty Queue
+                    Specialty Patients
                   </button>
                 )}
 

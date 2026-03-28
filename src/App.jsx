@@ -1006,6 +1006,20 @@ export default function App() {
   const selectedEncounter =
     selectedPatient?.encounters.find((e) => e.id === selectedEncounterId) || null;
 
+  const patientMedicationList = selectedPatient?.medicationList || [];
+
+  const sortedMedications = [...patientMedicationList].sort((a, b) => {
+    if ((a.isActive ?? true) !== (b.isActive ?? true)) {
+      return (b.isActive ?? true) - (a.isActive ?? true);
+    }
+
+    return (a.name || "").localeCompare(b.name || "");
+  });
+
+  const activeMedicationCount = patientMedicationList.filter(
+    (med) => med.isActive ?? true
+  ).length;
+
   useEffect(() => {
     if (!selectedEncounter?.id) {
       setSoapDraft({
@@ -1080,11 +1094,28 @@ export default function App() {
     );
   }, [patients]);
 
-  const specialtyEncounterRows = allEncounterRows.filter(
-    ({ encounter }) =>
-      encounter.visitType === "specialty_only" ||
-      encounter.visitType === "both"
-  );
+  const specialtyEncounterRows = useMemo(() => {
+  const todayClinicDate = formatClinicDate();
+
+  return allEncounterRows
+    .filter(
+      ({ encounter }) =>
+        encounter.visitType === "specialty_only" &&
+        normalizeClinicDate(encounter.clinicDate) === todayClinicDate &&
+        (
+          encounter.status === "ready" ||
+          encounter.status === "roomed" ||
+          encounter.status === "in_visit"
+        ) &&
+        encounter.status !== "done" &&
+        encounter.soapStatus !== "signed"
+    )
+    .sort((a, b) => {
+      const aTime = new Date(a.encounter.createdAt || 0).getTime();
+      const bTime = new Date(b.encounter.createdAt || 0).getTime();
+      return aTime - bTime;
+    });
+}, [allEncounterRows]);
 
   const specialtyRoomRulesForBoard = useMemo(() => {
     const today = formatClinicDate();
@@ -1123,8 +1154,10 @@ export default function App() {
 
         if (isLeadershipView) {
           return (
-            (encounter.status === "started" ||
-              encounter.status === "undergrad_complete") &&
+            (
+              (encounter.status === "started" && !encounter.leadershipIntakeComplete) ||
+              encounter.status === "undergrad_complete"
+            ) &&
             encounter.visitType !== "specialty_only"
           );
         }
@@ -1342,7 +1375,7 @@ export default function App() {
         targetPatient = await createPatientInSupabase(patientToSave);
       }
 
-      const encounter = {
+      const encounterBase = {
         clinicDate: formatClinicDate(),
         createdAt: new Date().toISOString(),
         newReturning: data.matchedPatientId ? "Returning" : (data.isReturning || "New"),
@@ -1371,8 +1404,6 @@ export default function App() {
         mentalHealthCombined: "N/A",
         counseling: "N/A",
         anyMentalHealthPositive: false,
-        visitType: data.visitType || "general",
-        specialtyType: data.specialtyType || "",
         status: "started",
         assignedStudent: "",
         assignedUpperLevel: "",
@@ -1380,13 +1411,41 @@ export default function App() {
         leadershipIntakeComplete: false,
       };
 
-      const savedEncounter = await createEncounterInSupabase(targetPatient.id, encounter);
+      let savedEncounter = null;
+
+      if (data.visitType === "both" && data.specialtyType) {
+        const generalEncounter = {
+          ...encounterBase,
+          visitType: "general",
+          specialtyType: "",
+        };
+
+        const specialtyEncounter = {
+  ...encounterBase,
+  visitType: "specialty_only",
+  specialtyType: data.specialtyType,
+  status: "ready",
+  leadershipIntakeComplete: true,
+};
+
+        savedEncounter = await createEncounterInSupabase(targetPatient.id, generalEncounter);
+        await createEncounterInSupabase(targetPatient.id, specialtyEncounter);
+      } else {
+        const singleEncounter = {
+          ...encounterBase,
+          visitType: data.visitType || "general",
+          specialtyType: data.specialtyType || "",
+        };
+
+        savedEncounter = await createEncounterInSupabase(targetPatient.id, singleEncounter);
+      }
 
       await refreshClinicData();
 
       setSelectedPatientId(targetPatient.id);
       setSelectedEncounterId(savedEncounter.id);
       setActiveView("registration");
+
     } catch (error) {
       console.error("Failed to save undergrad intake:", error);
       alert(`Failed to save intake: ${error.message}`);
@@ -1580,7 +1639,7 @@ export default function App() {
   const waitingEncounterRows = useMemo(() => {
     const todayClinicDate = formatClinicDate();
 
-    const queueBaseRows = filteredEncounterRows.filter(
+    const activeRows = filteredEncounterRows.filter(
       ({ encounter }) =>
         normalizeClinicDate(encounter.clinicDate) === todayClinicDate &&
         (
@@ -1598,28 +1657,33 @@ export default function App() {
       ""
     ).trim();
 
-    let rows = queueBaseRows;
+    let rows = activeRows;
 
     if (userRole === "student") {
-      rows = queueBaseRows.filter(({ encounter }) =>
+      rows = activeRows.filter(({ encounter }) =>
         (encounter.assignedStudent || "")
           .trim()
           .toLowerCase()
           .includes(currentUserName.toLowerCase())
       );
     } else if (userRole === "upper_level") {
-      rows = queueBaseRows.filter(({ encounter }) =>
+      rows = activeRows.filter(({ encounter }) =>
         (encounter.assignedUpperLevel || "")
           .trim()
           .toLowerCase()
           .includes(currentUserName.toLowerCase())
       );
     } else if (userRole === "attending") {
-      rows = queueBaseRows.filter(
+      rows = activeRows.filter(
         ({ encounter }) => encounter.soapStatus === "awaiting_attending"
       );
     } else {
-      rows = [...queueBaseRows].sort((a, b) => {
+      // leadership/general queue should only show general encounters
+      rows = activeRows.filter(
+        ({ encounter }) => encounter.visitType !== "specialty_only"
+      );
+
+      rows = [...rows].sort((a, b) => {
         const aUnassigned =
           !a.encounter.assignedStudent && !a.encounter.assignedUpperLevel
             ? 0
@@ -1863,6 +1927,12 @@ export default function App() {
       ms12Names: prev.ms12Names || joinActiveNames(activeStudents),
     }));
   }, [activeAttendings, activeUpperLevels, activeStudents]);
+
+  const canAccessSpecialtyQueue =
+  userRole === "leadership" ||
+  userRole === "student" ||
+  userRole === "upper_level";
+  userRole === "attending" 
 
   async function handleChangeProfileRole(profileId, nextRole, nextClassification = null) {
     if (!isLeadershipView) return;
@@ -3021,7 +3091,7 @@ export default function App() {
     try {
       await applyEncounterTransition(selectedEncounter.id, {
         roomNumber: "",
-        status: "done",
+        status: "in_visit",
       });
 
     } catch (error) {
@@ -3127,6 +3197,7 @@ export default function App() {
     setEditingVitalsIndex(null);
   }
 
+
   function startEditVitals(entry, index) {
     setCurrentVitals({
       bp: entry.bp || "",
@@ -3141,54 +3212,120 @@ export default function App() {
     });
     setEditingVitalsIndex(index);
   }
-  function prescribeFromFormulary(item) {
+  async function prescribeFromFormulary(item) {
     if (!canPrescribeMeds) return;
-    if (!selectedPatient) {
+    if (!selectedPatient || !selectedEncounter) {
       alert("Open a patient chart first before prescribing.");
       return;
     }
 
-    setNewMedication({
+    const medicationToAdd = {
       name: item.name || "",
       dosage: item.strength || "",
-      frequency: "",
+      frequency: "Daily",
       route: item.dosageForm || "",
+      dispenseAmount: "",
+      refillCount: "",
+      instructions: "",
       isActive: true,
-    });
+    };
 
-    setEditingMedicationId(null);
-    setShowMedicationModal(true);
+    const tempMedicationId = `temp-rx-${Date.now()}`;
+
+    const optimisticMedication = {
+      id: tempMedicationId,
+      ...medicationToAdd,
+    };
+
+    setPatients((prev) =>
+      prev.map((patient) =>
+        patient.id === selectedPatient.id
+          ? {
+            ...patient,
+            medicationList: [
+              ...(patient.medicationList || []),
+              optimisticMedication,
+            ],
+          }
+          : patient
+      )
+    );
+
     setActiveView("chart");
+
+    try {
+      const savedMedication = await createMedicationInSupabase(
+        selectedPatient.id,
+        medicationToAdd,
+        selectedEncounter.id
+      );
+
+      const hydratedMedication = {
+        id: savedMedication.id,
+        name: savedMedication.name || "",
+        dosage: savedMedication.dosage || "",
+        frequency: savedMedication.frequency || "",
+        route: savedMedication.route || "",
+        isActive: savedMedication.is_active ?? true,
+      };
+
+      setPatients((prev) =>
+        prev.map((patient) =>
+          patient.id === selectedPatient.id
+            ? {
+              ...patient,
+              medicationList: (patient.medicationList || []).map((med) =>
+                med.id === tempMedicationId ? hydratedMedication : med
+              ),
+            }
+            : patient
+        )
+      );
+    } catch (error) {
+      console.error("Failed to prescribe medication:", error);
+      alert(`Failed to prescribe medication: ${error.message}`);
+
+      setPatients((prev) =>
+        prev.map((patient) =>
+          patient.id === selectedPatient.id
+            ? {
+              ...patient,
+              medicationList: (patient.medicationList || []).filter(
+                (med) => med.id !== tempMedicationId
+              ),
+            }
+            : patient
+        )
+      );
+    }
   }
   async function addOrUpdateMedication() {
     if (!selectedPatient || !selectedEncounter) return;
     if (!newMedication.name.trim()) return;
 
     if (editingMedicationId !== null) {
-      const previousMedications = selectedEncounter.medications || [];
+      const previousMedications = selectedPatient.medicationList || [];
 
       const optimisticMedications = previousMedications.map((med) =>
         med.id === editingMedicationId
-          ? { ...med, ...newMedication, id: editingMedicationId }
+          ? {
+            ...med,
+            ...newMedication,
+            id: editingMedicationId,
+            lastUpdatedEncounterId: selectedEncounter.id,
+          }
           : med
       );
 
       setPatients((prev) =>
-        prev.map((patient) => {
-          if (patient.id !== selectedPatient.id) return patient;
-
-          return {
-            ...patient,
-            encounters: patient.encounters.map((encounter) =>
-              encounter.id === selectedEncounter.id
-                ? {
-                  ...encounter,
-                  medications: optimisticMedications,
-                }
-                : encounter
-            ),
-          };
-        })
+        prev.map((patient) =>
+          patient.id === selectedPatient.id
+            ? {
+              ...patient,
+              medicationList: optimisticMedications,
+            }
+            : patient
+        )
       );
 
       setNewMedication(EMPTY_MEDICATION);
@@ -3196,27 +3333,23 @@ export default function App() {
       setShowMedicationModal(false);
 
       try {
-        await updateMedicationInSupabase(editingMedicationId, newMedication);
+        await updateMedicationInSupabase(editingMedicationId, {
+          ...newMedication,
+          lastUpdatedEncounterId: selectedEncounter.id,
+        });
       } catch (error) {
         console.error("Failed to save medication:", error);
         alert(`Failed to save medication: ${error.message}`);
 
         setPatients((prev) =>
-          prev.map((patient) => {
-            if (patient.id !== selectedPatient.id) return patient;
-
-            return {
-              ...patient,
-              encounters: patient.encounters.map((encounter) =>
-                encounter.id === selectedEncounter.id
-                  ? {
-                    ...encounter,
-                    medications: previousMedications,
-                  }
-                  : encounter
-              ),
-            };
-          })
+          prev.map((patient) =>
+            patient.id === selectedPatient.id
+              ? {
+                ...patient,
+                medicationList: previousMedications,
+              }
+              : patient
+          )
         );
       }
 
@@ -3231,28 +3364,24 @@ export default function App() {
       dosage: newMedication.dosage || "",
       frequency: newMedication.frequency || "",
       route: newMedication.route || "",
+      dispenseAmount: newMedication.dispenseAmount || "",
+      refillCount: newMedication.refillCount || "",
+      instructions: newMedication.instructions || "",
+      lastUpdatedEncounterId: selectedEncounter.id,
       isActive: newMedication.isActive ?? true,
     };
-
     setPatients((prev) =>
-      prev.map((patient) => {
-        if (patient.id !== selectedPatient.id) return patient;
-
-        return {
-          ...patient,
-          encounters: patient.encounters.map((encounter) =>
-            encounter.id === selectedEncounter.id
-              ? {
-                ...encounter,
-                medications: [
-                  ...(encounter.medications || []),
-                  optimisticMedication,
-                ],
-              }
-              : encounter
-          ),
-        };
-      })
+      prev.map((patient) =>
+        patient.id === selectedPatient.id
+          ? {
+            ...patient,
+            medicationList: [
+              ...(patient.medicationList || []),
+              optimisticMedication,
+            ],
+          }
+          : patient
+      )
     );
 
     setNewMedication(EMPTY_MEDICATION);
@@ -3261,8 +3390,9 @@ export default function App() {
 
     try {
       const savedMedication = await createMedicationInSupabase(
-        selectedEncounter.id,
-        newMedication
+        selectedPatient.id,
+        newMedication,
+        selectedEncounter.id
       );
 
       const hydratedMedication = {
@@ -3271,50 +3401,40 @@ export default function App() {
         dosage: savedMedication.dosage || "",
         frequency: savedMedication.frequency || "",
         route: savedMedication.route || "",
+        dispenseAmount: savedMedication.dispense_amount ?? "",
+        refillCount: savedMedication.refill_count ?? "",
+        instructions: savedMedication.instructions || "",
+        lastUpdatedEncounterId: savedMedication.last_updated_encounter_id || null,
         isActive: savedMedication.is_active ?? true,
       };
 
       setPatients((prev) =>
-        prev.map((patient) => {
-          if (patient.id !== selectedPatient.id) return patient;
-
-          return {
-            ...patient,
-            encounters: patient.encounters.map((encounter) =>
-              encounter.id === selectedEncounter.id
-                ? {
-                  ...encounter,
-                  medications: (encounter.medications || []).map((med) =>
-                    med.id === tempMedicationId ? hydratedMedication : med
-                  ),
-                }
-                : encounter
-            ),
-          };
-        })
+        prev.map((patient) =>
+          patient.id === selectedPatient.id
+            ? {
+              ...patient,
+              medicationList: (patient.medicationList || []).map((med) =>
+                med.id === tempMedicationId ? hydratedMedication : med
+              ),
+            }
+            : patient
+        )
       );
     } catch (error) {
       console.error("Failed to save medication:", error);
       alert(`Failed to save medication: ${error.message}`);
 
       setPatients((prev) =>
-        prev.map((patient) => {
-          if (patient.id !== selectedPatient.id) return patient;
-
-          return {
-            ...patient,
-            encounters: patient.encounters.map((encounter) =>
-              encounter.id === selectedEncounter.id
-                ? {
-                  ...encounter,
-                  medications: (encounter.medications || []).filter(
-                    (med) => med.id !== tempMedicationId
-                  ),
-                }
-                : encounter
-            ),
-          };
-        })
+        prev.map((patient) =>
+          patient.id === selectedPatient.id
+            ? {
+              ...patient,
+              medicationList: (patient.medicationList || []).filter(
+                (med) => med.id !== tempMedicationId
+              ),
+            }
+            : patient
+        )
       );
     }
   }
@@ -3325,6 +3445,9 @@ export default function App() {
       dosage: med.dosage || "",
       frequency: med.frequency || "",
       route: med.route || "",
+      dispenseAmount: med.dispenseAmount || "",
+      refillCount: med.refillCount || "",
+      instructions: med.instructions || "",
       isActive: med.isActive,
     });
     setEditingMedicationId(med.id);
@@ -3334,7 +3457,7 @@ export default function App() {
   async function toggleMedicationActive(medicationId) {
     if (!selectedPatient || !selectedEncounter) return;
 
-    const existingMedication = (selectedEncounter.medications || []).find(
+    const existingMedication = (selectedPatient.medicationList || []).find(
       (med) => med.id === medicationId
     );
     if (!existingMedication) return;
@@ -3351,17 +3474,10 @@ export default function App() {
           patient.id === selectedPatient.id
             ? {
               ...patient,
-              encounters: patient.encounters.map((encounter) =>
-                encounter.id === selectedEncounter.id
-                  ? {
-                    ...encounter,
-                    medications: (encounter.medications || []).map((med) =>
-                      med.id === medicationId
-                        ? { ...med, isActive: nextIsActive }
-                        : med
-                    ),
-                  }
-                  : encounter
+              medicationList: (patient.medicationList || []).map((med) =>
+                med.id === medicationId
+                  ? { ...med, isActive: nextIsActive }
+                  : med
               ),
             }
             : patient
@@ -3380,7 +3496,7 @@ export default function App() {
     if (!confirmed) return;
 
     try {
-      const previousMedications = selectedEncounter.medications || [];
+      const previousMedications = selectedPatient.medicationList || [];
 
       // 🔥 optimistic update FIRST
       setPatients((prev) =>
@@ -3388,15 +3504,8 @@ export default function App() {
           patient.id === selectedPatient.id
             ? {
               ...patient,
-              encounters: patient.encounters.map((encounter) =>
-                encounter.id === selectedEncounter.id
-                  ? {
-                    ...encounter,
-                    medications: previousMedications.filter(
-                      (med) => med.id !== medicationId
-                    ),
-                  }
-                  : encounter
+              medicationList: previousMedications.filter(
+                (med) => med.id !== medicationId
               ),
             }
             : patient
@@ -3415,14 +3524,7 @@ export default function App() {
             patient.id === selectedPatient.id
               ? {
                 ...patient,
-                encounters: patient.encounters.map((encounter) =>
-                  encounter.id === selectedEncounter.id
-                    ? {
-                      ...encounter,
-                      medications: previousMedications,
-                    }
-                    : encounter
-                ),
+                medicationList: previousMedications,
               }
               : patient
           )
@@ -4410,16 +4512,6 @@ export default function App() {
     }
   }
 
-  const sortedMedications = selectedEncounter
-    ? [...(selectedEncounter.medications || [])].sort((a, b) => {
-      if (a.isActive === b.isActive) return 0;
-      return a.isActive ? -1 : 1;
-    })
-    : [];
-  const activeMedicationCount = selectedEncounter
-    ? (selectedEncounter.medications || []).filter((med) => med.isActive).length
-    : 0;
-
   const lastVisitLabel =
     selectedPatient && sortedSelectedPatientEncounters.length > 1
       ? formatDate(
@@ -4780,15 +4872,15 @@ export default function App() {
             />
           )}
 
-          {activeView === "specialty-queue" && (
-            <SpecialtyQueueView
-              specialtyEncounterRows={specialtyEncounterRows}
-              openPatientChart={openPatientChart}
-              getFullPatientName={getFullPatientName}
-              formatDate={formatDate}
-              isLeadershipView={isLeadershipView}
-            />
-          )}
+          {activeView === "specialty-queue" && canAccessSpecialtyQueue && (
+  <SpecialtyQueueView
+    specialtyEncounterRows={specialtyEncounterRows}
+    openPatientChart={openPatientChart}
+    getFullPatientName={getFullPatientName}
+    formatDate={formatDate}
+    isLeadershipView={isLeadershipView}
+  />
+)}
 
           {activeView === "board" && (
             <RoomBoard

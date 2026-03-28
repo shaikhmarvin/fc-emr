@@ -235,7 +235,7 @@ export default function FormularyView({
                           : "cursor-not-allowed bg-slate-200 text-slate-400"
                         }`}
                     >
-                      Prescribe
+                      Add to Med List
                     </button>
                   </td>
                 </tr>

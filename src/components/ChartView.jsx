@@ -82,9 +82,9 @@ export default function ChartView({
   saveInHouseLabs,
   saveSendOutLabs,
   soapDraft,
-updateSoapDraftField,
+  updateSoapDraftField,
 }) {
-  
+
 
   function formatAuditAction(action) {
     switch (action) {
@@ -127,6 +127,38 @@ updateSoapDraftField,
     if (current > previous) return "up";
     if (current < previous) return "down";
     return "same";
+  }
+
+  function getDosesPerDay(frequency) {
+    switch ((frequency || "").toLowerCase()) {
+      case "daily":
+        return 1;
+      case "bid":
+        return 2;
+      case "tid":
+        return 3;
+      case "qid":
+        return 4;
+      case "weekly":
+        return 1 / 7;
+      default:
+        return null;
+    }
+  }
+
+  function getEstimatedRunoutDate(med) {
+    const dispense = Number(med.dispenseAmount);
+    const dosesPerDay = getDosesPerDay(med.frequency);
+
+    if (!dispense || !dosesPerDay || dosesPerDay <= 0) return "";
+
+    const daysSupply = Math.floor(dispense / dosesPerDay);
+    if (!daysSupply || daysSupply < 1) return "";
+
+    const baseDate = new Date();
+    baseDate.setDate(baseDate.getDate() + daysSupply);
+
+    return baseDate.toLocaleDateString();
   }
 
   function renderTrendArrow(direction) {
@@ -192,30 +224,30 @@ updateSoapDraftField,
   }
 
   function getSpecialtyTypeLabel(type) {
-  switch (type) {
-    case "pt":
-      return "Physical Therapy";
-    case "dermatology":
-      return "Dermatology";
-    case "mental_health":
-      return "Mental Health";
-    case "addiction":
-      return "Addiction Medicine";
-    default:
-      return type || "Specialty";
+    switch (type) {
+      case "pt":
+        return "Physical Therapy";
+      case "dermatology":
+        return "Dermatology";
+      case "mental_health":
+        return "Mental Health";
+      case "addiction":
+        return "Addiction Medicine";
+      default:
+        return type || "Specialty";
+    }
   }
-}
 
-function getVisitTypeLabel(visitType) {
-  switch (visitType) {
-    case "specialty_only":
-      return "Specialty Only";
-    case "both":
-      return "General + Specialty";
-    default:
-      return "General Clinic";
+  function getVisitTypeLabel(visitType) {
+    switch (visitType) {
+      case "specialty_only":
+        return "Specialty Only";
+      case "both":
+        return "General + Specialty";
+      default:
+        return "General Clinic";
+    }
   }
-}
 
 
 
@@ -332,16 +364,15 @@ function getVisitTypeLabel(visitType) {
   const hrCategory = getHrCategory(latestVitals?.hr);
   const spo2Category = getSpo2Category(latestVitals?.spo2);
   const isSpecialtyVisit =
-  selectedEncounter?.visitType === "specialty_only" ||
-  selectedEncounter?.visitType === "both";
+    selectedEncounter?.visitType === "specialty_only" ||
+    selectedEncounter?.visitType === "both";
 
-const specialtyBadgeText = isSpecialtyVisit
-  ? `${getVisitTypeLabel(selectedEncounter?.visitType)}${
-      selectedEncounter?.specialtyType
-        ? ` • ${getSpecialtyTypeLabel(selectedEncounter.specialtyType)}`
-        : ""
+  const specialtyBadgeText = isSpecialtyVisit
+    ? `${getVisitTypeLabel(selectedEncounter?.visitType)}${selectedEncounter?.specialtyType
+      ? ` • ${getSpecialtyTypeLabel(selectedEncounter.specialtyType)}`
+      : ""
     }`
-  : "";
+    : "";
 
   return (
     <div className="space-y-4 p-3 sm:p-4 lg:space-y-6 lg:p-6">
@@ -398,19 +429,19 @@ const specialtyBadgeText = isSpecialtyVisit
         </div>
       </div>
 
-     {isSpecialtyVisit && (
-  <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
-    <div className="flex items-center gap-2">
-      <span className="text-sm font-semibold text-violet-800">
-        Specialty Visit
-      </span>
-    </div>
+      {isSpecialtyVisit && (
+        <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-violet-800">
+              Specialty Visit
+            </span>
+          </div>
 
-    <div className="mt-1 text-sm text-violet-700">
-      {specialtyBadgeText}
-    </div>
-  </div>
-)}
+          <div className="mt-1 text-sm text-violet-700">
+            {specialtyBadgeText}
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:gap-6">
         <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
           <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -545,8 +576,14 @@ const specialtyBadgeText = isSpecialtyVisit
                         </p>
 
                         <p className="text-xs text-slate-500">
-                          {encounter.visitLocation || "—"} •{" "}
-                          {encounter.newReturning || "—"}
+                          {encounter.visitLocation || "—"} • {encounter.newReturning || "—"}
+                        </p>
+
+                        <p className="text-xs font-medium text-slate-700">
+                          {getVisitTypeLabel(encounter.visitType)}
+                          {encounter.specialtyType
+                            ? ` • ${getSpecialtyTypeLabel(encounter.specialtyType)}`
+                            : ""}
                         </p>
                         <p className="text-xs text-slate-500">
                           Room: {encounter.roomNumber || "—"} • Student: {encounter.assignedStudent || "—"}
@@ -651,7 +688,7 @@ const specialtyBadgeText = isSpecialtyVisit
               </div>
             </div>
 
-            {isLeadershipView && (
+            {isLeadershipView && selectedEncounter?.visitType !== "specialty_only" && (
               <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
                 <h3 className="mb-4 text-lg font-semibold">
                   Leadership Assignment
@@ -863,12 +900,39 @@ const specialtyBadgeText = isSpecialtyVisit
                     >
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                         <div className="space-y-1">
-                          <p className="font-semibold">{med.name || "—"}</p>
-                          <p className="text-sm">Dosage: {med.dosage || "—"}</p>
-                          <p className="text-sm">
-                            Frequency: {med.frequency || "—"}
-                          </p>
-                          <p className="text-sm">Route: {med.route || "—"}</p>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold">{med.name || "—"}</p>
+
+                              {med.lastUpdatedEncounterId === selectedEncounter?.id && (
+                                <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">
+                                  Updated This Visit
+                                </span>
+                              )}
+                            </div>
+
+                            <p className="text-sm">Dosage: {med.dosage || "—"}</p>
+                            <p className="text-sm">Frequency: {med.frequency || "—"}</p>
+                            <p className="text-sm">Route: {med.route || "—"}</p>
+
+                            <p className="text-sm">
+                              Dispense: {med.dispenseAmount || "—"}
+                            </p>
+
+                            <p className="text-sm">
+                              Refills: {med.refillCount ?? "0"}
+                            </p>
+
+                            {med.instructions ? (
+                              <p className="text-sm">Instructions: {med.instructions}</p>
+                            ) : null}
+
+                            {getEstimatedRunoutDate(med) && (
+                              <p className="text-sm text-slate-600">
+                                Estimated Runout: {getEstimatedRunoutDate(med)}
+                              </p>
+                            )}
+                          </div>
                         </div>
 
                         <div className="grid grid-cols-3 gap-2 lg:grid-cols-1">
@@ -2106,9 +2170,9 @@ const specialtyBadgeText = isSpecialtyVisit
 Pertinent history, meds, allergies
 Relevant ROS`}
                   value={soapDraft.soapSubjective || ""}
-onChange={(e) =>
-  updateSoapDraftField("soapSubjective", e.target.value)
-}
+                  onChange={(e) =>
+                    updateSoapDraftField("soapSubjective", e.target.value)
+                  }
                   disabled={isSoapLocked}
                 />
               </div>
@@ -2124,9 +2188,9 @@ General appearance
 Focused exam
 Relevant test results`}
                   value={soapDraft.soapObjective || ""}
-onChange={(e) =>
-  updateSoapDraftField("soapObjective", e.target.value)
-}
+                  onChange={(e) =>
+                    updateSoapDraftField("soapObjective", e.target.value)
+                  }
                   disabled={isSoapLocked}
                 />
               </div>
@@ -2254,22 +2318,22 @@ Follow-up`}
                   4-Digit PIN
                 </label>
                 <input
-  type="password"
-  inputMode="numeric"
-  pattern="[0-9]*"
-  autoComplete="new-password"
-  autoCorrect="off"
-  autoCapitalize="off"
-  spellCheck={false}
-  maxLength={4}
-  name="attending-signature-pin"
-  value={attendingPin}
-  onChange={(e) =>
-    setAttendingPin(e.target.value.replace(/\D/g, "").slice(0, 4))
-  }
-  className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-  placeholder="Enter PIN"
-/>
+                  type="password"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  autoComplete="new-password"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  maxLength={4}
+                  name="attending-signature-pin"
+                  value={attendingPin}
+                  onChange={(e) =>
+                    setAttendingPin(e.target.value.replace(/\D/g, "").slice(0, 4))
+                  }
+                  className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
+                  placeholder="Enter PIN"
+                />
               </div>
             </div>
             {soapUiMessage ? (

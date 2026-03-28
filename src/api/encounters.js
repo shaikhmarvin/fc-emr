@@ -44,14 +44,15 @@ function buildIntakeData(encounter) {
 
 export async function createEncounterInSupabase(patientId, encounter) {
   const row = {
-    patient_id: patientId,
-    clinic_date: encounter.clinicDate,
-    chief_complaint: encounter.chiefComplaint || "",
-    status: mapUiStatusToDb(encounter.status || "Waiting"),
-    room: encounter.roomNumber || "",
-    notes: encounter.notes || "",
-    intake_data: buildIntakeData(encounter),
-  };
+  patient_id: patientId,
+  clinic_date: encounter.clinicDate,
+  chief_complaint: encounter.chiefComplaint || "",
+  status: mapUiStatusToDb(encounter.status || "Waiting"),
+  room: encounter.roomNumber || "",
+  notes: encounter.notes || "",
+  intake_data: buildIntakeData(encounter),
+  leadership_intake_complete: encounter.leadershipIntakeComplete ?? false,
+};
 
   const { data, error } = await supabase
     .from("encounters")
@@ -94,6 +95,10 @@ export async function updateEncounterInSupabase(encounterId, updates) {
   if (updates.notes !== undefined) {
     payload.notes = updates.notes;
   }
+
+  if (updates.leadershipIntakeComplete !== undefined) {
+  payload.leadership_intake_complete = updates.leadershipIntakeComplete;
+}
 
   if (updates.vitalsHistory !== undefined) {
     payload.vitals = updates.vitalsHistory;
@@ -211,16 +216,14 @@ export async function updateEncounterInSupabase(encounterId, updates) {
 };
   }
 
-  const { data, error } = await supabase
-    .from("encounters")
-    .update(payload)
-    .eq("id", encounterId)
-    .select()
-    .single();
+  const { error } = await supabase
+  .from("encounters")
+  .update(payload)
+  .eq("id", encounterId);
 
-  if (error) throw error;
+if (error) throw error;
 
-  return data;
+return { id: encounterId, ...updates };
 }
 
 function mapUiStatusToDb(status) {
@@ -283,13 +286,24 @@ export async function fetchMedications() {
   return data ?? [];
 }
 
-export async function createMedicationInSupabase(encounterId, medication) {
+export async function createMedicationInSupabase(patientId, medication, encounterId = null) {
   const row = {
+    patient_id: patientId,
     encounter_id: encounterId,
+    last_updated_encounter_id: encounterId,
     name: medication.name || "",
     dosage: medication.dosage || "",
     frequency: medication.frequency || "",
     route: medication.route || "",
+    dispense_amount:
+      medication.dispenseAmount === "" || medication.dispenseAmount === null
+        ? null
+        : Number(medication.dispenseAmount),
+    refill_count:
+      medication.refillCount === "" || medication.refillCount === null
+        ? null
+        : Number(medication.refillCount),
+    instructions: medication.instructions || "",
     is_active: medication.isActive ?? true,
   };
 
@@ -300,10 +314,8 @@ export async function createMedicationInSupabase(encounterId, medication) {
     .single();
 
   if (error) throw error;
-
   return data;
 }
-
 export async function updateMedicationInSupabase(medicationId, updates) {
   const payload = {};
 
@@ -311,7 +323,23 @@ export async function updateMedicationInSupabase(medicationId, updates) {
   if (updates.dosage !== undefined) payload.dosage = updates.dosage;
   if (updates.frequency !== undefined) payload.frequency = updates.frequency;
   if (updates.route !== undefined) payload.route = updates.route;
+  if (updates.dispenseAmount !== undefined) {
+    payload.dispense_amount =
+      updates.dispenseAmount === "" || updates.dispenseAmount === null
+        ? null
+        : Number(updates.dispenseAmount);
+  }
+  if (updates.refillCount !== undefined) {
+    payload.refill_count =
+      updates.refillCount === "" || updates.refillCount === null
+        ? null
+        : Number(updates.refillCount);
+  }
+  if (updates.instructions !== undefined) payload.instructions = updates.instructions;
   if (updates.isActive !== undefined) payload.is_active = updates.isActive;
+  if (updates.lastUpdatedEncounterId !== undefined) {
+    payload.last_updated_encounter_id = updates.lastUpdatedEncounterId;
+  }
 
   const { data, error } = await supabase
     .from("medications")
@@ -321,7 +349,6 @@ export async function updateMedicationInSupabase(medicationId, updates) {
     .single();
 
   if (error) throw error;
-
   return data;
 }
 
@@ -335,10 +362,9 @@ export async function deleteMedicationInSupabase(medicationId) {
 }
 
 export async function deleteEncounterInSupabase(encounterId) {
-  const { error } = await supabase
-    .from("encounters")
-    .delete()
-    .eq("id", encounterId);
+  const { error } = await supabase.rpc("delete_encounter_tree", {
+    target_encounter_id: encounterId,
+  });
 
   if (error) throw error;
 }

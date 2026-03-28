@@ -9,100 +9,100 @@ export function useAuthSession() {
   const [authReady, setAuthReady] = useState(false);
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
-    const [authFullName, setAuthFullName] = useState("");
-    const [authClassification, setAuthClassification] = useState("");
-    const [authLoading, setAuthLoading] = useState(false);
-    const [authMessage, setAuthMessage] = useState("");
-    const [needsOnboarding, setNeedsOnboarding] = useState(false);
-    const [onboardingFullName, setOnboardingFullName] = useState("");
-    const [onboardingClassification, setOnboardingClassification] = useState("");
-    const isSigningOutRef = useRef(false);
-    const [authRole, setAuthRole] = useState("");
-    const [authPin, setAuthPin] = useState("");
-const [authPinConfirm, setAuthPinConfirm] = useState("");
+  const [authFullName, setAuthFullName] = useState("");
+  const [authClassification, setAuthClassification] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authMessage, setAuthMessage] = useState("");
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const [onboardingFullName, setOnboardingFullName] = useState("");
+  const [onboardingClassification, setOnboardingClassification] = useState("");
+  const isSigningOutRef = useRef(false);
+  const [authRole, setAuthRole] = useState("");
+  const [authPin, setAuthPin] = useState("");
+  const [authPinConfirm, setAuthPinConfirm] = useState("");
 
   const isLeadershipView = authReady && userRole === "leadership";
 
- async function fetchProfileWithRetry(userId, attempt = 1) {
-  const { data: profile, error } = await supabase
-    .from("profiles")
-    .select("id, full_name, role, classification, approval_status, signature_pin_set")
-    .eq("id", userId)
-    .maybeSingle();
+  async function fetchProfileWithRetry(userId, attempt = 1) {
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("id, full_name, role, classification, approval_status, signature_pin_set")
+      .eq("id", userId)
+      .maybeSingle();
 
-  if (error) throw error;
+    if (error) throw error;
 
-  const role = profile?.role || null;
-  const classification = profile?.classification ?? null;
-  const roleRequiresClassification =
-    role === "student" || role === "upper_level";
+    const role = profile?.role || null;
+    const classification = profile?.classification ?? null;
+    const roleRequiresClassification =
+      role === "student" || role === "upper_level";
 
-  const profileReady =
-  !!role && (!roleRequiresClassification || classification !== null);
+    const profileReady =
+      !!role && (!roleRequiresClassification || classification !== null);
 
-  if (profileReady) {
+    if (profileReady) {
+      return profile;
+    }
+
+    if (attempt < 6) {
+      await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+      return fetchProfileWithRetry(userId, attempt + 1);
+    }
+
     return profile;
   }
-
-  if (attempt < 6) {
-    await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
-    return fetchProfileWithRetry(userId, attempt + 1);
-  }
-
-  return profile;
-}
 
   async function handleSignUp() {
     if (authLoading) return;
     setAuthLoading(true);
     setAuthMessage("");
-    
-     if (!authFullName.trim()) {
-  setAuthMessage("Please enter your full name.");
-  setAuthLoading(false);
-  return;
-}
 
-if (!authRole) {
-  setAuthMessage("Please select a role.");
-  setAuthLoading(false);
-  return;
-}
+    if (!authFullName.trim()) {
+      setAuthMessage("Please enter your full name.");
+      setAuthLoading(false);
+      return;
+    }
 
-if (authRole === "student" || authRole === "upper_level") {
-  if (!authClassification) {
-    setAuthMessage("Please select a classification.");
-    setAuthLoading(false);
-    return;
-  }
-}
+    if (!authRole) {
+      setAuthMessage("Please select a role.");
+      setAuthLoading(false);
+      return;
+    }
 
-if (authRole === "attending") {
-  if (authPin.length !== 4 || !/^\d{4}$/.test(authPin)) {
-    setAuthMessage("PIN must be exactly 4 digits.");
-    setAuthLoading(false);
-    return;
-  }
+    if (authRole === "student" || authRole === "upper_level") {
+      if (!authClassification) {
+        setAuthMessage("Please select a classification.");
+        setAuthLoading(false);
+        return;
+      }
+    }
 
-  if (authPin !== authPinConfirm) {
-    setAuthMessage("PINs do not match.");
-    setAuthLoading(false);
-    return;
-  }
-}
+    if (authRole === "attending") {
+      if (authPin.length !== 4 || !/^\d{4}$/.test(authPin)) {
+        setAuthMessage("PIN must be exactly 4 digits.");
+        setAuthLoading(false);
+        return;
+      }
+
+      if (authPin !== authPinConfirm) {
+        setAuthMessage("PINs do not match.");
+        setAuthLoading(false);
+        return;
+      }
+    }
 
     try {
-     await signUp(authEmail, authPassword, {
-  full_name: authFullName,
-  classification: authClassification || null,
-  role: authRole,
-  approval_status: "pending",
-  signature_pin: authRole === "attending" ? authPin : null,
-});
+      await signUp(authEmail, authPassword, {
+        full_name: authFullName,
+        classification: authClassification || null,
+        role: authRole,
+        approval_status: "pending",
+        signature_pin: authRole === "attending" ? authPin : null,
+      });
       setAuthMessage("Signup successful. You can now sign in.");
       setAuthPassword("");
-setAuthPin("");
-setAuthPinConfirm("");
+      setAuthPin("");
+      setAuthPinConfirm("");
     } catch (error) {
       console.error(error);
       setAuthMessage(`Signup failed: ${error.message}`);
@@ -160,15 +160,15 @@ setAuthPinConfirm("");
     } finally {
       setSession(null);
       setUserRole(null);
-        setAuthEmail("");
-        setAuthPassword("");
-        setAuthFullName("");
-        setAuthClassification("");
-        setOnboardingFullName("");
-        setOnboardingClassification("");
-        setNeedsOnboarding(false);
-        setAuthMessage("Signed out.");
-        setAuthLoading(false);
+      setAuthEmail("");
+      setAuthPassword("");
+      setAuthFullName("");
+      setAuthClassification("");
+      setOnboardingFullName("");
+      setOnboardingClassification("");
+      setNeedsOnboarding(false);
+      setAuthMessage("Signed out.");
+      setAuthLoading(false);
 
       setTimeout(() => {
         window.location.reload();
@@ -193,59 +193,59 @@ setAuthPinConfirm("");
       console.error("Failed to reset session:", error);
     }
 
-      setSession(null);
-      setUserRole(null);
-      setAuthReady(false);
-      setNeedsOnboarding(false);
-      setOnboardingFullName("");
-      setOnboardingClassification("");
+    setSession(null);
+    setUserRole(null);
+    setAuthReady(false);
+    setNeedsOnboarding(false);
+    setOnboardingFullName("");
+    setOnboardingClassification("");
 
     window.location.reload();
   }
 
-    async function handleCompleteOnboarding() {
-  if (authLoading) return;
-  if (!session?.user?.id) return;
+  async function handleCompleteOnboarding() {
+    if (authLoading) return;
+    if (!session?.user?.id) return;
 
-  if (!onboardingFullName.trim()) {
-    setAuthMessage("Please enter your full name.");
-    return;
+    if (!onboardingFullName.trim()) {
+      setAuthMessage("Please enter your full name.");
+      return;
+    }
+
+    if (
+      (userRole === "student" || userRole === "upper_level") &&
+      !onboardingClassification
+    ) {
+      setAuthMessage("Please select your classification.");
+      return;
+    }
+
+    try {
+      setAuthLoading(true);
+      setAuthMessage("");
+
+      const profile = await completeProfileSetup(
+        session.user.id,
+        onboardingFullName.trim(),
+        onboardingClassification
+      );
+
+      setUserRole(profile.role);
+      setNeedsOnboarding(false);
+      setAuthFullName(profile.full_name || onboardingFullName.trim());
+      setAuthClassification(profile.classification || onboardingClassification);
+      setOnboardingFullName(profile.full_name || onboardingFullName.trim());
+      setOnboardingClassification(
+        profile.classification || onboardingClassification
+      );
+      setAuthMessage("");
+    } catch (error) {
+      console.error("Failed to complete onboarding:", error);
+      setAuthMessage(`Failed to complete setup: ${error.message}`);
+    } finally {
+      setAuthLoading(false);
+    }
   }
-
-  if (
-  (userRole === "student" || userRole === "upper_level") &&
-  !onboardingClassification
-) {
-    setAuthMessage("Please select your classification.");
-    return;
-  }
-
-  try {
-    setAuthLoading(true);
-    setAuthMessage("");
-
-    const profile = await completeProfileSetup(
-      session.user.id,
-      onboardingFullName.trim(),
-      onboardingClassification
-    );
-
-    setUserRole(profile.role);
-    setNeedsOnboarding(false);
-    setAuthFullName(profile.full_name || onboardingFullName.trim());
-    setAuthClassification(profile.classification || onboardingClassification);
-    setOnboardingFullName(profile.full_name || onboardingFullName.trim());
-    setOnboardingClassification(
-      profile.classification || onboardingClassification
-    );
-    setAuthMessage("");
-  } catch (error) {
-    console.error("Failed to complete onboarding:", error);
-    setAuthMessage(`Failed to complete setup: ${error.message}`);
-  } finally {
-    setAuthLoading(false);
-  }
-}
 
   useEffect(() => {
     const {
@@ -273,46 +273,46 @@ setAuthPinConfirm("");
 
       setTimeout(async () => {
         try {
-            const profile = await fetchProfileWithRetry(userId);
+          const profile = await fetchProfileWithRetry(userId);
 
-if (!profile) {
-  console.error("No profile found for user:", userId);
-  setAuthMessage("No profile found. Contact leadership.");
-  setUserRole(null);
-  setAuthReady(true);
-  return;
-}
+          if (!profile) {
+            console.error("No profile found for user:", userId);
+            setAuthMessage("No profile found. Contact leadership.");
+            setUserRole(null);
+            setAuthReady(true);
+            return;
+          }
 
-await supabase
-  .from("profiles")
-  .update({ last_seen_at: new Date().toISOString() })
-  .eq("id", userId);
+          await supabase
+            .from("profiles")
+            .update({ last_seen_at: new Date().toISOString() })
+            .eq("id", userId);
 
-            console.log("PROFILE FROM onAuthStateChange:", profile, "EVENT:", event);
+          console.log("PROFILE FROM onAuthStateChange:", profile, "EVENT:", event);
 
-            const role = profile?.role || null;
-            const classification = profile?.classification ?? null;
-            const roleRequiresClassification =
-                role === "student" || role === "upper_level";
+          const role = profile?.role || null;
+          const classification = profile?.classification ?? null;
+          const roleRequiresClassification =
+            role === "student" || role === "upper_level";
 
-            if (profile?.approval_status !== "approved") {
-              setUserRole(null);
-              setNeedsOnboarding(false);
-              setAuthMessage("Awaiting leadership approval.");
-              setAuthReady(true);   // ✅ ADD THIS
-              return;
-            }
+          if (profile?.approval_status !== "approved") {
+            setUserRole(null);
+            setNeedsOnboarding(false);
+            setAuthMessage("Awaiting leadership approval.");
+            setAuthReady(true);   // ✅ ADD THIS
+            return;
+          }
 
-if (
-  role &&
-  (!roleRequiresClassification || classification !== null)
-) {
-  setUserRole(role);
-  setNeedsOnboarding(false);
-  setOnboardingFullName(profile?.full_name || "");
-  setOnboardingClassification(classification || "");
-  setAuthMessage("");
-}
+          if (
+            role &&
+            (!roleRequiresClassification || classification !== null)
+          ) {
+            setUserRole(role);
+            setNeedsOnboarding(false);
+            setOnboardingFullName(profile?.full_name || "");
+            setOnboardingClassification(classification || "");
+            setAuthMessage("");
+          }
 
         } catch (error) {
           console.error("Failed to load profile from auth state change:", error);
@@ -327,6 +327,48 @@ if (
       subscription.unsubscribe();
     };
   }, []);
+
+useEffect(() => {
+  if (!session?.user?.id) return;
+
+  const channel = supabase
+    .channel("profile-approval-listener")
+    .on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "profiles",
+        filter: `id=eq.${session.user.id}`,
+      },
+      async (payload) => {
+        const profile = payload.new;
+
+        const role = profile.role || null;
+        const classification = profile.classification ?? null;
+        const roleRequiresClassification =
+          role === "student" || role === "upper_level";
+
+        if (
+          profile.approval_status === "approved" &&
+          role &&
+          (!roleRequiresClassification || classification !== null)
+        ) {
+          setUserRole(role);
+          setNeedsOnboarding(false);
+          setOnboardingFullName(profile.full_name || "");
+          setOnboardingClassification(classification || "");
+          setAuthMessage("");
+          setAuthReady(true);
+        }
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [session?.user?.id]);
 
   return {
     session,
@@ -356,8 +398,8 @@ if (
     authRole,
     setAuthRole,
     authPin,
-setAuthPin,
-authPinConfirm,
-setAuthPinConfirm,
+    setAuthPin,
+    authPinConfirm,
+    setAuthPinConfirm,
   };
 }
