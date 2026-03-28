@@ -54,6 +54,7 @@ export default function ChartView({
   saveSoapNote,
   soapAutoSaveEnabled,
   updateEncounterField,
+  saveEncounterField,
   openEditIntake,
   formatDate,
   soapStatus,
@@ -83,6 +84,7 @@ export default function ChartView({
   saveSendOutLabs,
   soapDraft,
   updateSoapDraftField,
+  openPatientEditModal,
 }) {
 
 
@@ -258,6 +260,7 @@ export default function ChartView({
   const [showAudit, setShowAudit] = useState(false);
   const [selectedAttendingId, setSelectedAttendingId] = useState("");
   const [attendingPin, setAttendingPin] = useState("");
+  const [chiefComplaintDraft, setChiefComplaintDraft] = useState("");
   const rapidResultOptions = [
     { value: "", label: "—" },
     { value: "positive", label: "Positive" },
@@ -374,6 +377,10 @@ export default function ChartView({
     }`
     : "";
 
+  useEffect(() => {
+    setChiefComplaintDraft(selectedEncounter?.chiefComplaint || "");
+  }, [selectedEncounter?.id, selectedEncounter?.chiefComplaint]);
+
   return (
     <div className="space-y-4 p-3 sm:p-4 lg:space-y-6 lg:p-6">
       <button
@@ -382,51 +389,82 @@ export default function ChartView({
       >
         ← Back to Patients
       </button>
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <div className="rounded-2xl bg-white p-3 shadow sm:p-4">
-          <p className="text-sm text-slate-500">Patient</p>
-          <p className="mt-1 text-lg font-semibold text-slate-800">
-            {getFullPatientName(selectedPatient)}
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            Patient Snapshot
           </p>
-          <p className="mt-1 text-sm text-slate-500">
-            MRN: {selectedPatient.mrn || "—"}
-          </p>
+
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div>
+              <p className="text-lg font-semibold text-slate-800">
+                {getFullPatientName(selectedPatient)}
+              </p>
+              <p className="text-sm text-slate-500">
+                MRN: {selectedPatient.mrn || "—"}
+              </p>
+            </div>
+
+            <div className="space-y-1 text-sm text-slate-700">
+              <p>DOB: {selectedPatient.dob ? formatDate(selectedPatient.dob) : "—"}</p>
+              <p>Age: {selectedPatient.age || "—"}</p>
+              <p>Phone: {selectedPatient.phone || "—"}</p>
+            </div>
+          </div>
         </div>
 
         <div className="rounded-2xl bg-white p-3 shadow sm:p-4">
-          <p className="text-sm text-slate-500">Demographics</p>
-          <p className="mt-1 text-sm text-slate-700">
-            DOB: {selectedPatient.dob ? formatDate(selectedPatient.dob) : "—"}
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            Visit Snapshot
           </p>
-          <p className="text-sm text-slate-700">
-            Age: {selectedPatient.age || "—"}
-          </p>
-          <p className="text-sm text-slate-700">
-            Phone: {selectedPatient.phone || "—"}
-          </p>
-        </div>
 
-        <div className="rounded-2xl bg-white p-3 shadow sm:p-4">
-          <p className="text-sm text-slate-500">Clinical Snapshot</p>
-          <p className="mt-1 text-sm text-slate-700">
-            Allergies: {(selectedPatient.allergyList || []).length > 0
-              ? `${selectedPatient.allergyList.filter((a) => a.isActive).length} active`
-              : "None listed"}
-          </p>
-          <p className="text-sm text-slate-700">
-            Active meds: {activeMedicationCount}
-          </p>
-        </div>
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="space-y-1 text-sm text-slate-700">
+              <p>
+                Allergies: {(selectedPatient.allergyList || []).length > 0
+                  ? `${selectedPatient.allergyList.filter((a) => a.isActive).length} active`
+                  : "None listed"}
+              </p>
+              <p>Active meds: {activeMedicationCount}</p>
+            </div>
 
-        <div className="rounded-2xl bg-white p-3 shadow sm:p-4">
-          <p className="text-sm text-slate-500">Visit History</p>
-          <p className="mt-1 text-sm text-slate-700">
-            Current visit: {selectedEncounter?.clinicDate ? formatDate(selectedEncounter.clinicDate) : "—"}
-          </p>
-          <p className="text-sm text-slate-700">
-            Last visit: {lastVisitLabel}
-          </p>
+            <div className="space-y-1 text-sm text-slate-700">
+              <p>
+                Current visit: {selectedEncounter?.clinicDate ? formatDate(selectedEncounter.clinicDate) : "—"}
+              </p>
+              <p>Last visit: {lastVisitLabel}</p>
+            </div>
+          </div>
         </div>
+      </div>
+
+      <div className="flex flex-col gap-2 sm:flex-row">
+        {isLeadershipView && (
+          <button
+            onClick={openEditIntake}
+            className="rounded-lg bg-amber-500 px-4 py-2 text-white hover:bg-amber-600"
+          >
+            Edit Intake
+          </button>
+        )}
+
+        {(isLeadershipView || selectedPatient) && (
+          <button
+            onClick={openPatientEditModal}
+            className="rounded-lg bg-slate-700 px-4 py-2 text-white hover:bg-slate-800"
+          >
+            Edit Patient Info
+          </button>
+        )}
+
+        {canStartEncounter ? (
+          <button
+            onClick={startNewEncounter}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+          >
+            Start New Encounter
+          </button>
+        ) : null}
       </div>
 
       {isSpecialtyVisit && (
@@ -442,99 +480,7 @@ export default function ChartView({
           </div>
         </div>
       )}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:gap-6">
-        <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
-          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <h3 className="text-lg font-semibold">Patient Information</h3>
-
-            <div className="flex flex-col gap-2 sm:flex-row">
-              {isLeadershipView && (
-                <button
-                  onClick={openEditIntake}
-                  className="rounded-lg bg-amber-500 px-4 py-2 text-white hover:bg-amber-600"
-                >
-                  Edit Intake
-                </button>
-              )}
-
-              {canStartEncounter ? (
-                <button
-                  onClick={() => {
-                    setShowTimeline(true);
-                    startNewEncounter();
-                  }}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-                >
-                  Start New Encounter
-                </button>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 text-sm lg:grid-cols-2">
-            <p className="md:col-span-2">
-              <span className="font-medium">Last 4 SSN:</span>{" "}
-              {selectedPatient.last4ssn || "—"}
-            </p>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Phone
-              </label>
-              <input
-                type="text"
-                value={selectedPatient.phone || ""}
-                onChange={(e) => updatePatientField("phone", e.target.value)}
-                className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                placeholder="Phone number"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Pronouns
-              </label>
-              <input
-                type="text"
-                value={selectedPatient.pronouns || ""}
-                onChange={(e) => updatePatientField("pronouns", e.target.value)}
-                className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                placeholder="Pronouns"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Sex
-              </label>
-              <input
-                type="text"
-                value={selectedPatient.sex || ""}
-                onChange={(e) => updatePatientField("sex", e.target.value)}
-                className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                placeholder="Sex"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Ethnicity
-              </label>
-              <select
-                value={selectedPatient.ethnicity || ""}
-                onChange={(e) => updatePatientField("ethnicity", e.target.value)}
-                className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-              >
-                <option value="">Select Ethnicity</option>
-                <option>Hispanic or Latino</option>
-                <option>Asian</option>
-                <option>Black or African American</option>
-                <option>White</option>
-                <option>Middle Eastern</option>
-              </select>
-            </div>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 gap-4">
 
         <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
           <button
@@ -639,16 +585,10 @@ export default function ChartView({
             className={`grid gap-4 xl:gap-6 ${isLeadershipView ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1"
               }`}
           >
-            <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
+            <div className="rounded-2xl bg-white p-4 shadow">
               <h3 className="mb-4 text-lg font-semibold">Encounter Details</h3>
 
               <div className="space-y-3 text-sm">
-                <p>
-                  <span className="font-medium">Encounter Date:</span>{" "}
-                  {normalizeClinicDate
-                    ? normalizeClinicDate(selectedEncounter.clinicDate)
-                    : selectedEncounter.clinicDate}
-                </p>
 
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -656,25 +596,22 @@ export default function ChartView({
                   </label>
                   <input
                     type="text"
-                    value={selectedEncounter.chiefComplaint || ""}
+                    value={chiefComplaintDraft}
                     onChange={(e) => {
                       if (isEncounterLocked) return;
-                      updateEncounterField("chiefComplaint", e.target.value);
+                      setChiefComplaintDraft(e.target.value);
+                    }}
+                    onBlur={async (e) => {
+                      if (isEncounterLocked) return;
+
+                      const nextValue = e.target.value;
+                      updateEncounterField("chiefComplaint", nextValue);
+                      await saveEncounterField("chiefComplaint", nextValue);
                     }}
                     disabled={isEncounterLocked}
                     className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base disabled:bg-slate-100"
                   />
                 </div>
-
-                <p>
-                  <span className="font-medium">Visit Location:</span>{" "}
-                  {selectedEncounter.visitLocation || "—"}
-                </p>
-
-                <p>
-                  <span className="font-medium">Transportation:</span>{" "}
-                  {selectedEncounter.transportation || "—"}
-                </p>
 
                 <p>
                   <span className="font-medium">Encounter Status:</span>{" "}
@@ -689,7 +626,7 @@ export default function ChartView({
             </div>
 
             {isLeadershipView && selectedEncounter?.visitType !== "specialty_only" && (
-              <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
+              <div className="rounded-2xl bg-white p-4 shadow">
                 <h3 className="mb-4 text-lg font-semibold">
                   Leadership Assignment
                 </h3>
@@ -862,7 +799,7 @@ export default function ChartView({
           </div>
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:gap-6">
-            <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
+            <div className="rounded-2xl bg-white p-4 shadow">
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <h3 className="text-lg font-semibold">Medications</h3>
 
@@ -935,7 +872,7 @@ export default function ChartView({
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-3 gap-2 lg:grid-cols-1">
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-1">
                           <button
                             onClick={() => {
                               if (isEncounterLocked) return;
@@ -980,7 +917,7 @@ export default function ChartView({
               </div>
             </div>
 
-            <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
+            <div className="rounded-2xl bg-white p-4 shadow">
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <h3 className="text-lg font-semibold">Allergies</h3>
 
@@ -1018,7 +955,7 @@ export default function ChartView({
                           ) : null}
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2 lg:grid-cols-1">
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1">
                           <button
                             onClick={() => {
                               if (isEncounterLocked) return;
@@ -2034,7 +1971,7 @@ export default function ChartView({
             )}
           </div>
 
-          <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
+          <div className="rounded-2xl bg-white p-4 shadow">
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <h3 className="text-lg font-semibold">SOAP Note</h3>
 

@@ -2840,6 +2840,19 @@ export default function App() {
     );
   }
 
+  async function saveEncounterField(field, value) {
+  if (!selectedEncounter) return;
+
+  try {
+    await updateEncounterInSupabase(selectedEncounter.id, {
+      [field]: value,
+    });
+  } catch (error) {
+    console.error(`Failed to save ${field}:`, error);
+    alert(`Failed to save ${field}: ${error.message}`);
+  }
+}
+
   function updateSoapDraftField(field, value) {
     setSoapDraft((prev) => ({
       ...prev,
@@ -4769,7 +4782,7 @@ export default function App() {
 
 
   return (
-    <div className="min-h-screen bg-slate-100 lg:flex lg:h-screen">
+    <div className="min-h-screen bg-slate-100 lg:flex">
       <AppSidebar
         activeView={activeView}
         setActiveView={setActiveView}
@@ -4785,7 +4798,7 @@ export default function App() {
         userRole={userRole}
       />
 
-      <div className="min-w-0 flex-1 lg:ml-64 lg:flex lg:min-h-0 lg:flex-col">
+      <div className="min-w-0 flex-1 bg-slate-100 lg:ml-64 lg:flex lg:flex-col">
         <AppHeader
           activeView={activeView}
           selectedPatient={selectedPatient}
@@ -5001,6 +5014,7 @@ export default function App() {
               saveSoapNote={saveSoapNote}
               soapAutoSaveEnabled={true}
               updateEncounterField={updateEncounterField}
+              saveEncounterField={saveEncounterField}
               formatDate={formatDate}
               soapStatus={selectedEncounter?.soapStatus || "draft"}
               canSignAsUpperLevel={canSignAsUpperLevel}
@@ -5027,6 +5041,7 @@ export default function App() {
               signSoapAsAttendingWithPin={signSoapAsAttendingWithPin}
               soapDraft={soapDraft}
               updateSoapDraftField={updateSoapDraftField}
+              openPatientEditModal={openPatientEditModal}
             />
           )}
 
