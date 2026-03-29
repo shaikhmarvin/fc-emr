@@ -12,7 +12,6 @@ export default function DashboardView({
   deletePatientCompletely,
   openPatientEditModal,
   dashboardSelectedPatient,
-  endClinicReset,
   selectedClinicDate,
   setSelectedClinicDate,
   filteredVisiblePatients,
@@ -89,14 +88,6 @@ function formatPhone(phone) {
           </p>
         </div>
 
-        {isLeadershipView && (
-          <button
-            onClick={endClinicReset}
-            className="w-full rounded-lg bg-red-700 px-4 py-3 text-white hover:bg-red-800 sm:w-auto"
-          >
-            End Clinic Reset
-          </button>
-        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">

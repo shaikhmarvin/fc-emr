@@ -152,45 +152,49 @@ export default function ChartView({
         return null;
     }
   }
-
-  function getDaysSupplyFromMedicationLike(med) {
+  function getMedicationSupplyInfo(med) {
     const dispense = Number(med?.dispenseAmount);
     const dosesPerDay = getDosesPerDay(med?.frequency);
+    const refillCount = Number(med?.refillCount);
 
-    if (!dispense || !dosesPerDay || dosesPerDay <= 0) return "";
-    const daysSupply = Math.floor(dispense / dosesPerDay);
+    if (!dispense || !dosesPerDay || dosesPerDay <= 0) {
+      return {
+        daysUntilRefill: "",
+        refillDueDate: "",
+        totalDaysCovered: "",
+        runoutDate: "",
+      };
+    }
 
-    return daysSupply > 0 ? String(daysSupply) : "";
-  }
+    const daysUntilRefill = Math.floor(dispense / dosesPerDay);
+    if (!daysUntilRefill || daysUntilRefill < 1) {
+      return {
+        daysUntilRefill: "",
+        refillDueDate: "",
+        totalDaysCovered: "",
+        runoutDate: "",
+      };
+    }
 
-  function getEstimatedRunoutDateFromMedicationLike(med) {
-    const dispense = Number(med?.dispenseAmount);
-    const dosesPerDay = getDosesPerDay(med?.frequency);
+    const safeRefills =
+      Number.isFinite(refillCount) && refillCount >= 0 ? refillCount : 0;
 
-    if (!dispense || !dosesPerDay || dosesPerDay <= 0) return "";
+    const totalDaysCovered = daysUntilRefill * (safeRefills + 1);
 
-    const daysSupply = Math.floor(dispense / dosesPerDay);
-    if (!daysSupply || daysSupply < 1) return "";
+    const today = new Date();
 
-    const baseDate = new Date();
-    baseDate.setDate(baseDate.getDate() + daysSupply);
+    const refillDue = new Date();
+    refillDue.setDate(today.getDate() + daysUntilRefill);
 
-    return baseDate.toLocaleDateString();
-  }
+    const runout = new Date();
+    runout.setDate(today.getDate() + totalDaysCovered);
 
-  function getEstimatedRunoutDate(med) {
-    const dispense = Number(med.dispenseAmount);
-    const dosesPerDay = getDosesPerDay(med.frequency);
-
-    if (!dispense || !dosesPerDay || dosesPerDay <= 0) return "";
-
-    const daysSupply = Math.floor(dispense / dosesPerDay);
-    if (!daysSupply || daysSupply < 1) return "";
-
-    const baseDate = new Date();
-    baseDate.setDate(baseDate.getDate() + daysSupply);
-
-    return baseDate.toLocaleDateString();
+    return {
+      daysUntilRefill: daysUntilRefill,
+      refillDueDate: refillDue.toLocaleDateString(),
+      totalDaysCovered: totalDaysCovered,
+      runoutDate: runout.toLocaleDateString(),
+    };
   }
 
   function renderTrendArrow(direction) {
@@ -415,6 +419,60 @@ export default function ChartView({
   const isSpecialtyVisit =
     selectedEncounter?.visitType === "specialty_only" ||
     selectedEncounter?.visitType === "both";
+  const normalizedAssignedStudent = String(assignmentForm.studentName || "").trim().toLowerCase();
+  const normalizedAssignedUpperLevel = String(assignmentForm.upperLevelName || "").trim().toLowerCase();
+
+  function roomMatchesCurrentAssignment(room) {
+    const roomStudents = (room.assignedStudentsInRoom || []).map((name) =>
+      String(name || "").trim().toLowerCase()
+    );
+    const roomUpperLevels = (room.assignedUpperLevelsInRoom || []).map((name) =>
+      String(name || "").trim().toLowerCase()
+    );
+
+    if (normalizedAssignedStudent && roomStudents.includes(normalizedAssignedStudent)) {
+      return true;
+    }
+
+    if (
+      !normalizedAssignedStudent &&
+      normalizedAssignedUpperLevel &&
+      roomUpperLevels.includes(normalizedAssignedUpperLevel)
+    ) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function getRoomUsageLabel(room) {
+    if (!room?.occupied) {
+      return {
+        dot: "bg-green-500",
+        badge: "bg-green-100 text-green-700",
+        text: "Available",
+        helper: "",
+      };
+    }
+
+    if (roomMatchesCurrentAssignment(room)) {
+      return {
+        dot: "bg-blue-500",
+        badge: "bg-blue-100 text-blue-700",
+        text: "Same Student/Provider",
+        helper: "This room is already being used by this same student/provider.",
+      };
+    }
+
+    return {
+      dot: "bg-red-500",
+      badge: "bg-red-100 text-red-700",
+      text: "Different Student/Provider",
+      helper: room.occupiedBy
+        ? `Currently in use by ${room.occupiedBy}`
+        : "Currently in use",
+    };
+  }
 
   const specialtyBadgeText = isSpecialtyVisit
     ? `${getVisitTypeLabel(selectedEncounter?.visitType)}${selectedEncounter?.specialtyType
@@ -755,20 +813,18 @@ export default function ChartView({
 
                         if (!selectedRoom) return null;
 
+                        const roomUsage = getRoomUsageLabel(selectedRoom);
+
                         return (
                           <div className="flex items-center gap-2">
                             <span
-                              className={`inline-block h-2.5 w-2.5 rounded-full ${selectedRoom.occupied ? "bg-red-500" : "bg-green-500"
-                                }`}
+                              className={`inline-block h-2.5 w-2.5 rounded-full ${roomUsage.dot}`}
                             />
 
                             <span
-                              className={`rounded-full px-2 py-0.5 text-xs font-medium ${selectedRoom.occupied
-                                ? "bg-red-100 text-red-700"
-                                : "bg-green-100 text-green-700"
-                                }`}
+                              className={`rounded-full px-2 py-0.5 text-xs font-medium ${roomUsage.badge}`}
                             >
-                              {selectedRoom.occupied ? "Occupied" : "Available"}
+                              {roomUsage.text}
                             </span>
                           </div>
                         );
@@ -789,6 +845,11 @@ export default function ChartView({
                       {ROOM_OPTIONS.map((room) => (
                         <option key={room.number} value={room.number}>
                           {room.displayLabel || `${room.label} — ${room.area}`}
+                          {room.occupied
+                            ? roomMatchesCurrentAssignment(room)
+                              ? " (Same Student/Provider)"
+                              : " (In Use)"
+                            : " (Available)"}
                         </option>
                       ))}
                     </select>
@@ -798,12 +859,24 @@ export default function ChartView({
                         (room) => String(room.number) === String(assignmentForm.roomNumber)
                       );
 
-                      if (!selectedRoom?.occupied || !selectedRoom.occupiedBy) return null;
+                      if (!selectedRoom) return null;
+
+                      const roomUsage = getRoomUsageLabel(selectedRoom);
+
+                      if (!selectedRoom.occupied) return null;
 
                       return (
-                        <p className="mt-1 text-right text-xs text-slate-500">
-                          Currently occupied by {selectedRoom.occupiedBy}
-                        </p>
+                        <div className="mt-1 space-y-1 text-right">
+                          <p className="text-xs text-slate-500">
+                            {roomUsage.helper}
+                          </p>
+
+                          {selectedRoom.activeEncounterCount > 1 ? (
+                            <p className="text-xs text-slate-400">
+                              {selectedRoom.activeEncounterCount} active encounters in this room
+                            </p>
+                          ) : null}
+                        </div>
                       );
                     })()}
                   </div>
@@ -910,11 +983,20 @@ export default function ChartView({
                               <p className="text-sm">Instructions: {med.instructions}</p>
                             ) : null}
 
-                            {getEstimatedRunoutDate(med) && (
-                              <p className="text-sm text-slate-600">
-                                Estimated Runout: {getEstimatedRunoutDate(med)}
-                              </p>
-                            )}
+                            {(() => {
+                              const supply = getMedicationSupplyInfo(med);
+
+                              if (!supply.daysUntilRefill) return null;
+
+                              return (
+                                <div className="mt-1 text-xs text-slate-600 space-y-0.5">
+                                  <p>Days Until Refill: {supply.daysUntilRefill}</p>
+                                  <p>Refill Due: {supply.refillDueDate}</p>
+                                  <p>Total Coverage: {supply.totalDaysCovered} days</p>
+                                  <p>Estimated Runout: {supply.runoutDate}</p>
+                                </div>
+                              );
+                            })()}
                           </div>
                         </div>
 
@@ -1030,20 +1112,24 @@ export default function ChartView({
                           <div>Route: {approvedMedication?.route || "—"}</div>
                           <div>Dispense: {approvedMedication?.dispenseAmount || "—"}</div>
                           <div>Refills: {approvedMedication?.refillCount ?? "—"}</div>
-                          <div>
-                            Days Supply: {getDaysSupplyFromMedicationLike(approvedMedication) || "—"}
-                          </div>
+                          {(() => {
+                            const supply = getMedicationSupplyInfo(approvedMedication);
+
+                            if (!supply.daysUntilRefill) return null;
+
+                            return (
+                              <>
+                                <div>Days Until Refill: {supply.daysUntilRefill}</div>
+                                <div>Total Coverage: {supply.totalDaysCovered} days</div>
+                                <div>Estimated Runout: {supply.runoutDate}</div>
+                              </>
+                            );
+                          })()}
                         </div>
 
                         {approvedMedication?.instructions ? (
                           <div className="mt-1 text-xs text-slate-600">
                             Instructions: {approvedMedication.instructions}
-                          </div>
-                        ) : null}
-
-                        {getEstimatedRunoutDateFromMedicationLike(approvedMedication) ? (
-                          <div className="mt-1 text-xs text-slate-600">
-                            Estimated Runout: {getEstimatedRunoutDateFromMedicationLike(approvedMedication)}
                           </div>
                         ) : null}
                       </div>
@@ -1075,7 +1161,12 @@ export default function ChartView({
                 </button>
               </div>
 
-              <div className="space-y-3">
+              <div
+                className={`${(selectedPatient.allergyList || []).length > 5
+                  ? "max-h-[260px] overflow-y-auto pr-1"
+                  : ""
+                  } space-y-3`}
+              >
                 {(selectedPatient.allergyList || []).length > 0 ? (
                   selectedPatient.allergyList.map((allergy) => (
                     <div
