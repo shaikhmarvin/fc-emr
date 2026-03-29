@@ -72,6 +72,43 @@ export default function QueueView({
     return null;
   }
 
+  function normalizeAssignmentName(value) {
+    return String(value || "").trim().toLowerCase();
+  }
+
+  function roomMatchesDraftAssignment(room, encounter) {
+    const draftStudent = normalizeAssignmentName(
+      getDraftValue(encounter, "assignedStudent")
+    );
+    const draftUpper = normalizeAssignmentName(
+      getDraftValue(encounter, "assignedUpperLevel")
+    );
+
+    const roomStudents = (room.assignedStudentsInRoom || []).map((name) =>
+      normalizeAssignmentName(name)
+    );
+
+    const roomUpperLevels = (room.assignedUpperLevelsInRoom || []).map((name) =>
+      normalizeAssignmentName(name)
+    );
+
+    if (draftStudent && roomStudents.includes(draftStudent)) {
+      return true;
+    }
+
+    if (!draftStudent && draftUpper && roomUpperLevels.includes(draftUpper)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function getRoomQueueLabel(room, encounter) {
+    if (!room?.occupied) return "Available";
+    if (roomMatchesDraftAssignment(room, encounter)) return "Same Student/Provider";
+    return "In Use";
+  }
+
   const pendingRefills = (refillRequests || []).filter((r) => {
     const status = String(r.status || "pending").toLowerCase();
     return status === "pending";
@@ -183,21 +220,21 @@ export default function QueueView({
   }
 
   async function removeRefillRequest(req) {
-  const confirmed = window.confirm(
-    "Remove this refill request?"
-  );
-  if (!confirmed) return;
+    const confirmed = window.confirm(
+      "Remove this refill request?"
+    );
+    if (!confirmed) return;
 
-  try {
-    setDeleteRefillBusyId(req.id);
-    await onDeleteRefillRequest(req.id);
-  } catch (error) {
-    console.error("Failed to remove refill request:", error);
-    alert(error.message || "Failed to remove refill request.");
-  } finally {
-    setDeleteRefillBusyId(null);
+    try {
+      setDeleteRefillBusyId(req.id);
+      await onDeleteRefillRequest(req.id);
+    } catch (error) {
+      console.error("Failed to remove refill request:", error);
+      alert(error.message || "Failed to remove refill request.");
+    } finally {
+      setDeleteRefillBusyId(null);
+    }
   }
-}
 
   const unassignedRows =
     userRole === "leadership"
@@ -340,45 +377,45 @@ export default function QueueView({
                     </button>
 
                     <div className="mt-3 flex flex-wrap gap-2">
-  {userRole === "attending" ? (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        approveRefillAsSignedInAttending(req);
-      }}
-      disabled={directApproveBusyId === req.id}
-      className="rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
-    >
-      {directApproveBusyId === req.id ? "Approving..." : "Approve Refill"}
-    </button>
-  ) : canRefill ? (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        openApproveRefillModal(req);
-      }}
-      className="rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700"
-    >
-      Approve Refill
-    </button>
-  ) : null}
+                      {userRole === "attending" ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            approveRefillAsSignedInAttending(req);
+                          }}
+                          disabled={directApproveBusyId === req.id}
+                          className="rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {directApproveBusyId === req.id ? "Approving..." : "Approve Refill"}
+                        </button>
+                      ) : canRefill ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openApproveRefillModal(req);
+                          }}
+                          className="rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700"
+                        >
+                          Approve Refill
+                        </button>
+                      ) : null}
 
-  {canRefill && (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        removeRefillRequest(req);
-      }}
-      disabled={deleteRefillBusyId === req.id}
-      className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
-    >
-      {deleteRefillBusyId === req.id ? "Removing..." : "Remove Request"}
-    </button>
-  )}
-</div>
+                      {canRefill && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeRefillRequest(req);
+                          }}
+                          disabled={deleteRefillBusyId === req.id}
+                          className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {deleteRefillBusyId === req.id ? "Removing..." : "Remove Request"}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -386,24 +423,145 @@ export default function QueueView({
           </div>
         )}
 
-        <div className="space-y-4">
-          {userRole === "leadership" && unassignedRows.length > 0 && (
-            <div className="px-2 py-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Unassigned / New Patients
+        {userRole === "leadership" && unassignedRows.length > 0 && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold uppercase tracking-wide text-amber-800 shadow-sm">
+            Awaiting Assignment
+          </div>
+        )}
+        {(userRole === "leadership" ? unassignedRows : waitingEncounterRows).map(
+          ({ patient, encounter }) => (
+            <div
+              key={encounter.id}
+              onClick={(e) => {
+                if (e.target.closest("select, button")) return;
+                openPatientChart(patient.id, encounter.id);
+              }}
+              className="cursor-pointer rounded-xl border bg-white p-3 shadow-sm transition hover:bg-slate-50"
+            >
+              <div className="flex flex-col gap-2">
+                {/* Top row */}
+                <div className="flex items-center justify-between">
+                  <p className="font-semibold text-slate-800">
+                    {getPatientBoardName(patient)} ({patient.age})
+                  </p>
+
+                  <span
+                    className={`rounded-full border px-2 py-0.5 text-xs ${getStatusClasses(encounter.status)}`}
+                  >
+                    {getStatusLabel(encounter.status, encounter.soapStatus)}
+                  </span>
+                </div>
+
+                {/* Chief complaint */}
+                <p className="text-sm text-slate-600">
+                  {encounter.chiefComplaint || "No chief complaint"}
+                </p>
+
+                {/* Secondary info */}
+                <div className="flex flex-wrap gap-x-3 text-xs text-slate-500">
+                  <span>MRN: {patient.mrn || "—"}</span>
+                  <span>Wait: {formatWaitTime(encounter.createdAt)}</span>
+                </div>
+
+                {/* Assignment info */}
+                <p className="text-xs text-slate-500">
+                  Student: {encounter.assignedStudent || "—"} • Upper: {encounter.assignedUpperLevel || "—"}
+                </p>
+
+                {/* Badges */}
+                <div className="flex flex-wrap gap-2">
+                  {dualVisitBadge(encounter)}
+                  {priorityBadge(encounter)}
+                  {spanishBadge(encounter)}
+                  {diabetesBadge?.(encounter)}
+                  {fluBadge?.(encounter)}
+                  {elevatorBadge(encounter)}
+                  {papBadge?.(encounter)}
+                </div>
+
+                {/* Leadership controls */}
+                {userRole === "leadership" && (
+                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <select
+                      className="min-h-[40px] w-full rounded-lg border px-3 py-2 text-sm"
+                      value={getDraftValue(encounter, "assignedStudent")}
+                      onChange={(e) =>
+                        updateDraft(encounter.id, "assignedStudent", e.target.value)
+                      }
+                    >
+                      <option value="">Student</option>
+                      {studentNameOptions.map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      className="min-h-[40px] w-full rounded-lg border px-3 py-2 text-sm"
+                      value={getDraftValue(encounter, "assignedUpperLevel")}
+                      onChange={(e) =>
+                        updateDraft(encounter.id, "assignedUpperLevel", e.target.value)
+                      }
+                    >
+                      <option value="">Upper Level</option>
+                      {upperLevelNameOptions.map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      className="min-h-[40px] w-full rounded-lg border px-3 py-2 text-sm"
+                      value={getDraftValue(encounter, "roomNumber")}
+                      onChange={(e) =>
+                        updateDraft(encounter.id, "roomNumber", e.target.value)
+                      }
+                    >
+                      <option value="">Room</option>
+                      {ROOM_OPTIONS.map((room) => (
+                        <option key={room.number} value={room.number}>
+                          {(room.displayLabel || `${room.label} — ${room.area}`) +
+                            ` (${getRoomQueueLabel(room, encounter)})`}
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      type="button"
+                      onClick={() => submitDraft(encounter)}
+                      className="min-h-[40px] rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700"
+                    >
+                      Assign / Start
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
-          )}
-          {(userRole === "leadership" ? unassignedRows : waitingEncounterRows).map(
-            ({ patient, encounter }) => (
+          ))}
+
+        {waitingEncounterRows.length === 0 && (
+          <div className="px-5 py-6 text-slate-500">
+            No patients currently waiting.
+          </div>
+        )}
+        {userRole === "leadership" && assignedRows.length > 0 && (
+          <>
+            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold uppercase tracking-wide text-blue-800 shadow-sm">
+              Already Assigned / In Progress
+            </div>
+
+            {assignedRows.map(({ patient, encounter }) => (
               <div
                 key={encounter.id}
                 onClick={(e) => {
                   if (e.target.closest("select, button")) return;
                   openPatientChart(patient.id, encounter.id);
                 }}
-                className="cursor-pointer rounded-xl border bg-white p-3 shadow-sm hover:bg-slate-50"
+                className="cursor-pointer rounded-xl border bg-white p-3 shadow-sm transition hover:bg-slate-50"
               >
                 <div className="flex flex-col gap-2">
-                  {/* Top row */}
                   <div className="flex items-center justify-between">
                     <p className="font-semibold text-slate-800">
                       {getPatientBoardName(patient)} ({patient.age})
@@ -416,23 +574,19 @@ export default function QueueView({
                     </span>
                   </div>
 
-                  {/* Chief complaint */}
                   <p className="text-sm text-slate-600">
                     {encounter.chiefComplaint || "No chief complaint"}
                   </p>
 
-                  {/* Secondary info */}
                   <div className="flex flex-wrap gap-x-3 text-xs text-slate-500">
                     <span>MRN: {patient.mrn || "—"}</span>
                     <span>Wait: {formatWaitTime(encounter.createdAt)}</span>
                   </div>
 
-                  {/* Assignment info */}
                   <p className="text-xs text-slate-500">
                     Student: {encounter.assignedStudent || "—"} • Upper: {encounter.assignedUpperLevel || "—"}
                   </p>
 
-                  {/* Badges */}
                   <div className="flex flex-wrap gap-2">
                     {dualVisitBadge(encounter)}
                     {priorityBadge(encounter)}
@@ -442,212 +596,94 @@ export default function QueueView({
                     {elevatorBadge(encounter)}
                     {papBadge?.(encounter)}
                   </div>
-
-                  {/* Leadership controls */}
-                  {userRole === "leadership" && (
-                    <div className="mt-2 flex flex-col gap-2">
-                      <select
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm"
-                        value={getDraftValue(encounter, "assignedStudent")}
-                        onChange={(e) =>
-                          updateDraft(encounter.id, "assignedStudent", e.target.value)
-                        }
-                      >
-                        <option value="">Assign Student</option>
-                        {studentNameOptions.map((name) => (
-                          <option key={name} value={name}>
-                            {name}
-                          </option>
-                        ))}
-                      </select>
-
-                      <select
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm"
-                        value={getDraftValue(encounter, "assignedUpperLevel")}
-                        onChange={(e) =>
-                          updateDraft(encounter.id, "assignedUpperLevel", e.target.value)
-                        }
-                      >
-                        <option value="">Assign Upper</option>
-                        {upperLevelNameOptions.map((name) => (
-                          <option key={name} value={name}>
-                            {name}
-                          </option>
-                        ))}
-                      </select>
-
-                      <select
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm"
-                        value={getDraftValue(encounter, "roomNumber")}
-                        onChange={(e) =>
-                          updateDraft(encounter.id, "roomNumber", e.target.value)
-                        }
-                      >
-                        <option value="">Assign Room</option>
-                        {ROOM_OPTIONS.map((room) => (
-                          <option key={room.number} value={room.number}>
-                            {room.displayLabel || `${room.label} — ${room.area}`}
-                          </option>
-                        ))}
-                      </select>
-
-                      <button
-                        type="button"
-                        onClick={() => submitDraft(encounter)}
-                        className="rounded-lg bg-green-600 py-2 text-sm font-medium text-white hover:bg-green-700"
-                      >
-                        Assign / Start Visit
-                      </button>
-                    </div>
-                  )}
                 </div>
               </div>
             ))}
+          </>
+        )}
+      </div>
+      {showRefillApproveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold text-slate-900">
+              Approve Refill
+            </h3>
 
-          {waitingEncounterRows.length === 0 && (
-            <div className="px-5 py-6 text-slate-500">
-              No patients currently waiting.
-            </div>
-          )}
-          {userRole === "leadership" && assignedRows.length > 0 && (
-            <>
-              <div className="px-2 py-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Assigned / In Progress
+            <p className="mt-2 text-sm text-slate-600">
+              Select the attending and enter the 4-digit PIN to approve this refill request.
+            </p>
+
+            <div className="mt-4 space-y-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Attending
+                </label>
+                <select
+                  value={selectedAttendingId}
+                  onChange={(e) => setSelectedAttendingId(e.target.value)}
+                  className="w-full rounded-lg border px-3 py-3 text-sm"
+                >
+                  <option value="">Select attending</option>
+                  {(activeAttendings || []).map((attending) => (
+                    <option key={attending.id} value={attending.id}>
+                      {attending.full_name || "Unnamed Attending"}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              {assignedRows.map(({ patient, encounter }) => (
-                <div
-                  key={encounter.id}
-                  onClick={(e) => {
-                    if (e.target.closest("select, button")) return;
-                    openPatientChart(patient.id, encounter.id);
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  4-digit PIN
+                </label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={4}
+                  value={refillPin}
+                  onChange={(e) =>
+                    setRefillPin(e.target.value.replace(/\D/g, "").slice(0, 4))
+                  }
+                  className="w-full rounded-lg border px-3 py-3 text-sm"
+                  placeholder="Enter PIN"
+                />
+              </div>
+
+              {refillApproveMessage ? (
+                <div className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700">
+                  {refillApproveMessage}
+                </div>
+              ) : null}
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRefillApproveModal(false);
+                    setSelectedRefillRequest(null);
+                    setSelectedAttendingId("");
+                    setRefillPin("");
+                    setRefillApproveMessage("");
                   }}
-                  className="cursor-pointer rounded-xl border bg-white p-3 shadow-sm hover:bg-slate-50"
+                  className="flex-1 rounded-lg bg-slate-200 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-300"
                 >
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center justify-between">
-                      <p className="font-semibold text-slate-800">
-                        {getPatientBoardName(patient)} ({patient.age})
-                      </p>
+                  Cancel
+                </button>
 
-                      <span
-                        className={`rounded-full border px-2 py-0.5 text-xs ${getStatusClasses(encounter.status)}`}
-                      >
-                        {getStatusLabel(encounter.status, encounter.soapStatus)}
-                      </span>
-                    </div>
-
-                    <p className="text-sm text-slate-600">
-                      {encounter.chiefComplaint || "No chief complaint"}
-                    </p>
-
-                    <div className="flex flex-wrap gap-x-3 text-xs text-slate-500">
-                      <span>MRN: {patient.mrn || "—"}</span>
-                      <span>Wait: {formatWaitTime(encounter.createdAt)}</span>
-                    </div>
-
-                    <p className="text-xs text-slate-500">
-                      Student: {encounter.assignedStudent || "—"} • Upper: {encounter.assignedUpperLevel || "—"}
-                    </p>
-
-                    <div className="flex flex-wrap gap-2">
-                      {dualVisitBadge(encounter)}
-                      {priorityBadge(encounter)}
-                      {spanishBadge(encounter)}
-                      {diabetesBadge?.(encounter)}
-                      {fluBadge?.(encounter)}
-                      {elevatorBadge(encounter)}
-                      {papBadge?.(encounter)}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </>
-          )}
-        </div>
-        {showRefillApproveModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4">
-            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-              <h3 className="text-lg font-semibold text-slate-900">
-                Approve Refill
-              </h3>
-
-              <p className="mt-2 text-sm text-slate-600">
-                Select the attending and enter the 4-digit PIN to approve this refill request.
-              </p>
-
-              <div className="mt-4 space-y-4">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">
-                    Attending
-                  </label>
-                  <select
-                    value={selectedAttendingId}
-                    onChange={(e) => setSelectedAttendingId(e.target.value)}
-                    className="w-full rounded-lg border px-3 py-3 text-sm"
-                  >
-                    <option value="">Select attending</option>
-                    {(activeAttendings || []).map((attending) => (
-                      <option key={attending.id} value={attending.id}>
-                        {attending.full_name || "Unnamed Attending"}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">
-                    4-digit PIN
-                  </label>
-                  <input
-                    type="password"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    maxLength={4}
-                    value={refillPin}
-                    onChange={(e) =>
-                      setRefillPin(e.target.value.replace(/\D/g, "").slice(0, 4))
-                    }
-                    className="w-full rounded-lg border px-3 py-3 text-sm"
-                    placeholder="Enter PIN"
-                  />
-                </div>
-
-                {refillApproveMessage ? (
-                  <div className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700">
-                    {refillApproveMessage}
-                  </div>
-                ) : null}
-
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowRefillApproveModal(false);
-                      setSelectedRefillRequest(null);
-                      setSelectedAttendingId("");
-                      setRefillPin("");
-                      setRefillApproveMessage("");
-                    }}
-                    className="flex-1 rounded-lg bg-slate-200 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-300"
-                  >
-                    Cancel
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={submitRefillApproval}
-                    disabled={refillApproveBusy || !selectedAttendingId || refillPin.length !== 4}
-                    className="flex-1 rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {refillApproveBusy ? "Approving..." : "Approve"}
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={submitRefillApproval}
+                  disabled={refillApproveBusy || !selectedAttendingId || refillPin.length !== 4}
+                  className="flex-1 rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {refillApproveBusy ? "Approving..." : "Approve"}
+                </button>
               </div>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
