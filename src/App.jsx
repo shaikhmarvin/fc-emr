@@ -725,18 +725,32 @@ export default function App() {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "formulary_items" },
         (payload) => {
-          setFormulary((prev) => [payload.new, ...prev]);
+          setFormulary((prev) => {
+            const exists = prev.some(
+              (item) => String(item.id) === String(payload.new.id)
+            );
+            if (exists) return prev;
+            return [payload.new, ...prev];
+          });
         }
       )
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "formulary_items" },
         (payload) => {
-          setFormulary((prev) =>
-            prev.map((item) =>
-              item.id === payload.new.id ? payload.new : item
-            )
-          );
+          setFormulary((prev) => {
+            let changed = false;
+
+            const updated = prev.map((item) => {
+              if (String(item.id) === String(payload.new.id)) {
+                changed = true;
+                return payload.new;
+              }
+              return item;
+            });
+
+            return changed ? updated : prev;
+          });
         }
       )
       .on(
@@ -746,6 +760,114 @@ export default function App() {
           setFormulary((prev) =>
             prev.filter((item) => item.id !== payload.old.id)
           );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) return;
+
+    const channel = supabase
+      .channel("refill-requests-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "refill_requests",
+        },
+        (payload) => {
+          console.log("REFILL REALTIME:", payload);
+
+          if (payload.eventType === "INSERT") {
+            setRefillRequests((prev) => {
+              const exists = prev.some((r) => String(r.id) === String(payload.new.id));
+              if (exists) return prev;
+              return [payload.new, ...prev];
+            });
+          }
+
+          if (payload.eventType === "UPDATE") {
+            setRefillRequests((prev) => {
+              let changed = false;
+
+              const updated = prev.map((r) => {
+                if (String(r.id) === String(payload.new.id)) {
+                  changed = true;
+                  return payload.new;
+                }
+                return r;
+              });
+
+              return changed ? updated : prev;
+            });
+          }
+
+          if (payload.eventType === "DELETE") {
+            setRefillRequests((prev) =>
+              prev.filter((r) => r.id !== payload.old.id)
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) return;
+
+    const channel = supabase
+      .channel("profiles-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "profiles",
+        },
+        (payload) => {
+          console.log("PROFILES REALTIME:", payload);
+
+          if (payload.eventType === "INSERT") {
+            setProfiles((prev) => {
+              const exists = prev.some((p) => String(p.id) === String(payload.new.id));
+              if (exists) return prev;
+              return [payload.new, ...prev];
+            });
+          }
+
+          if (payload.eventType === "UPDATE") {
+            setProfiles((prev) =>
+              prev.map((p) =>
+                p.id === payload.new.id ? payload.new : p
+              )
+            );
+          }
+
+          if (payload.eventType === "UPDATE") {
+            setProfiles((prev) => {
+              let changed = false;
+
+              const updated = prev.map((p) => {
+                if (String(p.id) === String(payload.new.id)) {
+                  changed = true;
+                  return payload.new;
+                }
+                return p;
+              });
+
+              return changed ? updated : prev;
+            });
+          }
         }
       )
       .subscribe();
@@ -815,18 +937,28 @@ export default function App() {
 
           if (eventType === "INSERT") {
             setProgramEntries((prev) => {
-              const exists = prev.some((entry) => entry.id === mappedRow.id);
+              const exists = prev.some(
+                (entry) => String(entry.id) === String(mappedRow.id)
+              );
               if (exists) return prev;
               return [mappedRow, ...prev];
             });
           }
 
           if (eventType === "UPDATE") {
-            setProgramEntries((prev) =>
-              prev.map((entry) =>
-                entry.id === mappedRow.id ? mappedRow : entry
-              )
-            );
+            setProgramEntries((prev) => {
+              let changed = false;
+
+              const updated = prev.map((entry) => {
+                if (String(entry.id) === String(mappedRow.id)) {
+                  changed = true;
+                  return mappedRow;
+                }
+                return entry;
+              });
+
+              return changed ? updated : prev;
+            });
           }
 
           if (eventType === "DELETE") {
@@ -886,18 +1018,28 @@ export default function App() {
 
           if (eventType === "INSERT") {
             setPapEntries((prev) => {
-              const exists = prev.some((entry) => entry.id === mappedRow.id);
+              const exists = prev.some(
+                (entry) => String(entry.id) === String(mappedRow.id)
+              );
               if (exists) return prev;
               return [mappedRow, ...prev];
             });
           }
 
           if (eventType === "UPDATE") {
-            setPapEntries((prev) =>
-              prev.map((entry) =>
-                entry.id === mappedRow.id ? mappedRow : entry
-              )
-            );
+            setPapEntries((prev) => {
+              let changed = false;
+
+              const updated = prev.map((entry) => {
+                if (String(entry.id) === String(mappedRow.id)) {
+                  changed = true;
+                  return mappedRow;
+                }
+                return entry;
+              });
+
+              return changed ? updated : prev;
+            });
           }
 
           if (eventType === "DELETE") {
@@ -3184,19 +3326,19 @@ export default function App() {
     }
 
     const conflict = getRoomConflictDetails(numericRoom, selectedEncounter.id, {
-  assignedStudent: assignmentForm.studentName || selectedEncounter.assignedStudent,
-  assignedUpperLevel: assignmentForm.upperLevelName || selectedEncounter.assignedUpperLevel,
-});
+      assignedStudent: assignmentForm.studentName || selectedEncounter.assignedStudent,
+      assignedUpperLevel: assignmentForm.upperLevelName || selectedEncounter.assignedUpperLevel,
+    });
 
-if (conflict.hasConflict) {
-  const confirmed = window.confirm(
-    `This room is currently being used by a different student/provider (${conflict.occupiedByNames.join(", ")}). Select it anyway?`
-  );
+    if (conflict.hasConflict) {
+      const confirmed = window.confirm(
+        `This room is currently being used by a different student/provider (${conflict.occupiedByNames.join(", ")}). Select it anyway?`
+      );
 
-  if (!confirmed) {
-    return;
-  }
-}
+      if (!confirmed) {
+        return;
+      }
+    }
 
     setAssignmentForm((prev) => ({
       ...prev,
