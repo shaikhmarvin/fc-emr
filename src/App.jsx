@@ -1,7 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./lib/supabase";
 import { createPatientInSupabase, updatePatientInSupabase } from "./api/patients";
-import { createEncounterInSupabase, updateEncounterInSupabase, createMedicationInSupabase, updateMedicationInSupabase, deleteMedicationInSupabase, deleteEncounterInSupabase, } from "./api/encounters";
+import {
+  createEncounterInSupabase,
+  updateEncounterInSupabase,
+  createMedicationInSupabase,
+  updateMedicationInSupabase,
+  deleteMedicationInSupabase,
+  deleteEncounterInSupabase,
+  createRefillRequest,
+  fetchRefillRequests,
+  approveRefillRequestInSupabase,
+  deleteRefillRequestInSupabase, 
+} from "./api/encounters";
 import { useAuthSession } from "./hooks/useAuthSession";
 import { useClinicData } from "./hooks/useClinicData";
 import { canStartIntake, canManageRoomBoard, canEditFormulary, canPrescribe, canChart, } from "./utils/permissions";
@@ -222,6 +233,7 @@ export default function App() {
     setAuthPin,
     authPinConfirm,
     setAuthPinConfirm,
+    canRefillAccess,
   } = useAuthSession();
 
   useEffect(() => {
@@ -490,6 +502,12 @@ export default function App() {
     setActiveView("dashboard");
   }, [userRole]);
 
+  const canRefill = canRefillAccess || userRole === "attending" || userRole === "leadership";
+  const canAccessDashboard =
+    userRole === "leadership" ||
+    userRole === "undergraduate" ||
+    canRefill;
+
 
   const [clinicSummary, setClinicSummary] = useState({
     refillCount: "",
@@ -684,6 +702,21 @@ export default function App() {
   }, [session, formularyLoaded]);
 
   useEffect(() => {
+  if (!session) return;
+
+  async function loadRefillRequests() {
+    try {
+      const rows = await fetchRefillRequests();
+      setRefillRequests(rows);
+    } catch (error) {
+      console.error("Failed to load refill requests:", error);
+    }
+  }
+
+  loadRefillRequests();
+}, [session]);
+
+  useEffect(() => {
     if (!session) return;
 
     const channel = supabase
@@ -734,6 +767,7 @@ export default function App() {
     new URLSearchParams(window.location.search).get("display") === "board";
   const [selectedPatientId, setSelectedPatientId] = useState(null);
   const [selectedEncounterId, setSelectedEncounterId] = useState(null);
+  const [refillRequests, setRefillRequests] = useState([]);
   const { patients, setPatients, refreshClinicData } = useClinicData({
     authReady,
     session,
@@ -892,6 +926,8 @@ export default function App() {
   const [showMedicationModal, setShowMedicationModal] = useState(false);
   const [newMedication, setNewMedication] = useState(EMPTY_MEDICATION);
   const [editingMedicationId, setEditingMedicationId] = useState(null);
+    const [isRefillRequestMode, setIsRefillRequestMode] = useState(false);
+  const [refillSourceMedicationId, setRefillSourceMedicationId] = useState(null);
   const EMPTY_ALLERGY = { allergen: "", reaction: "", severity: "", notes: "", isActive: true, };
 
   const [showAllergyModal, setShowAllergyModal] = useState(false);
@@ -1095,27 +1131,27 @@ export default function App() {
   }, [patients]);
 
   const specialtyEncounterRows = useMemo(() => {
-  const todayClinicDate = formatClinicDate();
+    const todayClinicDate = formatClinicDate();
 
-  return allEncounterRows
-    .filter(
-      ({ encounter }) =>
-        encounter.visitType === "specialty_only" &&
-        normalizeClinicDate(encounter.clinicDate) === todayClinicDate &&
-        (
-          encounter.status === "ready" ||
-          encounter.status === "roomed" ||
-          encounter.status === "in_visit"
-        ) &&
-        encounter.status !== "done" &&
-        encounter.soapStatus !== "signed"
-    )
-    .sort((a, b) => {
-      const aTime = new Date(a.encounter.createdAt || 0).getTime();
-      const bTime = new Date(b.encounter.createdAt || 0).getTime();
-      return aTime - bTime;
-    });
-}, [allEncounterRows]);
+    return allEncounterRows
+      .filter(
+        ({ encounter }) =>
+          encounter.visitType === "specialty_only" &&
+          normalizeClinicDate(encounter.clinicDate) === todayClinicDate &&
+          (
+            encounter.status === "ready" ||
+            encounter.status === "roomed" ||
+            encounter.status === "in_visit"
+          ) &&
+          encounter.status !== "done" &&
+          encounter.soapStatus !== "signed"
+      )
+      .sort((a, b) => {
+        const aTime = new Date(a.encounter.createdAt || 0).getTime();
+        const bTime = new Date(b.encounter.createdAt || 0).getTime();
+        return aTime - bTime;
+      });
+  }, [allEncounterRows]);
 
   const specialtyRoomRulesForBoard = useMemo(() => {
     const today = formatClinicDate();
@@ -1421,12 +1457,12 @@ export default function App() {
         };
 
         const specialtyEncounter = {
-  ...encounterBase,
-  visitType: "specialty_only",
-  specialtyType: data.specialtyType,
-  status: "ready",
-  leadershipIntakeComplete: true,
-};
+          ...encounterBase,
+          visitType: "specialty_only",
+          specialtyType: data.specialtyType,
+          status: "ready",
+          leadershipIntakeComplete: true,
+        };
 
         savedEncounter = await createEncounterInSupabase(targetPatient.id, generalEncounter);
         await createEncounterInSupabase(targetPatient.id, specialtyEncounter);
@@ -1929,12 +1965,17 @@ export default function App() {
   }, [activeAttendings, activeUpperLevels, activeStudents]);
 
   const canAccessSpecialtyQueue =
-  userRole === "leadership" ||
-  userRole === "student" ||
-  userRole === "upper_level";
-  userRole === "attending" 
+    userRole === "leadership" ||
+    userRole === "student" ||
+    userRole === "upper_level";
+  userRole === "attending"
 
-  async function handleChangeProfileRole(profileId, nextRole, nextClassification = null) {
+  async function handleChangeProfileRole(
+    profileId,
+    nextRole,
+    nextClassification = null,
+    extraUpdates = {}
+  ) {
     if (!isLeadershipView) return;
 
     const currentUserId = session?.user?.id;
@@ -1942,7 +1983,9 @@ export default function App() {
     const currentProfile = profiles.find((profile) => profile.id === profileId);
     const effectiveRole = nextRole ?? currentProfile?.role ?? "student";
     const effectiveClassification =
-      nextClassification !== null ? nextClassification : currentProfile?.classification ?? null;
+      nextClassification !== null
+        ? nextClassification
+        : currentProfile?.classification ?? null;
 
     if (profileId === currentUserId && effectiveRole !== "leadership") {
       setProfilesMessage("You cannot remove your own leadership role.");
@@ -1958,6 +2001,7 @@ export default function App() {
             ...profile,
             role: effectiveRole,
             classification: effectiveClassification,
+            ...extraUpdates,
           }
           : profile
       )
@@ -1966,7 +2010,17 @@ export default function App() {
     try {
       setSavingProfileId(profileId);
       setProfilesMessage("");
-      await updateProfileRole(profileId, effectiveRole, effectiveClassification);
+
+      if (Object.keys(extraUpdates).length > 0) {
+        await updateProfileDetails(profileId, {
+          role: effectiveRole,
+          classification: effectiveClassification,
+          ...extraUpdates,
+        });
+      } else {
+        await updateProfileRole(profileId, effectiveRole, effectiveClassification);
+      }
+
       setProfilesMessage("User updated successfully.");
     } catch (error) {
       console.error("Failed to update profile role:", error);
@@ -2378,6 +2432,7 @@ export default function App() {
       clinicDate: normalizeClinicDate(baseEncounter.clinicDate) || formatClinicDate(),
       createdAt: baseEncounter.createdAt || new Date().toISOString(),
     };
+
 
     if (potentialDuplicate) {
       try {
@@ -2841,17 +2896,17 @@ export default function App() {
   }
 
   async function saveEncounterField(field, value) {
-  if (!selectedEncounter) return;
+    if (!selectedEncounter) return;
 
-  try {
-    await updateEncounterInSupabase(selectedEncounter.id, {
-      [field]: value,
-    });
-  } catch (error) {
-    console.error(`Failed to save ${field}:`, error);
-    alert(`Failed to save ${field}: ${error.message}`);
+    try {
+      await updateEncounterInSupabase(selectedEncounter.id, {
+        [field]: value,
+      });
+    } catch (error) {
+      console.error(`Failed to save ${field}:`, error);
+      alert(`Failed to save ${field}: ${error.message}`);
+    }
   }
-}
 
   function updateSoapDraftField(field, value) {
     setSoapDraft((prev) => ({
@@ -3452,6 +3507,40 @@ export default function App() {
     }
   }
 
+  async function submitRefillRequestFromModal() {
+  if (!selectedPatient || !refillSourceMedicationId || !session?.user?.id) return;
+  if (!newMedication.name?.trim()) return;
+
+  try {
+    await handleCreateRefillRequest(
+      selectedPatient.id,
+      refillSourceMedicationId,
+      session.user.id,
+      {
+        name: newMedication.name || "",
+        dosage: newMedication.dosage || "",
+        frequency: newMedication.frequency || "",
+        route: newMedication.route || "",
+        dispenseAmount: newMedication.dispenseAmount || "",
+        refillCount: newMedication.refillCount || "",
+        instructions: newMedication.instructions || "",
+        isActive: newMedication.isActive ?? true,
+      }
+    );
+
+    setShowMedicationModal(false);
+    setNewMedication(EMPTY_MEDICATION);
+    setEditingMedicationId(null);
+    setIsRefillRequestMode(false);
+    setRefillSourceMedicationId(null);
+
+    alert("Refill request submitted.");
+  } catch (error) {
+    console.error("Failed to create refill request:", error);
+    alert(`Failed to create refill request: ${error.message}`);
+  }
+}
+
   function startEditMedication(med) {
     setNewMedication({
       name: med.name || "",
@@ -3466,6 +3555,24 @@ export default function App() {
     setEditingMedicationId(med.id);
     setShowMedicationModal(true);
   }
+
+  function startRefillRequest(med) {
+  setNewMedication({
+    name: med.name || "",
+    dosage: med.dosage || "",
+    frequency: med.frequency || "",
+    route: med.route || "",
+    dispenseAmount: med.dispenseAmount || "",
+    refillCount: med.refillCount || "",
+    instructions: med.instructions || "",
+    isActive: med.isActive ?? true,
+  });
+
+  setEditingMedicationId(null);
+  setIsRefillRequestMode(true);
+  setRefillSourceMedicationId(med.id);
+  setShowMedicationModal(true);
+}
 
   async function toggleMedicationActive(medicationId) {
     if (!selectedPatient || !selectedEncounter) return;
@@ -3548,6 +3655,268 @@ export default function App() {
       alert(`Failed to delete medication: ${error.message}`);
     }
   }
+
+async function handleCreateRefillRequest(
+  patientId,
+  medicationId,
+  userId,
+  medicationPayload
+) {
+  if (!patientId || !medicationId || !userId) {
+    throw new Error("Missing refill request info.");
+  }
+
+  const existingPending = refillRequests.some(
+    (req) =>
+      String(req.patient_id) === String(patientId) &&
+      String(req.medication_id) === String(medicationId) &&
+      (!req.status || String(req.status).toLowerCase() === "pending")
+  );
+
+  if (existingPending) {
+    throw new Error("A pending refill request already exists for this medication.");
+  }
+
+  const saved = await createRefillRequest(
+    patientId,
+    medicationId,
+    userId,
+    medicationPayload
+  );
+
+  setRefillRequests((prev) => [saved, ...prev]);
+
+  return saved;
+}
+
+async function handleDeleteRefillRequest(refillRequestId) {
+  if (!refillRequestId) {
+    throw new Error("Missing refill request id.");
+  }
+
+  const targetRequest = refillRequests.find(
+    (req) => String(req.id) === String(refillRequestId)
+  );
+
+  if (!targetRequest) {
+    throw new Error("Refill request not found.");
+  }
+
+  const status = String(targetRequest.status || "pending").toLowerCase();
+  if (status !== "pending") {
+    throw new Error("Only pending refill requests can be removed.");
+  }
+
+  await deleteRefillRequestInSupabase(refillRequestId);
+
+  setRefillRequests((prev) =>
+    prev.filter((req) => String(req.id) !== String(refillRequestId))
+  );
+}
+
+async function handleApproveRefillRequestWithPin(
+  refillRequestId,
+  attendingId,
+  pin
+) {
+  if (!refillRequestId) {
+    throw new Error("Missing refill request id.");
+  }
+
+  if (!attendingId) {
+    throw new Error("Please select an attending.");
+  }
+
+  if (!pin || pin.length !== 4) {
+    throw new Error("PIN must be 4 digits.");
+  }
+
+  const attending = profiles.find(
+    (profile) => String(profile.id) === String(attendingId)
+  );
+
+  if (!attending) {
+    throw new Error("Attending not found.");
+  }
+
+  if (!attending.signature_pin_set) {
+    throw new Error("This attending has not set up a signature PIN yet.");
+  }
+
+  const targetRequest = refillRequests.find(
+    (req) => String(req.id) === String(refillRequestId)
+  );
+
+  if (!targetRequest) {
+    throw new Error("Refill request not found.");
+  }
+
+  const { data: pinValid, error: pinError } = await supabase.rpc(
+    "verify_signature_pin",
+    {
+      target_user_id: attendingId,
+      raw_pin: pin,
+    }
+  );
+
+  if (pinError) {
+    throw new Error(`Could not verify PIN: ${pinError.message}`);
+  }
+
+  if (!pinValid) {
+    throw new Error("Incorrect PIN.");
+  }
+
+  const payload = targetRequest.request_payload || null;
+
+  if (payload) {
+    const updatedMedication = await updateMedicationInSupabase(
+      targetRequest.medication_id,
+      {
+        name: payload.name || "",
+        dosage: payload.dosage || "",
+        frequency: payload.frequency || "",
+        route: payload.route || "",
+        dispenseAmount: payload.dispenseAmount || "",
+        refillCount: payload.refillCount || "",
+        instructions: payload.instructions || "",
+        isActive: payload.isActive ?? true,
+        lastUpdatedEncounterId: null,
+      }
+    );
+
+    setPatients((prev) =>
+      prev.map((patient) =>
+        String(patient.id) === String(targetRequest.patient_id)
+          ? {
+              ...patient,
+              medicationList: (patient.medicationList || []).map((med) =>
+                String(med.id) === String(targetRequest.medication_id)
+                  ? {
+                      ...med,
+                      name: updatedMedication.name || "",
+                      dosage: updatedMedication.dosage || "",
+                      frequency: updatedMedication.frequency || "",
+                      route: updatedMedication.route || "",
+                      dispenseAmount: updatedMedication.dispense_amount ?? "",
+                      refillCount: updatedMedication.refill_count ?? "",
+                      instructions: updatedMedication.instructions || "",
+                      isActive: updatedMedication.is_active ?? true,
+                      lastUpdatedEncounterId:
+                        updatedMedication.last_updated_encounter_id || null,
+                    }
+                  : med
+              ),
+            }
+          : patient
+      )
+    );
+  }
+
+  const saved = await approveRefillRequestInSupabase(
+    refillRequestId,
+    attendingId
+  );
+
+  setRefillRequests((prev) =>
+    prev.map((req) =>
+      req.id === refillRequestId ? saved : req
+    )
+  );
+
+  return saved;
+}
+
+async function handleApproveRefillRequestAsSignedInAttending(refillRequestId) {
+  if (!refillRequestId) {
+    throw new Error("Missing refill request id.");
+  }
+
+  if (!session?.user?.id) {
+    throw new Error("No signed-in user found.");
+  }
+
+  if (userRole !== "attending") {
+    throw new Error("Only attendings can use direct refill approval.");
+  }
+
+  const attendingId = session.user.id;
+
+  const attending = profiles.find(
+    (profile) => String(profile.id) === String(attendingId)
+  );
+
+  if (!attending) {
+    throw new Error("Signed-in attending not found.");
+  }
+
+  const targetRequest = refillRequests.find(
+    (req) => String(req.id) === String(refillRequestId)
+  );
+
+  if (!targetRequest) {
+    throw new Error("Refill request not found.");
+  }
+
+  const payload = targetRequest.request_payload || null;
+
+  if (payload) {
+    const updatedMedication = await updateMedicationInSupabase(
+      targetRequest.medication_id,
+      {
+        name: payload.name || "",
+        dosage: payload.dosage || "",
+        frequency: payload.frequency || "",
+        route: payload.route || "",
+        dispenseAmount: payload.dispenseAmount || "",
+        refillCount: payload.refillCount || "",
+        instructions: payload.instructions || "",
+        isActive: payload.isActive ?? true,
+        lastUpdatedEncounterId: null,
+      }
+    );
+
+    setPatients((prev) =>
+      prev.map((patient) =>
+        String(patient.id) === String(targetRequest.patient_id)
+          ? {
+              ...patient,
+              medicationList: (patient.medicationList || []).map((med) =>
+                String(med.id) === String(targetRequest.medication_id)
+                  ? {
+                      ...med,
+                      name: updatedMedication.name || "",
+                      dosage: updatedMedication.dosage || "",
+                      frequency: updatedMedication.frequency || "",
+                      route: updatedMedication.route || "",
+                      dispenseAmount: updatedMedication.dispense_amount ?? "",
+                      refillCount: updatedMedication.refill_count ?? "",
+                      instructions: updatedMedication.instructions || "",
+                      isActive: updatedMedication.is_active ?? true,
+                      lastUpdatedEncounterId:
+                        updatedMedication.last_updated_encounter_id || null,
+                    }
+                  : med
+              ),
+            }
+          : patient
+      )
+    );
+  }
+
+  const saved = await approveRefillRequestInSupabase(
+    refillRequestId,
+    attendingId
+  );
+
+  setRefillRequests((prev) =>
+    prev.map((req) =>
+      req.id === refillRequestId ? saved : req
+    )
+  );
+
+  return saved;
+}
 
   async function addOrUpdateAllergy() {
     if (!selectedPatient) return;
@@ -4796,6 +5165,7 @@ export default function App() {
         setSidebarOpen={setSidebarOpen}
         isLeadershipView={isLeadershipView}
         userRole={userRole}
+        canRefillAccess={canRefillAccess}
       />
 
       <div className="min-w-0 flex-1 bg-slate-100 lg:ml-64 lg:flex lg:flex-col">
@@ -4882,18 +5252,26 @@ export default function App() {
               upperLevelNameOptions={upperLevelNameOptions}
               ROOM_OPTIONS={roomDropdownOptions}
               onAssignFromQueue={assignEncounterFromQueue}
+              refillRequests={refillRequests}
+              canRefill={canRefill}
+              patients={patients}
+              activeAttendings={activeAttendings}
+              onApproveRefillRequest={handleApproveRefillRequestWithPin}
+              profileNameMap={profileNameMap} 
+              onApproveRefillAsSignedInAttending={handleApproveRefillRequestAsSignedInAttending}
+              onDeleteRefillRequest={handleDeleteRefillRequest}
             />
           )}
 
           {activeView === "specialty-queue" && canAccessSpecialtyQueue && (
-  <SpecialtyQueueView
-    specialtyEncounterRows={specialtyEncounterRows}
-    openPatientChart={openPatientChart}
-    getFullPatientName={getFullPatientName}
-    formatDate={formatDate}
-    isLeadershipView={isLeadershipView}
-  />
-)}
+            <SpecialtyQueueView
+              specialtyEncounterRows={specialtyEncounterRows}
+              openPatientChart={openPatientChart}
+              getFullPatientName={getFullPatientName}
+              formatDate={formatDate}
+              isLeadershipView={isLeadershipView}
+            />
+          )}
 
           {activeView === "board" && (
             <RoomBoard
@@ -5042,6 +5420,11 @@ export default function App() {
               soapDraft={soapDraft}
               updateSoapDraftField={updateSoapDraftField}
               openPatientEditModal={openPatientEditModal}
+              canRefill={canRefill}
+              currentUserId={session?.user?.id}
+              onStartRefillRequest={startRefillRequest}
+              refillRequests={refillRequests}
+              profileNameMap={profileNameMap}
             />
           )}
 
@@ -5095,16 +5478,25 @@ export default function App() {
 
 
       <MedicationModal
-        showMedicationModal={showMedicationModal}
-        selectedPatient={selectedPatient}
-        editingMedicationId={editingMedicationId}
-        newMedication={newMedication}
-        setNewMedication={setNewMedication}
-        setShowMedicationModal={setShowMedicationModal}
-        setEditingMedicationId={setEditingMedicationId}
-        addOrUpdateMedication={addOrUpdateMedication}
-        EMPTY_MEDICATION={EMPTY_MEDICATION}
-      />
+  showMedicationModal={showMedicationModal}
+  selectedPatient={selectedPatient}
+  editingMedicationId={editingMedicationId}
+  newMedication={newMedication}
+  setNewMedication={setNewMedication}
+  setShowMedicationModal={(value) => {
+    setShowMedicationModal(value);
+    if (!value) {
+      setIsRefillRequestMode(false);
+      setRefillSourceMedicationId(null);
+      setEditingMedicationId(null);
+      setNewMedication(EMPTY_MEDICATION);
+    }
+  }}
+  setEditingMedicationId={setEditingMedicationId}
+  addOrUpdateMedication={isRefillRequestMode ? submitRefillRequestFromModal : addOrUpdateMedication}
+  EMPTY_MEDICATION={EMPTY_MEDICATION}
+  isRefillRequestMode={isRefillRequestMode}
+/>
       <AllergyModal
         showAllergyModal={showAllergyModal}
         selectedPatient={selectedPatient}

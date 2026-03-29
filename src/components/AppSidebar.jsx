@@ -11,6 +11,7 @@ export default function AppSidebar({
   setSidebarOpen,
   isLeadershipView,
   userRole,
+  canRefillAccess,
 }) {
   function handleViewChange(view) {
     setActiveView(view);
@@ -70,9 +71,9 @@ export default function AppSidebar({
               <div className="space-y-2">
                 <SectionLabel>Workflow</SectionLabel>
 
-                {(isLeadershipView || userRole === "undergraduate") && (
-  <button
-    onClick={() => handleViewChange("dashboard")}
+                {(isLeadershipView || userRole === "undergraduate" || canRefillAccess) && (
+                  <button
+                    onClick={() => handleViewChange("dashboard")}
                     className={getNavItemClass("dashboard")}
                   >
                     Dashboard

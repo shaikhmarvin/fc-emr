@@ -368,3 +368,68 @@ export async function deleteEncounterInSupabase(encounterId) {
 
   if (error) throw error;
 }
+
+export async function createRefillRequest(
+  patientId,
+  medicationId,
+  userId,
+  requestPayload = null
+) {
+  const { data, error } = await supabase
+    .from("refill_requests")
+    .insert([{
+      patient_id: patientId,
+      medication_id: medicationId,
+      requested_by: userId,
+      request_payload: requestPayload,
+    }])
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+
+export async function approveRefillRequestInSupabase(
+  refillRequestId,
+  approvedBy
+) {
+  const approvedAt = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("refill_requests")
+    .update({
+      status: "approved",
+      approved_by: approvedBy,
+      approved_at: approvedAt,
+    })
+    .eq("id", refillRequestId)
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  return data;
+}
+
+export async function deleteRefillRequestInSupabase(refillRequestId) {
+  const { error } = await supabase
+    .from("refill_requests")
+    .delete()
+    .eq("id", refillRequestId);
+
+  if (error) throw error;
+}
+
+export async function fetchRefillRequests() {
+  const { data, error } = await supabase
+    .from("refill_requests")
+    .select("*")
+    .order("requested_at", { ascending: false });
+
+  if (error) throw error;
+
+  return data ?? [];
+}
+

@@ -85,6 +85,11 @@ export default function ChartView({
   soapDraft,
   updateSoapDraftField,
   openPatientEditModal,
+  canRefill,
+  currentUserId,
+  onStartRefillRequest,
+  refillRequests,
+  profileNameMap,
 }) {
 
 
@@ -146,6 +151,31 @@ export default function ChartView({
       default:
         return null;
     }
+  }
+
+  function getDaysSupplyFromMedicationLike(med) {
+    const dispense = Number(med?.dispenseAmount);
+    const dosesPerDay = getDosesPerDay(med?.frequency);
+
+    if (!dispense || !dosesPerDay || dosesPerDay <= 0) return "";
+    const daysSupply = Math.floor(dispense / dosesPerDay);
+
+    return daysSupply > 0 ? String(daysSupply) : "";
+  }
+
+  function getEstimatedRunoutDateFromMedicationLike(med) {
+    const dispense = Number(med?.dispenseAmount);
+    const dosesPerDay = getDosesPerDay(med?.frequency);
+
+    if (!dispense || !dosesPerDay || dosesPerDay <= 0) return "";
+
+    const daysSupply = Math.floor(dispense / dosesPerDay);
+    if (!daysSupply || daysSupply < 1) return "";
+
+    const baseDate = new Date();
+    baseDate.setDate(baseDate.getDate() + daysSupply);
+
+    return baseDate.toLocaleDateString();
   }
 
   function getEstimatedRunoutDate(med) {
@@ -332,6 +362,22 @@ export default function ChartView({
     const bTime = new Date(b.createdAt || b.clinicDate || 0).getTime();
     return bTime - aTime;
   });
+
+  const approvedRefillHistory = (refillRequests || [])
+    .filter((req) => {
+      const status = String(req.status || "").toLowerCase();
+      return (
+        String(req.patient_id) === String(selectedPatient?.id) &&
+        status === "approved"
+      );
+    })
+    .sort((a, b) => {
+      const aTime = new Date(a.approved_at || a.created_at || 0).getTime();
+      const bTime = new Date(b.approved_at || b.created_at || 0).getTime();
+      return bTime - aTime;
+    });
+
+
 
 
   const isEncounterLocked = selectedEncounter?.soapStatus === "signed";
@@ -905,6 +951,18 @@ export default function ChartView({
                           >
                             Delete
                           </button>
+
+                          {canRefill && (
+                            <button
+                              onClick={() => {
+                                if (isEncounterLocked) return;
+                                onStartRefillRequest(med);
+                              }}
+                              className="rounded-lg bg-purple-600 px-3 py-2 text-sm text-white"
+                            >
+                              Refill
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -915,6 +973,88 @@ export default function ChartView({
                   </p>
                 )}
               </div>
+            </div>
+
+            <div className="mt-6 border-t border-slate-200 pt-4">
+              <h4 className="text-sm font-semibold text-slate-800">
+                Refill History
+              </h4>
+
+              {approvedRefillHistory.length > 0 ? (
+                <div className="mt-3 space-y-2">
+                  {approvedRefillHistory.map((req) => {
+                    const medication = (selectedPatient.medicationList || []).find(
+                      (med) => String(med.id) === String(req.medication_id)
+                    );
+
+                    const approvedPayload = req.request_payload || null;
+                    const approvedMedication = approvedPayload
+                      ? {
+                        name: approvedPayload.name || medication?.name || "",
+                        dosage: approvedPayload.dosage || medication?.dosage || "",
+                        frequency: approvedPayload.frequency || medication?.frequency || "",
+                        route: approvedPayload.route || medication?.route || "",
+                        dispenseAmount:
+                          approvedPayload.dispenseAmount ?? medication?.dispenseAmount ?? "",
+                        refillCount:
+                          approvedPayload.refillCount ?? medication?.refillCount ?? "",
+                        instructions:
+                          approvedPayload.instructions || medication?.instructions || "",
+                      }
+                      : medication;
+
+                    return (
+                      <div
+                        key={req.id}
+                        className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                      >
+                        <div className="text-sm font-medium text-slate-800">
+                          {approvedMedication?.name || "Medication"}
+                        </div>
+
+                        <div className="mt-1 text-xs text-slate-500">
+                          Approved: {req.approved_at ? formatDate(req.approved_at) : "—"}
+                        </div>
+
+                        <div className="mt-1 text-xs text-slate-500">
+                          Approved by: {profileNameMap?.[req.approved_by] || "Unknown User"}
+                        </div>
+
+                        <div className="mt-1 text-xs text-slate-500">
+                          Requested by: {profileNameMap?.[req.requested_by] || "Unknown User"}
+                        </div>
+
+                        <div className="mt-2 grid grid-cols-1 gap-1 text-xs text-slate-600 sm:grid-cols-2">
+                          <div>Dosage: {approvedMedication?.dosage || "—"}</div>
+                          <div>Frequency: {approvedMedication?.frequency || "—"}</div>
+                          <div>Route: {approvedMedication?.route || "—"}</div>
+                          <div>Dispense: {approvedMedication?.dispenseAmount || "—"}</div>
+                          <div>Refills: {approvedMedication?.refillCount ?? "—"}</div>
+                          <div>
+                            Days Supply: {getDaysSupplyFromMedicationLike(approvedMedication) || "—"}
+                          </div>
+                        </div>
+
+                        {approvedMedication?.instructions ? (
+                          <div className="mt-1 text-xs text-slate-600">
+                            Instructions: {approvedMedication.instructions}
+                          </div>
+                        ) : null}
+
+                        {getEstimatedRunoutDateFromMedicationLike(approvedMedication) ? (
+                          <div className="mt-1 text-xs text-slate-600">
+                            Estimated Runout: {getEstimatedRunoutDateFromMedicationLike(approvedMedication)}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-slate-500">
+                  No approved refill history yet.
+                </p>
+              )}
             </div>
 
             <div className="rounded-2xl bg-white p-4 shadow">

@@ -3,7 +3,7 @@ import { supabase } from "../lib/supabase";
 export async function fetchProfiles() {
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, full_name, role, classification, email, approval_status, approved_by, approved_at, created_at, last_seen_at, signature_pin_set")
+    .select("id, full_name, role, classification, email, approval_status, approved_by, approved_at, created_at, last_seen_at, signature_pin_set, can_refill")
     .order("last_seen_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false });
 

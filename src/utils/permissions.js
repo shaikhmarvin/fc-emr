@@ -28,6 +28,14 @@ export function canChart(role) {
   );
 }
 
+export function canRefill(role, profile) {
+  return (
+    role === "attending" ||
+    role === "leadership" ||
+    profile?.can_refill === true
+  );
+}
+
 export function getRoleFromClassification(classification) {
   if (!classification) return null;
 

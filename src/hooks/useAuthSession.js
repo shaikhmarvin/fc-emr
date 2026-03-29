@@ -20,13 +20,14 @@ export function useAuthSession() {
   const [authRole, setAuthRole] = useState("");
   const [authPin, setAuthPin] = useState("");
   const [authPinConfirm, setAuthPinConfirm] = useState("");
+  const [canRefillAccess, setCanRefillAccess] = useState(false);
 
   const isLeadershipView = authReady && userRole === "leadership";
 
   async function fetchProfileWithRetry(userId, attempt = 1) {
     const { data: profile, error } = await supabase
       .from("profiles")
-      .select("id, full_name, role, classification, approval_status, signature_pin_set")
+      .select("id, full_name, role, classification, approval_status, signature_pin_set, can_refill")
       .eq("id", userId)
       .maybeSingle();
 
@@ -169,6 +170,7 @@ export function useAuthSession() {
       setNeedsOnboarding(false);
       setAuthMessage("Signed out.");
       setAuthLoading(false);
+      setCanRefillAccess(false);
 
       setTimeout(() => {
         window.location.reload();
@@ -199,6 +201,7 @@ export function useAuthSession() {
     setNeedsOnboarding(false);
     setOnboardingFullName("");
     setOnboardingClassification("");
+    setCanRefillAccess(false);
 
     window.location.reload();
   }
@@ -259,6 +262,7 @@ export function useAuthSession() {
 
       if (!newSession) {
         setUserRole(null);
+        setCanRefillAccess(false);
         setAuthReady(true);
         return;
       }
@@ -267,6 +271,7 @@ export function useAuthSession() {
 
       if (!userId) {
         setUserRole(null);
+        setCanRefillAccess(false);
         setAuthReady(true);
         return;
       }
@@ -304,15 +309,16 @@ export function useAuthSession() {
           }
 
           if (
-            role &&
-            (!roleRequiresClassification || classification !== null)
-          ) {
-            setUserRole(role);
-            setNeedsOnboarding(false);
-            setOnboardingFullName(profile?.full_name || "");
-            setOnboardingClassification(classification || "");
-            setAuthMessage("");
-          }
+  role &&
+  (!roleRequiresClassification || classification !== null)
+) {
+  setUserRole(role);
+  setCanRefillAccess(profile?.can_refill === true);
+  setNeedsOnboarding(false);
+  setOnboardingFullName(profile?.full_name || "");
+  setOnboardingClassification(classification || "");
+  setAuthMessage("");
+}
 
         } catch (error) {
           console.error("Failed to load profile from auth state change:", error);
@@ -350,17 +356,18 @@ useEffect(() => {
           role === "student" || role === "upper_level";
 
         if (
-          profile.approval_status === "approved" &&
-          role &&
-          (!roleRequiresClassification || classification !== null)
-        ) {
-          setUserRole(role);
-          setNeedsOnboarding(false);
-          setOnboardingFullName(profile.full_name || "");
-          setOnboardingClassification(classification || "");
-          setAuthMessage("");
-          setAuthReady(true);
-        }
+  profile.approval_status === "approved" &&
+  role &&
+  (!roleRequiresClassification || classification !== null)
+) {
+  setUserRole(role);
+  setCanRefillAccess(profile?.can_refill === true);
+  setNeedsOnboarding(false);
+  setOnboardingFullName(profile.full_name || "");
+  setOnboardingClassification(classification || "");
+  setAuthMessage("");
+  setAuthReady(true);
+}
       }
     )
     .subscribe();
@@ -401,5 +408,6 @@ useEffect(() => {
     setAuthPin,
     authPinConfirm,
     setAuthPinConfirm,
+    canRefillAccess,
   };
 }

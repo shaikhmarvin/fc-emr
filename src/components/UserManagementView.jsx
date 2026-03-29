@@ -82,6 +82,7 @@ export default function UserManagementView({
                     <th className="px-3 py-3 font-semibold text-slate-700">Email</th>
                     <th className="px-3 py-3 font-semibold text-slate-700">Classification</th>
                     <th className="px-3 py-3 font-semibold text-slate-700">Role</th>
+                    <th className="px-3 py-3 font-semibold text-slate-700">Refill Access</th>
                     <th className="px-3 py-3 font-semibold text-slate-700">Approval</th>
                     <th className="px-3 py-3 font-semibold text-slate-700">Last Seen</th>
                     <th className="px-3 py-3 font-semibold text-slate-700">Action</th>
@@ -224,6 +225,21 @@ export default function UserManagementView({
                             <option value="pharmacy">pharmacy</option>
                           </select>
                         </td>
+
+                        <td className="px-3 py-3">
+  <label className="flex items-center gap-2 text-sm">
+    <input
+      type="checkbox"
+      checked={profile.can_refill || false}
+      onChange={(e) =>
+        onChangeRole(profile.id, profile.role, profile.classification, {
+          can_refill: e.target.checked,
+        })
+      }
+    />
+    Refill Access
+  </label>
+</td>
 
                         <td className="px-3 py-3">
                           {profile.approval_status === "approved" ? (
