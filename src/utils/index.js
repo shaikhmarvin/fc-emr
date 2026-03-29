@@ -16,9 +16,6 @@ export function calculateAge(dob) {
   return age >= 0 ? String(age) : "";
 }
 
-export function generateMrn() {
-  return String(Math.floor(100000 + Math.random() * 900000));
-}
 
 export function getPatientBoardName(patient) {
   const first = patient.firstName?.trim() || "";
@@ -188,9 +185,9 @@ export function normalizeClinicDate(dateStr) {
   }
 
   const year = parsed.getFullYear();
-const month = String(parsed.getMonth() + 1).padStart(2, "0");
-const day = String(parsed.getDate()).padStart(2, "0");
-return `${year}-${month}-${day}`;
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 export function createEncounterFromIntake(form) {
@@ -275,37 +272,218 @@ export function normalizeForDuplicateCheck(value) {
     .replace(/\s+/g, " ");
 }
 
+function normalizePatientNamePart(value = "") {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getNameTokens(value = "") {
+  return normalizePatientNamePart(value)
+    .split(" ")
+    .filter(Boolean);
+}
+
+function normalizeDobString(value = "") {
+  if (!value) return "";
+
+  const str = String(value).trim();
+
+  // already yyyy-mm-dd
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+
+  // mm/dd/yyyy or mm-dd-yyyy
+  const slashOrDashMatch = str.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (slashOrDashMatch) {
+    const mm = slashOrDashMatch[1].padStart(2, "0");
+    const dd = slashOrDashMatch[2].padStart(2, "0");
+    const yyyy = slashOrDashMatch[3];
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  return str;
+}
+
+function differsByOneDigit(a = "", b = "") {
+  const left = String(a || "").replace(/\D/g, "");
+  const right = String(b || "").replace(/\D/g, "");
+
+  if (!left || !right) return false;
+  if (left.length !== right.length) return false;
+
+  let diffCount = 0;
+
+  for (let i = 0; i < left.length; i += 1) {
+    if (left[i] !== right[i]) diffCount += 1;
+    if (diffCount > 1) return false;
+  }
+
+  return diffCount === 1;
+}
+
+function areDobValuesClose(inputDob = "", patientDob = "") {
+  const normalizedInputDob = normalizeDobString(inputDob);
+  const normalizedPatientDob = normalizeDobString(patientDob);
+
+  if (!normalizedInputDob || !normalizedPatientDob) return false;
+  if (normalizedInputDob === normalizedPatientDob) return true;
+
+  return differsByOneDigit(normalizedInputDob, normalizedPatientDob);
+}
+
+function firstNamesAreCompatible(inputFirstName = "", patientFirstName = "") {
+  const input = normalizePatientNamePart(inputFirstName);
+  const patient = normalizePatientNamePart(patientFirstName);
+
+  if (!input || !patient) return false;
+  if (input === patient) return true;
+
+  if (input.startsWith(patient) || patient.startsWith(input)) return true;
+
+  const inputTokens = getNameTokens(inputFirstName);
+  const patientTokens = getNameTokens(patientFirstName);
+
+  return inputTokens.some((token) => patientTokens.includes(token));
+}
+
+function lastNamesAreCompatible(inputLastName = "", patientLastName = "") {
+  const input = normalizePatientNamePart(inputLastName);
+  const patient = normalizePatientNamePart(patientLastName);
+
+  if (!input || !patient) return false;
+  if (input === patient) return true;
+
+  if (input.includes(patient) || patient.includes(input)) return true;
+
+  const inputTokens = getNameTokens(inputLastName);
+  const patientTokens = getNameTokens(patientLastName);
+
+  if (inputTokens.length === 0 || patientTokens.length === 0) return false;
+
+  return inputTokens.some((token) => patientTokens.includes(token));
+}
+
 export function findPotentialDuplicatePatient(
   patients,
   firstName,
   lastName,
   dob,
   last4ssn,
-  excludePatientId = null
+  editingPatientId = null
 ) {
-  return patients.find((patient) => {
-    if (excludePatientId && patient.id === excludePatientId) return false;
+  const normalizedFirstName = normalizePatientNamePart(firstName);
+  const normalizedLastName = normalizePatientNamePart(lastName);
+  const normalizedDob = normalizeDobString(dob);
+  const normalizedLast4 = String(last4ssn || "").replace(/\D/g, "").slice(-4);
 
-    const sameDob =
-      normalizeForDuplicateCheck(patient.dob) ===
-      normalizeForDuplicateCheck(dob);
+  if (!normalizedFirstName || !normalizedLastName || !normalizedDob) {
+    return null;
+  }
 
-    const sameFirst =
-      normalizeForDuplicateCheck(patient.firstName) ===
-      normalizeForDuplicateCheck(firstName);
+  let bestMatch = null;
+  let bestScore = -1;
 
-    const sameLast =
-      normalizeForDuplicateCheck(patient.lastName) ===
-      normalizeForDuplicateCheck(lastName);
+  for (const patient of patients || []) {
+    if (!patient) continue;
+    if (editingPatientId && String(patient.id) === String(editingPatientId)) continue;
 
-    const inputLast4 = normalizeForDuplicateCheck(last4ssn);
-    const patientLast4 = normalizeForDuplicateCheck(patient.last4ssn);
+    const patientFirstName = patient.firstName || "";
+    const patientLastName = patient.lastName || "";
+    const patientDob = patient.dob || "";
+    const patientLast4 = String(patient.last4ssn || "").replace(/\D/g, "").slice(-4);
 
-    const hasLast4OnBoth = inputLast4 && patientLast4;
-    const sameLast4 = hasLast4OnBoth ? inputLast4 === patientLast4 : true;
+    const firstNameCompatible = firstNamesAreCompatible(
+      normalizedFirstName,
+      patientFirstName
+    );
+    const lastNameCompatible = lastNamesAreCompatible(
+      normalizedLastName,
+      patientLastName
+    );
+    const dobExactMatch =
+      normalizeDobString(patientDob) === normalizedDob;
+    const dobCloseMatch =
+      !dobExactMatch && areDobValuesClose(normalizedDob, patientDob);
+    const ssnExactMatch =
+      !!normalizedLast4 && !!patientLast4 && normalizedLast4 === patientLast4;
 
-    return sameDob && sameFirst && sameLast && sameLast4;
-  });
+    let score = 0;
+
+    if (firstNameCompatible) score += 2;
+    if (lastNameCompatible) score += 3;
+    if (dobExactMatch) score += 4;
+    else if (dobCloseMatch) score += 2;
+    if (ssnExactMatch) score += 3;
+
+    // hard-stop bad candidates:
+    // if neither name side matches, ignore
+    if (!firstNameCompatible && !lastNameCompatible) continue;
+
+    // if DOB is way off and SSN does not match, ignore
+    if (!dobExactMatch && !dobCloseMatch && !ssnExactMatch) continue;
+
+    // require at least one strong identity anchor
+    const hasStrongAnchor =
+      dobExactMatch ||
+      ssnExactMatch ||
+      (lastNameCompatible && firstNameCompatible && dobCloseMatch);
+
+    if (!hasStrongAnchor) continue;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = patient;
+    }
+  }
+
+  return bestMatch;
+}
+
+export function patientMatchesSearch(patient, searchForm) {
+  if (!patient) return false;
+
+  const mrnQuery = String(searchForm?.mrn || "").trim().toLowerCase();
+  const firstNameQuery = String(searchForm?.firstName || "").trim();
+  const lastNameQuery = String(searchForm?.lastName || "").trim();
+  const dobQuery = String(searchForm?.dob || "").trim();
+  const last4Query = String(searchForm?.last4ssn || "").replace(/\D/g, "").slice(-4);
+
+  if (mrnQuery) {
+    const patientMrn = String(patient.mrn || "").trim().toLowerCase();
+    if (!patientMrn.includes(mrnQuery)) return false;
+  }
+
+  if (last4Query) {
+    const patientLast4 = String(patient.last4ssn || "").replace(/\D/g, "").slice(-4);
+    if (!patientLast4.includes(last4Query)) return false;
+  }
+
+  if (dobQuery) {
+    const patientDob = normalizeDobString(patient.dob || "");
+    const queryDob = normalizeDobString(dobQuery);
+
+    if (patientDob !== queryDob && !areDobValuesClose(queryDob, patientDob)) {
+      return false;
+    }
+  }
+
+  if (firstNameQuery) {
+    if (!firstNamesAreCompatible(firstNameQuery, patient.firstName || "")) {
+      return false;
+    }
+  }
+
+  if (lastNameQuery) {
+    if (!lastNamesAreCompatible(lastNameQuery, patient.lastName || "")) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 export function mrnExists(patients, mrn, excludePatientId = null) {

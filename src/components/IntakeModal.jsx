@@ -8,6 +8,7 @@ export default function IntakeModal({
   submitPatient,
   isEditingIntake,
   intakeMatchPatientId,
+  intakeMatchedPatient,
 }) {
   const SEX_OPTIONS = ["Male", "Female", "Other", "Prefer not to say"];
 
@@ -80,19 +81,40 @@ export default function IntakeModal({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4">
-          {intakeMatchPatientId && !isEditingIntake && (
-            <div className="mb-6 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-4">
-              <p className="text-sm font-semibold text-amber-900">
-                Possible existing patient found
-              </p>
-              <p className="mt-1 text-sm text-amber-800">
-                Stable patient information has been auto-filled. Continue entering
-                today’s visit details normally. Saving will add this as a new
-                encounter to the existing patient chart.
-              </p>
-            </div>
-          )}
+        {intakeMatchPatientId && !isEditingIntake && (
+  <div className="mb-6 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-4">
+    <p className="text-sm font-semibold text-amber-900">
+      Possible existing patient found
+    </p>
+
+    <p className="mt-1 text-sm text-amber-800">
+  Stable patient information has been auto-filled. Continue entering
+  today’s visit details normally. Saving will add this as a new
+  encounter to the existing patient chart.
+</p>
+
+<div className="mt-3 rounded-lg border border-amber-300 bg-amber-100 px-3 py-2">
+  <p className="text-xs font-semibold text-amber-900">
+    Verify that the name, DOB, and other details below match the correct patient
+    before completing intake.
+  </p>
+</div>
+
+    {intakeMatchedPatient && (
+      <div className="mt-3 rounded-xl border border-amber-200 bg-white/70 px-3 py-3 text-sm text-amber-900">
+        <p className="font-semibold">
+          {`${intakeMatchedPatient.firstName || ""} ${intakeMatchedPatient.lastName || ""}`.trim() || "Existing patient"}
+        </p>
+        <div className="mt-1 grid grid-cols-1 gap-1 sm:grid-cols-2">
+          <p>DOB: {intakeMatchedPatient.dob || "—"}</p>
+          <p>Phone: {intakeMatchedPatient.phone || "—"}</p>
+          <p>MRN: {intakeMatchedPatient.mrn || "—"}</p>
+          <p>Last 4 SSN: {intakeMatchedPatient.last4ssn || "—"}</p>
+        </div>
+      </div>
+    )}
+  </div>
+)}
 
           {intakeTab === 0 && (
             <div className="space-y-4">
@@ -131,7 +153,7 @@ export default function IntakeModal({
                   <Field label="Patient ID / MRN">
                     <input
                       className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      placeholder="Leave blank to auto-generate"
+                      placeholder="Leave blank if unknown"
                       value={intakeForm.mrn}
                       onChange={(e) => updateIntakeField("mrn", e.target.value)}
                     />
@@ -676,7 +698,6 @@ export default function IntakeModal({
           </button>
         </div>
       </div>
-    </div>
   );
 }
 

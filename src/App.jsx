@@ -86,7 +86,6 @@ import {
 } from "./constants";
 import {
   calculateAge,
-  generateMrn,
   getPatientBoardName,
   getFullPatientName,
   getStudentBoardName,
@@ -104,6 +103,7 @@ import {
   canAssignRoom,
   mapDbStatusToUi,
   findPotentialDuplicatePatient,
+  patientMatchesSearch,
   mrnExists,
   sortEncountersByDate,
 } from "./utils";
@@ -898,6 +898,7 @@ export default function App() {
   const dashboardSelectedPatient =
     patients.find((p) => p.id === dashboardSelectedPatientId) || null;
 
+
   useEffect(() => {
     if (!session) return;
 
@@ -1079,6 +1080,8 @@ export default function App() {
   const [editingPatientId, setEditingPatientId] = useState(null);
   const [intakeMatchPatientId, setIntakeMatchPatientId] = useState(null);
   const [autoFilledMatchPatientId, setAutoFilledMatchPatientId] = useState(null);
+  const intakeMatchedPatient =
+  patients.find((p) => p.id === intakeMatchPatientId) || null;
 
   const [soapBusy, setSoapBusy] = useState(false);
   const [soapUiMessage, setSoapUiMessage] = useState("");
@@ -1392,34 +1395,9 @@ export default function App() {
   }, [allEncounterRows, selectedClinicDate]);
 
 
-  const filteredPatients = patients.filter((patient) => {
-    const mrnMatch =
-      !debouncedSearchForm.mrn ||
-      (patient.mrn || "")
-        .toLowerCase()
-        .includes(debouncedSearchForm.mrn.toLowerCase());
-
-    const firstNameMatch =
-      !debouncedSearchForm.firstName ||
-      (patient.firstName || "")
-        .toLowerCase()
-        .includes(debouncedSearchForm.firstName.toLowerCase());
-
-    const lastNameMatch =
-      !debouncedSearchForm.lastName ||
-      (patient.lastName || "")
-        .toLowerCase()
-        .includes(debouncedSearchForm.lastName.toLowerCase());
-
-    const dobMatch =
-      !debouncedSearchForm.dob || patient.dob === debouncedSearchForm.dob;
-
-    const ssnMatch =
-      !debouncedSearchForm.last4ssn ||
-      (patient.last4ssn || "").includes(debouncedSearchForm.last4ssn);
-
-    return mrnMatch && firstNameMatch && lastNameMatch && dobMatch && ssnMatch;
-  });
+const filteredPatients = patients.filter((patient) =>
+  patientMatchesSearch(patient, debouncedSearchForm)
+);
 
   const visiblePatientIds = new Set(
     visibleEncounterRows.map(({ patient }) => patient.id)
@@ -2734,7 +2712,7 @@ export default function App() {
             patient.id === potentialDuplicate.id
               ? {
                 ...patient,
-                mrn: patient.mrn || intakeForm.mrn.trim() || generateMrn(),
+                mrn: patient.mrn || intakeForm.mrn.trim(),
                 firstName: intakeForm.firstName,
                 lastName: intakeForm.lastName,
                 preferredName: intakeForm.preferredName,
@@ -5713,6 +5691,7 @@ export default function App() {
         submitPatient={submitPatient}
         isEditingIntake={isEditingIntake}
         intakeMatchPatientId={intakeMatchPatientId}
+        intakeMatchedPatient={intakeMatchedPatient}
       />
 
       <UndergradRegistrationModal
