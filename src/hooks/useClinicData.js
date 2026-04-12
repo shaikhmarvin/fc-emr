@@ -10,11 +10,11 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
 
   patientsData.forEach((patient) => {
     patientMap[patient.id] = {
-  ...patient,
-  encounters: [],
-  allergyList: [],
-  medicationList: [],
-};
+      ...patient,
+      encounters: [],
+      allergyList: [],
+      medicationList: [],
+    };
   });
 
   encountersData.forEach((encounter) => {
@@ -62,6 +62,10 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
       notes: encounter.notes || "",
       inHouseLabs: encounter.in_house_labs || {},
       sendOutLabs: encounter.send_out_labs || {},
+      importedSendOutLabs:
+        encounter.imported_send_out_labs ||
+        encounter.importedSendOutLabs ||
+        [],
       medications: [],
       vitalsHistory: encounter.vitals || [],
       soapSubjective: encounter.hpi || "",
@@ -80,7 +84,6 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
       specialtyType,
       leadershipIntakeComplete: encounter.leadership_intake_complete ?? false,
     });
-
   });
 
   Object.values(patientMap).forEach((patient) => {
@@ -90,26 +93,22 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
   });
 
   medicationsData.forEach((medication) => {
-  const patient = patientMap[medication.patient_id];
-  if (!patient) return;
+    const patient = patientMap[medication.patient_id];
+    if (!patient) return;
 
-  if (!patient.medicationList) {
-    patient.medicationList = [];
-  }
-
- patient.medicationList.push({
-  id: medication.id,
-  name: medication.name || "",
-  dosage: medication.dosage || "",
-  frequency: medication.frequency || "",
-  route: medication.route || "",
-  dispenseAmount: medication.dispense_amount ?? "",
-  refillCount: medication.refill_count ?? "",
-  instructions: medication.instructions || "",
-  lastUpdatedEncounterId: medication.last_updated_encounter_id || null,
-  isActive: medication.is_active ?? true,
-});
-});
+    patient.medicationList.push({
+      id: medication.id,
+      name: medication.name || "",
+      dosage: medication.dosage || "",
+      frequency: medication.frequency || "",
+      route: medication.route || "",
+      dispenseAmount: medication.dispense_amount ?? "",
+      refillCount: medication.refill_count ?? "",
+      instructions: medication.instructions || "",
+      lastUpdatedEncounterId: medication.last_updated_encounter_id || null,
+      isActive: medication.is_active ?? true,
+    });
+  });
 
   allergiesData.forEach((allergy) => {
     const patient = patientMap[allergy.patient_id];
@@ -130,9 +129,20 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
 
 export function useClinicData({ authReady, session, userRole }) {
   const [patients, setPatients] = useState([]);
+
   const timeoutRef = useRef(null);
+  const inFlightRef = useRef(false);
+  const queuedReloadRef = useRef(false);
+
   const loadData = useCallback(async () => {
     if (!authReady || !session || !userRole) return;
+
+    if (inFlightRef.current) {
+      queuedReloadRef.current = true;
+      return;
+    }
+
+    inFlightRef.current = true;
 
     try {
       const [patientsData, encountersData, medicationsData, allergiesData] =
@@ -153,18 +163,22 @@ export function useClinicData({ authReady, session, userRole }) {
       );
     } catch (error) {
       console.error("Failed loading data:", error);
+    } finally {
+      inFlightRef.current = false;
+
+      if (queuedReloadRef.current) {
+        queuedReloadRef.current = false;
+        loadData();
+      }
     }
   }, [authReady, session, userRole]);
 
   useEffect(() => {
-    loadData().then(() => {
-    });
+    loadData();
   }, [loadData]);
 
   useEffect(() => {
     if (!authReady || !session || !userRole) return;
-
-
 
     const triggerReload = () => {
       if (timeoutRef.current) {
@@ -173,47 +187,32 @@ export function useClinicData({ authReady, session, userRole }) {
 
       timeoutRef.current = setTimeout(() => {
         loadData();
-      }, 50);
+      }, 250);
     };
-
 
     const channel = supabase
       .channel("clinic-data-realtime")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "patients" },
-        (payload) => {
-          console.log("REALTIME patients:", payload);
-          triggerReload();
-        }
+        triggerReload
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "encounters" },
-        (payload) => {
-          console.log("REALTIME encounters:", payload);
-          triggerReload();
-        }
+        triggerReload
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "medications" },
-        (payload) => {
-          console.log("REALTIME medications:", payload);
-          triggerReload();
-        }
+        triggerReload
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "allergies" },
-        (payload) => {
-          console.log("REALTIME allergies:", payload);
-          triggerReload();
-        }
+        triggerReload
       )
-      .subscribe((status) => {
-        console.log("clinic-data-realtime status:", status);
-      });
+      .subscribe();
 
     return () => {
       if (timeoutRef.current) {
@@ -224,14 +223,14 @@ export function useClinicData({ authReady, session, userRole }) {
   }, [authReady, session, userRole, loadData]);
 
   useEffect(() => {
-  if (!authReady || !session || !userRole) return;
+    if (!authReady || !session || !userRole) return;
 
-  const interval = setInterval(() => {
-    loadData();
-  }, 3000);
+    const fallbackInterval = setInterval(() => {
+      loadData();
+    }, 60000);
 
-  return () => clearInterval(interval);
-}, [authReady, session, userRole, loadData]);
+    return () => clearInterval(fallbackInterval);
+  }, [authReady, session, userRole, loadData]);
 
   return {
     patients,

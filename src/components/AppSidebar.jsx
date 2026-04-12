@@ -149,6 +149,15 @@ export default function AppSidebar({
 
                 {isLeadershipView && (
                   <button
+                    onClick={() => handleViewChange("lab-import")}
+                    className={getNavItemClass("lab-import")}
+                  >
+                    Lab Import
+                  </button>
+                )}
+
+                {isLeadershipView && (
+                  <button
                     onClick={() => handleViewChange("pap")}
                     className={getNavItemClass("pap")}
                   >

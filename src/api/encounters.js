@@ -108,9 +108,9 @@ export async function updateEncounterInSupabase(encounterId, updates) {
     payload.in_house_labs = updates.inHouseLabs;
   }
 
-  if (updates.sendOutLabs !== undefined) {
-    payload.send_out_labs = updates.sendOutLabs;
-  }
+  if (updates.imported_send_out_labs !== undefined) {
+  payload.imported_send_out_labs = updates.imported_send_out_labs;
+}
 
   if (updates.status !== undefined) {
     payload.status = mapUiStatusToDb(updates.status);
@@ -430,6 +430,17 @@ export async function fetchRefillRequests() {
 
   if (error) throw error;
 
+  return data ?? [];
+}
+
+export async function fetchEncountersByPatient(patientId) {
+  const { data, error } = await supabase
+    .from("encounters")
+    .select("*")
+    .eq("patient_id", patientId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
   return data ?? [];
 }
 

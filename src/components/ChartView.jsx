@@ -197,6 +197,15 @@ export default function ChartView({
     };
   }
 
+  function groupImportedLabs(labs = []) {
+  return labs.reduce((groups, lab) => {
+    const group = lab.group || "Other";
+    if (!groups[group]) groups[group] = [];
+    groups[group].push(lab);
+    return groups;
+  }, {});
+}
+
   function renderTrendArrow(direction) {
     if (direction === "up") return "↑";
     if (direction === "down") return "↓";
@@ -383,7 +392,10 @@ export default function ChartView({
 
 
 
-
+  const legacySendOutLabs = selectedEncounter?.sendOutLabs || {};
+  const importedSendOutLabs = Array.isArray(selectedEncounter?.importedSendOutLabs)
+    ? selectedEncounter.importedSendOutLabs
+    : [];
   const isEncounterLocked = selectedEncounter?.soapStatus === "signed";
   const isSoapLocked = isEncounterLocked; // keep for compatibility
   const vitalsHistory = selectedEncounter?.vitalsHistory || [];
@@ -2119,7 +2131,7 @@ export default function ChartView({
             )}
           </div>
 
-          <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
+                 <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
             <button
               onClick={() => setShowSendOutLabs((prev) => !prev)}
               className="flex w-full items-center justify-between text-left text-lg font-semibold"
@@ -2129,75 +2141,133 @@ export default function ChartView({
             </button>
 
             {showSendOutLabs && (
-              <div className="mt-4 space-y-4">
+              <div className="mt-4 space-y-6">
+                {/* Legacy send-out workflow stays visible */}
+                <div className="space-y-4">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={legacySendOutLabs?.ordered || false}
+                      onChange={(e) =>
+                        saveSendOutLabs({
+                          ...legacySendOutLabs,
+                          ordered: e.target.checked,
+                        })
+                      }
+                    />
+                    Send-Out Labs Ordered
+                  </label>
 
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={selectedEncounter.sendOutLabs?.ordered || false}
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={legacySendOutLabs?.received || false}
+                      onChange={(e) =>
+                        saveSendOutLabs({
+                          ...legacySendOutLabs,
+                          received: e.target.checked,
+                        })
+                      }
+                    />
+                    Results Received
+                  </label>
+
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      disabled={!legacySendOutLabs?.received}
+                      checked={legacySendOutLabs?.patientNotified || false}
+                      onChange={(e) =>
+                        saveSendOutLabs({
+                          ...legacySendOutLabs,
+                          patientNotified: e.target.checked,
+                        })
+                      }
+                    />
+                    Patient Notified
+                  </label>
+
+                  <textarea
+                    className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
+                    placeholder="Labs ordered / notes"
+                    value={legacySendOutLabs?.notes || ""}
                     onChange={(e) =>
                       saveSendOutLabs({
-                        ...selectedEncounter.sendOutLabs,
-                        ordered: e.target.checked,
+                        ...legacySendOutLabs,
+                        notes: e.target.value,
                       })
                     }
                   />
-                  Send-Out Labs Ordered
-                </label>
 
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={selectedEncounter.sendOutLabs?.received || false}
+                  <textarea
+                    className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
+                    placeholder="Result summary"
+                    value={legacySendOutLabs?.resultSummary || ""}
                     onChange={(e) =>
                       saveSendOutLabs({
-                        ...selectedEncounter.sendOutLabs,
-                        received: e.target.checked,
+                        ...legacySendOutLabs,
+                        resultSummary: e.target.value,
                       })
                     }
                   />
-                  Results Received
-                </label>
+                </div>
 
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    disabled={!selectedEncounter.sendOutLabs?.received}
-                    checked={selectedEncounter.sendOutLabs?.patientNotified || false}
-                    onChange={(e) =>
-                      saveSendOutLabs({
-                        ...selectedEncounter.sendOutLabs,
-                        patientNotified: e.target.checked,
-                      })
-                    }
-                  />
-                  Patient Notified
-                </label>
+                {/* Imported OCR labs display below legacy controls */}
+                {importedSendOutLabs.length > 0 ? (
+                  <div className="space-y-4 border-t border-slate-200 pt-4">
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                      Imported outside labs saved for this encounter.
+                    </div>
 
-                <textarea
-                  className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                  placeholder="Labs ordered / notes"
-                  value={selectedEncounter.sendOutLabs?.notes || ""}
-                  onChange={(e) =>
-                    saveSendOutLabs({
-                      ...selectedEncounter.sendOutLabs,
-                      notes: e.target.value,
-                    })
-                  }
-                />
+                    {Object.entries(groupImportedLabs(importedSendOutLabs)).map(
+                      ([group, labs]) => (
+                        <div
+                          key={group}
+                          className="overflow-hidden rounded-xl border border-slate-200"
+                        >
+                          <div className="bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-800">
+                            {group}
+                          </div>
 
-                <textarea
-                  className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                  placeholder="Result summary"
-                  value={selectedEncounter.sendOutLabs?.resultSummary || ""}
-                  onChange={(e) =>
-                    saveSendOutLabs({
-                      ...selectedEncounter.sendOutLabs,
-                      resultSummary: e.target.value,
-                    })
-                  }
-                />
+                          <div className="divide-y divide-slate-100">
+                            {labs.map((lab, index) => (
+                              <div
+                                key={`${lab.key || lab.displayName || "lab"}-${index}`}
+                                className="flex items-start justify-between gap-4 px-4 py-3"
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-sm font-medium text-slate-900">
+                                    {lab.displayName || lab.key || "Lab"}
+                                  </div>
 
+                                  {lab.expectedRangeText ? (
+                                    <div className="mt-1 text-xs text-slate-500">
+                                      Expected: {lab.expectedRangeText}
+                                    </div>
+                                  ) : null}
+
+                                  {lab.suspicious ? (
+                                    <div className="mt-1 text-xs font-medium text-yellow-700">
+                                      Value looks unusual — review saved result
+                                    </div>
+                                  ) : null}
+                                </div>
+
+                                <div className="shrink-0 text-sm font-semibold text-slate-900">
+                                  {lab.value !== null &&
+                                  lab.value !== undefined &&
+                                  lab.value !== ""
+                                    ? String(lab.value)
+                                    : "—"}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    )}
+                  </div>
+                ) : null}
               </div>
             )}
           </div>

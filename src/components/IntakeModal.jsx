@@ -9,6 +9,8 @@ export default function IntakeModal({
   isEditingIntake,
   intakeMatchPatientId,
   intakeMatchedPatient,
+  autoFilledMatchPatientId,
+  applyMatchedPatientToIntake,
 }) {
   const SEX_OPTIONS = ["Male", "Female", "Other", "Prefer not to say"];
 
@@ -88,17 +90,15 @@ export default function IntakeModal({
     </p>
 
     <p className="mt-1 text-sm text-amber-800">
-  Stable patient information has been auto-filled. Continue entering
-  today’s visit details normally. Saving will add this as a new
-  encounter to the existing patient chart.
-</p>
+      Review the possible match below. Stable patient information will only be
+      filled in after you click the button.
+    </p>
 
-<div className="mt-3 rounded-lg border border-amber-300 bg-amber-100 px-3 py-2">
-  <p className="text-xs font-semibold text-amber-900">
-    Verify that the name, DOB, and other details below match the correct patient
-    before completing intake.
-  </p>
-</div>
+    <div className="mt-3 rounded-lg border border-amber-300 bg-amber-100 px-3 py-2">
+      <p className="text-xs font-semibold text-amber-900">
+        Verify name, DOB, MRN, and phone before using the existing chart.
+      </p>
+    </div>
 
     {intakeMatchedPatient && (
       <div className="mt-3 rounded-xl border border-amber-200 bg-white/70 px-3 py-3 text-sm text-amber-900">
@@ -111,593 +111,611 @@ export default function IntakeModal({
           <p>MRN: {intakeMatchedPatient.mrn || "—"}</p>
           <p>Last 4 SSN: {intakeMatchedPatient.last4ssn || "—"}</p>
         </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={applyMatchedPatientToIntake}
+            className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
+          >
+            {autoFilledMatchPatientId === intakeMatchPatientId
+              ? "Existing Patient Info Applied"
+              : "Use Existing Patient Info"}
+          </button>
+
+          {autoFilledMatchPatientId === intakeMatchPatientId && (
+            <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">
+              Stable patient fields have been applied. Continue entering today’s visit details.
+            </div>
+          )}
+        </div>
       </div>
     )}
   </div>
 )}
 
-          {intakeTab === 0 && (
-            <div className="space-y-4">
-              <SectionCard title="Patient Information">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  <Field label="First Name">
-                    <input
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      value={intakeForm.firstName}
-                      onChange={(e) =>
-                        updateIntakeField("firstName", e.target.value)
-                      }
-                    />
-                  </Field>
-
-                  <Field label="Last Name">
-                    <input
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      value={intakeForm.lastName}
-                      onChange={(e) =>
-                        updateIntakeField("lastName", e.target.value)
-                      }
-                    />
-                  </Field>
-
-                  <Field label="Preferred Name">
-                    <input
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      value={intakeForm.preferredName}
-                      onChange={(e) =>
-                        updateIntakeField("preferredName", e.target.value)
-                      }
-                    />
-                  </Field>
-
-                  <Field label="Patient ID / MRN">
-                    <input
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      placeholder="Leave blank if unknown"
-                      value={intakeForm.mrn}
-                      onChange={(e) => updateIntakeField("mrn", e.target.value)}
-                    />
-                  </Field>
-
-                  <Field label="Date of Birth">
-                    <input
-                      type="date"
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      value={intakeForm.dob}
-                      onChange={(e) => updateIntakeField("dob", e.target.value)}
-                    />
-                  </Field>
-
-                  <Field label="Age">
-                    <input
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-600"
-                      value={intakeForm.age}
-                      readOnly
-                    />
-                  </Field>
-
-                  <Field label="Phone Number">
-                    <input
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      value={intakeForm.phone}
-                      onChange={(e) =>
-                        updateIntakeField(
-                          "phone",
-                          formatPhoneNumber(e.target.value)
-                        )
-                      }
-                    />
-                  </Field>
-
-                  <Field label="Pronouns">
-                    <input
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      value={intakeForm.pronouns}
-                      onChange={(e) =>
-                        updateIntakeField("pronouns", e.target.value)
-                      }
-                    />
-                  </Field>
-
-                  <Field label="Sex">
-                    <select
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      value={intakeForm.sex}
-                      onChange={(e) => updateIntakeField("sex", e.target.value)}
-                    >
-                      <option value="">Select sex</option>
-                      {SEX_OPTIONS.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-
-                  <Field label="Ethnicity">
-                    <select
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      value={intakeForm.ethnicity}
-                      onChange={(e) =>
-                        updateIntakeField("ethnicity", e.target.value)
-                      }
-                    >
-                      <option value="">Select ethnicity</option>
-                      <option>Hispanic or Latino</option>
-                      <option>Asian</option>
-                      <option>Black or African American</option>
-                      <option>White</option>
-                      <option>Middle Eastern</option>
-                    </select>
-                  </Field>
-                </div>
-              </SectionCard>
-
-              <Field label="Patient Flags" className="xl:col-span-3">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <CheckboxCard
-                    label="Patient is over 65"
-                    checked={intakeForm.over65}
-                    onChange={(checked) => updateIntakeField("over65", checked)}
+        {intakeTab === 0 && (
+          <div className="space-y-4">
+            <SectionCard title="Patient Information">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <Field label="First Name">
+                  <input
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    value={intakeForm.firstName}
+                    onChange={(e) =>
+                      updateIntakeField("firstName", e.target.value)
+                    }
                   />
-                  <CheckboxCard
-                    label="TTU Student"
-                    checked={intakeForm.ttuStudent}
-                    onChange={(checked) => updateIntakeField("ttuStudent", checked)}
+                </Field>
+
+                <Field label="Last Name">
+                  <input
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    value={intakeForm.lastName}
+                    onChange={(e) =>
+                      updateIntakeField("lastName", e.target.value)
+                    }
                   />
-                </div>
-              </Field>
-            </div>
-          )}
+                </Field>
 
-          {intakeTab === 1 && (
-            <div className="space-y-6">
-              <SectionCard title="Visit Details">
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <Field label="New or Returning">
-                    <select
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      value={intakeForm.newReturning}
-                      onChange={(e) =>
-                        updateIntakeField("newReturning", e.target.value)
-                      }
-                    >
-                      <option value="">Select status</option>
-                      <option>New</option>
-                      <option>Returning</option>
-                    </select>
-                  </Field>
-
-                  <Field label="Visit Location">
-                    <select
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      value={intakeForm.visitLocation}
-                      onChange={(e) =>
-                        updateIntakeField("visitLocation", e.target.value)
-                      }
-                    >
-                      <option value="">Select location</option>
-                      <option>In Clinic</option>
-                      <option>Zoom</option>
-                      <option>Phone</option>
-                    </select>
-                  </Field>
-
-                  <ReadOnlyField
-                    label="Visit Type"
-                    value={intakeForm.visitType}
+                <Field label="Preferred Name">
+                  <input
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    value={intakeForm.preferredName}
+                    onChange={(e) =>
+                      updateIntakeField("preferredName", e.target.value)
+                    }
                   />
+                </Field>
 
-                  <ReadOnlyField
-                    label="Specialty"
-                    value={intakeForm.specialtyType || "—"}
+                <Field label="Patient ID / MRN">
+                  <input
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    placeholder="Leave blank if unknown"
+                    value={intakeForm.mrn}
+                    onChange={(e) => updateIntakeField("mrn", e.target.value)}
                   />
+                </Field>
 
-                  <Field label="Chief Complaint" className="md:col-span-2">
+                <Field label="Date of Birth">
+                  <input
+                    type="date"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    value={intakeForm.dob}
+                    onChange={(e) => updateIntakeField("dob", e.target.value)}
+                  />
+                </Field>
+
+                <Field label="Age">
+                  <input
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-600"
+                    value={intakeForm.age}
+                    readOnly
+                  />
+                </Field>
+
+                <Field label="Phone Number">
+                  <input
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    value={intakeForm.phone}
+                    onChange={(e) =>
+                      updateIntakeField(
+                        "phone",
+                        formatPhoneNumber(e.target.value)
+                      )
+                    }
+                  />
+                </Field>
+
+                <Field label="Pronouns">
+                  <input
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    value={intakeForm.pronouns}
+                    onChange={(e) =>
+                      updateIntakeField("pronouns", e.target.value)
+                    }
+                  />
+                </Field>
+
+                <Field label="Sex">
+                  <select
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    value={intakeForm.sex}
+                    onChange={(e) => updateIntakeField("sex", e.target.value)}
+                  >
+                    <option value="">Select sex</option>
+                    {SEX_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Ethnicity">
+                  <select
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    value={intakeForm.ethnicity}
+                    onChange={(e) =>
+                      updateIntakeField("ethnicity", e.target.value)
+                    }
+                  >
+                    <option value="">Select ethnicity</option>
+                    <option>Hispanic or Latino</option>
+                    <option>Asian</option>
+                    <option>Black or African American</option>
+                    <option>White</option>
+                    <option>Middle Eastern</option>
+                  </select>
+                </Field>
+              </div>
+            </SectionCard>
+
+            <Field label="Patient Flags" className="xl:col-span-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <CheckboxCard
+                  label="Patient is over 65"
+                  checked={intakeForm.over65}
+                  onChange={(checked) => updateIntakeField("over65", checked)}
+                />
+                <CheckboxCard
+                  label="TTU Student"
+                  checked={intakeForm.ttuStudent}
+                  onChange={(checked) => updateIntakeField("ttuStudent", checked)}
+                />
+              </div>
+            </Field>
+          </div>
+        )}
+
+        {intakeTab === 1 && (
+          <div className="space-y-6">
+            <SectionCard title="Visit Details">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <Field label="New or Returning">
+                  <select
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    value={intakeForm.newReturning}
+                    onChange={(e) =>
+                      updateIntakeField("newReturning", e.target.value)
+                    }
+                  >
+                    <option value="">Select status</option>
+                    <option>New</option>
+                    <option>Returning</option>
+                  </select>
+                </Field>
+
+                <Field label="Visit Location">
+                  <select
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    value={intakeForm.visitLocation}
+                    onChange={(e) =>
+                      updateIntakeField("visitLocation", e.target.value)
+                    }
+                  >
+                    <option value="">Select location</option>
+                    <option>In Clinic</option>
+                    <option>Zoom</option>
+                    <option>Phone</option>
+                  </select>
+                </Field>
+
+                <ReadOnlyField
+                  label="Visit Type"
+                  value={intakeForm.visitType}
+                />
+
+                <ReadOnlyField
+                  label="Specialty"
+                  value={intakeForm.specialtyType || "—"}
+                />
+
+                <Field label="Chief Complaint" className="md:col-span-2">
+                  <input
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    value={intakeForm.chiefComplaint}
+                    onChange={(e) =>
+                      updateIntakeField("chiefComplaint", e.target.value)
+                    }
+                  />
+                </Field>
+
+                <Field label="Notes" className="md:col-span-2">
+                  <textarea
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    rows="4"
+                    value={intakeForm.notes}
+                    onChange={(e) => updateIntakeField("notes", e.target.value)}
+                  />
+                </Field>
+              </div>
+            </SectionCard>
+          </div>
+        )}
+
+        {intakeTab === 2 && (
+          <div className="space-y-6">
+            <SectionCard title="Screenings">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <Field label="Mammogram">
+                  <select
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    value={intakeForm.mammogramStatus}
+                    onChange={(e) =>
+                      updateIntakeField("mammogramStatus", e.target.value)
+                    }
+                  >
+                    <option value="">Select one</option>
+                    <option>Interested</option>
+                    <option>Not Interested</option>
+                    <option>UTD</option>
+                    <option>N/A</option>
+                  </select>
+                </Field>
+
+                <Field label="Pap Smear">
+                  <select
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    value={intakeForm.papStatus}
+                    onChange={(e) =>
+                      updateIntakeField("papStatus", e.target.value)
+                    }
+                  >
+                    <option value="">Select one</option>
+                    <option>Interested</option>
+                    <option>Not Interested</option>
+                    <option>UTD</option>
+                    <option>N/A</option>
+                  </select>
+                </Field>
+
+                <Field label="Flu Shot">
+                  <select
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    value={intakeForm.fluShot}
+                    onChange={(e) =>
+                      updateIntakeField("fluShot", e.target.value)
+                    }
+                  >
+                    <option value="">Select one</option>
+                    <option>Interested</option>
+                    <option>Not Interested</option>
+                    <option>UTD</option>
+                  </select>
+                </Field>
+
+                <CheckboxCard
+                  label="HTN"
+                  checked={intakeForm.htn}
+                  onChange={(checked) => updateIntakeField("htn", checked)}
+                />
+
+                <CheckboxCard
+                  label="DM"
+                  checked={intakeForm.dm}
+                  onChange={(checked) => updateIntakeField("dm", checked)}
+                />
+
+                <Field label="Labs drawn in the last 6 months">
+                  <select
+                    className={`w-full rounded-xl border px-3 py-2.5 ${intakeForm.htn || intakeForm.dm
+                      ? "border-slate-200"
+                      : "border-slate-200 bg-slate-50 text-slate-400"
+                      }`}
+                    value={intakeForm.labsLast6Months}
+                    onChange={(e) =>
+                      updateIntakeField("labsLast6Months", e.target.value)
+                    }
+                    disabled={!intakeForm.htn && !intakeForm.dm}
+                  >
+                    <option value="">Select one</option>
+                    <option>Yes</option>
+                    <option>No</option>
+                    <option>Not sure</option>
+                  </select>
+                </Field>
+
+                <Field label="Nicotine Use">
+                  <select
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    value={intakeForm.nicotineUse}
+                    onChange={(e) =>
+                      updateIntakeField("nicotineUse", e.target.value)
+                    }
+                  >
+                    <option value="">Select one</option>
+                    <option>No</option>
+                    <option>Yes</option>
+                    <option>Former</option>
+                    <option>Unknown</option>
+                  </select>
+                </Field>
+
+                {showNicotineDetails && (
+                  <Field label="Nicotine Details">
                     <input
                       className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      value={intakeForm.chiefComplaint}
+                      placeholder="Type, amount, frequency"
+                      value={intakeForm.nicotineDetails}
                       onChange={(e) =>
-                        updateIntakeField("chiefComplaint", e.target.value)
+                        updateIntakeField("nicotineDetails", e.target.value)
                       }
                     />
                   </Field>
+                )}
 
-                  <Field label="Notes" className="md:col-span-2">
+                <Field label="Substance Use Concern">
+                  <select
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    value={intakeForm.substanceUseConcern}
+                    onChange={(e) =>
+                      updateIntakeField("substanceUseConcern", e.target.value)
+                    }
+                  >
+                    <option value="">Select one</option>
+                    <option>No</option>
+                    <option>Yes</option>
+                  </select>
+                </Field>
+
+                <Field label="Substance Use Treatment">
+                  <select
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    value={intakeForm.substanceUseTreatment}
+                    onChange={(e) =>
+                      updateIntakeField(
+                        "substanceUseTreatment",
+                        e.target.value
+                      )
+                    }
+                  >
+                    <option value="">Select one</option>
+                    <option>No</option>
+                    <option>Yes</option>
+                    <option>Maybe</option>
+                  </select>
+                </Field>
+
+                {showSubstanceNotes && (
+                  <Field label="Substance Use Notes" className="md:col-span-2">
                     <textarea
                       className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      rows="4"
-                      value={intakeForm.notes}
-                      onChange={(e) => updateIntakeField("notes", e.target.value)}
-                    />
-                  </Field>
-                </div>
-              </SectionCard>
-            </div>
-          )}
-
-          {intakeTab === 2 && (
-            <div className="space-y-6">
-              <SectionCard title="Screenings">
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <Field label="Mammogram">
-                    <select
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      value={intakeForm.mammogramStatus}
-                      onChange={(e) =>
-                        updateIntakeField("mammogramStatus", e.target.value)
-                      }
-                    >
-                      <option value="">Select one</option>
-                      <option>Interested</option>
-                      <option>Not Interested</option>
-                      <option>UTD</option>
-                      <option>N/A</option>
-                    </select>
-                  </Field>
-
-                  <Field label="Pap Smear">
-                    <select
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      value={intakeForm.papStatus}
-                      onChange={(e) =>
-                        updateIntakeField("papStatus", e.target.value)
-                      }
-                    >
-                      <option value="">Select one</option>
-                      <option>Interested</option>
-                      <option>Not Interested</option>
-                      <option>UTD</option>
-                      <option>N/A</option>
-                    </select>
-                  </Field>
-
-                  <Field label="Flu Shot">
-                    <select
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      value={intakeForm.fluShot}
-                      onChange={(e) =>
-                        updateIntakeField("fluShot", e.target.value)
-                      }
-                    >
-                      <option value="">Select one</option>
-                      <option>Interested</option>
-                      <option>Not Interested</option>
-                      <option>UTD</option>
-                    </select>
-                  </Field>
-
-                  <CheckboxCard
-                    label="HTN"
-                    checked={intakeForm.htn}
-                    onChange={(checked) => updateIntakeField("htn", checked)}
-                  />
-
-                  <CheckboxCard
-                    label="DM"
-                    checked={intakeForm.dm}
-                    onChange={(checked) => updateIntakeField("dm", checked)}
-                  />
-
-                  <Field label="Labs drawn in the last 6 months">
-                    <select
-                      className={`w-full rounded-xl border px-3 py-2.5 ${intakeForm.htn || intakeForm.dm
-                        ? "border-slate-200"
-                        : "border-slate-200 bg-slate-50 text-slate-400"
-                        }`}
-                      value={intakeForm.labsLast6Months}
-                      onChange={(e) =>
-                        updateIntakeField("labsLast6Months", e.target.value)
-                      }
-                      disabled={!intakeForm.htn && !intakeForm.dm}
-                    >
-                      <option value="">Select one</option>
-                      <option>Yes</option>
-                      <option>No</option>
-                      <option>Not sure</option>
-                    </select>
-                  </Field>
-
-                  <Field label="Nicotine Use">
-                    <select
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      value={intakeForm.nicotineUse}
-                      onChange={(e) =>
-                        updateIntakeField("nicotineUse", e.target.value)
-                      }
-                    >
-                      <option value="">Select one</option>
-                      <option>No</option>
-                      <option>Yes</option>
-                      <option>Former</option>
-                      <option>Unknown</option>
-                    </select>
-                  </Field>
-
-                  {showNicotineDetails && (
-                    <Field label="Nicotine Details">
-                      <input
-                        className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                        placeholder="Type, amount, frequency"
-                        value={intakeForm.nicotineDetails}
-                        onChange={(e) =>
-                          updateIntakeField("nicotineDetails", e.target.value)
-                        }
-                      />
-                    </Field>
-                  )}
-
-                  <Field label="Substance Use Concern">
-                    <select
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      value={intakeForm.substanceUseConcern}
-                      onChange={(e) =>
-                        updateIntakeField("substanceUseConcern", e.target.value)
-                      }
-                    >
-                      <option value="">Select one</option>
-                      <option>No</option>
-                      <option>Yes</option>
-                    </select>
-                  </Field>
-
-                  <Field label="Substance Use Treatment">
-                    <select
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      value={intakeForm.substanceUseTreatment}
-                      onChange={(e) =>
-                        updateIntakeField(
-                          "substanceUseTreatment",
-                          e.target.value
-                        )
-                      }
-                    >
-                      <option value="">Select one</option>
-                      <option>No</option>
-                      <option>Yes</option>
-                      <option>Maybe</option>
-                    </select>
-                  </Field>
-
-                  {showSubstanceNotes && (
-                    <Field label="Substance Use Notes" className="md:col-span-2">
-                      <textarea
-                        className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                        rows="3"
-                        placeholder="Relevant details"
-                        value={intakeForm.substanceUseNotes}
-                        onChange={(e) =>
-                          updateIntakeField("substanceUseNotes", e.target.value)
-                        }
-                      />
-                    </Field>
-                  )}
-                </div>
-              </SectionCard>
-            </div>
-          )}
-
-          {intakeTab === 3 && (
-            <div className="space-y-6">
-              <SectionCard title="Referral / Service Needs">
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <Field label="Dermatology">
-                    <input
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      placeholder="Reason or chief complaint"
-                      value={
-                        intakeForm.dermatology === "N/A"
-                          ? ""
-                          : intakeForm.dermatology
-                      }
-                      onChange={(e) =>
-                        updateIntakeField(
-                          "dermatology",
-                          e.target.value.trim() === "" ? "N/A" : e.target.value
-                        )
-                      }
-                    />
-                  </Field>
-
-                  <Field label="Ophthalmology">
-                    <input
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      placeholder="Reason or chief complaint"
-                      value={
-                        intakeForm.ophthalmology === "N/A"
-                          ? ""
-                          : intakeForm.ophthalmology
-                      }
-                      onChange={(e) =>
-                        updateIntakeField(
-                          "ophthalmology",
-                          e.target.value.trim() === ""
-                            ? "N/A"
-                            : e.target.value
-                        )
-                      }
-                    />
-                  </Field>
-
-                  <Field label="Optometry">
-                    <input
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      placeholder="Reason or chief complaint"
-                      value={
-                        intakeForm.optometry === "N/A"
-                          ? ""
-                          : intakeForm.optometry
-                      }
-                      onChange={(e) =>
-                        updateIntakeField(
-                          "optometry",
-                          e.target.value.trim() === "" ? "N/A" : e.target.value
-                        )
-                      }
-                    />
-                  </Field>
-
-                  <Field label="Diabetic Eye Exam in Past Year">
-                    <select
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      value={intakeForm.diabeticEyeExamPastYear}
-                      onChange={(e) =>
-                        updateIntakeField(
-                          "diabeticEyeExamPastYear",
-                          e.target.value
-                        )
-                      }
-                    >
-                      <option value="">Select one</option>
-                      <option>Yes</option>
-                      <option>No</option>
-                      <option>Not sure</option>
-                      <option>N/A</option>
-                    </select>
-                  </Field>
-
-                  <Field label="Physical Therapy">
-                    <input
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      placeholder="Reason or chief complaint"
-                      value={
-                        intakeForm.physicalTherapy === "N/A"
-                          ? ""
-                          : intakeForm.physicalTherapy
-                      }
-                      onChange={(e) =>
-                        updateIntakeField(
-                          "physicalTherapy",
-                          e.target.value.trim() === ""
-                            ? "N/A"
-                            : e.target.value
-                        )
-                      }
-                    />
-                  </Field>
-
-                  <Field label="Mental Health Screening / Medications">
-                    <input
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                      rows="3"
                       placeholder="Relevant details"
-                      value={
-                        intakeForm.mentalHealthCombined === "N/A"
-                          ? ""
-                          : intakeForm.mentalHealthCombined
-                      }
+                      value={intakeForm.substanceUseNotes}
                       onChange={(e) =>
-                        updateIntakeField(
-                          "mentalHealthCombined",
-                          e.target.value.trim() === ""
-                            ? "N/A"
-                            : e.target.value
-                        )
+                        updateIntakeField("substanceUseNotes", e.target.value)
                       }
                     />
                   </Field>
-
-                  <Field label="Counseling">
-                    <input
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      placeholder="Relevant details"
-                      value={
-                        intakeForm.counseling === "N/A"
-                          ? ""
-                          : intakeForm.counseling
-                      }
-                      onChange={(e) =>
-                        updateIntakeField(
-                          "counseling",
-                          e.target.value.trim() === "" ? "N/A" : e.target.value
-                        )
-                      }
-                    />
-                  </Field>
-
-                  <CheckboxCard
-                    label="Any mental health screen positive"
-                    checked={intakeForm.anyMentalHealthPositive}
-                    onChange={(checked) =>
-                      updateIntakeField("anyMentalHealthPositive", checked)
-                    }
-                  />
-                </div>
-              </SectionCard>
-            </div>
-          )}
-
-          {intakeTab === 4 && (
-            <div className="space-y-6">
-              <SectionCard title="Logistics">
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <Field label="Transportation">
-                    <select
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      value={intakeForm.transportation}
-                      onChange={(e) =>
-                        updateIntakeField("transportation", e.target.value)
-                      }
-                    >
-                      <option value="">Select transportation</option>
-                      <option>Drove Self</option>
-                      <option>Someone Drove Pt</option>
-                      <option>Bus/Public Transport</option>
-                      <option>Walked/Bike</option>
-                      <option>Uber/Cab</option>
-                    </select>
-                  </Field>
-
-                  <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-4 text-sm text-blue-800">
-                    Bus/Public Transport patients will be prioritized in the
-                    queue.
-                  </div>
-
-                  <CheckboxCard
-                    label="Needs Elevator"
-                    checked={intakeForm.needsElevator}
-                    onChange={(checked) =>
-                      updateIntakeField("needsElevator", checked)
-                    }
-                  />
-
-                  <CheckboxCard
-                    label="Spanish Speaking"
-                    checked={!!intakeForm.spanishSpeaking}
-                    onChange={(checked) =>
-                      updateIntakeField("spanishSpeaking", checked)
-                    }
-                  />
-                </div>
-              </SectionCard>
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center justify-between border-t px-6 py-4">
-          <div className="flex gap-2">
-            <button
-              onClick={() => setIntakeTab((prev) => Math.max(0, prev - 1))}
-              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Back
-            </button>
-
-            <button
-              onClick={() => setIntakeTab((prev) => Math.min(4, prev + 1))}
-              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Next
-            </button>
+                )}
+              </div>
+            </SectionCard>
           </div>
+        )}
+
+        {intakeTab === 3 && (
+          <div className="space-y-6">
+            <SectionCard title="Referral / Service Needs">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <Field label="Dermatology">
+                  <input
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    placeholder="Reason or chief complaint"
+                    value={
+                      intakeForm.dermatology === "N/A"
+                        ? ""
+                        : intakeForm.dermatology
+                    }
+                    onChange={(e) =>
+                      updateIntakeField(
+                        "dermatology",
+                        e.target.value.trim() === "" ? "N/A" : e.target.value
+                      )
+                    }
+                  />
+                </Field>
+
+                <Field label="Ophthalmology">
+                  <input
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    placeholder="Reason or chief complaint"
+                    value={
+                      intakeForm.ophthalmology === "N/A"
+                        ? ""
+                        : intakeForm.ophthalmology
+                    }
+                    onChange={(e) =>
+                      updateIntakeField(
+                        "ophthalmology",
+                        e.target.value.trim() === ""
+                          ? "N/A"
+                          : e.target.value
+                      )
+                    }
+                  />
+                </Field>
+
+                <Field label="Optometry">
+                  <input
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    placeholder="Reason or chief complaint"
+                    value={
+                      intakeForm.optometry === "N/A"
+                        ? ""
+                        : intakeForm.optometry
+                    }
+                    onChange={(e) =>
+                      updateIntakeField(
+                        "optometry",
+                        e.target.value.trim() === "" ? "N/A" : e.target.value
+                      )
+                    }
+                  />
+                </Field>
+
+                <Field label="Diabetic Eye Exam in Past Year">
+                  <select
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    value={intakeForm.diabeticEyeExamPastYear}
+                    onChange={(e) =>
+                      updateIntakeField(
+                        "diabeticEyeExamPastYear",
+                        e.target.value
+                      )
+                    }
+                  >
+                    <option value="">Select one</option>
+                    <option>Yes</option>
+                    <option>No</option>
+                    <option>Not sure</option>
+                    <option>N/A</option>
+                  </select>
+                </Field>
+
+                <Field label="Physical Therapy">
+                  <input
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    placeholder="Reason or chief complaint"
+                    value={
+                      intakeForm.physicalTherapy === "N/A"
+                        ? ""
+                        : intakeForm.physicalTherapy
+                    }
+                    onChange={(e) =>
+                      updateIntakeField(
+                        "physicalTherapy",
+                        e.target.value.trim() === ""
+                          ? "N/A"
+                          : e.target.value
+                      )
+                    }
+                  />
+                </Field>
+
+                <Field label="Mental Health Screening / Medications">
+                  <input
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    placeholder="Relevant details"
+                    value={
+                      intakeForm.mentalHealthCombined === "N/A"
+                        ? ""
+                        : intakeForm.mentalHealthCombined
+                    }
+                    onChange={(e) =>
+                      updateIntakeField(
+                        "mentalHealthCombined",
+                        e.target.value.trim() === ""
+                          ? "N/A"
+                          : e.target.value
+                      )
+                    }
+                  />
+                </Field>
+
+                <Field label="Counseling">
+                  <input
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    placeholder="Relevant details"
+                    value={
+                      intakeForm.counseling === "N/A"
+                        ? ""
+                        : intakeForm.counseling
+                    }
+                    onChange={(e) =>
+                      updateIntakeField(
+                        "counseling",
+                        e.target.value.trim() === "" ? "N/A" : e.target.value
+                      )
+                    }
+                  />
+                </Field>
+
+                <CheckboxCard
+                  label="Any mental health screen positive"
+                  checked={intakeForm.anyMentalHealthPositive}
+                  onChange={(checked) =>
+                    updateIntakeField("anyMentalHealthPositive", checked)
+                  }
+                />
+              </div>
+            </SectionCard>
+          </div>
+        )}
+
+        {intakeTab === 4 && (
+          <div className="space-y-6">
+            <SectionCard title="Logistics">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <Field label="Transportation">
+                  <select
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                    value={intakeForm.transportation}
+                    onChange={(e) =>
+                      updateIntakeField("transportation", e.target.value)
+                    }
+                  >
+                    <option value="">Select transportation</option>
+                    <option>Drove Self</option>
+                    <option>Someone Drove Pt</option>
+                    <option>Bus/Public Transport</option>
+                    <option>Walked/Bike</option>
+                    <option>Uber/Cab</option>
+                  </select>
+                </Field>
+
+                <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-4 text-sm text-blue-800">
+                  Bus/Public Transport patients will be prioritized in the
+                  queue.
+                </div>
+
+                <CheckboxCard
+                  label="Needs Elevator"
+                  checked={intakeForm.needsElevator}
+                  onChange={(checked) =>
+                    updateIntakeField("needsElevator", checked)
+                  }
+                />
+
+                <CheckboxCard
+                  label="Spanish Speaking"
+                  checked={!!intakeForm.spanishSpeaking}
+                  onChange={(checked) =>
+                    updateIntakeField("spanishSpeaking", checked)
+                  }
+                />
+              </div>
+            </SectionCard>
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between border-t px-6 py-4">
+        <div className="flex gap-2">
+          <button
+            onClick={() => setIntakeTab((prev) => Math.max(0, prev - 1))}
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Back
+          </button>
 
           <button
-            onClick={submitPatient}
-            className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+            onClick={() => setIntakeTab((prev) => Math.min(4, prev + 1))}
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
-            Complete Intake
+            Next
           </button>
         </div>
+
+        <button
+          onClick={submitPatient}
+          className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+        >
+          Complete Intake
+        </button>
       </div>
+    </div>
   );
 }
 

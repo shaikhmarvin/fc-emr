@@ -2,6 +2,18 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./lib/supabase";
 import { createPatientInSupabase, updatePatientInSupabase } from "./api/patients";
 import {
+  parseLabsFromText,
+  extractPatientNameFromLabText as extractPatientNameFromLabTextFromParser,
+  formatPatientName,
+} from "./lib/labParser";
+import * as pdfjsLib from "pdfjs-dist";
+import pdfjsWorker from "pdfjs-dist/build/pdf.worker?url";
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+
+window.testLabParser = parseLabsFromText;
+import LabImportView from "./components/LabImportView";
+import {
   createEncounterInSupabase,
   updateEncounterInSupabase,
   createMedicationInSupabase,
@@ -15,6 +27,7 @@ import {
 } from "./api/encounters";
 import { useAuthSession } from "./hooks/useAuthSession";
 import { useClinicData } from "./hooks/useClinicData";
+import ToastStack from "./components/ToastStack";
 import { canStartIntake, canManageRoomBoard, canEditFormulary, canPrescribe, canChart, } from "./utils/permissions";
 import { fetchProfiles, updateProfileRole, updateProfileDetails } from "./api/profiles";
 import { createAuditLog, fetchAuditLogForEncounter } from "./api/audit";
@@ -131,6 +144,38 @@ function spanishBadge(encounter) {
   return null;
 }
 
+async function runGoogleOCR(base64Images) {
+  const { data, error } = await supabase.functions.invoke("google-ocr", {
+    body: { images: base64Images },
+  });
+
+  if (error) {
+    console.error("OCR error object:", error);
+
+    try {
+      const bodyText = await error.context?.text?.();
+      console.error("OCR error body:", bodyText);
+      throw new Error(bodyText || error.message || "OCR request failed");
+    } catch {
+      throw new Error(error.message || "OCR request failed");
+    }
+  }
+
+  return data?.texts || [];
+}
+
+async function runGoogleOCRInChunks(base64Images = [], chunkSize = 16) {
+  const allTexts = [];
+
+  for (let i = 0; i < base64Images.length; i += chunkSize) {
+    const chunk = base64Images.slice(i, i + chunkSize);
+    const texts = await runGoogleOCR(chunk);
+    allTexts.push(...(texts || []));
+  }
+
+  return allTexts;
+}
+
 function diabetesBadge(encounter) {
   const hasDM =
     encounter.dm === true ||
@@ -189,16 +234,109 @@ function getLocalDateInputValue(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
+function computeLabCounts(labs = []) {
+  let missing_count = 0;
+  let autofilled_count = 0;
+  let needs_review_count = 0;
+
+  labs.forEach((lab) => {
+    const isMissing = lab.missing === true || lab.value == null || lab.value === "";
+    const isAutofilled = lab.autoFilled === true;
+
+    const isSuspicious =
+      lab.suspicious === true ||
+      lab.duplicateType === "same_encounter" ||
+      lab.duplicateType === "recent";
+
+    if (isMissing) missing_count++;
+    if (isAutofilled) autofilled_count++;
+    if (isSuspicious || isMissing) needs_review_count++;
+  });
+
+  return {
+    missing_count,
+    autofilled_count,
+    needs_review_count,
+  };
+}
+
+function categorizeLabsForExport(labs = []) {
+  const trueMissingLabs = [];
+  const panelPlaceholders = [];
+  const suspiciousLabs = [];
+
+  labs.forEach((lab) => {
+    const isMissing = lab.missing === true || lab.value == null || lab.value === "";
+    const isAutofilled = lab.autoFilled === true;
+
+    const isSuspicious =
+      lab.suspicious === true ||
+      lab.duplicateType === "same_encounter" ||
+      lab.duplicateType === "recent";
+
+    // 🔴 TRUE missing (should exist but no value)
+    if (isMissing && !isAutofilled) {
+      trueMissingLabs.push(lab);
+    }
+
+    // ⚪ panel placeholders (expected but intentionally blank)
+    if (isMissing && isAutofilled) {
+      panelPlaceholders.push(lab);
+    }
+
+    // 🟡 suspicious
+    if (isSuspicious) {
+      suspiciousLabs.push(lab);
+    }
+  });
+
+  return {
+    trueMissingLabs,
+    panelPlaceholders,
+    suspiciousLabs,
+  };
+}
+
 export default function App() {
   async function testSupabaseConnection() {
-
-    const { data, error } = await supabase.from("patients").select("*");
+    const { error } = await supabase.from("patients").select("*").limit(1);
 
     if (error) {
       console.error(error);
-      alert("Error: " + error.message);
+      showToast({
+        title: "Supabase error",
+        message: error.message,
+        type: "error",
+      });
     } else {
-      alert("Supabase connection works!");
+      showToast({
+        title: "Connection works",
+        message: "Supabase is reachable.",
+        type: "success",
+      });
+    }
+  }
+
+  const [toasts, setToasts] = useState([]);
+
+  function dismissToast(toastId) {
+    setToasts((prev) => prev.filter((toast) => toast.id !== toastId));
+  }
+
+  function showToast({
+    title = "Notice",
+    message = "",
+    type = "info",
+    duration = 3500,
+  }) {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+    setToasts((prev) => [...prev, { id, title, message, type }]);
+
+    if (duration > 0) {
+      window.setTimeout(() => {
+        setToasts((prev) => prev.filter((toast) => toast.id !== id));
+      }, duration);
     }
   }
 
@@ -846,14 +984,6 @@ export default function App() {
           }
 
           if (payload.eventType === "UPDATE") {
-            setProfiles((prev) =>
-              prev.map((p) =>
-                p.id === payload.new.id ? payload.new : p
-              )
-            );
-          }
-
-          if (payload.eventType === "UPDATE") {
             setProfiles((prev) => {
               let changed = false;
 
@@ -881,6 +1011,14 @@ export default function App() {
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showIntakeModal, setShowIntakeModal] = useState(false);
+  const [labImportRawText, setLabImportRawText] = useState("");
+  const [labImportPacket, setLabImportPacket] = useState(null);
+  const [labImportPackets, setLabImportPackets] = useState([]);
+  const [selectedLabImportPacketId, setSelectedLabImportPacketId] = useState(null);
+  const [activeLabImportBatchId, setActiveLabImportBatchId] = useState(null);
+  const [labImportLoading, setLabImportLoading] = useState(false);
+  const [ocrUploading, setOcrUploading] = useState(false);
+  const [ocrError, setOcrError] = useState("");
   const [intakeTab, setIntakeTab] = useState(0);
   const [intakeForm, setIntakeForm] = useState(EMPTY_FORM);
   const [searchForm, setSearchForm] = useState(EMPTY_SEARCH);
@@ -897,6 +1035,1608 @@ export default function App() {
   });
   const dashboardSelectedPatient =
     patients.find((p) => p.id === dashboardSelectedPatientId) || null;
+
+
+  function normalizeExtractedDate(value = "") {
+    const text = String(value || "").trim();
+    if (!text) return "";
+
+    // matches 3/4/2026 or 03/04/2026
+    const slashMatch = text.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{2,4})\b/);
+    if (slashMatch) {
+      let [, month, day, year] = slashMatch;
+      if (year.length === 2) {
+        year = `20${year}`;
+      }
+
+      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+
+    // already yyyy-mm-dd
+    const isoMatch = text.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+    if (isoMatch) {
+      return isoMatch[0];
+    }
+
+    return "";
+  }
+
+  function extractPatientNameFromLabText(rawText = "") {
+    const lines = String(rawText || "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    function cleanName(value = "") {
+      let cleaned = String(value || "")
+        .replace(/\bmedical record number\b.*$/i, "")
+        .replace(/\bmrn\b.*$/i, "")
+        .replace(/\bdob\b.*$/i, "")
+        .replace(/\bage\b.*$/i, "")
+        .replace(/\bmale\b.*$/i, "")
+        .replace(/\bfemale\b.*$/i, "")
+        .replace(/\bsex\b.*$/i, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (cleaned.includes(",")) {
+        const parts = cleaned.split(",").map((part) => part.trim()).filter(Boolean);
+        if (parts.length >= 2) {
+          cleaned = `${parts.slice(1).join(" ")} ${parts[0]}`.trim();
+        }
+      }
+
+      return cleaned;
+    }
+
+    function looksLikePersonName(value = "") {
+      const text = String(value || "").trim();
+      if (!text) return false;
+      if (/\d/.test(text)) return false;
+      if (
+        /(egfr|legend|critical|footnote|corrected abnormal|result symbol|reference range|units|molecular diagnostics|procedure|collected|specimen|reactive|non-reactive|detected|not detected|health system|hospital lab|chemistry|cbc|immunology|hiv screen)/i.test(text)
+      ) {
+        return false;
+      }
+
+      const words = text.split(/\s+/).filter(Boolean);
+      if (words.length < 2 || words.length > 4) return false;
+
+      return true;
+    }
+
+    for (let i = 0; i < lines.length; i += 1) {
+      const compact = lines[i].replace(/\s+/g, " ").trim();
+
+      const patientSameLine = compact.match(
+        /\bpat(?:ient|lent|lient|ent)\s*[:\-]?\s*(.*)$/i
+      );
+
+      if (patientSameLine) {
+        const candidates = [
+          cleanName(patientSameLine[1]),
+          cleanName(lines[i + 1] || ""),
+          cleanName(lines[i - 1] || ""),
+          cleanName(lines[i + 2] || ""),
+          cleanName(lines[i - 2] || ""),
+        ];
+
+        for (const candidate of candidates) {
+          if (looksLikePersonName(candidate)) return candidate;
+        }
+      }
+    }
+
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+
+      if (/^[A-Z' -]+,\s*[A-Z][A-Z' -]+$/.test(line)) {
+        const cleaned = cleanName(line);
+        const nearby = [
+          lines[i - 1] || "",
+          lines[i + 1] || "",
+          lines[i + 2] || "",
+        ].join(" ");
+
+        if (
+          looksLikePersonName(cleaned) &&
+          /patient|dob|mrn/i.test(nearby)
+        ) {
+          return cleaned;
+        }
+      }
+    }
+
+    return "";
+  }
+
+  function extractDobFromLabText(rawText = "") {
+    const lines = String(rawText || "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    for (const line of lines) {
+      const dobMatch = line.match(/\bdob\s*[:\-]?\s*(\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2})/i);
+      if (dobMatch) {
+        return normalizeExtractedDate(dobMatch[1]);
+      }
+    }
+
+    // fallback for OCR lines like:
+    // "M, 57 yr, 1/12/1969"
+    for (const line of lines) {
+      const anyDateMatch = line.match(/\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/);
+      if (anyDateMatch) {
+        return normalizeExtractedDate(anyDateMatch[1]);
+      }
+    }
+
+    return "";
+  }
+
+  function extractCollectedDateFromLabText(rawText = "") {
+    const lines = String(rawText || "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+
+      const collectedMatch = line.match(
+        /\bcollected\b.*?(\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2})/i
+      );
+      if (collectedMatch) {
+        return normalizeExtractedDate(collectedMatch[1]);
+      }
+
+      if (/^collected date\/time$/i.test(line) || /^collected$/i.test(line)) {
+        const nextLine = lines[i + 1] || "";
+        const nextDateMatch = nextLine.match(
+          /\b(\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2})\b/i
+        );
+        if (nextDateMatch) {
+          return normalizeExtractedDate(nextDateMatch[1]);
+        }
+      }
+    }
+
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+
+      const orderedMatch = line.match(
+        /\bordered\b.*?(\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2})/i
+      );
+      if (orderedMatch) {
+        return normalizeExtractedDate(orderedMatch[1]);
+      }
+
+      if (/^ordered date\/time$/i.test(line) || /^ordered$/i.test(line)) {
+        const nextLine = lines[i + 1] || "";
+        const nextDateMatch = nextLine.match(
+          /\b(\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2})\b/i
+        );
+        if (nextDateMatch) {
+          return normalizeExtractedDate(nextDateMatch[1]);
+        }
+      }
+    }
+
+    return "";
+  }
+
+  function normalizePatientMatchText(value = "") {
+    let text = String(value || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/medical record number:.*$/i, "")
+      .replace(/\bmrn:.*$/i, "")
+      .replace(/[^a-z0-9,\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (text.includes(",")) {
+      const parts = text.split(",").map((part) => part.trim()).filter(Boolean);
+      if (parts.length >= 2) {
+        text = `${parts.slice(1).join(" ")} ${parts[0]}`.trim();
+      }
+    }
+
+    return text.replace(/\s+/g, " ").trim();
+  }
+
+  function buildCanonicalPatientNameKey(value = "") {
+    const cleaned = normalizePatientMatchText(value);
+
+    if (!cleaned) return "";
+
+    const rawParts = cleaned
+      .split(" ")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => part.replace(/[^a-z0-9]/g, ""));
+
+    if (rawParts.length === 0) return "";
+
+    const mergedParts = [];
+    for (const part of rawParts) {
+      const last = mergedParts[mergedParts.length - 1] || "";
+
+      if (
+        last &&
+        last.length > 1 &&
+        part.length === 1
+      ) {
+        mergedParts[mergedParts.length - 1] = `${last}${part}`;
+        continue;
+      }
+
+      mergedParts.push(part);
+    }
+
+    return mergedParts.sort().join(" ");
+  }
+
+  function splitNameParts(fullName = "") {
+    const cleaned = normalizePatientMatchText(fullName);
+
+    if (!cleaned) {
+      return {
+        full: "",
+        first: "",
+        last: "",
+      };
+    }
+
+    const parts = cleaned.split(" ").filter(Boolean);
+
+    return {
+      full: cleaned,
+      first: parts[0] || "",
+      last: parts.length > 1 ? parts[parts.length - 1] : "",
+    };
+  }
+
+  function datesMatchExactly(a = "", b = "") {
+    return String(a || "").trim() !== "" && String(a || "").trim() === String(b || "").trim();
+  }
+
+  function scorePatientLabMatch(patient, extractedPatientName, extractedDob) {
+    const patientFullName = `${patient.firstName || ""} ${patient.lastName || ""}`.trim();
+
+    const extracted = splitNameParts(extractedPatientName);
+    const patientName = splitNameParts(patientFullName);
+
+    let score = 0;
+
+    if (extracted.full && patientName.full && extracted.full === patientName.full) {
+      score += 100;
+    }
+
+    if (extracted.first && patientName.first && extracted.first === patientName.first) {
+      score += 25;
+    }
+
+    if (extracted.last && patientName.last && extracted.last === patientName.last) {
+      score += 40;
+    }
+
+    if (
+      extracted.last &&
+      patientName.last &&
+      (extracted.last.includes(patientName.last) ||
+        patientName.last.includes(extracted.last))
+    ) {
+      score += 15;
+    }
+
+    if (
+      extracted.first &&
+      patientName.first &&
+      (extracted.first.includes(patientName.first) ||
+        patientName.first.includes(extracted.first))
+    ) {
+      score += 10;
+    }
+
+    if (
+      extracted.first &&
+      patientName.first &&
+      extracted.first[0] &&
+      patientName.first[0] &&
+      extracted.first[0] === patientName.first[0]
+    ) {
+      score += 5;
+    }
+
+    if (
+      extracted.last &&
+      patientName.last &&
+      extracted.last[0] &&
+      patientName.last[0] &&
+      extracted.last[0] === patientName.last[0]
+    ) {
+      score += 10;
+    }
+
+    if (datesMatchExactly(patient.dob, extractedDob)) {
+      score += 60;
+    }
+
+    return score;
+  }
+
+  function findBestPatientMatch(patients = [], extractedName = "", extractedDob = "") {
+    if (!patients || patients.length === 0) {
+      return {
+        status: "unresolved",
+        match: null,
+        possible: [],
+        reason: "No patients loaded yet.",
+      };
+    }
+
+    let bestMatch = null;
+    let bestScore = 0;
+    const possibleMatches = [];
+
+    for (const patient of patients) {
+      const score = scorePatientLabMatch(patient, extractedName, extractedDob);
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = patient;
+      }
+
+      if (score >= 60) {
+        possibleMatches.push({ patient, score });
+      }
+    }
+
+    if (bestScore >= 120 && bestMatch) {
+      return {
+        status: "matched",
+        match: bestMatch,
+        possible: [],
+        reason: "",
+      };
+    }
+
+    if (possibleMatches.length > 0) {
+      return {
+        status: "possible_match",
+        match: null,
+        possible: possibleMatches
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 3)
+          .map((entry) => entry.patient),
+        reason: "Possible patient matches found.",
+      };
+    }
+
+    return {
+      status: "unresolved",
+      match: null,
+      possible: [],
+      reason: "No confident patient match found.",
+    };
+  }
+
+  function normalizeBulkLabLines(rawText = "") {
+    return String(rawText || "")
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      .split("\n")
+      .map((line) => line.trimEnd());
+  }
+
+  function looksLikePatientStart(line = "", prev = "", next = "", nextTwo = "") {
+    const text = String(line || "").trim();
+    const prevText = String(prev || "").trim();
+    const nextText = String(next || "").trim();
+    const nextTwoText = String(nextTwo || "").trim();
+
+    if (!text) return false;
+
+    if (
+      /^pat(?:ient|lent|lient|ent)\s*[:\s-]/i.test(text) ||
+      /\bpat(?:ient|lent|lient|ent)\s+.+\bmrn\b/i.test(text) ||
+      /^name\s*[:\s-]/i.test(text)
+    ) {
+      return true;
+    }
+
+    const looksLikeCommaName =
+      /^[A-Z' -]+,\s*[A-Z][A-Z' -]+$/.test(text) &&
+      !/EGFR|LEGEND|CRITICAL|FOOTNOTE|CORRECTED ABNORMAL|MOLECULAR DIAGNOSTICS|CHEMISTRY|CBC|IMMUNOLOGY|HIV/.test(text);
+
+    if (!looksLikeCommaName) return false;
+
+    return (
+      /^pat(?:ient|lent|lient|ent)\s*[:\s-]*$/i.test(nextText) ||
+      /^pat(?:ient|lent|lient|ent)\s*[:\s-]/i.test(nextText) ||
+      /^pat(?:ient|lent|lient|ent)\s*[:\s-]*$/i.test(prevText) ||
+      /^dob\s*[:\-]/i.test(nextText) ||
+      /^dob\s*[:\-]/i.test(nextTwoText)
+    );
+  }
+
+  function looksLikeDobLine(line = "") {
+    return /\bdob\s*[:\-]?\s*\d{1,2}\/\d{1,2}\/\d{2,4}/i.test(String(line || "").trim());
+  }
+
+  function looksLikeMrnLine(line = "") {
+    return /\bmrn\b/i.test(String(line || "").trim());
+  }
+
+  function cleanOcrLabText(rawText = "") {
+    const lines = String(rawText || "")
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      .split("\n")
+      .map((line) => line.replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+
+    const cleaned = [];
+    let skipInterpretiveBlock = false;
+
+    for (const line of lines) {
+      const lower = line.toLowerCase();
+
+      if (
+        /^@@@\s*\d+\s*@@@$/.test(line) ||
+        /system generated/i.test(line) ||
+        /page \d+ of \d+/i.test(line) ||
+        /umctxrrd/i.test(line) ||
+        /rrd/i.test(line) && /180679/i.test(line) ||
+        /^\(?806\)?\s*775[-–]?\d+/i.test(line) ||
+        /602 indiana avenue/i.test(line) ||
+        /lubbock,\s*tx\s*7941/i.test(line) ||
+        /^legend:/i.test(line) ||
+        /^attending physician:/i.test(line) ||
+        /^ordering physician:/i.test(line) ||
+        /^financial number:/i.test(line) ||
+        /^location:/i.test(line) ||
+        /^consulting physician:/i.test(line) ||
+        /^entered by:/i.test(line) ||
+        /^order details:/i.test(line) ||
+        /^order comment:/i.test(line) ||
+        /^order start date/i.test(line) ||
+        /^order status:/i.test(line) ||
+        /^end-state/i.test(line) ||
+        /^catalog type:/i.test(line) ||
+        /^activity type:/i.test(line)
+      ) {
+        continue;
+      }
+
+      if (/^interpretive data$/i.test(line) || /^order comments$/i.test(line)) {
+        skipInterpretiveBlock = true;
+        continue;
+      }
+
+      if (skipInterpretiveBlock) {
+        const looksLikeNewSection =
+          /^patient name:/i.test(line) ||
+          /^patient:/i.test(line) ||
+          /^dob:/i.test(line) ||
+          /^collected/i.test(line) ||
+          /^procedure/i.test(line) ||
+          /^chlamydia/i.test(line) ||
+          /^neisseria/i.test(line) ||
+          /^hiv /i.test(line) ||
+          /^syphilis/i.test(line) ||
+          /^hepatitis/i.test(line) ||
+          /^wbc$/i.test(line) ||
+          /^rbc$/i.test(line) ||
+          /^hemoglobin/i.test(line) ||
+          /^hematocrit/i.test(line) ||
+          /^sodium/i.test(line) ||
+          /^potassium/i.test(line) ||
+          /^chloride/i.test(line) ||
+          /^glucose/i.test(line) ||
+          /^bun$/i.test(line) ||
+          /^creatinine/i.test(line) ||
+          /^calcium/i.test(line) ||
+          /^cholesterol/i.test(line) ||
+          /^triglycerides/i.test(line) ||
+          /^hdl/i.test(line) ||
+          /^ldl/i.test(line) ||
+          /^tsh/i.test(line) ||
+          /^t4/i.test(line) ||
+          /^estradiol/i.test(line);
+
+        if (!looksLikeNewSection) {
+          continue;
+        }
+
+        skipInterpretiveBlock = false;
+      }
+
+      const normalizedLine = line
+        .replace(/Medical Record Number:/gi, "MRN:")
+        .replace(/Patient Name:\s*/i, "Patient: ")
+        .replace(/\bDORB:\b/i, "DOB:")
+        .replace(/\bCoflected\b|\bCollected Dato\b|\bCollegted\b|\bCollacted\b/gi, "Collected")
+        .replace(/\bChiamydia\b/gi, "Chlamydia")
+        .replace(/\bHemaogiobin\b/gi, "Hemoglobin")
+        .replace(/\bSereen\b/gi, "Screen")
+        .replace(/\bResuit\b/gi, "Result")
+        .replace(/\bNeisseria gonorthoeae\b/gi, "Neisseria gonorrhoeae")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+
+      cleaned.push(normalizedLine);
+    }
+
+    return cleaned.join("\n");
+  }
+
+  function splitBulkLabTextIntoPackets(rawText = "") {
+    const lines = normalizeBulkLabLines(rawText).filter((line) => line.trim() !== "");
+
+    if (lines.length === 0) return [];
+
+    const packets = [];
+    let current = [];
+
+    function pushCurrent() {
+      const text = current.join("\n").trim();
+      if (text) {
+        packets.push({
+          packetId: `packet-${packets.length + 1}`,
+          rawText: text,
+        });
+      }
+      current = [];
+    }
+
+    function looksLikeDivider(line = "") {
+      const text = String(line || "").trim();
+      return /^[-_=]{5,}$/.test(text);
+    }
+
+    function windowHasDob(startIndex, endIndex) {
+      const start = Math.max(0, startIndex);
+      const end = Math.min(lines.length - 1, endIndex);
+
+      for (let i = start; i <= end; i += 1) {
+        if (looksLikeDobLine(lines[i])) return true;
+      }
+      return false;
+    }
+
+    function currentPacketLooksReal() {
+      if (current.length === 0) return false;
+
+      const joined = current.join("\n").toLowerCase();
+      return (
+        joined.includes("collected date") ||
+        joined.includes("procedure") ||
+        joined.includes("result") ||
+        joined.includes("chemistry") ||
+        joined.includes("cbc") ||
+        joined.includes("immunology") ||
+        joined.includes("molecular diagnostics")
+      );
+    }
+
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+      const prev = i > 0 ? lines[i - 1] : "";
+      const next = i < lines.length - 1 ? lines[i + 1] : "";
+      const next2 = i < lines.length - 2 ? lines[i + 2] : "";
+      const next3 = i < lines.length - 3 ? lines[i + 3] : "";
+
+      if (looksLikeDivider(line)) {
+        continue;
+      }
+
+      const patientBoundary =
+        current.length > 0 &&
+        currentPacketLooksReal() &&
+        (
+          (
+            looksLikePatientStart(line) &&
+            (
+              looksLikeDobLine(line) ||
+              looksLikeDobLine(prev) ||
+              looksLikeDobLine(next) ||
+              looksLikeDobLine(next2) ||
+              looksLikeDobLine(next3) ||
+              windowHasDob(i - 1, i + 3)
+            )
+          ) ||
+          (
+            /^patient\s*:/i.test(String(line || "").trim()) &&
+            windowHasDob(i, i + 3)
+          )
+        );
+
+      if (patientBoundary) {
+        pushCurrent();
+      }
+
+      current.push(line);
+    }
+
+    pushCurrent();
+
+    return packets;
+  }
+
+  function classifyLabPacket(rawText = "") {
+    const text = rawText.toLowerCase();
+
+    const hasInfectious =
+      text.includes("chlamydia") ||
+      text.includes("gonorrhea") ||
+      text.includes("trichomonas") ||
+      text.includes("syphilis") ||
+      text.includes("hiv") ||
+      text.includes("hepatitis");
+
+    const hasPathology =
+      text.includes("pap") ||
+      text.includes("cytology") ||
+      text.includes("hpv") ||
+      text.includes("specimen adequacy");
+
+    const hasRadiology =
+      text.includes("findings") &&
+      text.includes("impression");
+
+    const hasSingleTest =
+      text.includes("thyroid") ||
+      text.includes("tsh") ||
+      text.includes("a1c") ||
+      text.includes("hemoglobin a1c") ||
+      text.includes("ferritin") ||
+      text.includes("iron level") ||
+      text.includes("tibc") ||
+      text.includes("vitamin d") ||
+      text.includes("b12");
+
+    const hasLiver =
+      /\bast\b/.test(text) ||
+      /\balt\b/.test(text) ||
+      /\balk(?:aline)?\s+phos(?:phatase)?\b/.test(text) ||
+      /\bbilirubin\b/.test(text);
+
+    const hasRenal =
+      /\begfr\b/.test(text) ||
+      /\brenal\b/.test(text) ||
+      /\bcreatinine clearance\b/.test(text) ||
+      /\bphosphorus\b/.test(text);
+
+    const hasCbc =
+      text.includes("white blood cell") ||
+      text.includes("wbc") ||
+      text.includes("hematocrit") ||
+      text.includes("mcv") ||
+      text.includes("platelet") ||
+      text.includes("cbc");
+
+    const hasChemistry =
+      text.includes("sodium") ||
+      text.includes("potassium") ||
+      text.includes("glucose") ||
+      text.includes("creatinine") ||
+      text.includes("bun") ||
+      text.includes("chemistry");
+
+    const structuredHits = [hasLiver, hasRenal, hasCbc, hasChemistry].filter(Boolean).length;
+
+    // IMPORTANT:
+    // if a packet clearly has multi-panel structure, keep it multi-panel
+    // even if it also contains hepatitis/HIV/TSH/A1c pages merged into the same patient packet
+    if (structuredHits >= 2) {
+      return "Multi-Panel Report";
+    }
+
+    if (hasPathology) return "Pathology / PAP";
+    if (hasRadiology) return "Radiology / Report";
+    if (hasInfectious) return "Infectious / STD";
+    if (hasSingleTest) return "Single Test Report";
+
+    if (hasLiver) return "liver";
+    if (hasRenal) return "renal";
+    if (hasCbc) return "cbc";
+    if (hasChemistry) return "chemistry";
+
+    if (text.includes("umc")) {
+      return "umc_structured";
+    }
+
+    return "unknown";
+  }
+
+  function buildLabImportPacketFromText(rawText, packetType = "unknown") {
+    const rawExtractedPatientName =
+      extractPatientNameFromLabTextFromParser(rawText) ||
+      extractPatientNameFromLabText(rawText);
+
+    const extractedPatientName = formatPatientName(rawExtractedPatientName);
+    const extractedDob = extractDobFromLabText(rawText);
+    const collectedDate =
+      extractCollectedDateFromLabText(rawText) || formatClinicDate();
+
+    const shouldParseAsStructuredLabs =
+      packetType !== "Pathology / PAP" &&
+      packetType !== "Radiology / Report";
+
+    const parsedLabs = shouldParseAsStructuredLabs
+      ? window.testLabParser(rawText, [], collectedDate)
+      : [];
+
+    const matchResult = findBestPatientMatch(
+      patients,
+      extractedPatientName,
+      extractedDob
+    );
+
+    return {
+      extractedPatientName,
+      extractedDob,
+      collectedDate,
+      matchStatus: matchResult.status,
+      matchedPatient: matchResult.match || null,
+      possibleMatches: matchResult.possible || [],
+      unresolvedReason: matchResult.reason || "",
+      confirmedPatient: matchResult.match || null,
+      labs: parsedLabs,
+      rawText,
+      reviewStatus: "unsaved",
+      savedAt: null,
+      skippedAt: null,
+    };
+  }
+
+  function buildBulkLabImportPacketsFromText(rawText) {
+    const chunks = mergeConsecutivePacketsForSamePatient(
+      splitBulkLabTextIntoPackets(rawText)
+    );
+
+    const builtPackets = chunks
+      .map((chunk, index) => {
+        const packetType = classifyLabPacket(chunk.rawText);
+        const packet = buildLabImportPacketFromText(chunk.rawText, packetType);
+
+        return {
+          ...packet,
+          packetId: chunk.packetId || `packet-${index + 1}`,
+          sourceRawText: chunk.rawText,
+          packetType,
+          reviewStatus: packet.reviewStatus || "unsaved",
+          savedAt: packet.savedAt || null,
+          skippedAt: packet.skippedAt || null,
+        };
+      })
+      .filter((packet) => {
+        const hasLabs = (packet.labs || []).length > 0;
+        const hasExtractedPatient =
+          !!String(packet.extractedPatientName || "").trim() &&
+          !!String(packet.extractedDob || "").trim();
+
+        const isNonNumericButImportant =
+          packet.packetType === "Pathology / PAP" ||
+          packet.packetType === "Radiology / Report" ||
+          packet.packetType === "Single Test Report";
+
+        return hasLabs || isNonNumericButImportant || hasExtractedPatient;
+      });
+
+    return mergeDuplicatePacketsByPatientDobAndType(builtPackets);
+  }
+
+  function mergeConsecutivePacketsForSamePatient(chunks = []) {
+    if (!Array.isArray(chunks) || chunks.length <= 1) return chunks;
+
+    const merged = [];
+
+    function normalizeNameForMerge(value = "") {
+      return buildCanonicalPatientNameKey(value);
+    }
+
+    for (const chunk of chunks) {
+      const rawText = chunk?.rawText || "";
+      const patientName = normalizeNameForMerge(extractPatientNameFromLabText(rawText));
+      const dob = extractDobFromLabText(rawText);
+
+      const last = merged[merged.length - 1];
+
+      if (last) {
+        const lastPatientName = normalizeNameForMerge(
+          extractPatientNameFromLabText(last.rawText)
+        );
+        const lastDob = extractDobFromLabText(last.rawText);
+
+        const samePatient =
+          (
+            patientName &&
+            lastPatientName &&
+            patientName === lastPatientName &&
+            dob &&
+            lastDob &&
+            dob === lastDob
+          ) ||
+          (
+            !patientName &&
+            !!lastPatientName &&
+            dob &&
+            lastDob &&
+            dob === lastDob
+          );
+
+        if (samePatient) {
+          last.rawText = `${last.rawText}\n${rawText}`.trim();
+          continue;
+        }
+      }
+
+      merged.push({ ...chunk });
+    }
+
+    return merged.map((chunk, index) => ({
+      ...chunk,
+      packetId: `packet-${index + 1}`,
+    }));
+  }
+
+  function mergeDuplicatePacketsByPatientDobAndType(packets = []) {
+    if (!Array.isArray(packets) || packets.length <= 1) return packets;
+
+    const mergedMap = new Map();
+
+    function makeKey(packet) {
+      let name = buildCanonicalPatientNameKey(packet.extractedPatientName || "");
+
+      name = name
+        .replace(/[^a-z]/gi, "")   // remove commas, spaces, punctuation
+        .toLowerCase();
+
+      const dob = String(packet.extractedDob || "").trim();
+
+      return `${name}__${dob}`;
+    }
+
+    function pickPreferredPacketType(existingType = "", nextType = "") {
+      const priority = {
+        "multi-panel report": 5,
+        "infectious / std": 4,
+        "single test report": 3,
+        "cbc": 2,
+        "chemistry": 2,
+        "unknown": 1,
+      };
+
+      const a = String(existingType || "").trim().toLowerCase();
+      const b = String(nextType || "").trim().toLowerCase();
+
+      return (priority[b] || 0) > (priority[a] || 0) ? nextType : existingType;
+    }
+
+    for (const packet of packets) {
+      const key = makeKey(packet);
+
+      if (!mergedMap.has(key)) {
+        mergedMap.set(key, {
+          ...packet,
+          rawText: packet.rawText || packet.sourceRawText || "",
+          sourceRawText: packet.sourceRawText || packet.rawText || "",
+        });
+        continue;
+      }
+
+      const existing = mergedMap.get(key);
+
+      const combinedLabs = [...(existing.labs || [])];
+      const seenLabKeys = new Set(
+        combinedLabs.map(
+          (lab) =>
+            `${lab.key || lab.displayName || ""}__${String(lab.value ?? "").trim()}__${lab.group || ""}`
+        )
+      );
+
+      for (const lab of packet.labs || []) {
+        const labKey = `${lab.key || lab.displayName || ""}__${String(lab.value ?? "").trim()}__${lab.group || ""}`;
+        if (!seenLabKeys.has(labKey)) {
+          combinedLabs.push(lab);
+          seenLabKeys.add(labKey);
+        }
+      }
+
+      const existingName = String(existing.extractedPatientName || "").trim();
+      const nextName = String(packet.extractedPatientName || "").trim();
+
+      const preferredExtractedPatientName =
+        existingName && nextName
+          ? (existingName.length >= nextName.length ? existingName : nextName)
+          : (existingName || nextName);
+
+      mergedMap.set(key, {
+        ...existing,
+        extractedPatientName: preferredExtractedPatientName,
+        packetType: pickPreferredPacketType(existing.packetType, packet.packetType),
+        labs: combinedLabs,
+        rawText: `${existing.rawText}\n${packet.rawText || packet.sourceRawText || ""}`.trim(),
+        sourceRawText: `${existing.sourceRawText}\n${packet.sourceRawText || packet.rawText || ""}`.trim(),
+        possibleMatches:
+          existing.possibleMatches?.length > 0
+            ? existing.possibleMatches
+            : packet.possibleMatches || [],
+        matchedPatient: existing.matchedPatient || packet.matchedPatient || null,
+        confirmedPatient: existing.confirmedPatient || packet.confirmedPatient || null,
+      });
+    }
+
+    return Array.from(mergedMap.values()).map((packet, index) => ({
+      ...packet,
+      packetId: `packet-${index + 1}`,
+    }));
+  }
+
+  function mapLabImportDbRowToPacket(row) {
+    const matchedPatient =
+      row.matched_patient_id
+        ? patients.find((p) => String(p.id) === String(row.matched_patient_id)) || null
+        : null;
+
+    const possibleMatches = Array.isArray(row.match_candidates_json)
+      ? row.match_candidates_json
+        .map((entry) => {
+          const id =
+            entry?.id ||
+            entry?.patient_id ||
+            entry?.patientId ||
+            null;
+
+          if (!id) return null;
+
+          return patients.find((p) => String(p.id) === String(id)) || null;
+        })
+        .filter(Boolean)
+      : [];
+
+    return {
+      packetId: row.id,
+      batchId: row.batch_id,
+      extractedPatientName: row.extracted_name || "",
+      extractedDob: row.extracted_dob || "",
+      collectedDate: row.collected_date || "",
+      packetType: row.packet_type || "unknown",
+      rawText: row.raw_text || "",
+      sourceRawText: row.raw_text || "",
+      labs: Array.isArray(row.parsed_labs_json) ? row.parsed_labs_json : [],
+      reviewStatus: row.review_status || "unreviewed",
+      savedAt: row.saved_at || null,
+      skippedAt: row.skipped_at || null,
+      matchedPatient,
+      confirmedPatient: matchedPatient,
+      matchStatus: matchedPatient
+        ? "matched"
+        : possibleMatches.length > 0
+          ? "possible_match"
+          : "unresolved",
+      possibleMatches,
+      unresolvedReason: matchedPatient
+        ? ""
+        : "No confident patient match found.",
+      matchedEncounterId: row.matched_encounter_id || null,
+      suspiciousCount: row.suspicious_count || 0,
+      missingCount: row.missing_count || 0,
+      totalLabCount: row.total_lab_count || 0,
+    };
+  }
+
+  async function loadSharedLabImportBatch(batchId = null) {
+    if (!session) return;
+
+    setLabImportLoading(true);
+
+    try {
+      let activeBatchId = batchId;
+
+      if (!activeBatchId) {
+        const { data: batchRows, error: batchError } = await supabase
+          .from("lab_import_batches")
+          .select("id, created_at, status")
+          .eq("status", "active")
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (batchError) throw batchError;
+
+        activeBatchId = batchRows?.[0]?.id || null;
+      }
+
+      if (!activeBatchId) {
+        setActiveLabImportBatchId(null);
+        setLabImportPackets([]);
+        setLabImportPacket(null);
+        setSelectedLabImportPacketId(null);
+        return;
+      }
+
+      const { data: packetRows, error: packetError } = await supabase
+        .from("lab_import_packets")
+        .select("*")
+        .eq("batch_id", activeBatchId)
+        .order("created_at", { ascending: true });
+
+      if (packetError) throw packetError;
+
+      const mappedPackets = (packetRows || []).map(mapLabImportDbRowToPacket);
+
+      setActiveLabImportBatchId(activeBatchId);
+      setLabImportPackets(mappedPackets);
+
+      const nextSelectedId =
+        selectedLabImportPacketId &&
+          mappedPackets.some((packet) => packet.packetId === selectedLabImportPacketId)
+          ? selectedLabImportPacketId
+          : mappedPackets[0]?.packetId || null;
+
+      setSelectedLabImportPacketId(nextSelectedId);
+      setLabImportPacket(
+        mappedPackets.find((packet) => packet.packetId === nextSelectedId) || null
+      );
+    } catch (error) {
+  console.error("Failed to load shared lab import batch:", error);
+  showToast({
+    title: "Failed to load lab batch",
+    message: error.message,
+    type: "error",
+    duration: 5000,
+  });
+} finally {
+      setLabImportLoading(false);
+    }
+  }
+
+  async function createSharedLabImportBatchWithPackets(packets, source = "manual") {
+    if (!session?.user?.id) {
+      throw new Error("No signed-in user found.");
+    }
+
+    const { data: batchRow, error: batchError } = await supabase
+      .from("lab_import_batches")
+      .insert({
+        created_by: session.user.id,
+        status: "active",
+        source,
+      })
+      .select()
+      .single();
+
+    if (batchError) throw batchError;
+
+    const rowsToInsert = (packets || []).map((packet) => ({
+      batch_id: batchRow.id,
+      extracted_name: packet.extractedPatientName || "",
+      extracted_dob: packet.extractedDob || null,
+      collected_date: packet.collectedDate || null,
+      packet_type: packet.packetType || "unknown",
+      matched_patient_id: packet.confirmedPatient?.id || null,
+      matched_encounter_id: null,
+      review_status: packet.reviewStatus || "unreviewed",
+      raw_text: packet.rawText || packet.sourceRawText || "",
+      parsed_labs_json: packet.labs || [],
+      duplicate_summary_json: {},
+      match_candidates_json: (packet.possibleMatches || []).map((p) => ({
+        id: p.id,
+      })),
+      suspicious_count: (packet.labs || []).filter((lab) => !!lab?.suspicious).length,
+      missing_count: (packet.labs || []).filter((lab) => !!lab?.missing || !!lab?.autoFilled).length,
+      total_lab_count: (packet.labs || []).length,
+      last_opened_by: session.user.id,
+      last_opened_at: new Date().toISOString(),
+    }));
+
+    const { error: insertError } = await supabase
+      .from("lab_import_packets")
+      .insert(rowsToInsert);
+
+    if (insertError) throw insertError;
+
+    return batchRow.id;
+  }
+
+  async function updateSharedLabImportPacket(packetId, updates = {}) {
+    const { data, error } = await supabase
+      .from("lab_import_packets")
+      .update(updates)
+      .eq("id", packetId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  async function handleLiveUpdateLabPacketLabs(packetId, reviewedLabs) {
+    if (!packetId) return;
+
+    const existingPacket = labImportPackets.find(
+      (packet) => String(packet.packetId) === String(packetId)
+    );
+
+    const existingJson = JSON.stringify(existingPacket?.labs || []);
+    const nextJson = JSON.stringify(reviewedLabs || []);
+
+    if (existingJson === nextJson) {
+      return;
+    }
+
+    try {
+      await updateSharedLabImportPacket(packetId, {
+        parsed_labs_json: reviewedLabs,
+        suspicious_count: (reviewedLabs || []).filter((lab) => !!lab?.suspicious).length,
+        missing_count: (reviewedLabs || []).filter(
+          (lab) => !!lab?.missing || !!lab?.autoFilled
+        ).length,
+        total_lab_count: (reviewedLabs || []).length,
+      });
+
+      setLabImportPackets((prev) =>
+        prev.map((packet) =>
+          packet.packetId === packetId
+            ? {
+              ...packet,
+              labs: reviewedLabs,
+              suspiciousCount: (reviewedLabs || []).filter((lab) => !!lab?.suspicious).length,
+              missingCount: (reviewedLabs || []).filter(
+                (lab) => !!lab?.missing || !!lab?.autoFilled
+              ).length,
+              totalLabCount: (reviewedLabs || []).length,
+            }
+            : packet
+        )
+      );
+
+      setLabImportPacket((prev) =>
+        prev && prev.packetId === packetId
+          ? {
+            ...prev,
+            labs: reviewedLabs,
+            suspiciousCount: (reviewedLabs || []).filter((lab) => !!lab?.suspicious).length,
+            missingCount: (reviewedLabs || []).filter(
+              (lab) => !!lab?.missing || !!lab?.autoFilled
+            ).length,
+            totalLabCount: (reviewedLabs || []).length,
+          }
+          : prev
+      );
+    } catch (error) {
+      console.error("Failed to live-update lab packet labs:", error);
+    }
+  }
+
+  async function handleParseLabImportText() {
+    if (!labImportRawText.trim()) {
+  showToast({
+    title: "No lab text",
+    message: "Paste lab text first.",
+    type: "warning",
+  });
+  return;
+}
+
+    try {
+      const cleanedText = cleanOcrLabText(labImportRawText);
+      setLabImportRawText(cleanedText);
+
+      const packets = buildBulkLabImportPacketsFromText(cleanedText);
+
+      if (!packets || packets.length === 0) {
+  showToast({
+    title: "No labs detected",
+    message: "No labs were detected from the pasted text.",
+    type: "warning",
+  });
+  return;
+}
+
+      const batchId = await createSharedLabImportBatchWithPackets(packets, "manual");
+
+      await loadSharedLabImportBatch(batchId);
+      setActiveView("lab-import");
+    } catch (error) {
+  console.error("Failed to create shared lab import batch:", error);
+  showToast({
+    title: "Failed to create lab batch",
+    message: error.message,
+    type: "error",
+    duration: 5000,
+  });
+}
+  }
+
+  async function fileToBase64(file) {
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.onload = () => {
+        try {
+          const result = String(reader.result || "");
+          const base64 = result.split(",")[1] || "";
+          resolve(base64);
+        } catch (error) {
+          reject(error);
+        }
+      };
+
+      reader.onerror = () => reject(reader.error || new Error("Failed to read file"));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function convertPdfToBase64Images(file) {
+    const arrayBuffer = await file.arrayBuffer();
+
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const images = [];
+
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum += 1) {
+      const page = await pdf.getPage(pageNum);
+
+      const viewport = page.getViewport({ scale: 2.0 });
+
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d");
+
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+
+      await page.render({
+        canvasContext: context,
+        viewport,
+      }).promise;
+
+      const dataUrl = canvas.toDataURL("image/png");
+      const base64 = dataUrl.split(",")[1] || "";
+      images.push(base64);
+    }
+
+    return images;
+  }
+
+  async function handleGoogleOCRImport(file) {
+    if (!file) return;
+
+    setOcrUploading(true);
+    setOcrError("");
+
+    try {
+      let base64Images = [];
+
+      if (file.type === "application/pdf") {
+        base64Images = await convertPdfToBase64Images(file);
+      } else if (file.type.startsWith("image/")) {
+        base64Images = [await fileToBase64(file)];
+      } else {
+        throw new Error("Only PDF and image files are supported.");
+      }
+
+      const ocrTexts = await runGoogleOCRInChunks(base64Images, 16);
+      const combinedText = ocrTexts.join("\n\n").trim();
+
+      if (!combinedText) {
+        throw new Error("OCR returned no text.");
+      }
+
+      const cleanedText = cleanOcrLabText(combinedText);
+      setLabImportRawText(cleanedText);
+
+      const packets = buildBulkLabImportPacketsFromText(cleanedText);
+
+      if (!packets || packets.length === 0) {
+        throw new Error("OCR worked, but no labs were detected from the extracted text.");
+      }
+
+      const batchId = await createSharedLabImportBatchWithPackets(packets, "google_ocr");
+
+      await loadSharedLabImportBatch(batchId);
+      setActiveView("lab-import");
+    } catch (error) {
+      console.error("Google OCR import failed:", error);
+      setOcrError(error.message || "OCR failed.");
+    } finally {
+      setOcrUploading(false);
+    }
+  }
+
+  async function handleConfirmLabImportPatient(packetId, patient) {
+    if (!packetId || !patient) return;
+
+    try {
+      await updateSharedLabImportPacket(packetId, {
+        matched_patient_id: patient.id,
+        match_candidates_json: [],
+      });
+
+      setLabImportPackets((prev) =>
+        prev.map((packet) =>
+          packet.packetId === packetId
+            ? {
+              ...packet,
+              confirmedPatient: patient,
+              matchStatus: "matched",
+              matchedPatient: patient,
+              possibleMatches: [],
+              unresolvedReason: "",
+            }
+            : packet
+        )
+      );
+
+      setLabImportPacket((prev) =>
+        prev && prev.packetId === packetId
+          ? {
+            ...prev,
+            confirmedPatient: patient,
+            matchStatus: "matched",
+            matchedPatient: patient,
+            possibleMatches: [],
+            unresolvedReason: "",
+          }
+          : prev
+      );
+    } catch (error) {
+  console.error("Failed to confirm patient for lab packet:", error);
+  showToast({
+    title: "Failed to confirm patient",
+    message: error.message,
+    type: "error",
+    duration: 5000,
+  });
+}
+  }
+
+  async function handleSkipLabImportPacket(packetId) {
+    if (!packetId) return;
+
+    const skippedAt = new Date().toISOString();
+
+    try {
+      await updateSharedLabImportPacket(packetId, {
+        review_status: "skipped",
+        skipped_at: skippedAt,
+      });
+
+      setLabImportPackets((prev) =>
+        prev.map((packet) =>
+          packet.packetId === packetId
+            ? {
+              ...packet,
+              reviewStatus: "skipped",
+              skippedAt,
+            }
+            : packet
+        )
+      );
+
+      setLabImportPacket((prev) =>
+        prev && prev.packetId === packetId
+          ? {
+            ...prev,
+            reviewStatus: "skipped",
+            skippedAt,
+          }
+          : prev
+      );
+   } catch (error) {
+  console.error("Failed to skip lab packet:", error);
+  showToast({
+    title: "Failed to skip packet",
+    message: error.message,
+    type: "error",
+    duration: 5000,
+  });
+}
+  }
+
+  useEffect(() => {
+    if (!session) return;
+    if (!isLeadershipView) return;
+    if (activeView !== "lab-import") return;
+
+    loadSharedLabImportBatch(activeLabImportBatchId || null);
+  }, [session, isLeadershipView, activeView]);
+
+  async function handleSelectLabImportPacket(packetId) {
+    if (!packetId) return;
+
+    setSelectedLabImportPacketId(packetId);
+
+    const found = labImportPackets.find((packet) => packet.packetId === packetId) || null;
+    setLabImportPacket(found);
+
+    if (session?.user?.id) {
+      try {
+        await updateSharedLabImportPacket(packetId, {
+          last_opened_by: session.user.id,
+          last_opened_at: new Date().toISOString(),
+        });
+      } catch (error) {
+        console.error("Failed to update last opened packet info:", error);
+      }
+    }
+  }
+
+  function handleExportLabDebug() {
+    try {
+      const packets = labImportPackets || [];
+
+      function buildIndexedLines(text = "") {
+        return String(text || "")
+          .split("\n")
+          .map((line, index) => ({
+            index,
+            text: String(line || ""),
+          }));
+      }
+
+      const exportData = {
+        timestamp: new Date().toISOString(),
+        rawText: labImportRawText || "",
+        indexedRawTextLines: buildIndexedLines(labImportRawText || ""),
+        packetCount: packets.length,
+
+        packetSummary: packets.map((packet) => {
+          const packetLabs = packet.labs || [];
+          const counts = computeLabCounts(packetLabs);
+
+          return {
+            packetId: packet.packetId,
+            extractedPatientName: packet.extractedPatientName || "",
+            extractedDob: packet.extractedDob || "",
+            collectedDate: packet.collectedDate || "",
+            packetType: packet.packetType || "unknown",
+            reviewStatus: packet.reviewStatus || "unsaved",
+            labCount: packetLabs.length,
+            suspiciousCount: packetLabs.filter((lab) => !!lab?.suspicious).length,
+            missingCount: counts.missing_count,
+            autoFilledCount: counts.autofilled_count,
+            needsReviewCount: counts.needs_review_count,
+          };
+        }),
+
+        packets: packets.map((packet) => {
+          const finalLabs = (packet.labs || []).map((lab) => ({
+            key: lab.key || "",
+            displayName: lab.displayName || "",
+            group: lab.group || "",
+            value: lab.value ?? null,
+            rawLine: lab.rawLine || "",
+            confidence: lab.confidence || "",
+            suspicious: !!lab.suspicious,
+            missing: !!lab.missing,
+            autoFilled: !!lab.autoFilled,
+            expectedRangeText: lab.expectedRangeText || "",
+            duplicateType: lab.duplicateType || null,
+            duplicateInfo: lab.duplicateInfo || null,
+
+            debugMeta: {
+              parseMethod: lab.debugMeta?.parseMethod || null,
+              matchIndex:
+                Number.isInteger(lab.debugMeta?.matchIndex)
+                  ? lab.debugMeta.matchIndex
+                  : null,
+              valueLineIndex:
+                Number.isInteger(lab.debugMeta?.valueLineIndex)
+                  ? lab.debugMeta.valueLineIndex
+                  : null,
+              valueSourceLine: lab.debugMeta?.valueSourceLine || "",
+              candidateNumbers: Array.isArray(lab.debugMeta?.candidateNumbers)
+                ? lab.debugMeta.candidateNumbers
+                : [],
+              debugCandidates: Array.isArray(lab.debugMeta?.debugCandidates)
+                ? lab.debugMeta.debugCandidates
+                : [],
+              rangeUsed: lab.debugMeta?.rangeUsed || "",
+            },
+          }));
+
+          const counts = computeLabCounts(finalLabs);
+          const categorized = categorizeLabsForExport(finalLabs);
+
+          const parsingFails = finalLabs.filter(
+            (lab) =>
+              lab.missing ||
+              lab.suspicious ||
+              lab.autoFilled ||
+              lab.value === null ||
+              lab.value === undefined ||
+              lab.value === ""
+          );
+
+          return {
+            packetId: packet.packetId,
+
+            summary: {
+              total_labs: finalLabs.length,
+              missing_count: counts.missing_count,
+              autofilled_count: counts.autofilled_count,
+              needs_review_count: counts.needs_review_count,
+            },
+
+            categorized: {
+              trueMissingLabs: categorized.trueMissingLabs,
+              panelPlaceholders: categorized.panelPlaceholders,
+              suspiciousLabs: categorized.suspiciousLabs,
+            },
+
+            patient: {
+              extractedName: packet.extractedPatientName || "",
+              extractedDob: packet.extractedDob || "",
+              confirmedPatient: packet.confirmedPatient || null,
+              matchStatus: packet.matchStatus || "unresolved",
+              matchedPatient: packet.matchedPatient || null,
+              possibleMatches: packet.possibleMatches || [],
+              unresolvedReason: packet.unresolvedReason || "",
+            },
+
+            metadata: {
+              collectedDate: packet.collectedDate || "",
+              packetType: packet.packetType || "unknown",
+              reviewStatus: packet.reviewStatus || "unsaved",
+              savedAt: packet.savedAt || null,
+              skippedAt: packet.skippedAt || null,
+            },
+
+            finalLabs,
+            parsingFails,
+
+            finalLabSummary: finalLabs.map((lab) => ({
+              name: lab.displayName,
+              value: lab.value,
+              rawLine: lab.rawLine,
+              suspicious: lab.suspicious,
+              missing: lab.missing,
+              autoFilled: lab.autoFilled,
+              parseMethod: lab.debugMeta?.parseMethod || null,
+              valueLineIndex: lab.debugMeta?.valueLineIndex ?? null,
+            })),
+
+            rawPacket: {
+              extractedPatientName: packet.extractedPatientName || "",
+              extractedDob: packet.extractedDob || "",
+              collectedDate: packet.collectedDate || "",
+              packetType: packet.packetType || "unknown",
+              rawText: packet.rawText || "",
+              sourceRawText: packet.sourceRawText || "",
+              indexedLines: buildIndexedLines(packet.rawText || ""),
+              indexedSourceLines: buildIndexedLines(packet.sourceRawText || ""),
+            },
+          };
+        }),
+      };
+
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+        type: "application/json",
+      });
+
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `lab_debug_${Date.now()}.json`;
+      a.click();
+
+      URL.revokeObjectURL(url);
+    } catch (error) {
+  console.error("Failed to export lab debug:", error);
+  showToast({
+    title: "Export failed",
+    message: "Failed to export lab debug JSON.",
+    type: "error",
+    duration: 5000,
+  });
+}
+  }
 
 
   useEffect(() => {
@@ -1057,6 +2797,31 @@ export default function App() {
     };
   }, [session]);
 
+  useEffect(() => {
+    if (!session) return;
+    if (!activeLabImportBatchId) return;
+
+    const channel = supabase
+      .channel(`lab-import-packets-${activeLabImportBatchId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "lab_import_packets",
+          filter: `batch_id=eq.${activeLabImportBatchId}`,
+        },
+        async () => {
+          await loadSharedLabImportBatch(activeLabImportBatchId);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session, activeLabImportBatchId]);
+
   const [assignmentForm, setAssignmentForm] = useState({
     studentName: "",
     upperLevelName: "",
@@ -1081,7 +2846,7 @@ export default function App() {
   const [intakeMatchPatientId, setIntakeMatchPatientId] = useState(null);
   const [autoFilledMatchPatientId, setAutoFilledMatchPatientId] = useState(null);
   const intakeMatchedPatient =
-  patients.find((p) => p.id === intakeMatchPatientId) || null;
+    patients.find((p) => p.id === intakeMatchPatientId) || null;
 
   const [soapBusy, setSoapBusy] = useState(false);
   const [soapUiMessage, setSoapUiMessage] = useState("");
@@ -1101,11 +2866,13 @@ export default function App() {
   useEffect(() => {
     if (isEditingIntake || !showIntakeModal) {
       if (intakeMatchPatientId !== null) setIntakeMatchPatientId(null);
+      if (autoFilledMatchPatientId !== null) setAutoFilledMatchPatientId(null);
       return;
     }
 
     if (!intakeForm.firstName || !intakeForm.lastName || !intakeForm.dob) {
       if (intakeMatchPatientId !== null) setIntakeMatchPatientId(null);
+      if (autoFilledMatchPatientId !== null) setAutoFilledMatchPatientId(null);
       return;
     }
 
@@ -1123,6 +2890,13 @@ export default function App() {
     if (nextMatchId !== intakeMatchPatientId) {
       setIntakeMatchPatientId(nextMatchId);
     }
+
+    if (
+      autoFilledMatchPatientId !== null &&
+      autoFilledMatchPatientId !== nextMatchId
+    ) {
+      setAutoFilledMatchPatientId(null);
+    }
   }, [
     intakeForm.firstName,
     intakeForm.lastName,
@@ -1132,8 +2906,9 @@ export default function App() {
     isEditingIntake,
     showIntakeModal,
     intakeMatchPatientId,
+    autoFilledMatchPatientId,
+    patients,
   ]);
-
   useEffect(() => {
     if (activeView === "users" && isLeadershipView) {
       loadProfiles();
@@ -1148,36 +2923,7 @@ export default function App() {
     return () => window.clearTimeout(timeout);
   }, [searchForm]);
 
-  useEffect(() => {
-    if (!showIntakeModal || isEditingIntake || !intakeMatchPatientId) return;
-    if (autoFilledMatchPatientId === intakeMatchPatientId) return;
-    const matchedPatient = patients.find((p) => p.id === intakeMatchPatientId);
-    if (!matchedPatient) return;
 
-    setAutoFilledMatchPatientId(intakeMatchPatientId);
-
-    setIntakeForm((prev) => ({
-      ...prev,
-      firstName: prev.firstName || matchedPatient.firstName || "",
-      preferredName: prev.preferredName || matchedPatient.preferredName || "",
-      mrn: prev.mrn || matchedPatient.mrn || "",
-      last4ssn: prev.last4ssn || matchedPatient.last4ssn || "",
-      dob: prev.dob || matchedPatient.dob || "",
-      age: prev.age || matchedPatient.age || "",
-      phone: prev.phone || matchedPatient.phone || "",
-      pronouns: prev.pronouns || matchedPatient.pronouns || "",
-      ethnicity: prev.ethnicity || matchedPatient.ethnicity || "",
-      sex: prev.sex || matchedPatient.sex || "",
-      over65:
-        prev.over65 || (matchedPatient.age ? Number(matchedPatient.age) > 65 : false),
-    }));
-  }, [
-    showIntakeModal,
-    isEditingIntake,
-    intakeMatchPatientId,
-    autoFilledMatchPatientId,
-    patients,
-  ]);
 
   const [selectedClinicDate, setSelectedClinicDate] = useState(
     getLocalDateInputValue()
@@ -1395,9 +3141,9 @@ export default function App() {
   }, [allEncounterRows, selectedClinicDate]);
 
 
-const filteredPatients = patients.filter((patient) =>
-  patientMatchesSearch(patient, debouncedSearchForm)
-);
+  const filteredPatients = patients.filter((patient) =>
+    patientMatchesSearch(patient, debouncedSearchForm)
+  );
 
   const visiblePatientIds = new Set(
     visibleEncounterRows.map(({ patient }) => patient.id)
@@ -1604,7 +3350,12 @@ const filteredPatients = patients.filter((patient) =>
 
     } catch (error) {
       console.error("Failed to save undergrad intake:", error);
-      alert(`Failed to save intake: ${error.message}`);
+      showToast({
+        title: "Failed to save intake",
+        message: error.message,
+        type: "error",
+        duration: 5000,
+      });
     }
   }
 
@@ -1687,7 +3438,12 @@ const filteredPatients = patients.filter((patient) =>
       setUndergradRegistrationForm(EMPTY_UNDERGRAD_REGISTRATION_FORM);
     } catch (error) {
       console.error("Failed to save undergrad registration:", error);
-      alert(`Failed to save undergrad registration: ${error.message}`);
+      showToast({
+        title: "Failed to save registration",
+        message: error.message,
+        type: "error",
+        duration: 5000,
+      });
     }
   }
   function openLeadershipRegistration(patientId, encounterId) {
@@ -2053,6 +3809,32 @@ const filteredPatients = patients.filter((patient) =>
     });
   }
 
+  function applyMatchedPatientToIntake() {
+    if (!intakeMatchPatientId) return;
+
+    const matchedPatient = patients.find((p) => p.id === intakeMatchPatientId);
+    if (!matchedPatient) return;
+
+    setAutoFilledMatchPatientId(intakeMatchPatientId);
+
+    setIntakeForm((prev) => ({
+      ...prev,
+      firstName: prev.firstName || matchedPatient.firstName || "",
+      preferredName: prev.preferredName || matchedPatient.preferredName || "",
+      mrn: prev.mrn || matchedPatient.mrn || "",
+      last4ssn: prev.last4ssn || matchedPatient.last4ssn || "",
+      dob: prev.dob || matchedPatient.dob || "",
+      age: prev.age || matchedPatient.age || "",
+      phone: prev.phone || matchedPatient.phone || "",
+      pronouns: prev.pronouns || matchedPatient.pronouns || "",
+      ethnicity: prev.ethnicity || matchedPatient.ethnicity || "",
+      sex: prev.sex || matchedPatient.sex || "",
+      over65:
+        prev.over65 ||
+        (matchedPatient.age ? Number(matchedPatient.age) > 65 : false),
+    }));
+  }
+
   function isToday(dateString) {
     if (!dateString) return false;
 
@@ -2174,8 +3956,8 @@ const filteredPatients = patients.filter((patient) =>
   const canAccessSpecialtyQueue =
     userRole === "leadership" ||
     userRole === "student" ||
-    userRole === "upper_level";
-  userRole === "attending"
+    userRole === "upper_level" ||
+    userRole === "attending";
 
   async function handleChangeProfileRole(
     profileId,
@@ -2705,6 +4487,11 @@ const filteredPatients = patients.filter((patient) =>
             false,
           visitType: intakeData.visitType ?? encounter.visitType ?? "general",
           specialtyType: intakeData.specialtyType ?? encounter.specialtyType ?? "",
+          importedSendOutLabs:
+            savedEncounter.imported_send_out_labs ||
+            savedEncounter.importedSendOutLabs ||
+            encounter.importedSendOutLabs ||
+            [],
         };
 
         setPatients((prev) =>
@@ -2916,7 +4703,12 @@ const filteredPatients = patients.filter((patient) =>
       );
     } catch (error) {
       console.error("Failed to save patient edits:", error);
-      alert(`Failed to save patient edits: ${error.message}`);
+      showToast({
+        title: "Failed to save patient edits",
+        message: error.message,
+        type: "error",
+        duration: 5000,
+      });
     }
   }
 
@@ -3193,19 +4985,31 @@ const filteredPatients = patients.filter((patient) =>
         : encounter.roomNumber || "";
 
     if (!nextRoomNumber) {
-      alert("Please select a room before assigning this patient.");
+      showToast({
+        title: "Room required",
+        message: "Please select a room before assigning this patient.",
+        type: "warning",
+      });
       return;
     }
 
     if (!nextStudent && !nextUpperLevel) {
-      alert("Please assign a student or upper level before starting the visit.");
+      showToast({
+        title: "Assignee required",
+        message: "Please assign a student or upper level before starting the visit.",
+        type: "warning",
+      });
       return;
     }
 
     const numericRoom = Number(nextRoomNumber);
 
     if (!canAssignRoom(encounter, numericRoom)) {
-      alert("Pap smear patients cannot be assigned to Room 9 or Room 10.");
+      showToast({
+        title: "Room restriction",
+        message: "Pap smear patients cannot be assigned to Room 9 or Room 10.",
+        type: "warning",
+      });
       return;
     }
 
@@ -3234,7 +5038,12 @@ const filteredPatients = patients.filter((patient) =>
 
     } catch (error) {
       console.error("Failed to assign encounter from queue:", error);
-      alert(`Failed to save assignment: ${error.message}`);
+      showToast({
+        title: "Failed to save assignment",
+        message: error.message,
+        type: "error",
+        duration: 5000,
+      });
     }
   }
 
@@ -3244,19 +5053,31 @@ const filteredPatients = patients.filter((patient) =>
     if (!selectedPatient || !selectedEncounter) return;
 
     if (!assignmentForm.roomNumber) {
-      alert("Please select a room before assigning this patient.");
+      showToast({
+        title: "Room required",
+        message: "Please select a room before assigning this patient.",
+        type: "warning",
+      });
       return;
     }
 
     if (!assignmentForm.studentName && !assignmentForm.upperLevelName) {
-      alert("Please assign a student or upper level before starting the visit.");
+      showToast({
+        title: "Assignee required",
+        message: "Please assign a student or upper level before starting the visit.",
+        type: "warning",
+      });
       return;
     }
 
     const roomNumber = Number(assignmentForm.roomNumber);
 
     if (!canAssignRoom(selectedEncounter, roomNumber)) {
-      alert("Pap smear patients cannot be assigned to Room 9 or Room 10.");
+      showToast({
+        title: "Room restriction",
+        message: "Pap smear patients cannot be assigned to Room 9 or Room 10.",
+        type: "warning",
+      });
       return;
     }
 
@@ -3286,20 +5107,33 @@ const filteredPatients = patients.filter((patient) =>
 
     } catch (error) {
       console.error("Failed to assign encounter:", error);
-      alert(`Failed to assign room: ${error.message}`);
+      showToast({
+        title: "Failed to assign room",
+        message: error.message,
+        type: "error",
+        duration: 5000,
+      });
     }
   }
   async function assignEncounterToRoom(roomNumber) {
     if (!canManageRooms) return;
     if (!selectedPatient || !selectedEncounter) {
-      alert("Open a patient chart first before assigning a room.");
+      showToast({
+        title: "No chart open",
+        message: "Open a patient chart first before assigning a room.",
+        type: "warning",
+      });
       return;
     }
 
     const numericRoom = Number(roomNumber);
 
     if (!canAssignRoom(selectedEncounter, numericRoom)) {
-      alert("Pap smear patients cannot be assigned to Room 9 or Room 10.");
+      showToast({
+        title: "Room restriction",
+        message: "Pap smear patients cannot be assigned to Room 9 or Room 10.",
+        type: "warning",
+      });
       return;
     }
 
@@ -3355,7 +5189,12 @@ const filteredPatients = patients.filter((patient) =>
       await applyEncounterTransition(selectedEncounter.id, updates);
     } catch (error) {
       console.error("Failed to update encounter status:", error);
-      alert(`Failed to update status: ${error.message}`);
+      showToast({
+        title: "Failed to update status",
+        message: error.message,
+        type: "error",
+        duration: 5000,
+      });
     }
   }
   async function clearEncounterRoom() {
@@ -3373,7 +5212,12 @@ const filteredPatients = patients.filter((patient) =>
 
     } catch (error) {
       console.error("Failed to clear encounter room:", error);
-      alert(`Failed to clear room: ${error.message}`);
+      showToast({
+        title: "Failed to clear room",
+        message: error.message,
+        type: "error",
+        duration: 5000,
+      });
       return;
     }
 
@@ -3560,7 +5404,12 @@ const filteredPatients = patients.filter((patient) =>
       );
     } catch (error) {
       console.error("Failed to prescribe medication:", error);
-      alert(`Failed to prescribe medication: ${error.message}`);
+      showToast({
+        title: "Failed to prescribe medication",
+        message: error.message,
+        type: "error",
+        duration: 5000,
+      });
 
       setPatients((prev) =>
         prev.map((patient) =>
@@ -3616,7 +5465,12 @@ const filteredPatients = patients.filter((patient) =>
         });
       } catch (error) {
         console.error("Failed to save medication:", error);
-        alert(`Failed to save medication: ${error.message}`);
+        showToast({
+          title: "Failed to save medication",
+          message: error.message,
+          type: "error",
+          duration: 5000,
+        });
 
         setPatients((prev) =>
           prev.map((patient) =>
@@ -3699,7 +5553,12 @@ const filteredPatients = patients.filter((patient) =>
       );
     } catch (error) {
       console.error("Failed to save medication:", error);
-      alert(`Failed to save medication: ${error.message}`);
+      showToast({
+        title: "Failed to save medication",
+        message: error.message,
+        type: "error",
+        duration: 5000,
+      });
 
       setPatients((prev) =>
         prev.map((patient) =>
@@ -3743,7 +5602,11 @@ const filteredPatients = patients.filter((patient) =>
       setIsRefillRequestMode(false);
       setRefillSourceMedicationId(null);
 
-      alert("Refill request submitted.");
+      showToast({
+        title: "Refill submitted",
+        message: "The refill request was saved and is now pending approval.",
+        type: "success",
+      });
     } catch (error) {
       console.error("Failed to create refill request:", error);
       alert(`Failed to create refill request: ${error.message}`);
@@ -3814,7 +5677,12 @@ const filteredPatients = patients.filter((patient) =>
       );
     } catch (error) {
       console.error("Failed to toggle medication:", error);
-      alert(`Failed to update medication: ${error.message}`);
+      showToast({
+        title: "Failed to update medication",
+        message: error.message,
+        type: "error",
+        duration: 5000,
+      });
     }
   }
 
@@ -3845,7 +5713,12 @@ const filteredPatients = patients.filter((patient) =>
         await deleteMedicationInSupabase(medicationId);
       } catch (error) {
         console.error("Failed to delete medication:", error);
-        alert(`Failed to delete medication: ${error.message}`);
+        showToast({
+          title: "Failed to delete medication",
+          message: error.message,
+          type: "error",
+          duration: 5000,
+        });
 
         // 🔁 rollback if failure
         setPatients((prev) =>
@@ -3861,7 +5734,12 @@ const filteredPatients = patients.filter((patient) =>
       }
     } catch (error) {
       console.error("Failed to delete medication:", error);
-      alert(`Failed to delete medication: ${error.message}`);
+      showToast({
+        title: "Failed to delete medication",
+        message: error.message,
+        type: "error",
+        duration: 5000,
+      });
     }
   }
 
@@ -4151,7 +6029,12 @@ const filteredPatients = patients.filter((patient) =>
         );
       } catch (error) {
         console.error("Failed to update allergy:", error);
-        alert(`Failed to update allergy: ${error.message}`);
+        showToast({
+          title: "Failed to update allergy",
+          message: error.message,
+          type: "error",
+          duration: 5000,
+        });
         return;
       }
     } else {
@@ -4180,7 +6063,12 @@ const filteredPatients = patients.filter((patient) =>
         );
       } catch (error) {
         console.error("Failed to create allergy:", error);
-        alert(`Failed to create allergy: ${error.message}`);
+        showToast({
+          title: "Failed to create allergy",
+          message: error.message,
+          type: "error",
+          duration: 5000,
+        });
         return;
       }
     }
@@ -4225,7 +6113,12 @@ const filteredPatients = patients.filter((patient) =>
       );
     } catch (error) {
       console.error("Failed to delete allergy:", error);
-      alert(`Failed to delete allergy: ${error.message}`);
+      showToast({
+        title: "Failed to delete allergy",
+        message: error.message,
+        type: "error",
+        duration: 5000,
+      });
     }
   }
 
@@ -5361,6 +7254,79 @@ const filteredPatients = patients.filter((patient) =>
           sidebarOpen={sidebarOpen}
           setSidebarOpen={setSidebarOpen}
         />
+
+        {activeView === "lab-import" && (
+          <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-3">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Lab Import</h3>
+                <p className="text-sm text-slate-600">
+                  Upload a PDF/image for OCR or paste outside lab text below.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4">
+                <label className="block text-sm font-medium text-slate-700">
+                  Upload lab PDF or image
+                </label>
+
+                <input
+                  type="file"
+                  accept="application/pdf,image/*"
+                  className="mt-2 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleGoogleOCRImport(file);
+                    }
+                    e.target.value = "";
+                  }}
+                />
+
+                {ocrUploading && (
+                  <p className="mt-2 text-sm text-blue-700">Running OCR...</p>
+                )}
+
+                {ocrError && (
+                  <p className="mt-2 text-sm text-red-600">{ocrError}</p>
+                )}
+              </div>
+
+              <textarea
+                value={labImportRawText}
+                onChange={(e) => setLabImportRawText(e.target.value)}
+                placeholder="Paste labs or upload PDF above..."
+                className="min-h-[220px] w-full rounded-xl border border-slate-300 px-3 py-3 text-sm text-slate-900"
+              />
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={handleParseLabImportText}
+                  disabled={ocrUploading}
+                  className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                >
+                  Parse Labs
+                </button>
+
+                <button
+                  onClick={() => {
+                    setLabImportRawText("");
+                    setLabImportPacket(null);
+                    setLabImportPackets([]);
+                    setSelectedLabImportPacketId(null);
+                    setOcrError("");
+                  }}
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+
+
         <div>
           {activeView === "dashboard" && (
             <DashboardView
@@ -5383,6 +7349,90 @@ const filteredPatients = patients.filter((patient) =>
               patientRecordsTitle={patientRecordsTitle}
               openPatientFromFilteredView={openPatientFromFilteredView}
               getFullPatientName={getFullPatientName}
+            />
+          )}
+
+          {activeView === "lab-import" && (
+            <LabImportView
+              packet={labImportPacket}
+              packets={labImportPackets}
+              selectedPacketId={selectedLabImportPacketId}
+              onSelectPacket={handleSelectLabImportPacket}
+              onChangeLabs={handleLiveUpdateLabPacketLabs}
+              onBack={() => {
+                setActiveView("dashboard");
+              }}
+              onExportDebug={handleExportLabDebug}
+              onConfirmPatient={(patient) => {
+                if (!labImportPacket?.packetId) return;
+                handleConfirmLabImportPatient(labImportPacket.packetId, patient);
+              }}
+              onSkip={() => {
+                if (!labImportPacket?.packetId) return;
+                handleSkipLabImportPacket(labImportPacket.packetId);
+              }}
+              onSave={async (reviewedLabs, encounterId) => {
+                if (!labImportPacket || !labImportPacket.confirmedPatient || !encounterId) {
+                  alert("Pick a patient and encounter first.");
+                  return;
+                }
+
+                try {
+                  await updateEncounterInSupabase(encounterId, {
+                    importedSendOutLabs: reviewedLabs,
+                  });
+
+                  const savedAt = new Date().toISOString();
+
+                  await updateSharedLabImportPacket(labImportPacket.packetId, {
+                    parsed_labs_json: reviewedLabs,
+                    matched_patient_id: labImportPacket.confirmedPatient.id,
+                    matched_encounter_id: encounterId,
+                    review_status: "saved",
+                    saved_at: savedAt,
+                    suspicious_count: (reviewedLabs || []).filter((lab) => !!lab?.suspicious).length,
+                    missing_count: (reviewedLabs || []).filter((lab) => !!lab?.missing || !!lab?.autoFilled).length,
+                    total_lab_count: (reviewedLabs || []).length,
+                  });
+
+                  setLabImportPackets((prev) =>
+                    prev.map((packet) =>
+                      packet.packetId === labImportPacket.packetId
+                        ? {
+                          ...packet,
+                          labs: reviewedLabs,
+                          reviewStatus: "saved",
+                          savedAt,
+                          matchedEncounterId: encounterId,
+                        }
+                        : packet
+                    )
+                  );
+
+                  setLabImportPacket((prev) =>
+                    prev && prev.packetId === labImportPacket.packetId
+                      ? {
+                        ...prev,
+                        labs: reviewedLabs,
+                        reviewStatus: "saved",
+                        savedAt,
+                        matchedEncounterId: encounterId,
+                      }
+                      : prev
+                  );
+
+                  await loadSharedLabImportBatch(activeLabImportBatchId || null);
+
+                  showToast({
+                    title: "Labs saved",
+                    message: "Imported labs were saved successfully.",
+                    type: "success",
+                  });
+                } catch (error) {
+                  console.error("Failed to save imported labs:", error);
+                  alert(`Failed to save imported labs: ${error.message}`);
+                }
+              }}
             />
           )}
 
@@ -5600,6 +7650,8 @@ const filteredPatients = patients.filter((patient) =>
             />
           )}
 
+          <ToastStack toasts={toasts} onDismiss={dismissToast} />
+
           {activeView === "summary" && isLeadershipView && (
             <ClinicSummaryView
               selectedClinicDate={selectedClinicDate}
@@ -5692,6 +7744,8 @@ const filteredPatients = patients.filter((patient) =>
         isEditingIntake={isEditingIntake}
         intakeMatchPatientId={intakeMatchPatientId}
         intakeMatchedPatient={intakeMatchedPatient}
+        autoFilledMatchPatientId={autoFilledMatchPatientId}
+        applyMatchedPatientToIntake={applyMatchedPatientToIntake}
       />
 
       <UndergradRegistrationModal
