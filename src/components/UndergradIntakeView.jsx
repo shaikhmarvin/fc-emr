@@ -238,27 +238,30 @@ zipCode: prev.zipCode || matchedPatient.zipCode || "",
   }));
 }, [matchPatientId, autoFilledMatchPatientId, patients]);
 
-  function handleSubmit() {
-    const payload = {
-  ...form,
-  age,
-  matchedPatientId: matchPatientId || null,
-  address: [form.addressLine1, form.city, form.state, form.zipCode]
-    .filter(Boolean)
-    .join(", "),
-  emergencyContact: {
-    name: form.emergencyContactName,
-    relation: form.emergencyContactRelation,
-    phone: form.emergencyContactPhone,
-  },
-  intakeStatus: "started",
-};
+  async function handleSubmit() {
+  const payload = {
+    ...form,
+    age,
+    matchedPatientId: matchPatientId || null,
+    address: [form.addressLine1, form.city, form.state, form.zipCode]
+      .filter(Boolean)
+      .join(", "),
+    emergencyContact: {
+      name: form.emergencyContactName,
+      relation: form.emergencyContactRelation,
+      phone: form.emergencyContactPhone,
+    },
+    intakeStatus: "started",
+  };
 
-    onSave(payload);
-setForm(EMPTY_FORM);
-setMatchPatientId(null);
-setAutoFilledMatchPatientId(null);
-  }
+  const didSave = await onSave(payload);
+
+  if (!didSave) return;
+
+  setForm(EMPTY_FORM);
+  setMatchPatientId(null);
+  setAutoFilledMatchPatientId(null);
+}
 
   return (
     <div className="min-h-screen bg-slate-100 p-4 md:p-6">
@@ -296,7 +299,16 @@ setAutoFilledMatchPatientId(null);
                   onChange={(e) => handleChange("firstName", e.target.value)}
                 />
               </div>
-
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Last Name
+                </label>
+                <input
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={form.lastName}
+                  onChange={(e) => handleChange("lastName", e.target.value)}
+                />
+              </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
                   Preferred Name
@@ -308,16 +320,7 @@ setAutoFilledMatchPatientId(null);
                 />
               </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Last Name
-                </label>
-                <input
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  value={form.lastName}
-                  onChange={(e) => handleChange("lastName", e.target.value)}
-                />
-              </div>
+             
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">

@@ -1,5 +1,6 @@
 import { getStatusClasses, getStatusLabel } from "../utils";
 import { useEffect, useMemo, useState } from "react";
+import OphthalmologySoapForm from "./OphthalmologySoapForm";
 export default function ChartView({
   selectedPatient,
   selectedEncounter,
@@ -198,13 +199,13 @@ export default function ChartView({
   }
 
   function groupImportedLabs(labs = []) {
-  return labs.reduce((groups, lab) => {
-    const group = lab.group || "Other";
-    if (!groups[group]) groups[group] = [];
-    groups[group].push(lab);
-    return groups;
-  }, {});
-}
+    return labs.reduce((groups, lab) => {
+      const group = lab.group || "Other";
+      if (!groups[group]) groups[group] = [];
+      groups[group].push(lab);
+      return groups;
+    }, {});
+  }
 
   function renderTrendArrow(direction) {
     if (direction === "up") return "↑";
@@ -2131,7 +2132,7 @@ export default function ChartView({
             )}
           </div>
 
-                 <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
+          <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
             <button
               onClick={() => setShowSendOutLabs((prev) => !prev)}
               className="flex w-full items-center justify-between text-left text-lg font-semibold"
@@ -2255,8 +2256,8 @@ export default function ChartView({
 
                                 <div className="shrink-0 text-sm font-semibold text-slate-900">
                                   {lab.value !== null &&
-                                  lab.value !== undefined &&
-                                  lab.value !== ""
+                                    lab.value !== undefined &&
+                                    lab.value !== ""
                                     ? String(lab.value)
                                     : "—"}
                                 </div>
@@ -2397,79 +2398,74 @@ export default function ChartView({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Subjective
-                </label>
-                <textarea
-                  className="min-h-[180px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base disabled:cursor-not-allowed disabled:bg-slate-100"
-                  placeholder={`Chief complaint / HPI
-Pertinent history, meds, allergies
-Relevant ROS`}
-                  value={soapDraft.soapSubjective || ""}
-                  onChange={(e) =>
-                    updateSoapDraftField("soapSubjective", e.target.value)
-                  }
-                  disabled={isSoapLocked}
-                />
-              </div>
+            {selectedEncounter?.specialtyType === "ophthalmology" ? (
+  <OphthalmologySoapForm
+    soapDraft={soapDraft}
+    updateSoapDraftField={updateSoapDraftField}
+    isSoapLocked={isSoapLocked}
+  />
+) : (
+  <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+    <div>
+      <label className="mb-1 block text-sm font-medium text-slate-700">
+        Subjective
+      </label>
+      <textarea
+        className="min-h-[160px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base disabled:bg-slate-100"
+        value={soapDraft.soapSubjective || ""}
+        onChange={(e) =>
+          updateSoapDraftField("soapSubjective", e.target.value)
+        }
+        disabled={isSoapLocked}
+      />
+    </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Objective
-                </label>
-                <textarea
-                  className="min-h-[180px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base disabled:cursor-not-allowed disabled:bg-slate-100"
-                  placeholder={`Physical exam findings
-General appearance
-Focused exam
-Relevant test results`}
-                  value={soapDraft.soapObjective || ""}
-                  onChange={(e) =>
-                    updateSoapDraftField("soapObjective", e.target.value)
-                  }
-                  disabled={isSoapLocked}
-                />
-              </div>
+    <div>
+      <label className="mb-1 block text-sm font-medium text-slate-700">
+        Objective
+      </label>
+      <textarea
+        className="min-h-[160px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base disabled:bg-slate-100"
+        value={soapDraft.soapObjective || ""}
+        onChange={(e) =>
+          updateSoapDraftField("soapObjective", e.target.value)
+        }
+        disabled={isSoapLocked}
+      />
+    </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Assessment
-                </label>
-                <textarea
-                  className="min-h-[180px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base disabled:cursor-not-allowed disabled:bg-slate-100"
-                  placeholder={`Most likely diagnosis
-Differential
-Problem list`}
-                  value={soapDraft.soapAssessment || ""}
-                  onChange={(e) =>
-                    updateSoapDraftField("soapAssessment", e.target.value)
-                  }
-                  disabled={isSoapLocked}
-                />
-              </div>
+    <div>
+      <label className="mb-1 block text-sm font-medium text-slate-700">
+        Assessment
+      </label>
+      <textarea
+        className="min-h-[160px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base disabled:bg-slate-100"
+        value={soapDraft.soapAssessment || ""}
+        onChange={(e) =>
+          updateSoapDraftField("soapAssessment", e.target.value)
+        }
+        disabled={isSoapLocked}
+      />
+    </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Plan
-                </label>
-                <textarea
-                  className="min-h-[180px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base disabled:cursor-not-allowed disabled:bg-slate-100"
-                  placeholder={`Treatment
-Labs / referrals
-Patient education
-Follow-up`}
-                  value={soapDraft.soapPlan || ""}
-                  onChange={(e) =>
-                    updateSoapDraftField("soapPlan", e.target.value)
-                  }
-                  disabled={isSoapLocked}
-                />
-              </div>
-            </div>
+    <div>
+      <label className="mb-1 block text-sm font-medium text-slate-700">
+        Plan
+      </label>
+      <textarea
+        className="min-h-[160px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base disabled:bg-slate-100"
+        value={soapDraft.soapPlan || ""}
+        onChange={(e) =>
+          updateSoapDraftField("soapPlan", e.target.value)
+        }
+        disabled={isSoapLocked}
+      />
+    </div>
+  </div>
+)}
           </div>
-          <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
+
+                    <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
             <button
               onClick={() => setShowAudit((prev) => !prev)}
               className="mb-4 flex w-full items-center justify-between text-left text-lg font-semibold"
@@ -2478,141 +2474,141 @@ Follow-up`}
               <span>{showAudit ? "▲" : "▼"}</span>
             </button>
 
-            {showAudit && (
-              <>
-                {auditLoading ? (
-                  <p className="text-sm text-slate-500">Loading audit trail...</p>
-                ) : auditEntries.length === 0 ? (
-                  <p className="text-sm text-slate-500">No audit history yet.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {auditEntries.map((entry) => (
-                      <div
-                        key={entry.id}
-                        className="rounded-xl border border-slate-200 bg-slate-50 p-3"
-                      >
-                        <p className="text-sm font-medium text-slate-800">
-                          {formatAuditAction(entry.action)}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          {entry.actor_name || "Unknown User"} •{" "}
-                          {new Date(entry.created_at).toLocaleString()}
-                        </p>
+              {showAudit && (
+                <>
+                  {auditLoading ? (
+                    <p className="text-sm text-slate-500">Loading audit trail...</p>
+                  ) : auditEntries.length === 0 ? (
+                    <p className="text-sm text-slate-500">No audit history yet.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {auditEntries.map((entry) => (
+                        <div
+                          key={entry.id}
+                          className="rounded-xl border border-slate-200 bg-slate-50 p-3"
+                        >
+                          <p className="text-sm font-medium text-slate-800">
+                            {formatAuditAction(entry.action)}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {entry.actor_name || "Unknown User"} •{" "}
+                            {new Date(entry.created_at).toLocaleString()}
+                          </p>
 
-                        {![
-                          "soap_saved",
-                          "soap_submitted_upper",
-                          "soap_submitted_attending",
-                          "soap_signed_upper",
-                          "soap_signed_attending",
-                          "soap_reopened",
-                        ].includes(entry.action) &&
-                          entry.details &&
-                          Object.keys(entry.details).length > 0 ? (
-                          <pre className="mt-2 overflow-x-auto rounded bg-white p-2 text-xs text-slate-600">
-                            {JSON.stringify(entry.details, null, 2)}
-                          </pre>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </>
+                          {![
+                            "soap_saved",
+                            "soap_submitted_upper",
+                            "soap_submitted_attending",
+                            "soap_signed_upper",
+                            "soap_signed_attending",
+                            "soap_reopened",
+                          ].includes(entry.action) &&
+                            entry.details &&
+                            Object.keys(entry.details).length > 0 ? (
+                            <pre className="mt-2 overflow-x-auto rounded bg-white p-2 text-xs text-slate-600">
+                              {JSON.stringify(entry.details, null, 2)}
+                            </pre>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </>
       )}
-      {showSignModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-            <h3 className="text-lg font-semibold text-slate-900">
-              Attending Signature
-            </h3>
-            <p className="mt-1 text-sm text-slate-600">
-              Select the attending and enter their 4-digit PIN to sign this note.
-            </p>
+          {showSignModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+              <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Attending Signature
+                </h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  Select the attending and enter their 4-digit PIN to sign this note.
+                </p>
 
-            <div className="mt-4 space-y-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Attending
-                </label>
-                <select
-                  value={selectedAttendingId}
-                  onChange={(e) => setSelectedAttendingId(e.target.value)}
-                  className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                >
-                  <option value="">Select attending</option>
-                  {activeAttendings?.map((attending) => (
-                    <option key={attending.id} value={attending.id}>
-                      {attending.full_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                <div className="mt-4 space-y-4">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                      Attending
+                    </label>
+                    <select
+                      value={selectedAttendingId}
+                      onChange={(e) => setSelectedAttendingId(e.target.value)}
+                      className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
+                    >
+                      <option value="">Select attending</option>
+                      {activeAttendings?.map((attending) => (
+                        <option key={attending.id} value={attending.id}>
+                          {attending.full_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  4-Digit PIN
-                </label>
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  autoComplete="new-password"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  spellCheck={false}
-                  maxLength={4}
-                  name="attending-signature-pin"
-                  value={attendingPin}
-                  onChange={(e) =>
-                    setAttendingPin(e.target.value.replace(/\D/g, "").slice(0, 4))
-                  }
-                  className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                  placeholder="Enter PIN"
-                />
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                      4-Digit PIN
+                    </label>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      autoComplete="new-password"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      maxLength={4}
+                      name="attending-signature-pin"
+                      value={attendingPin}
+                      onChange={(e) =>
+                        setAttendingPin(e.target.value.replace(/\D/g, "").slice(0, 4))
+                      }
+                      className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
+                      placeholder="Enter PIN"
+                    />
+                  </div>
+                </div>
+                {soapUiMessage ? (
+                  <p className="mt-3 text-sm text-red-600">{soapUiMessage}</p>
+                ) : null}
+                <div className="mt-6 flex gap-3">
+                  <button
+                    onClick={() => {
+                      setShowSignModal(false);
+                      setSelectedAttendingId("");
+                      setAttendingPin("");
+                    }}
+                    className="flex-1 rounded-lg bg-slate-200 px-4 py-3 text-slate-700 hover:bg-slate-300"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    onClick={async () => {
+                      const success = await signSoapAsAttendingWithPin(
+                        selectedAttendingId,
+                        attendingPin
+                      );
+
+                      if (success) {
+                        setShowSignModal(false);
+                        setSelectedAttendingId("");
+                        setAttendingPin("");
+                      } else {
+                        setAttendingPin("");
+                      }
+                    }}
+                    disabled={!selectedAttendingId || attendingPin.length !== 4 || soapBusy}
+                    className="flex-1 rounded-lg bg-emerald-600 px-4 py-3 text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {soapBusy ? "Signing..." : "Sign Note"}
+                  </button>
+                </div>
               </div>
             </div>
-            {soapUiMessage ? (
-              <p className="mt-3 text-sm text-red-600">{soapUiMessage}</p>
-            ) : null}
-            <div className="mt-6 flex gap-3">
-              <button
-                onClick={() => {
-                  setShowSignModal(false);
-                  setSelectedAttendingId("");
-                  setAttendingPin("");
-                }}
-                className="flex-1 rounded-lg bg-slate-200 px-4 py-3 text-slate-700 hover:bg-slate-300"
-              >
-                Cancel
-              </button>
-
-              <button
-                onClick={async () => {
-                  const success = await signSoapAsAttendingWithPin(
-                    selectedAttendingId,
-                    attendingPin
-                  );
-
-                  if (success) {
-                    setShowSignModal(false);
-                    setSelectedAttendingId("");
-                    setAttendingPin("");
-                  } else {
-                    setAttendingPin("");
-                  }
-                }}
-                disabled={!selectedAttendingId || attendingPin.length !== 4 || soapBusy}
-                className="flex-1 rounded-lg bg-emerald-600 px-4 py-3 text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {soapBusy ? "Signing..." : "Sign Note"}
-              </button>
-            </div>
-          </div>
+          )}
         </div>
       )}
-    </div>
-  );
-}
+  

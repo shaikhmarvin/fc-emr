@@ -72,6 +72,8 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
       soapObjective: encounter.objective || "",
       soapAssessment: encounter.assessment || "",
       soapPlan: encounter.plan || "",
+            ophthalmologyNote: encounter.ophthalmology_note || null,
+      ophthalmology_note: encounter.ophthalmology_note || null,
       soapSavedAt: "",
       soapStatus: encounter.soap_status || "draft",
       soapAuthorId: encounter.soap_author_id || null,

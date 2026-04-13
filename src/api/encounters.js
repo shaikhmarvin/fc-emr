@@ -1,5 +1,90 @@
 import { supabase } from "../lib/supabase";
 
+const EMPTY_OPHTHO_NOTE = {
+  hpi: "",
+  ocularHistory: "",
+  vaOd: "",
+  vaOs: "",
+  phOd: "",
+  phOs: "",
+  iopOd: "",
+  iopOs: "",
+  externalOd: "",
+  externalOs: "",
+  slitLampOd: "",
+  slitLampOs: "",
+  fundusOd: "",
+  fundusOs: "",
+  assessment: "",
+  plan: "",
+};
+
+function mapEncounterRow(row) {
+  const intake = row.intake_data || {};
+
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    clinicDate: row.clinic_date || "",
+    createdAt: row.created_at || "",
+    chiefComplaint: row.chief_complaint || "",
+    status: mapDbStatusToUi(row.status),
+    roomNumber: row.room || "",
+    notes: row.notes || "",
+
+    newReturning: intake.newReturning ?? "Returning",
+    visitLocation: intake.visitLocation ?? "In Clinic",
+    transportation: intake.transportation ?? "",
+    needsElevator: intake.needsElevator ?? false,
+    spanishSpeaking: intake.spanishSpeaking ?? false,
+    mammogramStatus: intake.mammogramStatus ?? "",
+    papStatus: intake.papStatus ?? "",
+    fluShot: intake.fluShot ?? "",
+    htn: intake.htn ?? false,
+    dm: intake.dm ?? false,
+    labsLast6Months: intake.labsLast6Months ?? "",
+    nicotineUse: intake.nicotineUse ?? "",
+    nicotineDetails: intake.nicotineDetails ?? "",
+    substanceUseConcern: intake.substanceUseConcern ?? "",
+    substanceUseTreatment: intake.substanceUseTreatment ?? "",
+    substanceUseNotes: intake.substanceUseNotes ?? "",
+    dermatology: intake.dermatology ?? "N/A",
+    ophthalmology: intake.ophthalmology ?? "N/A",
+    optometry: intake.optometry ?? "N/A",
+    diabeticEyeExamPastYear: intake.diabeticEyeExamPastYear ?? "N/A",
+    physicalTherapy: intake.physicalTherapy ?? "N/A",
+    mentalHealthCombined: intake.mentalHealthCombined ?? "N/A",
+    counseling: intake.counseling ?? "N/A",
+    anyMentalHealthPositive: intake.anyMentalHealthPositive ?? false,
+    visitType: intake.visitType ?? "general",
+    specialtyType: intake.specialtyType ?? "",
+
+    leadershipIntakeComplete: row.leadership_intake_complete ?? false,
+
+    soapSubjective: row.hpi || "",
+    soapObjective: row.objective || "",
+    soapAssessment: row.assessment || "",
+    soapPlan: row.plan || "",
+
+    soapStatus: row.soap_status || "draft",
+    soapAuthorId: row.soap_author_id || null,
+    soapAuthorRole: row.soap_author_role || "",
+    upperLevelSignedBy: row.upper_level_signed_by || null,
+    upperLevelSignedAt: row.upper_level_signed_at || null,
+    attendingSignedBy: row.attending_signed_by || null,
+    attendingSignedAt: row.attending_signed_at || null,
+
+    vitalsHistory: row.vitals || [],
+    inHouseLabs: row.in_house_labs || {},
+    importedSendOutLabs: row.imported_send_out_labs || [],
+
+    ophthalmologyNote: {
+      ...EMPTY_OPHTHO_NOTE,
+      ...(row.ophthalmology_note || {}),
+    },
+  };
+}
+
 export async function fetchEncounters() {
   const { data, error } = await supabase
     .from("encounters")
@@ -44,15 +129,21 @@ function buildIntakeData(encounter) {
 
 export async function createEncounterInSupabase(patientId, encounter) {
   const row = {
-  patient_id: patientId,
-  clinic_date: encounter.clinicDate,
-  chief_complaint: encounter.chiefComplaint || "",
-  status: mapUiStatusToDb(encounter.status || "Waiting"),
-  room: encounter.roomNumber || "",
-  notes: encounter.notes || "",
-  intake_data: buildIntakeData(encounter),
-  leadership_intake_complete: encounter.leadershipIntakeComplete ?? false,
-};
+    patient_id: patientId,
+    clinic_date: encounter.clinicDate,
+    chief_complaint: encounter.chiefComplaint || "",
+    status: mapUiStatusToDb(encounter.status || "Waiting"),
+    room: encounter.roomNumber || "",
+    notes: encounter.notes || "",
+    intake_data: buildIntakeData(encounter),
+    leadership_intake_complete: encounter.leadershipIntakeComplete ?? false,
+    hpi: encounter.soapSubjective || "",
+    objective: encounter.soapObjective || "",
+    assessment: encounter.soapAssessment || "",
+    plan: encounter.soapPlan || "",
+    soap_status: encounter.soapStatus || "draft",
+    ophthalmology_note: encounter.ophthalmologyNote || null,
+  };
 
   const { data, error } = await supabase
     .from("encounters")
@@ -97,20 +188,20 @@ export async function updateEncounterInSupabase(encounterId, updates) {
   }
 
   if (updates.leadershipIntakeComplete !== undefined) {
-  payload.leadership_intake_complete = updates.leadershipIntakeComplete;
-}
+    payload.leadership_intake_complete = updates.leadershipIntakeComplete;
+  }
 
   if (updates.vitalsHistory !== undefined) {
     payload.vitals = updates.vitalsHistory;
   }
 
-    if (updates.inHouseLabs !== undefined) {
+  if (updates.inHouseLabs !== undefined) {
     payload.in_house_labs = updates.inHouseLabs;
   }
 
   if (updates.imported_send_out_labs !== undefined) {
-  payload.imported_send_out_labs = updates.imported_send_out_labs;
-}
+    payload.imported_send_out_labs = updates.imported_send_out_labs;
+  }
 
   if (updates.status !== undefined) {
     payload.status = mapUiStatusToDb(updates.status);
@@ -152,34 +243,38 @@ export async function updateEncounterInSupabase(encounterId, updates) {
     payload.attending_signed_at = updates.attendingSignedAt;
   }
 
+  if (updates.ophthalmologyNote !== undefined) {
+    payload.ophthalmology_note = updates.ophthalmologyNote;
+  }
+
   const intakeFields = [
-  "newReturning",
-  "visitLocation",
-  "transportation",
-  "needsElevator",
-  "spanishSpeaking",
-  "mammogramStatus",
-  "papStatus",
-  "fluShot",
-  "htn",
-  "dm",
-  "labsLast6Months",
-  "nicotineUse",
-  "nicotineDetails",
-  "substanceUseConcern",
-  "substanceUseTreatment",
-  "substanceUseNotes",
-  "dermatology",
-  "ophthalmology",
-  "optometry",
-  "diabeticEyeExamPastYear",
-  "physicalTherapy",
-  "mentalHealthCombined",
-  "counseling",
-  "anyMentalHealthPositive",
-  "visitType",
-  "specialtyType",
-];
+    "newReturning",
+    "visitLocation",
+    "transportation",
+    "needsElevator",
+    "spanishSpeaking",
+    "mammogramStatus",
+    "papStatus",
+    "fluShot",
+    "htn",
+    "dm",
+    "labsLast6Months",
+    "nicotineUse",
+    "nicotineDetails",
+    "substanceUseConcern",
+    "substanceUseTreatment",
+    "substanceUseNotes",
+    "dermatology",
+    "ophthalmology",
+    "optometry",
+    "diabeticEyeExamPastYear",
+    "physicalTherapy",
+    "mentalHealthCombined",
+    "counseling",
+    "anyMentalHealthPositive",
+    "visitType",
+    "specialtyType",
+  ];
 
   const hasIntakeUpdates = intakeFields.some(
     (field) => updates[field] !== undefined
@@ -187,43 +282,45 @@ export async function updateEncounterInSupabase(encounterId, updates) {
 
   if (hasIntakeUpdates) {
     payload.intake_data = {
-  newReturning: updates.newReturning ?? "Returning",
-  visitLocation: updates.visitLocation ?? "In Clinic",
-  transportation: updates.transportation ?? "",
-  needsElevator: updates.needsElevator ?? false,
-  spanishSpeaking: updates.spanishSpeaking ?? false,
-  mammogramStatus: updates.mammogramStatus ?? "",
-  papStatus: updates.papStatus ?? "",
-  fluShot: updates.fluShot ?? "",
-  htn: updates.htn ?? false,
-  dm: updates.dm ?? false,
-  labsLast6Months: updates.labsLast6Months ?? "",
-  nicotineUse: updates.nicotineUse ?? "",
-  nicotineDetails: updates.nicotineDetails ?? "",
-  substanceUseConcern: updates.substanceUseConcern ?? "",
-  substanceUseTreatment: updates.substanceUseTreatment ?? "",
-  substanceUseNotes: updates.substanceUseNotes ?? "",
-  dermatology: updates.dermatology ?? "N/A",
-  ophthalmology: updates.ophthalmology ?? "N/A",
-  optometry: updates.optometry ?? "N/A",
-  diabeticEyeExamPastYear: updates.diabeticEyeExamPastYear ?? "N/A",
-  physicalTherapy: updates.physicalTherapy ?? "N/A",
-  mentalHealthCombined: updates.mentalHealthCombined ?? "N/A",
-  counseling: updates.counseling ?? "N/A",
-  anyMentalHealthPositive: updates.anyMentalHealthPositive ?? false,
-  visitType: updates.visitType ?? "general",
-  specialtyType: updates.specialtyType ?? "",
-};
+      newReturning: updates.newReturning ?? "Returning",
+      visitLocation: updates.visitLocation ?? "In Clinic",
+      transportation: updates.transportation ?? "",
+      needsElevator: updates.needsElevator ?? false,
+      spanishSpeaking: updates.spanishSpeaking ?? false,
+      mammogramStatus: updates.mammogramStatus ?? "",
+      papStatus: updates.papStatus ?? "",
+      fluShot: updates.fluShot ?? "",
+      htn: updates.htn ?? false,
+      dm: updates.dm ?? false,
+      labsLast6Months: updates.labsLast6Months ?? "",
+      nicotineUse: updates.nicotineUse ?? "",
+      nicotineDetails: updates.nicotineDetails ?? "",
+      substanceUseConcern: updates.substanceUseConcern ?? "",
+      substanceUseTreatment: updates.substanceUseTreatment ?? "",
+      substanceUseNotes: updates.substanceUseNotes ?? "",
+      dermatology: updates.dermatology ?? "N/A",
+      ophthalmology: updates.ophthalmology ?? "N/A",
+      optometry: updates.optometry ?? "N/A",
+      diabeticEyeExamPastYear: updates.diabeticEyeExamPastYear ?? "N/A",
+      physicalTherapy: updates.physicalTherapy ?? "N/A",
+      mentalHealthCombined: updates.mentalHealthCombined ?? "N/A",
+      counseling: updates.counseling ?? "N/A",
+      anyMentalHealthPositive: updates.anyMentalHealthPositive ?? false,
+      visitType: updates.visitType ?? "general",
+      specialtyType: updates.specialtyType ?? "",
+    };
   }
 
-  const { error } = await supabase
-  .from("encounters")
-  .update(payload)
-  .eq("id", encounterId);
+  const { data, error } = await supabase
+    .from("encounters")
+    .update(payload)
+    .eq("id", encounterId)
+    .select()
+    .single();
 
-if (error) throw error;
+  if (error) throw error;
 
-return { id: encounterId, ...updates };
+  return data;
 }
 
 function mapUiStatusToDb(status) {
