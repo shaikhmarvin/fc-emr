@@ -3117,30 +3117,40 @@ const [soapDraft, setSoapDraft] = useState({
   }, [programSettings]);
 
   const registrationRows = useMemo(() => {
-    return allEncounterRows
-      .filter(({ encounter }) => {
-        if (userRole === "undergraduate") {
-          return encounter.status === "started";
-        }
+  return allEncounterRows
+    .filter(({ encounter }) => {
+      if (!encounter) return false;
 
-        if (isLeadershipView) {
-          return (
-            (
-              (encounter.status === "started" && !encounter.leadershipIntakeComplete) ||
-              encounter.status === "undergrad_complete"
-            ) &&
-            encounter.visitType !== "specialty_only"
-          );
-        }
+      const isGeneralRegistrationEncounter =
+        encounter.visitType !== "specialty_only";
 
-        return false;
-      })
-      .sort((a, b) => {
-        const aTime = new Date(a.encounter.createdAt || 0).getTime();
-        const bTime = new Date(b.encounter.createdAt || 0).getTime();
-        return aTime - bTime;
-      });
-  }, [allEncounterRows, userRole, isLeadershipView]);
+      const isRegistrationStatus =
+        encounter.status === "started" ||
+        encounter.status === "undergrad_complete";
+
+      if (userRole === "undergraduate") {
+        return (
+          isGeneralRegistrationEncounter &&
+          encounter.status === "started"
+        );
+      }
+
+      if (isLeadershipView) {
+        return (
+          isGeneralRegistrationEncounter &&
+          isRegistrationStatus &&
+          !encounter.leadershipIntakeComplete
+        );
+      }
+
+      return false;
+    })
+    .sort((a, b) => {
+      const aTime = new Date(a.encounter.createdAt || 0).getTime();
+      const bTime = new Date(b.encounter.createdAt || 0).getTime();
+      return aTime - bTime;
+    });
+}, [allEncounterRows, userRole, isLeadershipView]);
 
   async function removeFromRegistration(patientId, encounterId) {
     const confirmed = window.confirm(

@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import { getStatusLabel } from "../utils";
 
+const CLINIC_URL = "https://fc-emr.vercel.app/"; // CHANGE THIS
+const WIFI_NAME = "Volunteers"; // CHANGE THIS
+const WIFI_PASSWORD = "StarToast76"; // CHANGE THIS
+
+const QR_SRC = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(
+  CLINIC_URL
+)}`;
+
 function isVisibleOnBoard(encounter) {
   if (!encounter) return false;
   if (!encounter.roomNumber) return false;
@@ -54,18 +62,44 @@ export default function BoardDisplay({
 
   return (
     <div className="min-h-screen bg-slate-900 p-4 text-white">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Free Clinic Room Board</h1>
-          <p className="text-sm text-slate-300">Live Display</p>
-        </div>
+      <div className="mb-4 flex items-start justify-between">
+  <div>
+    <h1 className="text-3xl font-bold">Free Clinic Room Board</h1>
+    <p className="text-sm text-slate-300">Live Display</p>
+  </div>
 
-        <div className="text-right text-sm text-slate-300">
-          {now.toLocaleDateString()}
-          <br />
-          {now.toLocaleTimeString()}
-        </div>
-      </div>
+  <div className="flex items-start gap-6">
+    {/* Info Panel */}
+    <div className="rounded-xl bg-slate-800/80 p-3 text-xs text-slate-200 shadow">
+      <p className="font-semibold text-white mb-1">Connect Here</p>
+
+      <p>
+        <span className="font-semibold">Site:</span>{" "}
+        <span className="break-all">{CLINIC_URL}</span>
+      </p>
+
+      <p>
+        <span className="font-semibold">WiFi:</span> {WIFI_NAME}
+      </p>
+
+      <p>
+        <span className="font-semibold">Password:</span> {WIFI_PASSWORD}
+      </p>
+    </div>
+
+    {/* QR Code */}
+    <div className="rounded-xl bg-white p-2 shadow">
+      <img src={QR_SRC} alt="QR Code" className="h-24 w-24" />
+    </div>
+
+    {/* Time */}
+    <div className="text-right text-sm text-slate-300">
+      {now.toLocaleDateString()}
+      <br />
+      {now.toLocaleTimeString()}
+    </div>
+  </div>
+</div>
 
       <div className="grid h-[calc(100vh-96px)] grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {ROOM_OPTIONS.map((room) => {
