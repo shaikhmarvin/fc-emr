@@ -1,5 +1,5 @@
 import { getStatusClasses, getStatusLabel } from "../utils";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import OphthalmologySoapForm from "./OphthalmologySoapForm";
 export default function ChartView({
   selectedPatient,
@@ -91,6 +91,7 @@ export default function ChartView({
   onStartRefillRequest,
   refillRequests,
   profileNameMap,
+  setSkipUpperLevelApproval,
 }) {
 
 
@@ -198,13 +199,375 @@ export default function ChartView({
     };
   }
 
-  function groupImportedLabs(labs = []) {
-    return labs.reduce((groups, lab) => {
-      const group = lab.group || "Other";
-      if (!groups[group]) groups[group] = [];
-      groups[group].push(lab);
-      return groups;
-    }, {});
+  const LAB_GROUP_ORDER = [
+    "CBC",
+    "Chemistry / Renal",
+    "Liver",
+    "Diabetes",
+    "Lipids",
+    "Thyroid / Endocrine",
+    "Infectious",
+    "Urine",
+    "Other",
+  ];
+
+  const IN_HOUSE_LAB_CONFIG = [
+    { group: "Chemistry / Renal", label: "Sodium", path: ["istat", "na"] },
+    { group: "Chemistry / Renal", label: "Potassium", path: ["istat", "k"] },
+    { group: "Chemistry / Renal", label: "Chloride", path: ["istat", "cl"] },
+    { group: "Chemistry / Renal", label: "Ionized Calcium", path: ["istat", "ica"] },
+    { group: "Diabetes", label: "Glucose", path: ["istat", "glucose"] },
+    { group: "Chemistry / Renal", label: "TCO2", path: ["istat", "tco2"] },
+    { group: "Chemistry / Renal", label: "BUN", path: ["istat", "bun"] },
+    { group: "Chemistry / Renal", label: "Creatinine", path: ["istat", "creatinine"] },
+    { group: "CBC", label: "Hematocrit", path: ["istat", "hct"] },
+    { group: "CBC", label: "Hemoglobin", path: ["istat", "hgb"] },
+    { group: "Chemistry / Renal", label: "Anion Gap", path: ["istat", "anionGap"] },
+
+    { group: "Diabetes", label: "Blood Glucose", path: ["core", "bloodGlucose"] },
+    { group: "Diabetes", label: "A1c", path: ["core", "a1c"] },
+    { group: "Infectious", label: "HIV", path: ["core", "hiv"] },
+
+    { group: "Lipids", label: "Total Cholesterol", path: ["lipids", "totalCholesterol"] },
+    { group: "Lipids", label: "Triglycerides", path: ["lipids", "triglycerides"] },
+    { group: "Lipids", label: "HDL", path: ["lipids", "hdl"] },
+    { group: "Lipids", label: "LDL", path: ["lipids", "ldl"] },
+    { group: "Lipids", label: "TC / HDL", path: ["lipids", "tcHdl"] },
+
+    { group: "Urine", label: "Urine Albumin", path: ["microalbumin", "albumin"] },
+    { group: "Urine", label: "Urine Creatinine", path: ["microalbumin", "creatinine"] },
+    { group: "Urine", label: "Albumin / Creatinine Ratio", path: ["microalbumin", "acRatio"] },
+
+    { group: "Urine", label: "Leukocytes", path: ["urinalysis", "leukocytes"] },
+    { group: "Urine", label: "Nitrite", path: ["urinalysis", "nitrite"] },
+    { group: "Urine", label: "Urobilinogen", path: ["urinalysis", "urobilinogen"] },
+    { group: "Urine", label: "Protein", path: ["urinalysis", "protein"] },
+    { group: "Urine", label: "pH", path: ["urinalysis", "ph"] },
+    { group: "Urine", label: "Blood", path: ["urinalysis", "blood"] },
+    { group: "Urine", label: "Specific Gravity", path: ["urinalysis", "specificGravity"] },
+    { group: "Urine", label: "Ketones", path: ["urinalysis", "ketones"] },
+    { group: "Urine", label: "Bilirubin", path: ["urinalysis", "bilirubin"] },
+    { group: "Urine", label: "Urine Glucose", path: ["urinalysis", "glucose"] },
+
+    { group: "Infectious", label: "Flu", path: ["rapid", "flu"] },
+    { group: "Infectious", label: "Strep", path: ["rapid", "strep"] },
+    { group: "Other", label: "Guaiac", path: ["rapid", "guaiac"] },
+    { group: "Other", label: "HCG", path: ["rapid", "hcg"] },
+    { group: "Other", label: "Mono", path: ["rapid", "mono"] },
+
+    { group: "Other", label: "Nursing Notes", path: ["nursingNotes"] },
+  ];
+
+  function getNestedValue(obj, path = []) {
+    return path.reduce((acc, key) => {
+      if (acc === null || acc === undefined) return undefined;
+      return acc[key];
+    }, obj);
+  }
+
+  function hasMeaningfulLabValue(value) {
+    if (value === null || value === undefined) return false;
+    if (typeof value === "string" && value.trim() === "") return false;
+    return true;
+  }
+
+  function normalizeLabDate(value) {
+    if (!value) return "";
+
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString().slice(0, 10);
+    }
+
+    const str = String(value).trim();
+
+    const yyyyMmDd = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (yyyyMmDd) return str;
+
+    const mmDdYyyy = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (mmDdYyyy) {
+      const [, mm, dd, yyyy] = mmDdYyyy;
+      return `${yyyy}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+    }
+
+    return str;
+  }
+
+  function formatLabHeaderDate(dateKey) {
+    if (!dateKey) return "Unknown";
+    const parsed = new Date(`${dateKey}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return dateKey;
+    return parsed.toLocaleDateString();
+  }
+
+  function normalizeLabName(rawName) {
+    const cleaned = String(rawName || "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const map = {
+      wbc: "WBC",
+      "white blood cell count": "WBC",
+      rbc: "RBC",
+      hemoglobin: "Hemoglobin",
+      hgb: "Hemoglobin",
+      hematocrit: "Hematocrit",
+      hct: "Hematocrit",
+      mcv: "MCV",
+      mch: "MCH",
+      mchc: "MCHC",
+      rdw: "RDW",
+      platelets: "Platelets",
+      platelet: "Platelets",
+      sodium: "Sodium",
+      potassium: "Potassium",
+      chloride: "Chloride",
+      glucose: "Glucose",
+      "blood glucose": "Blood Glucose",
+      bun: "BUN",
+      creatinine: "Creatinine",
+      "anion gap": "Anion Gap",
+      "ionized calcium": "Ionized Calcium",
+      calcium: "Calcium",
+      tco2: "TCO2",
+      bicarbonate: "TCO2",
+      alt: "ALT",
+      ast: "AST",
+      alkphos: "Alk Phos",
+      "alk phos": "Alk Phos",
+      bilirubin: "Bilirubin",
+      albumin: "Albumin",
+      protein: "Protein",
+      "total cholesterol": "Total Cholesterol",
+      triglycerides: "Triglycerides",
+      hdl: "HDL",
+      ldl: "LDL",
+      "tc / hdl": "TC / HDL",
+      "a1c": "A1c",
+      "hba1c": "A1c",
+      tsh: "TSH",
+      hiv: "HIV",
+      rpr: "RPR",
+      flu: "Flu",
+      strep: "Strep",
+      guaiac: "Guaiac",
+      hcg: "HCG",
+      mono: "Mono",
+      leukocytes: "Leukocytes",
+      nitrite: "Nitrite",
+      urobilinogen: "Urobilinogen",
+      "specific gravity": "Specific Gravity",
+      ketones: "Ketones",
+      "urine glucose": "Urine Glucose",
+      "urine albumin": "Urine Albumin",
+      "urine creatinine": "Urine Creatinine",
+      "albumin / creatinine ratio": "Albumin / Creatinine Ratio",
+      "albumin/creatinine ratio": "Albumin / Creatinine Ratio",
+      "nursing notes": "Nursing Notes",
+      "tsh 3rd generation": "TSH",
+      "tsh third generation": "TSH",
+
+      "ldl calculated": "LDL",
+      "non-hdl cholesterol": "Non-HDL Cholesterol",
+
+      "hemoglobin a1c": "A1c",
+      "hgb a1c": "A1c",
+
+      "hiv screen": "HIV",
+
+      "chlamydia trachomatis pcr": "Chlamydia PCR",
+      "neisseria gonorrhoeae pcr": "Gonorrhea PCR",
+    };
+
+    const key = cleaned.toLowerCase();
+    return map[key] || cleaned;
+  }
+
+  function inferLabGroup(label, explicitGroup = "") {
+    const group = String(explicitGroup || "").trim();
+    if (group) {
+      if (/cbc/i.test(group)) return "CBC";
+      if (/chem|renal|bmp|cmp|electrolyte/i.test(group)) return "Chemistry / Renal";
+      if (/liver|hepatic/i.test(group)) return "Liver";
+      if (/diabet|a1c|glucose/i.test(group)) return "Diabetes";
+      if (/lipid|cholesterol|triglyceride/i.test(group)) return "Lipids";
+      if (/thyroid|endocrine/i.test(group)) return "Thyroid / Endocrine";
+      if (/infect|std|hiv|rpr|syphilis|hepatitis/i.test(group)) return "Infectious";
+      if (/urine|ua|microalbumin/i.test(group)) return "Urine";
+      return group;
+    }
+
+    const lower = String(label || "").toLowerCase();
+
+    if (/(wbc|rbc|hemoglobin|hematocrit|mcv|mch|mchc|rdw|platelet)/i.test(lower)) return "CBC";
+    if (/(sodium|potassium|chloride|bun|creatinine|anion gap|ionized calcium|tco2|calcium)/i.test(lower)) return "Chemistry / Renal";
+    if (/(ast|alt|alk phos|bilirubin|albumin)/i.test(lower)) return "Liver";
+    if (/(glucose|a1c|hba1c)/i.test(lower)) return "Diabetes";
+    if (/(cholesterol|triglycerides|hdl|ldl|tc \/ hdl)/i.test(lower)) return "Lipids";
+    if (/(tsh|t4|t3)/i.test(lower)) return "Thyroid / Endocrine";
+    if (/(hiv|rpr|syphilis|hepatitis|flu|strep|mono)/i.test(lower)) return "Infectious";
+    if (/(urine|leukocytes|nitrite|urobilinogen|specific gravity|ketones|microalbumin|albumin \/ creatinine ratio)/i.test(lower)) return "Urine";
+
+    return "Other";
+  }
+
+  function getLabFlag(rawFlag, value) {
+    const flag = String(rawFlag || "").trim().toUpperCase();
+    if (flag === "H" || flag === "L") return flag;
+
+    const lowerValue = String(value || "").trim().toLowerCase();
+    if (lowerValue === "positive" || lowerValue === "detected" || lowerValue === "reactive") {
+      return "H";
+    }
+
+    return "";
+  }
+
+  function isAbnormalFlag(flag) {
+    return flag === "H" || flag === "L";
+  }
+
+  function getLabFlagClasses(flag) {
+    if (flag === "H") return "text-red-700";
+    if (flag === "L") return "text-blue-700";
+    return "text-slate-900";
+  }
+
+  function truncateLabValue(value) {
+    const text = String(value ?? "").trim();
+    if (!text) return "—";
+    if (text.length <= 42) return text;
+    return `${text.slice(0, 42)}…`;
+  }
+
+  function flattenInHouseLabs(encounter) {
+    const inHouseLabs = encounter?.inHouseLabs || {};
+    const dateKey = normalizeLabDate(encounter?.clinicDate || encounter?.createdAt);
+
+    return IN_HOUSE_LAB_CONFIG
+      .map((config) => {
+        const rawValue = getNestedValue(inHouseLabs, config.path);
+        if (!hasMeaningfulLabValue(rawValue)) return null;
+
+        const label = normalizeLabName(config.label);
+        return {
+          analyte: label,
+          group: config.group || inferLabGroup(label),
+          dateKey,
+          value: rawValue,
+          valueText: truncateLabValue(rawValue),
+          fullValueText: String(rawValue ?? "").trim(),
+          unitText: "",
+          sourceLabel: "In-house",
+          flag: getLabFlag("", rawValue),
+          referenceRange: "",
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function flattenImportedLabs(encounter) {
+    const importedLabs = Array.isArray(encounter?.importedSendOutLabs)
+      ? encounter.importedSendOutLabs
+      : [];
+
+    return importedLabs
+      .map((lab) => {
+        const rawValue = lab?.value;
+        if (!hasMeaningfulLabValue(rawValue)) return null;
+
+        const analyte = normalizeLabName(
+          lab?.displayName || lab?.normalizedName || lab?.key || "Lab"
+        );
+
+        const dateKey = normalizeLabDate(
+          lab?.collectionDate ||
+          lab?.collectedAt ||
+          lab?.date ||
+          encounter?.clinicDate ||
+          encounter?.createdAt
+        );
+
+        return {
+          analyte,
+          group: inferLabGroup(analyte, lab?.group),
+          dateKey,
+          value: rawValue,
+          valueText: truncateLabValue(rawValue),
+          fullValueText: String(rawValue ?? "").trim(),
+          unitText: String(lab?.units || lab?.unit || "").trim(),
+          sourceLabel: "Outside",
+          flag: String(
+            lab?.resultSymbol ||
+            lab?.flag ||
+            lab?.abnormalFlag ||
+            lab?.hlFlag ||
+            ""
+          ).trim(),
+          referenceRange: String(
+            lab?.referenceRangeText ||
+            lab?.referenceRange ||
+            lab?.reference_range ||
+            lab?.range ||
+            lab?.normalRange ||
+            lab?.expectedRange ||
+            ""
+          ).trim(),
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function buildLongitudinalLabData(encounters = []) {
+    const allResults = encounters.flatMap((encounter) => [
+      ...flattenInHouseLabs(encounter),
+      ...flattenImportedLabs(encounter),
+    ]);
+
+    const dateKeys = [...new Set(allResults.map((result) => result.dateKey).filter(Boolean))].sort(
+      (a, b) => new Date(b).getTime() - new Date(a).getTime()
+    );
+
+    const rowsByAnalyte = new Map();
+    let abnormalCount = 0;
+
+    allResults.forEach((result) => {
+      if (isAbnormalFlag(result.flag)) abnormalCount += 1;
+
+      if (!rowsByAnalyte.has(result.analyte)) {
+        rowsByAnalyte.set(result.analyte, {
+          analyte: result.analyte,
+          group: result.group || "Other",
+          valuesByDate: {},
+          abnormal: false,
+        });
+      }
+
+      const row = rowsByAnalyte.get(result.analyte);
+
+      if (!row.valuesByDate[result.dateKey]) {
+        row.valuesByDate[result.dateKey] = [];
+      }
+
+      row.valuesByDate[result.dateKey].push(result);
+
+      if (isAbnormalFlag(result.flag)) {
+        row.abnormal = true;
+      }
+    });
+
+    const groupedRows = LAB_GROUP_ORDER.map((group) => ({
+      group,
+      rows: [...rowsByAnalyte.values()]
+        .filter((row) => row.group === group)
+        .sort((a, b) => a.analyte.localeCompare(b.analyte)),
+    })).filter((groupBlock) => groupBlock.rows.length > 0);
+
+    return {
+      dateKeys,
+      groupedRows,
+      abnormalCount,
+    };
   }
 
   function renderTrendArrow(direction) {
@@ -305,6 +668,7 @@ export default function ChartView({
   const [selectedAttendingId, setSelectedAttendingId] = useState("");
   const [attendingPin, setAttendingPin] = useState("");
   const [chiefComplaintDraft, setChiefComplaintDraft] = useState("");
+  const [labFilter, setLabFilter] = useState("all");
   const rapidResultOptions = [
     { value: "", label: "—" },
     { value: "positive", label: "Positive" },
@@ -376,6 +740,10 @@ export default function ChartView({
     const bTime = new Date(b.createdAt || b.clinicDate || 0).getTime();
     return bTime - aTime;
   });
+
+  const longitudinalLabData = useMemo(() => {
+    return buildLongitudinalLabData(sortedEncounters);
+  }, [sortedEncounters]);
 
   const approvedRefillHistory = (refillRequests || [])
     .filter((req) => {
@@ -667,16 +1035,24 @@ export default function ChartView({
                       </span>
 
                       {canStartEncounter ? (
-                        <button
-                          type="button"
+                        <span
+                          role="button"
+                          tabIndex={0}
                           onClick={(e) => {
                             e.stopPropagation();
                             deleteEncounter(encounter.id);
                           }}
-                          className="rounded-lg bg-red-100 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-200"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              deleteEncounter(encounter.id);
+                            }
+                          }}
+                          className="rounded-lg bg-red-100 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-200 cursor-pointer"
                         >
                           Delete Encounter
-                        </button>
+                        </span>
                       ) : null}
                     </div>
                   </div>
@@ -685,6 +1061,8 @@ export default function ChartView({
             </div>
           )}
         </div>
+
+
       </div>
 
       {selectedEncounter && (
@@ -811,7 +1189,45 @@ export default function ChartView({
                         </option>
                       ))}
                     </select>
+
+                    {isLeadershipView ? (
+                      <div className="mt-2 space-y-2">
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSkipUpperLevelApproval(true)}
+                            disabled={!!assignmentForm.upperLevelName || !!selectedEncounter?.assignedUpperLevel}
+                            className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Approve Skip Upper Level
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setSkipUpperLevelApproval(false)}
+                            disabled={!selectedEncounter?.skipUpperLevel}
+                            className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Remove Skip Upper
+                          </button>
+                        </div>
+
+                        {selectedEncounter?.skipUpperLevel ? (
+                          <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                            Skip Upper Level is approved for this encounter.
+                          </div>
+                        ) : null}
+
+                        {!!assignmentForm.upperLevelName || !!selectedEncounter?.assignedUpperLevel ? (
+                          <div className="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-600">
+                            An upper level is assigned, so skip-upper is disabled.
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
+
+
 
                   <div>
                     <div className="mb-2 flex items-center justify-between gap-3">
@@ -1506,195 +1922,68 @@ export default function ChartView({
 
           <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
             <button
-              onClick={() => setShowLabs((prev) => !prev)}
+              onClick={() => setShowSendOutLabs((prev) => !prev)}
               className="flex w-full items-center justify-between text-left text-lg font-semibold"
             >
               In-House Labs
-              <span>{showLabs ? "▲" : "▼"}</span>
+              <span>{showSendOutLabs ? "▲" : "▼"}</span>
             </button>
 
-            {showLabs && (
+            {showSendOutLabs && selectedEncounter && (
               <div className="mt-4 space-y-6">
 
+                {/* iSTAT Panel */}
                 <div>
                   <h4 className="mb-3 font-semibold text-slate-800">iSTAT Panel</h4>
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">Na</label>
-                      <input
-                        type="number"
-                        step="any"
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.istat?.na || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("istat", "na", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      />
-                    </div>
 
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">K</label>
-                      <input
-                        type="number"
-                        step="any"
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.istat?.k || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("istat", "k", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      />
-                    </div>
+                    {[
+                      ["na", "Na"],
+                      ["k", "K"],
+                      ["cl", "Cl"],
+                      ["ica", "iCa"],
+                      ["glucose", "Glucose"],
+                      ["tco2", "TCO2"],
+                      ["bun", "BUN"],
+                      ["creatinine", "Creatinine"],
+                      ["hct", "Hct"],
+                      ["hgb", "Hgb"],
+                      ["anionGap", "Anion Gap"],
+                    ].map(([key, label]) => (
+                      <div key={key}>
+                        <label className="mb-1 block text-sm font-medium text-slate-700">
+                          {label}
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
+                          value={selectedEncounter.inHouseLabs?.istat?.[key] || ""}
+                          onChange={(e) => {
+                            if (isEncounterLocked) return;
+                            updateInHouseLabSection("istat", key, e.target.value);
+                          }}
+                          disabled={isEncounterLocked}
+                        />
+                      </div>
+                    ))}
 
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">Cl</label>
-                      <input
-                        type="number"
-                        step="any"
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.istat?.cl || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("istat", "cl", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">iCa</label>
-                      <input
-                        type="number"
-                        step="any"
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.istat?.ica || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("istat", "ica", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">Glucose</label>
-                      <input
-                        type="number"
-                        step="any"
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.istat?.glucose || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("istat", "glucose", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">TCO2</label>
-                      <input
-                        type="number"
-                        step="any"
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.istat?.tco2 || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("istat", "tco2", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">BUN</label>
-                      <input
-                        type="number"
-                        step="any"
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.istat?.bun || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("istat", "bun", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">Creatinine</label>
-                      <input
-                        type="number"
-                        step="any"
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.istat?.creatinine || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("istat", "creatinine", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">HCT</label>
-                      <input
-                        type="number"
-                        step="any"
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.istat?.hct || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("istat", "hct", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">Hgb</label>
-                      <input
-                        type="number"
-                        step="any"
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.istat?.hgb || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("istat", "hgb", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">Anion Gap</label>
-                      <input
-                        type="number"
-                        step="any"
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.istat?.anionGap || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("istat", "anionGap", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      />
-                    </div>
                   </div>
                 </div>
 
+                {/* Core */}
                 <div>
-                  <h4 className="mb-3 font-semibold text-slate-800">Core Labs</h4>
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  <h4 className="mb-3 font-semibold text-slate-800">Core</h4>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+
                     <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">Blood Glucose</label>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">
+                        Blood Glucose
+                      </label>
                       <input
                         type="number"
                         step="any"
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2"
                         value={selectedEncounter.inHouseLabs?.core?.bloodGlucose || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1705,11 +1994,13 @@ export default function ChartView({
                     </div>
 
                     <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">HbA1C</label>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">
+                        A1c
+                      </label>
                       <input
                         type="number"
                         step="any"
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2"
                         value={selectedEncounter.inHouseLabs?.core?.a1c || ""}
                         onChange={(e) => {
                           if (isEncounterLocked) return;
@@ -1719,559 +2010,515 @@ export default function ChartView({
                       />
                     </div>
 
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">HIV</label>
-                      <select
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.core?.hiv || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("core", "hiv", e.target.value);
-                        }}
-                      >
-                        <option value="">Select</option>
-                        <option value="negative">Negative</option>
-                        <option value="positive">Positive</option>
-                        <option value="indeterminate">Indeterminate</option>
-                      </select>
-                    </div>
                   </div>
                 </div>
 
+                {/* Lipids */}
                 <div>
                   <h4 className="mb-3 font-semibold text-slate-800">Lipids</h4>
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">HDL</label>
-                      <input
-                        type="number"
-                        step="any"
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.lipids?.hdl || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("lipids", "hdl", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      />
-                    </div>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
 
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">Triglycerides</label>
-                      <input
-                        type="number"
-                        step="any"
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.lipids?.triglycerides || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("lipids", "triglycerides", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">LDL</label>
-                      <input
-                        type="number"
-                        step="any"
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.lipids?.ldl || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("lipids", "ldl", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">TC/HDL</label>
-                      <input
-                        type="number"
-                        step="any"
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.lipids?.tcHdl || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("lipids", "tcHdl", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">Total Cholesterol</label>
-                      <input
-                        type="number"
-                        step="any"
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.lipids?.totalCholesterol || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("lipids", "totalCholesterol", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="mb-3 font-semibold text-slate-800">Microalbumin / Creatinine</h4>
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">Albumin</label>
-                      <input
-                        type="number"
-                        step="any"
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.microalbumin?.albumin || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("microalbumin", "albumin", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">Creatinine</label>
-                      <input
-                        type="number"
-                        step="any"
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.microalbumin?.creatinine || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("microalbumin", "creatinine", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">A/C Ratio</label>
-                      <input
-                        type="number"
-                        step="any"
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.microalbumin?.acRatio || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("microalbumin", "acRatio", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="mb-3 font-semibold text-slate-800">Urinalysis</h4>
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">Leukocytes</label>
-                      <select
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.urinalysis?.leukocytes || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("urinalysis", "leukocytes", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      >
-                        {uaOptions.leukocytes.map((option) => (
-                          <option key={option || "blank-leukocytes"} value={option}>
-                            {option || "Select"}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">Nitrite</label>
-                      <select
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.urinalysis?.nitrite || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("urinalysis", "nitrite", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      >
-                        {uaOptions.nitrite.map((option) => (
-                          <option key={option || "blank-nitrite"} value={option}>
-                            {option || "Select"}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">Urobilinogen</label>
-                      <select
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.urinalysis?.urobilinogen || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("urinalysis", "urobilinogen", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      >
-                        {uaOptions.urobilinogen.map((option) => (
-                          <option key={option || "blank-urobilinogen"} value={option}>
-                            {option || "Select"}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">Protein</label>
-                      <select
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.urinalysis?.protein || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("urinalysis", "protein", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      >
-                        {uaOptions.protein.map((option) => (
-                          <option key={option || "blank-protein"} value={option}>
-                            {option || "Select"}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">pH</label>
-                      <select
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.urinalysis?.ph || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("urinalysis", "ph", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      >
-                        {uaOptions.ph.map((option) => (
-                          <option key={option || "blank-ph"} value={option}>
-                            {option || "Select"}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">Blood</label>
-                      <select
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.urinalysis?.blood || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("urinalysis", "blood", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      >
-                        {uaOptions.blood.map((option) => (
-                          <option key={option || "blank-blood"} value={option}>
-                            {option || "Select"}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">Specific Gravity</label>
-                      <select
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.urinalysis?.specificGravity || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("urinalysis", "specificGravity", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      >
-                        {uaOptions.specificGravity.map((option) => (
-                          <option key={option || "blank-sg"} value={option}>
-                            {option || "Select"}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">Ketones</label>
-                      <select
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.urinalysis?.ketones || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("urinalysis", "ketones", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      >
-                        {uaOptions.ketones.map((option) => (
-                          <option key={option || "blank-ketones"} value={option}>
-                            {option || "Select"}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">Bilirubin</label>
-                      <select
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.urinalysis?.bilirubin || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("urinalysis", "bilirubin", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      >
-                        {uaOptions.bilirubin.map((option) => (
-                          <option key={option || "blank-bilirubin"} value={option}>
-                            {option || "Select"}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">Urine Glucose</label>
-                      <select
-                        className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                        value={selectedEncounter.inHouseLabs?.urinalysis?.glucose || ""}
-                        onChange={(e) => {
-                          if (isEncounterLocked) return;
-                          updateInHouseLabSection("urinalysis", "glucose", e.target.value);
-                        }}
-                        disabled={isEncounterLocked}
-                      >
-                        {uaOptions.glucose.map((option) => (
-                          <option key={option || "blank-ua-glucose"} value={option}>
-                            {option || "Select"}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="mb-3 font-semibold text-slate-800">Rapid Tests</h4>
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
                     {[
-                      { key: "flu", label: "Flu" },
-                      { key: "strep", label: "Strep" },
-                      { key: "guaiac", label: "Guaiac" },
-                      { key: "hcg", label: "HCG" },
-                      { key: "mono", label: "Mono" },
-                    ].map((test) => {
-                      const currentValue = selectedEncounter.inHouseLabs?.rapid?.[test.key] || "";
+                      ["totalCholesterol", "Total Cholesterol"],
+                      ["triglycerides", "Triglycerides"],
+                      ["hdl", "HDL"],
+                      ["ldl", "LDL"],
+                      ["tcHdl", "TC / HDL"],
+                    ].map(([key, label]) => (
+                      <div key={key}>
+                        <label className="mb-1 block text-sm font-medium text-slate-700">
+                          {label}
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          className="min-h-[44px] w-full rounded-lg border px-3 py-2"
+                          value={selectedEncounter.inHouseLabs?.lipids?.[key] || ""}
+                          onChange={(e) => {
+                            if (isEncounterLocked) return;
+                            updateInHouseLabSection("lipids", key, e.target.value);
+                          }}
+                          disabled={isEncounterLocked}
+                        />
+                      </div>
+                    ))}
 
-                      return (
-                        <div key={test.key}>
-                          <label className="mb-1 block text-sm font-medium text-slate-700">
-                            {test.label}
-                          </label>
-
-                          <div className="flex gap-2">
-                            {["positive", "negative"].map((val) => {
-                              const isActive = currentValue === val;
-
-                              return (
-                                <button
-                                  key={val}
-                                  type="button"
-                                  onClick={() => {
-                                    if (isEncounterLocked) return;
-                                    updateInHouseLabSection(
-                                      "rapid",
-                                      test.key,
-                                      currentValue === val ? "" : val
-                                    )
-                                  }
-                                  }
-                                  className={`rounded-lg border px-3 py-2 text-sm ${isActive
-                                    ? "border-blue-600 bg-blue-100 text-blue-800"
-                                    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                                    }`}
-                                >
-                                  {val === "positive" ? "Positive" : "Negative"}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
                   </div>
                 </div>
 
+                {/* Notes */}
                 <div>
-                  <h4 className="mb-3 font-semibold text-slate-800">Nursing Notes</h4>
+                  <h4 className="mb-2 font-semibold text-slate-800">Notes</h4>
                   <textarea
-                    className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                    rows={4}
-                    placeholder="Nursing notes"
                     value={selectedEncounter.inHouseLabs?.nursingNotes || ""}
                     onChange={(e) => {
                       if (isEncounterLocked) return;
                       updateInHouseLabRoot("nursingNotes", e.target.value);
                     }}
+                    className="w-full rounded-lg border px-3 py-2"
+                    rows={3}
+                    placeholder="Enter any lab notes..."
                     disabled={isEncounterLocked}
                   />
                 </div>
+
               </div>
             )}
           </div>
+
+
 
           <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
             <button
-              onClick={() => setShowSendOutLabs((prev) => !prev)}
+              onClick={() => setShowLabs((prev) => !prev)}
               className="flex w-full items-center justify-between text-left text-lg font-semibold"
             >
-              Send-Out Labs
-              <span>{showSendOutLabs ? "▲" : "▼"}</span>
+              Full Lab View
+              <span>{showLabs ? "▲" : "▼"}</span>
             </button>
 
-            {showSendOutLabs && (
-              <div className="mt-4 space-y-6">
-                {/* Legacy send-out workflow stays visible */}
-                <div className="space-y-4">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={legacySendOutLabs?.ordered || false}
-                      onChange={(e) =>
-                        saveSendOutLabs({
-                          ...legacySendOutLabs,
-                          ordered: e.target.checked,
-                        })
-                      }
-                    />
-                    Send-Out Labs Ordered
-                  </label>
+            {showLabs && (
+              <div className="mt-4 space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { key: "all", label: "All" },
+                    { key: "abnormal", label: "Abnormal only" },
+                    ...longitudinalLabData.groupedRows.map((groupBlock) => ({
+                      key: groupBlock.group,
+                      label: groupBlock.group,
+                    })),
+                  ].map((chip) => {
+                    const active = labFilter === chip.key;
 
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={legacySendOutLabs?.received || false}
-                      onChange={(e) =>
-                        saveSendOutLabs({
-                          ...legacySendOutLabs,
-                          received: e.target.checked,
-                        })
-                      }
-                    />
-                    Results Received
-                  </label>
-
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      disabled={!legacySendOutLabs?.received}
-                      checked={legacySendOutLabs?.patientNotified || false}
-                      onChange={(e) =>
-                        saveSendOutLabs({
-                          ...legacySendOutLabs,
-                          patientNotified: e.target.checked,
-                        })
-                      }
-                    />
-                    Patient Notified
-                  </label>
-
-                  <textarea
-                    className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                    placeholder="Labs ordered / notes"
-                    value={legacySendOutLabs?.notes || ""}
-                    onChange={(e) =>
-                      saveSendOutLabs({
-                        ...legacySendOutLabs,
-                        notes: e.target.value,
-                      })
-                    }
-                  />
-
-                  <textarea
-                    className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                    placeholder="Result summary"
-                    value={legacySendOutLabs?.resultSummary || ""}
-                    onChange={(e) =>
-                      saveSendOutLabs({
-                        ...legacySendOutLabs,
-                        resultSummary: e.target.value,
-                      })
-                    }
-                  />
+                    return (
+                      <button
+                        key={chip.key}
+                        type="button"
+                        onClick={() => setLabFilter(chip.key)}
+                        className={`rounded-full border px-3 py-1.5 text-sm ${active
+                          ? "border-blue-600 bg-blue-100 text-blue-800"
+                          : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                          }`}
+                      >
+                        {chip.label}
+                      </button>
+                    );
+                  })}
                 </div>
 
-                {/* Imported OCR labs display below legacy controls */}
-                {importedSendOutLabs.length > 0 ? (
-                  <div className="space-y-4 border-t border-slate-200 pt-4">
-                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-                      Imported outside labs saved for this encounter.
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                  <span className="font-medium">Dates:</span>{" "}
+                  {longitudinalLabData.dateKeys.length}
+                  {" • "}
+                  <span className="font-medium">Abnormal results:</span>{" "}
+                  {longitudinalLabData.abnormalCount}
+                </div>
+
+                {longitudinalLabData.dateKeys.length === 0 ? (
+  <div className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
+    No saved lab results yet.
+  </div>
+) : (
+  <>
+    <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200">
+      <table className="min-w-[900px] border-separate border-spacing-0 text-sm">
+        <thead>
+          <tr>
+            <th className="sticky left-0 z-20 w-[170px] border-b border-r border-slate-200 bg-slate-100 px-3 py-2 text-left font-semibold text-slate-800">
+              Lab
+            </th>
+
+            {longitudinalLabData.dateKeys.map((dateKey) => (
+              <th
+                key={dateKey}
+                className="border-b border-slate-200 bg-slate-100 px-2 py-2 text-left font-semibold text-slate-800"
+              >
+                {formatLabHeaderDate(dateKey)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+
+        <tbody>
+          {longitudinalLabData.groupedRows
+            .filter((groupBlock) => {
+              if (labFilter === "all" || labFilter === "abnormal") return true;
+              return groupBlock.group === labFilter;
+            })
+            .map((groupBlock) => {
+              const visibleRows = groupBlock.rows.filter((row) => {
+                if (labFilter === "abnormal") return row.abnormal;
+                return true;
+              });
+
+              if (visibleRows.length === 0) return null;
+
+              return (
+                <Fragment key={groupBlock.group}>
+                  <tr>
+                    <td
+                      colSpan={longitudinalLabData.dateKeys.length + 1}
+                      className="bg-slate-75 border-b border-t border-slate-200 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600"
+                    >
+                      {groupBlock.group}
+                    </td>
+                  </tr>
+
+                  {visibleRows.map((row) => (
+                    <tr key={row.analyte}>
+                      <td className="sticky left-0 z-10 w-[170px] border-b border-r border-slate-200 bg-white px-3 py-2 font-medium text-slate-900">
+                        {row.analyte}
+                      </td>
+
+                      {longitudinalLabData.dateKeys.map((dateKey) => {
+                        const cellResults = row.valuesByDate[dateKey] || [];
+
+                        return (
+                          <td
+                            key={`${row.analyte}-${dateKey}`}
+                            className="min-w-[120px] border-b border-slate-200 px-2 py-2 align-top"
+                          >
+                            {cellResults.length === 0 ? (
+                              <span className="text-slate-300">—</span>
+                            ) : (
+                              <div className="space-y-2">
+                                {cellResults.map((result, index) => (
+                                  <div
+                                    key={`${row.analyte}-${dateKey}-${index}`}
+                                    className="rounded-lg bg-slate-50 px-2.5 py-2"
+                                    title={result.fullValueText}
+                                  >
+                                    <div className="flex items-start gap-2">
+  <span
+    className={`inline-flex min-w-[22px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+      result.flag === "H"
+        ? "bg-red-100 text-red-700"
+        : result.flag === "L"
+        ? "bg-blue-100 text-blue-700"
+        : "invisible"
+    }`}
+  >
+    {result.flag || "•"}
+  </span>
+
+  <div className="min-w-0">
+                                        <div className={`font-semibold ${getLabFlagClasses(result.flag)}`}>
+                                          {result.valueText}
+                                        </div>
+
+                                        <div className="mt-1 text-xs text-slate-500">
+                                          {result.sourceLabel}
+                                          {result.unitText ? ` • ${result.unitText}` : ""}
+                                        </div>
+
+                                        {result.referenceRange ? (
+                                          <div className="text-xs text-slate-400">
+                                            Ref: {result.referenceRange}
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </Fragment>
+              );
+            })}
+        </tbody>
+      </table>
+    </div>
+
+    <div className="space-y-4 md:hidden">
+      {longitudinalLabData.groupedRows
+        .filter((groupBlock) => {
+          if (labFilter === "all" || labFilter === "abnormal") return true;
+          return groupBlock.group === labFilter;
+        })
+        .map((groupBlock) => {
+          const visibleRows = groupBlock.rows.filter((row) => {
+            if (labFilter === "abnormal") return row.abnormal;
+            return true;
+          });
+
+          if (visibleRows.length === 0) return null;
+
+          return (
+            <div key={groupBlock.group} className="space-y-3">
+              <div className="text-xs font-semibold uppercase text-slate-500">
+                {groupBlock.group}
+              </div>
+
+              {visibleRows.map((row) => {
+                const allResults = Object.values(row.valuesByDate || {}).flat();
+
+                if (allResults.length === 0) return null;
+
+                return (
+                  <div
+                    key={row.analyte}
+                    className="rounded-xl border border-slate-200 bg-white p-3"
+                  >
+                    <div className="mb-2 font-semibold text-slate-800">
+                      {row.analyte}
                     </div>
 
-                    {Object.entries(groupImportedLabs(importedSendOutLabs)).map(
-                      ([group, labs]) => (
+                    <div className="space-y-2">
+                      {allResults.map((result, idx) => (
                         <div
-                          key={group}
-                          className="overflow-hidden rounded-xl border border-slate-200"
+                          key={idx}
+                          className="flex items-start justify-between text-sm"
                         >
-                          <div className="bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-800">
-                            {group}
+                          <div className="text-slate-600">
+                            {formatLabHeaderDate(result.dateKey)}
                           </div>
 
-                          <div className="divide-y divide-slate-100">
-                            {labs.map((lab, index) => (
+                          <div className="text-right">
+                            <div className={`font-semibold ${getLabFlagClasses(result.flag)}`}>
+                              {result.valueText}
+                            </div>
+
+                            <div className="text-xs text-slate-500">
+                              {result.sourceLabel}
+                              {result.unitText ? ` • ${result.unitText}` : ""}
+                            </div>
+
+                            {result.referenceRange ? (
+                              <div className="text-xs text-slate-400">
+                                Ref: {result.referenceRange}
+                              </div>
+                            ) : null}
+                          </div>
+
+                          <div
+  className={`ml-2 rounded-full px-2 py-0.5 text-xs font-bold ${
+    result.flag === "H"
+      ? "bg-red-100 text-red-700"
+      : result.flag === "L"
+      ? "bg-blue-100 text-blue-700"
+      : "invisible"
+  }`}
+>
+  {result.flag || "•"}
+</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+    </div>
+  </>
+)}
+                  <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="min-w-[900px] border-separate border-spacing-0 text-sm">
+                      <thead>
+                        <tr>
+                          <th className="sticky left-0 z-20 w-[170px] border-b border-r border-slate-200 bg-slate-100 px-3 py-2 text-left font-semibold text-slate-800">
+                            Lab
+                          </th>
+
+                          {longitudinalLabData.dateKeys.map((dateKey) => (
+                            <th
+                              key={dateKey}
+                              className="border-b border-slate-200 bg-slate-100 px-2 py-2 text-left font-semibold text-slate-800"
+                            >
+                              {formatLabHeaderDate(dateKey)}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {longitudinalLabData.groupedRows
+                          .filter((groupBlock) => {
+                            if (labFilter === "all" || labFilter === "abnormal") return true;
+                            return groupBlock.group === labFilter;
+                          })
+                          .map((groupBlock) => {
+                            const visibleRows = groupBlock.rows.filter((row) => {
+                              if (labFilter === "abnormal") return row.abnormal;
+                              return true;
+                            });
+
+                            if (visibleRows.length === 0) return null;
+
+                            return (
+                              <Fragment key={groupBlock.group}>
+                                <tr>
+                                  <td
+                                    colSpan={longitudinalLabData.dateKeys.length + 1}
+                                    className="bg-slate-75 border-b border-t border-slate-200 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600"
+                                  >
+                                    {groupBlock.group}
+                                  </td>
+                                </tr>
+
+                                {visibleRows.map((row) => (
+                                  <tr key={row.analyte}>
+                                    <td className="sticky left-0 z-10 w-[170px] border-b border-r border-slate-200 bg-white px-3 py-2 font-medium text-slate-900">
+                                      {row.analyte}
+                                    </td>
+
+                                    {longitudinalLabData.dateKeys.map((dateKey) => {
+                                      const cellResults = row.valuesByDate[dateKey] || [];
+
+                                      return (
+                                        <td
+                                          key={`${row.analyte}-${dateKey}`}
+                                          className="min-w-[120px] border-b border-slate-200 px-2 py-2 align-top"
+                                        >
+                                          {cellResults.length === 0 ? (
+                                            <span className="text-slate-300">—</span>
+                                          ) : (
+                                            <div className="space-y-2">
+                                              {cellResults.map((result, index) => (
+                                                <div
+                                                  key={`${row.analyte}-${dateKey}-${index}`}
+                                                  className="rounded-lg bg-slate-50 px-2.5 py-2"
+                                                  title={result.fullValueText}
+                                                >
+                                                  <div className="flex items-start gap-2">
+                                                    {result.flag ? (
+                                                      <span
+                                                        className={`inline-flex min-w-[22px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold ${result.flag === "H"
+                                                          ? "bg-red-100 text-red-700"
+                                                          : "bg-blue-100 text-blue-700"
+                                                          }`}
+                                                      >
+                                                        {result.flag}
+                                                      </span>
+                                                    ) : null}
+
+                                                    <div className="min-w-0">
+                                                      <div className={`font-semibold ${getLabFlagClasses(result.flag)}`}>
+                                                        {result.valueText}
+                                                      </div>
+
+                                                      <div className="mt-1 text-xs text-slate-500">
+                                                        {result.sourceLabel}
+                                                        {result.unitText ? ` • ${result.unitText}` : ""}
+                                                      </div>
+
+                                                      {result.referenceRange ? (
+                                                        <div className="text-xs text-slate-400">
+                                                          Ref: {result.referenceRange}
+                                                        </div>
+                                                      ) : null}
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                ))}
+                              </Fragment>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* MOBILE LAB VIEW */}
+                <div className="space-y-4 md:hidden">
+                  {longitudinalLabData.groupedRows
+                    .filter((groupBlock) => {
+                      if (labFilter === "all" || labFilter === "abnormal") return true;
+                      return groupBlock.group === labFilter;
+                    })
+                    .map((groupBlock) => {
+                      const visibleRows = groupBlock.rows.filter((row) => {
+                        if (labFilter === "abnormal") return row.abnormal;
+                        return true;
+                      });
+
+                      if (visibleRows.length === 0) return null;
+
+                      return (
+                        <div key={groupBlock.group} className="space-y-3">
+                          <div className="text-xs font-semibold uppercase text-slate-500">
+                            {groupBlock.group}
+                          </div>
+
+                          {visibleRows.map((row) => {
+                            const allResults = Object.values(row.valuesByDate || {}).flat();
+
+                            if (allResults.length === 0) return null;
+
+                            return (
                               <div
-                                key={`${lab.key || lab.displayName || "lab"}-${index}`}
-                                className="flex items-start justify-between gap-4 px-4 py-3"
+                                key={row.analyte}
+                                className="rounded-xl border border-slate-200 p-3 bg-white"
                               >
-                                <div className="min-w-0 flex-1">
-                                  <div className="text-sm font-medium text-slate-900">
-                                    {lab.displayName || lab.key || "Lab"}
-                                  </div>
-
-                                  {lab.expectedRangeText ? (
-                                    <div className="mt-1 text-xs text-slate-500">
-                                      Expected: {lab.expectedRangeText}
-                                    </div>
-                                  ) : null}
-
-                                  {lab.suspicious ? (
-                                    <div className="mt-1 text-xs font-medium text-yellow-700">
-                                      Value looks unusual — review saved result
-                                    </div>
-                                  ) : null}
+                                <div className="font-semibold text-slate-800 mb-2">
+                                  {row.analyte}
                                 </div>
 
-                                <div className="shrink-0 text-sm font-semibold text-slate-900">
-                                  {lab.value !== null &&
-                                    lab.value !== undefined &&
-                                    lab.value !== ""
-                                    ? String(lab.value)
-                                    : "—"}
+                                <div className="space-y-2">
+                                  {allResults.map((result, idx) => (
+                                    <div
+                                      key={idx}
+                                      className="flex justify-between items-start text-sm"
+                                    >
+                                      <div className="text-slate-600">
+                                        {formatLabHeaderDate(result.dateKey)}
+                                      </div>
+
+                                      <div className="text-right">
+                                        <div className={`font-semibold ${getLabFlagClasses(result.flag)}`}>
+                                          {result.valueText}
+                                        </div>
+
+                                        <div className="text-xs text-slate-500">
+                                          {result.sourceLabel}
+                                          {result.unitText ? ` • ${result.unitText}` : ""}
+                                        </div>
+
+                                        {result.referenceRange && (
+                                          <div className="text-xs text-slate-400">
+                                            Ref: {result.referenceRange}
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {result.flag && (
+                                        <div
+                                          className={`ml-2 rounded-full px-2 py-0.5 text-xs font-bold ${result.flag === "H"
+                                              ? "bg-red-100 text-red-700"
+                                              : "bg-blue-100 text-blue-700"
+                                            }`}
+                                        >
+                                          {result.flag}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
                                 </div>
                               </div>
-                            ))}
-                          </div>
+                            );
+                          })}
                         </div>
-                      )
-                    )}
-                  </div>
-                ) : null}
+                      );
+                    })}
+                </div>
+                )
               </div>
             )}
           </div>
+
+
 
           <div className="rounded-2xl bg-white p-4 shadow">
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -2320,14 +2567,41 @@ export default function ChartView({
                 </button>
               ) : null}
 
+              {isLeadershipView && !selectedEncounter?.skipUpperLevel ? (
+                <button
+                  onClick={() => setSkipUpperLevelApproval(true)}
+                  disabled={!!selectedEncounter?.assignedUpperLevel}
+                  className="rounded-lg bg-amber-500 px-3 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Skip Upper Level
+                </button>
+              ) : null}
+
+              {isLeadershipView && selectedEncounter?.skipUpperLevel ? (
+                <button
+                  onClick={() => setSkipUpperLevelApproval(false)}
+                  className="rounded-lg bg-slate-400 px-3 py-2 text-sm text-white"
+                >
+                  Remove Skip Upper
+                </button>
+              ) : null}
+
               {canSubmitForAttending ? (
                 <button
                   onClick={submitSoapForAttending}
                   disabled={soapBusy}
                   className="rounded-lg bg-indigo-600 px-4 py-3 text-sm font-medium text-white"
                 >
-                  Submit Note for Attending Signature
+                  {selectedEncounter?.skipUpperLevel
+                    ? "Submit Note Directly to Attending"
+                    : "Submit Note for Attending Signature"}
                 </button>
+              ) : null}
+
+              {selectedEncounter?.skipUpperLevel ? (
+                <div className="inline-block rounded-lg bg-amber-100 px-4 py-3 text-sm font-semibold text-amber-800">
+                  Skip Upper Level Approved
+                </div>
               ) : null}
             </div>
 
@@ -2399,73 +2673,73 @@ export default function ChartView({
             </div>
 
             {selectedEncounter?.specialtyType === "ophthalmology" ? (
-  <OphthalmologySoapForm
-    soapDraft={soapDraft}
-    updateSoapDraftField={updateSoapDraftField}
-    isSoapLocked={isSoapLocked}
-  />
-) : (
-  <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-    <div>
-      <label className="mb-1 block text-sm font-medium text-slate-700">
-        Subjective
-      </label>
-      <textarea
-        className="min-h-[160px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base disabled:bg-slate-100"
-        value={soapDraft.soapSubjective || ""}
-        onChange={(e) =>
-          updateSoapDraftField("soapSubjective", e.target.value)
-        }
-        disabled={isSoapLocked}
-      />
-    </div>
+              <OphthalmologySoapForm
+                soapDraft={soapDraft}
+                updateSoapDraftField={updateSoapDraftField}
+                isSoapLocked={isSoapLocked}
+              />
+            ) : (
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Subjective
+                  </label>
+                  <textarea
+                    className="min-h-[160px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base disabled:bg-slate-100"
+                    value={soapDraft.soapSubjective || ""}
+                    onChange={(e) =>
+                      updateSoapDraftField("soapSubjective", e.target.value)
+                    }
+                    disabled={isSoapLocked}
+                  />
+                </div>
 
-    <div>
-      <label className="mb-1 block text-sm font-medium text-slate-700">
-        Objective
-      </label>
-      <textarea
-        className="min-h-[160px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base disabled:bg-slate-100"
-        value={soapDraft.soapObjective || ""}
-        onChange={(e) =>
-          updateSoapDraftField("soapObjective", e.target.value)
-        }
-        disabled={isSoapLocked}
-      />
-    </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Objective
+                  </label>
+                  <textarea
+                    className="min-h-[160px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base disabled:bg-slate-100"
+                    value={soapDraft.soapObjective || ""}
+                    onChange={(e) =>
+                      updateSoapDraftField("soapObjective", e.target.value)
+                    }
+                    disabled={isSoapLocked}
+                  />
+                </div>
 
-    <div>
-      <label className="mb-1 block text-sm font-medium text-slate-700">
-        Assessment
-      </label>
-      <textarea
-        className="min-h-[160px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base disabled:bg-slate-100"
-        value={soapDraft.soapAssessment || ""}
-        onChange={(e) =>
-          updateSoapDraftField("soapAssessment", e.target.value)
-        }
-        disabled={isSoapLocked}
-      />
-    </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Assessment
+                  </label>
+                  <textarea
+                    className="min-h-[160px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base disabled:bg-slate-100"
+                    value={soapDraft.soapAssessment || ""}
+                    onChange={(e) =>
+                      updateSoapDraftField("soapAssessment", e.target.value)
+                    }
+                    disabled={isSoapLocked}
+                  />
+                </div>
 
-    <div>
-      <label className="mb-1 block text-sm font-medium text-slate-700">
-        Plan
-      </label>
-      <textarea
-        className="min-h-[160px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base disabled:bg-slate-100"
-        value={soapDraft.soapPlan || ""}
-        onChange={(e) =>
-          updateSoapDraftField("soapPlan", e.target.value)
-        }
-        disabled={isSoapLocked}
-      />
-    </div>
-  </div>
-)}
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Plan
+                  </label>
+                  <textarea
+                    className="min-h-[160px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base disabled:bg-slate-100"
+                    value={soapDraft.soapPlan || ""}
+                    onChange={(e) =>
+                      updateSoapDraftField("soapPlan", e.target.value)
+                    }
+                    disabled={isSoapLocked}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
-                    <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
+          <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
             <button
               onClick={() => setShowAudit((prev) => !prev)}
               className="mb-4 flex w-full items-center justify-between text-left text-lg font-semibold"
@@ -2474,141 +2748,142 @@ export default function ChartView({
               <span>{showAudit ? "▲" : "▼"}</span>
             </button>
 
-              {showAudit && (
-                <>
-                  {auditLoading ? (
-                    <p className="text-sm text-slate-500">Loading audit trail...</p>
-                  ) : auditEntries.length === 0 ? (
-                    <p className="text-sm text-slate-500">No audit history yet.</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {auditEntries.map((entry) => (
-                        <div
-                          key={entry.id}
-                          className="rounded-xl border border-slate-200 bg-slate-50 p-3"
-                        >
-                          <p className="text-sm font-medium text-slate-800">
-                            {formatAuditAction(entry.action)}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            {entry.actor_name || "Unknown User"} •{" "}
-                            {new Date(entry.created_at).toLocaleString()}
-                          </p>
+            {showAudit && (
+              <>
+                {auditLoading ? (
+                  <p className="text-sm text-slate-500">Loading audit trail...</p>
+                ) : auditEntries.length === 0 ? (
+                  <p className="text-sm text-slate-500">No audit history yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {auditEntries.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className="rounded-xl border border-slate-200 bg-slate-50 p-3"
+                      >
+                        <p className="text-sm font-medium text-slate-800">
+                          {formatAuditAction(entry.action)}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {entry.actor_name || "Unknown User"} •{" "}
+                          {new Date(entry.created_at).toLocaleString()}
+                        </p>
 
-                          {![
-                            "soap_saved",
-                            "soap_submitted_upper",
-                            "soap_submitted_attending",
-                            "soap_signed_upper",
-                            "soap_signed_attending",
-                            "soap_reopened",
-                          ].includes(entry.action) &&
-                            entry.details &&
-                            Object.keys(entry.details).length > 0 ? (
-                            <pre className="mt-2 overflow-x-auto rounded bg-white p-2 text-xs text-slate-600">
-                              {JSON.stringify(entry.details, null, 2)}
-                            </pre>
-                          ) : null}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </>
+                        {![
+                          "soap_saved",
+                          "soap_submitted_upper",
+                          "soap_submitted_attending",
+                          "soap_signed_upper",
+                          "soap_signed_attending",
+                          "soap_reopened",
+                        ].includes(entry.action) &&
+                          entry.details &&
+                          Object.keys(entry.details).length > 0 ? (
+                          <pre className="mt-2 overflow-x-auto rounded bg-white p-2 text-xs text-slate-600">
+                            {JSON.stringify(entry.details, null, 2)}
+                          </pre>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </>
       )}
-          {showSignModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-              <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-                <h3 className="text-lg font-semibold text-slate-900">
-                  Attending Signature
-                </h3>
-                <p className="mt-1 text-sm text-slate-600">
-                  Select the attending and enter their 4-digit PIN to sign this note.
-                </p>
+      {showSignModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-900">
+              Attending Signature
+            </h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Select the attending and enter their 4-digit PIN to sign this note.
+            </p>
 
-                <div className="mt-4 space-y-4">
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-700">
-                      Attending
-                    </label>
-                    <select
-                      value={selectedAttendingId}
-                      onChange={(e) => setSelectedAttendingId(e.target.value)}
-                      className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                    >
-                      <option value="">Select attending</option>
-                      {activeAttendings?.map((attending) => (
-                        <option key={attending.id} value={attending.id}>
-                          {attending.full_name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+            <div className="mt-4 space-y-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Attending
+                </label>
+                <select
+                  value={selectedAttendingId}
+                  onChange={(e) => setSelectedAttendingId(e.target.value)}
+                  className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
+                >
+                  <option value="">Select attending</option>
+                  {activeAttendings?.map((attending) => (
+                    <option key={attending.id} value={attending.id}>
+                      {attending.full_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-700">
-                      4-Digit PIN
-                    </label>
-                    <input
-                      type="password"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      autoComplete="new-password"
-                      autoCorrect="off"
-                      autoCapitalize="off"
-                      spellCheck={false}
-                      maxLength={4}
-                      name="attending-signature-pin"
-                      value={attendingPin}
-                      onChange={(e) =>
-                        setAttendingPin(e.target.value.replace(/\D/g, "").slice(0, 4))
-                      }
-                      className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                      placeholder="Enter PIN"
-                    />
-                  </div>
-                </div>
-                {soapUiMessage ? (
-                  <p className="mt-3 text-sm text-red-600">{soapUiMessage}</p>
-                ) : null}
-                <div className="mt-6 flex gap-3">
-                  <button
-                    onClick={() => {
-                      setShowSignModal(false);
-                      setSelectedAttendingId("");
-                      setAttendingPin("");
-                    }}
-                    className="flex-1 rounded-lg bg-slate-200 px-4 py-3 text-slate-700 hover:bg-slate-300"
-                  >
-                    Cancel
-                  </button>
-
-                  <button
-                    onClick={async () => {
-                      const success = await signSoapAsAttendingWithPin(
-                        selectedAttendingId,
-                        attendingPin
-                      );
-
-                      if (success) {
-                        setShowSignModal(false);
-                        setSelectedAttendingId("");
-                        setAttendingPin("");
-                      } else {
-                        setAttendingPin("");
-                      }
-                    }}
-                    disabled={!selectedAttendingId || attendingPin.length !== 4 || soapBusy}
-                    className="flex-1 rounded-lg bg-emerald-600 px-4 py-3 text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {soapBusy ? "Signing..." : "Sign Note"}
-                  </button>
-                </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  4-Digit PIN
+                </label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  autoComplete="new-password"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  maxLength={4}
+                  name="attending-signature-pin"
+                  value={attendingPin}
+                  onChange={(e) =>
+                    setAttendingPin(e.target.value.replace(/\D/g, "").slice(0, 4))
+                  }
+                  className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
+                  placeholder="Enter PIN"
+                />
               </div>
             </div>
-          )}
+            {soapUiMessage ? (
+              <p className="mt-3 text-sm text-red-600">{soapUiMessage}</p>
+            ) : null}
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={() => {
+                  setShowSignModal(false);
+                  setSelectedAttendingId("");
+                  setAttendingPin("");
+                }}
+                className="flex-1 rounded-lg bg-slate-200 px-4 py-3 text-slate-700 hover:bg-slate-300"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={async () => {
+                  const success = await signSoapAsAttendingWithPin(
+                    selectedAttendingId,
+                    attendingPin
+                  );
+
+                  if (success) {
+                    setShowSignModal(false);
+                    setSelectedAttendingId("");
+                    setAttendingPin("");
+                  } else {
+                    setAttendingPin("");
+                  }
+                }}
+                disabled={!selectedAttendingId || attendingPin.length !== 4 || soapBusy}
+                className="flex-1 rounded-lg bg-emerald-600 px-4 py-3 text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {soapBusy ? "Signing..." : "Sign Note"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
-  
+    </div>
+  )
+}
+

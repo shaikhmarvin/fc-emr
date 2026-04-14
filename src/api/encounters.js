@@ -66,13 +66,16 @@ function mapEncounterRow(row) {
     soapAssessment: row.assessment || "",
     soapPlan: row.plan || "",
 
-    soapStatus: row.soap_status || "draft",
+        soapStatus: row.soap_status || "draft",
     soapAuthorId: row.soap_author_id || null,
     soapAuthorRole: row.soap_author_role || "",
     upperLevelSignedBy: row.upper_level_signed_by || null,
     upperLevelSignedAt: row.upper_level_signed_at || null,
     attendingSignedBy: row.attending_signed_by || null,
     attendingSignedAt: row.attending_signed_at || null,
+    skipUpperLevel: row.skip_upper_level ?? false,
+    skipUpperLevelBy: row.skip_upper_level_by || null,
+    skipUpperLevelAt: row.skip_upper_level_at || null,
 
     vitalsHistory: row.vitals || [],
     inHouseLabs: row.in_house_labs || {},
@@ -199,6 +202,10 @@ export async function updateEncounterInSupabase(encounterId, updates) {
     payload.in_house_labs = updates.inHouseLabs;
   }
 
+    if (updates.importedSendOutLabs !== undefined) {
+    payload.imported_send_out_labs = updates.importedSendOutLabs;
+  }
+
   if (updates.imported_send_out_labs !== undefined) {
     payload.imported_send_out_labs = updates.imported_send_out_labs;
   }
@@ -239,8 +246,20 @@ export async function updateEncounterInSupabase(encounterId, updates) {
     payload.attending_signed_by = updates.attendingSignedBy;
   }
 
-  if (updates.attendingSignedAt !== undefined) {
+    if (updates.attendingSignedAt !== undefined) {
     payload.attending_signed_at = updates.attendingSignedAt;
+  }
+
+  if (updates.skipUpperLevel !== undefined) {
+    payload.skip_upper_level = updates.skipUpperLevel;
+  }
+
+  if (updates.skipUpperLevelBy !== undefined) {
+    payload.skip_upper_level_by = updates.skipUpperLevelBy;
+  }
+
+  if (updates.skipUpperLevelAt !== undefined) {
+    payload.skip_upper_level_at = updates.skipUpperLevelAt;
   }
 
   if (updates.ophthalmologyNote !== undefined) {
@@ -310,7 +329,10 @@ export async function updateEncounterInSupabase(encounterId, updates) {
       specialtyType: updates.specialtyType ?? "",
     };
   }
-
+  
+  if (Object.keys(payload).length === 0) {
+    throw new Error("No encounter fields were provided for update.");
+  }
   const { data, error } = await supabase
     .from("encounters")
     .update(payload)

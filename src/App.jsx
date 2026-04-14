@@ -498,24 +498,34 @@ export default function App() {
   }
 
   function canSubmitSoapForAttending(role, encounter) {
-    if (!encounter) return false;
-    return (
-      role === "upper_level" &&
-      (encounter.soapStatus === "draft" || !encounter.soapStatus)
-    );
-  }
+  if (!encounter) return false;
+
+  const isDraft = encounter.soapStatus === "draft" || !encounter.soapStatus;
+  const skipUpperApproved = !!encounter.skipUpperLevel;
+
+  return (
+    (role === "upper_level" && isDraft) ||
+    ((role === "student" || role === "leadership") && isDraft && skipUpperApproved)
+  );
+}
 
   function canAttendingSignSoap(role, encounter) {
-    if (!encounter) return false;
+  if (!encounter) return false;
 
-    return (
-      !!encounter.upperLevelSignedAt && !encounter.attendingSignedAt &&
-      (role === "student" ||
-        role === "upper_level" ||
-        role === "leadership" ||
-        role === "attending")
-    );
+  const allowedRole =
+    role === "student" ||
+    role === "upper_level" ||
+    role === "leadership" ||
+    role === "attending";
+
+  if (!allowedRole || !!encounter.attendingSignedAt) return false;
+
+  if (encounter.skipUpperLevel && encounter.soapStatus === "awaiting_attending") {
+    return true;
   }
+
+  return !!encounter.upperLevelSignedAt;
+}
 
   function formatRoleLabel(role) {
     switch (role) {
@@ -872,6 +882,7 @@ export default function App() {
 
     loadRefillRequests();
   }, [session]);
+
 
   useEffect(() => {
     if (!session) return;
@@ -2164,16 +2175,13 @@ export default function App() {
   }
 
   async function updateSharedLabImportPacket(packetId, updates = {}) {
-    const { data, error } = await supabase
-      .from("lab_import_packets")
-      .update(updates)
-      .eq("id", packetId)
-      .select()
-      .single();
+  const { error } = await supabase
+    .from("lab_import_packets")
+    .update(updates)
+    .eq("id", packetId);
 
-    if (error) throw error;
-    return data;
-  }
+  if (error) throw error;
+}
 
   async function handleLiveUpdateLabPacketLabs(packetId, reviewedLabs) {
     if (!packetId) return;
@@ -3023,9 +3031,7 @@ const [soapDraft, setSoapDraft] = useState({
   }, [selectedEncounter?.id]);
 
   const canSignAsUpperLevel = canUpperLevelSignSoap(userRole, selectedEncounter);
-  const canSignAsAttending =
-    selectedEncounter?.soapStatus === "awaiting_attending" &&
-    !selectedEncounter?.attendingSignedAt;
+  const canSignAsAttending = canAttendingSignSoap(userRole, selectedEncounter);
   const canSubmitForUpperLevel = canSubmitSoapForUpperLevel(
     userRole,
     selectedEncounter
@@ -5102,12 +5108,15 @@ async function handleUndergradStartEncounter(data) {
       }
     }
 
-    try {
+        try {
       await applyEncounterTransition(encounterId, {
         assignedStudent: nextStudent,
         assignedUpperLevel: nextUpperLevel,
         roomNumber: String(numericRoom),
         status: "in_visit",
+        skipUpperLevel: nextUpperLevel ? false : encounter.skipUpperLevel,
+        skipUpperLevelBy: nextUpperLevel ? null : encounter.skipUpperLevelBy,
+        skipUpperLevelAt: nextUpperLevel ? null : encounter.skipUpperLevelAt,
       });
 
     } catch (error) {
@@ -5175,8 +5184,11 @@ async function handleUndergradStartEncounter(data) {
       await applyEncounterTransition(selectedEncounter.id, {
         roomNumber: String(roomNumber),
         status: "in_visit",
-        assignedStudent: assignmentForm.studentName,
-        assignedUpperLevel: assignmentForm.upperLevelName,
+              assignedStudent: assignmentForm.studentName,
+      assignedUpperLevel: assignmentForm.upperLevelName,
+      skipUpperLevel: assignmentForm.upperLevelName ? false : selectedEncounter.skipUpperLevel,
+      skipUpperLevelBy: assignmentForm.upperLevelName ? null : selectedEncounter.skipUpperLevelBy,
+      skipUpperLevelAt: assignmentForm.upperLevelName ? null : selectedEncounter.skipUpperLevelAt,
       });
 
     } catch (error) {
@@ -6521,6 +6533,81 @@ async function handleUndergradStartEncounter(data) {
     }
   }
 
+  async function setSkipUpperLevelApproval(enabled) {
+  if (!selectedPatient || !selectedEncounter || !session?.user?.id) return;
+  if (userRole !== "leadership") return;
+
+  const hasSoapStarted =
+  !!(soapDraft.soapSubjective || "").trim() ||
+  !!(soapDraft.soapObjective || "").trim() ||
+  !!(soapDraft.soapAssessment || "").trim() ||
+  !!(soapDraft.soapPlan || "").trim() ||
+  !!(soapDraft.ophthalmologyNote?.hpi || "").trim() ||
+  !!(soapDraft.ophthalmologyNote?.ocularHistory || "").trim() ||
+  !!(soapDraft.ophthalmologyNote?.assessment || "").trim() ||
+  !!(soapDraft.ophthalmologyNote?.plan || "").trim();
+
+  if (enabled && !hasSoapStarted) {
+    showToast({
+      title: "SOAP not started",
+      message: "Start the note before approving Skip Upper Level.",
+      type: "warning",
+    });
+    return;
+  }
+
+  try {
+    const nowIso = new Date().toISOString();
+
+    await updateEncounterInSupabase(selectedEncounter.id, {
+      skipUpperLevel: enabled,
+      skipUpperLevelBy: enabled ? session.user.id : null,
+      skipUpperLevelAt: enabled ? nowIso : null,
+    });
+
+    setPatients((prev) =>
+      prev.map((patient) =>
+        patient.id === selectedPatient.id
+          ? {
+              ...patient,
+              encounters: patient.encounters.map((encounter) =>
+                encounter.id === selectedEncounter.id
+                  ? {
+                      ...encounter,
+                      skipUpperLevel: enabled,
+                      skipUpperLevelBy: enabled ? session.user.id : null,
+                      skipUpperLevelAt: enabled ? nowIso : null,
+                    }
+                  : encounter
+              ),
+            }
+          : patient
+      )
+    );
+
+    await logAuditEvent(enabled ? "skip_upper_level_approved" : "skip_upper_level_revoked", {
+      skipUpperLevel: enabled,
+    });
+    await loadAuditLog();
+
+    showToast({
+      title: enabled ? "Skip Upper Level approved" : "Skip Upper Level removed",
+      message: enabled
+        ? "This encounter can now bypass upper level and go directly to attending."
+        : "This encounter has been returned to the normal upper-level workflow.",
+      type: "success",
+    });
+  } catch (error) {
+    console.error("Failed to update skip upper level approval:", error);
+    showToast({
+      title: "Update failed",
+      message: error.message,
+      type: "error",
+      duration: 5000,
+    });
+  }
+}
+
   async function signSoapAsAttending() {
     if (!selectedPatient || !selectedEncounter || !session?.user?.id || !userRole) return;
     if (!canSignAsAttending) return;
@@ -7506,10 +7593,10 @@ async function handleUndergradStartEncounter(data) {
                 setActiveView("dashboard");
               }}
               onExportDebug={handleExportLabDebug}
-              onConfirmPatient={(patient) => {
-                if (!labImportPacket?.packetId) return;
-                handleConfirmLabImportPatient(labImportPacket.packetId, patient);
-              }}
+              onConfirmPatient={(packetId, patient) => {
+  if (!packetId || !patient) return;
+  handleConfirmLabImportPatient(packetId, patient);
+}}
               onSkip={() => {
                 if (!labImportPacket?.packetId) return;
                 handleSkipLabImportPacket(labImportPacket.packetId);
@@ -7790,6 +7877,7 @@ async function handleUndergradStartEncounter(data) {
               onStartRefillRequest={startRefillRequest}
               refillRequests={refillRequests}
               profileNameMap={profileNameMap}
+              setSkipUpperLevelApproval={setSkipUpperLevelApproval}
             />
           )}
 

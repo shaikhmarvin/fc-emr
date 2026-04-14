@@ -159,6 +159,7 @@ function MatchPanel({
   possibleMatches,
   unresolvedReason,
   onConfirmPatient,
+  packetId,
 }) {
   const displayMatchedPatient = confirmedPatient || matchedPatient;
 
@@ -200,7 +201,7 @@ function MatchPanel({
           {possibleMatches.length > 0 ? (
             possibleMatches.map((patient, index) => (
               <div
-                key={`${patient.id || index}`}
+                key={`${packetId}-${patient.id || index}`}
                 className="rounded-xl border border-amber-200 bg-white/80 p-3"
               >
                 <p className="text-sm font-semibold text-amber-900">
@@ -216,11 +217,15 @@ function MatchPanel({
 
                 {onConfirmPatient ? (
                   <button
-                    onClick={() => onConfirmPatient(patient)}
-                    className="mt-3 rounded-lg bg-amber-600 px-3 py-2 text-xs font-medium text-white hover:bg-amber-700"
-                  >
-                    Confirm This Patient
-                  </button>
+  type="button"
+  onClick={(e) => {
+    e.stopPropagation();
+    onConfirmPatient(packetId, patient);
+  }}
+  className="mt-3 rounded-lg bg-amber-600 px-3 py-2 text-xs font-medium text-white hover:bg-amber-700"
+>
+  Confirm This Patient
+</button>
                 ) : null}
               </div>
             ))
@@ -279,10 +284,7 @@ export default function LabImportView({
   const lastIncomingLabsJsonRef = useRef({});
   const lastPushedLabsJsonRef = useRef({});
 
-  const reviewedLabs = useMemo(() => {
-    if (!packet?.packetId) return [];
-    return reviewedLabsByPacketId[packet.packetId] || packet.labs || [];
-  }, [packet?.packetId, packet?.labs, reviewedLabsByPacketId]);
+  
 
   const sortedPackets = useMemo(() => {
     return [...packets].sort((a, b) => {
@@ -306,50 +308,56 @@ export default function LabImportView({
     });
   }, [packets]);
 
-  useEffect(() => {
-    if (!packet?.packetId) return;
+  const selectedPacket = useMemo(() => {
+  return sortedPackets.find(p => p.packetId === selectedPacketId) || null;
+}, [sortedPackets, selectedPacketId]);
 
-    const incomingLabs = packet.labs || [];
-    const incomingJson = JSON.stringify(incomingLabs);
-
-    lastIncomingLabsJsonRef.current[packet.packetId] = incomingJson;
-
-    setReviewedLabsByPacketId((prev) => {
-      const currentJson = JSON.stringify(prev[packet.packetId] || []);
-
-      if (currentJson === incomingJson) {
-        return prev;
-      }
-
-      return {
-        ...prev,
-        [packet.packetId]: incomingLabs,
-      };
-    });
-  }, [packet?.packetId, packet?.labs]);
+const reviewedLabs = useMemo(() => {
+  if (!selectedPacket?.packetId) return [];
+  return reviewedLabsByPacketId[selectedPacket.packetId] || selectedPacket.labs || [];
+}, [selectedPacket?.packetId, selectedPacket?.labs, reviewedLabsByPacketId]);
 
   useEffect(() => {
-    if (!packet?.packetId) return;
-    if (!onChangeLabs) return;
+  if (!selectedPacket?.packetId) return;
 
-    const packetId = packet.packetId;
-    const reviewedJson = JSON.stringify(reviewedLabs || []);
-    const incomingJson = lastIncomingLabsJsonRef.current[packetId] || "";
-    const lastPushedJson = lastPushedLabsJsonRef.current[packetId] || "";
+  const incomingLabs = selectedPacket.labs || [];
+  const incomingJson = JSON.stringify(incomingLabs);
 
-    // do not write back if this is just DB/realtime data we received
-    if (reviewedJson === incomingJson) return;
+  lastIncomingLabsJsonRef.current[selectedPacket.packetId] = incomingJson;
 
-    // do not write again if we already pushed this exact version
-    if (reviewedJson === lastPushedJson) return;
+  setReviewedLabsByPacketId((prev) => {
+    const currentJson = JSON.stringify(prev[selectedPacket.packetId] || []);
 
-    const timeout = window.setTimeout(() => {
-      lastPushedLabsJsonRef.current[packetId] = reviewedJson;
-      onChangeLabs(packetId, reviewedLabs);
-    }, 500);
+    if (currentJson === incomingJson) {
+      return prev;
+    }
 
-    return () => window.clearTimeout(timeout);
-  }, [packet?.packetId, reviewedLabs, onChangeLabs]);
+    return {
+      ...prev,
+      [selectedPacket.packetId]: incomingLabs,
+    };
+  });
+}, [selectedPacket?.packetId, selectedPacket?.labs]);
+
+  useEffect(() => {
+  if (!selectedPacket?.packetId) return;
+  if (!onChangeLabs) return;
+
+  const packetId = selectedPacket.packetId;
+  const reviewedJson = JSON.stringify(reviewedLabs || []);
+  const incomingJson = lastIncomingLabsJsonRef.current[packetId] || "";
+  const lastPushedJson = lastPushedLabsJsonRef.current[packetId] || "";
+
+  if (reviewedJson === incomingJson) return;
+  if (reviewedJson === lastPushedJson) return;
+
+  const timeout = window.setTimeout(() => {
+    lastPushedLabsJsonRef.current[packetId] = reviewedJson;
+    onChangeLabs(packetId, reviewedLabs);
+  }, 500);
+
+  return () => window.clearTimeout(timeout);
+}, [selectedPacket?.packetId, reviewedLabs, onChangeLabs]);
 
 
   function normalizeEncounterDate(value) {
@@ -362,46 +370,46 @@ export default function LabImportView({
   }
 
   useEffect(() => {
-    async function loadEncounters() {
-      if (!packet?.confirmedPatient?.id) {
-        setEncounters([]);
-        setSelectedEncounterId(null);
+  async function loadEncounters() {
+    if (!selectedPacket?.confirmedPatient?.id) {
+      setEncounters([]);
+      setSelectedEncounterId(null);
+      return;
+    }
+
+    try {
+      const data = await fetchEncountersByPatient(selectedPacket.confirmedPatient.id);
+      setEncounters(data || []);
+
+      const normalizedCollectedDate = normalizeEncounterDate(selectedPacket.collectedDate);
+
+      const exactDateMatch =
+        (data || []).find(
+          (enc) => normalizeEncounterDate(enc.clinic_date) === normalizedCollectedDate
+        ) || null;
+
+      if (exactDateMatch) {
+        setSelectedEncounterId(exactDateMatch.id);
         return;
       }
 
-      try {
-        const data = await fetchEncountersByPatient(packet.confirmedPatient.id);
-        setEncounters(data || []);
-
-        const normalizedCollectedDate = normalizeEncounterDate(packet.collectedDate);
-
-        const exactDateMatch =
-          (data || []).find(
-            (enc) => normalizeEncounterDate(enc.clinic_date) === normalizedCollectedDate
-          ) || null;
-
-        if (exactDateMatch) {
-          setSelectedEncounterId(exactDateMatch.id);
-          return;
-        }
-
-        if (data && data.length > 0) {
-          setSelectedEncounterId(data[0].id);
-          return;
-        }
-
-        setSelectedEncounterId(null);
-      } catch (error) {
-        console.error("Failed to load encounters for confirmed patient:", error);
-        setEncounters([]);
-        setSelectedEncounterId(null);
+      if (data && data.length > 0) {
+        setSelectedEncounterId(data[0].id);
+        return;
       }
+
+      setSelectedEncounterId(null);
+    } catch (error) {
+      console.error("Failed to load encounters for confirmed patient:", error);
+      setEncounters([]);
+      setSelectedEncounterId(null);
     }
+  }
 
-    loadEncounters();
-  }, [packet?.confirmedPatient?.id, packet?.collectedDate, packet?.packetId]);
+  loadEncounters();
+}, [selectedPacket?.confirmedPatient?.id, selectedPacket?.collectedDate, selectedPacket?.packetId]);
 
-  if (!packet) {
+  if (!selectedPacket) {
     return (
       <div className="p-6">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -415,17 +423,17 @@ export default function LabImportView({
   }
 
   const {
-    extractedPatientName,
-    extractedDob,
-    collectedDate,
-    matchStatus,
-    matchedPatient,
-    possibleMatches = [],
-    unresolvedReason,
-    confirmedPatient = null,
-    packetType = "unknown",
-    reviewStatus = "unsaved",
-  } = packet;
+  extractedPatientName,
+  extractedDob,
+  collectedDate,
+  matchStatus,
+  matchedPatient,
+  possibleMatches = [],
+  unresolvedReason,
+  confirmedPatient = null,
+  packetType = "unknown",
+  reviewStatus = "unsaved",
+} = selectedPacket;
 
   const suspiciousCount = reviewedLabs.filter((lab) => !!lab?.suspicious).length;
   const duplicateCount = reviewedLabs.filter((lab) => !!lab?.duplicateType).length;
@@ -443,16 +451,18 @@ export default function LabImportView({
   }
 
   function updateReviewedLabs(nextLabsOrUpdater) {
-    const nextLabs =
-      typeof nextLabsOrUpdater === "function"
-        ? nextLabsOrUpdater(reviewedLabs)
-        : nextLabsOrUpdater;
+  if (!selectedPacket?.packetId) return;
 
-    setReviewedLabsByPacketId((prev) => ({
-      ...prev,
-      [packet.packetId]: nextLabs,
-    }));
-  }
+  const nextLabs =
+    typeof nextLabsOrUpdater === "function"
+      ? nextLabsOrUpdater(reviewedLabs)
+      : nextLabsOrUpdater;
+
+  setReviewedLabsByPacketId((prev) => ({
+    ...prev,
+    [selectedPacket.packetId]: nextLabs,
+  }));
+}
 
   let saveDisabledReason = "";
 
@@ -553,7 +563,10 @@ if (reviewedLabs.length === 0) {
                   packet={p}
                   index={index}
                   isActive={p.packetId === selectedPacketId}
-                  onClick={() => onSelectPacket?.(p.packetId)}
+                  onClick={() => {
+  console.log("SELECT PACKET", p.packetId, p.extractedPatientName);
+  onSelectPacket?.(p.packetId);
+}}
                 />
               ))}
             </div>
@@ -571,15 +584,15 @@ if (reviewedLabs.length === 0) {
               </div>
 
               <div className="mt-3 flex flex-wrap gap-2">
-                <SummaryChip>{(packet.labs || []).length} labs</SummaryChip>
+                <SummaryChip>{(selectedPacket.labs || []).length} labs</SummaryChip>
 
-                {packet.matchStatus === "unresolved" ? (
-                  <SummaryChip tone="red">patient unresolved</SummaryChip>
-                ) : null}
+{selectedPacket.matchStatus === "unresolved" ? (
+  <SummaryChip tone="red">patient unresolved</SummaryChip>
+) : null}
 
-                {packet.matchStatus === "possible_match" ? (
-                  <SummaryChip tone="amber">match review</SummaryChip>
-                ) : null}
+{selectedPacket.matchStatus === "possible_match" ? (
+  <SummaryChip tone="amber">match review</SummaryChip>
+) : null}
 
                 {suspiciousCount > 0 ? (
                   <SummaryChip tone="amber">{suspiciousCount} suspicious</SummaryChip>
@@ -656,13 +669,14 @@ if (reviewedLabs.length === 0) {
 
         <div className="space-y-4">
           <MatchPanel
-            packet={packet}
-            confirmedPatient={confirmedPatient}
-            matchedPatient={matchedPatient}
-            possibleMatches={possibleMatches}
-            unresolvedReason={unresolvedReason}
-            onConfirmPatient={onConfirmPatient}
-          />
+  packet={selectedPacket}
+  packetId={selectedPacket?.packetId}
+  confirmedPatient={confirmedPatient}
+  matchedPatient={matchedPatient}
+  possibleMatches={possibleMatches}
+  unresolvedReason={unresolvedReason}
+  onConfirmPatient={onConfirmPatient}
+/>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-900">Encounter Match</h3>

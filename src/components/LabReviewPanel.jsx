@@ -227,7 +227,8 @@ export default function LabReviewPanel({ labs = [], onChangeLabs = null }) {
                 <div className="divide-y divide-slate-100">
                   {rows.map(({ lab, index }) => {
                     const displayValue = getDisplayValue(lab.value);
-                    const flag = computeFlag(lab.value, lab.expectedRangeText);
+                    const displayRange = lab.referenceRangeText || lab.expectedRangeText || "";
+const flag = computeFlag(lab.value, displayRange);
                     const duplicateSame = lab.duplicateType === "same_encounter";
                     const duplicateRecent = lab.duplicateType === "recent";
                     const suspicious = !!lab.suspicious;
@@ -263,9 +264,9 @@ export default function LabReviewPanel({ labs = [], onChangeLabs = null }) {
 
                             {(lab.expectedRangeText || lab.rawLine || lab.duplicateInfo || suspicious) && (
                               <div className="mt-2 space-y-1 text-xs text-slate-500">
-                                {lab.expectedRangeText ? (
-                                  <div>Range: {lab.expectedRangeText}</div>
-                                ) : null}
+                                {displayRange ? (
+  <div>Range: {displayRange}</div>
+) : null}
                                 {lab.rawLine ? (
                                   <div className="truncate">Source: {lab.rawLine}</div>
                                 ) : null}

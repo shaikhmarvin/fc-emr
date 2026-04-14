@@ -5,6 +5,104 @@ import {
 } from "./labCatalog";
 import { LAB_PANELS } from "./labCatalog";
 
+const UMC_REFERENCE_RANGES = {
+  // CBC
+  wbc: "4.3-10.7",
+  rbc: "4.00-5.60",
+  hemoglobin: "12.6-17.4",
+  hematocrit: "37.0-53.0",
+  mcv: "79.0-96.0",
+  mch: "26.0-34.0",
+  mchc: "31.0-37.0",
+  rdw: "11.5-14.5",
+  platelets: "150-400",
+  mpv: "7.4-10.4",
+
+  // Differential
+  neutrophils_percent: "40.0-74.0",
+  lymphocytes_percent: "19.0-48.0",
+  monocytes_percent: "3.4-9.0",
+  eosinophils_percent: "0.0-7.0",
+  basophils_percent: "0.0-1.5",
+  immature_granulocytes_percent: "0.0-0.4",
+  anc: "1.56-6.13",
+  absolute_lymphocytes: "1.18-3.74",
+  absolute_monocytes: "0.24-0.86",
+  absolute_eosinophils: "0.04-0.36",
+  absolute_basophils: "0.01-0.08",
+
+  // Chemistry
+  sodium: "136-145",
+  potassium: "3.5-5.1",
+  chloride: "98-107",
+  co2: "22-29",
+  anion_gap: "7-16",
+  glucose: "70-99",
+  bun: "6-20",
+  creatinine: "0.67-1.17",
+  egfr: "60+",
+  calcium: "8.6-10.0",
+  phosphorus: "2.5-4.5",
+  magnesium: "1.6-2.6",
+
+  // Liver
+  total_protein: "6.4-8.3",
+  albumin: "3.5-5.2",
+  globulin: "2.3-3.5",
+  ag_ratio: "1.0-2.0",
+  total_bilirubin: "0.0-1.2",
+  direct_bilirubin: "0.0-0.3",
+  ast: "0-40",
+  alt: "0-41",
+  alkaline_phosphatase: "40-129",
+  ggt: "8-61",
+
+  // Diabetes / endocrine
+  a1c: "4.0-5.6",
+  estimated_average_glucose: "70-114",
+  insulin: "2.6-24.9",
+
+  // Thyroid
+  tsh: "0.27-4.20",
+  free_t4: "0.93-1.70",
+  total_t4: "4.5-11.7",
+  free_t3: "2.0-4.4",
+  total_t3: "80-200",
+
+  // Lipids
+  total_cholesterol: "0-199",
+  hdl: "40+",
+  ldl: "0-99",
+  triglycerides: "0-149",
+  non_hdl: "0-129",
+  chol_hdl_ratio: "0-5.0",
+
+  // Iron studies
+  iron: "59-158",
+  tibc: "250-450",
+  uibc: "112-347",
+  iron_saturation: "20-50",
+  ferritin: "30-400",
+  transferrin: "200-360",
+
+  // Vitamins
+  vitamin_d_25oh: "30-100",
+  vitamin_b12: "232-1245",
+  folate: "4.8+",
+
+  // Coagulation
+  pt: "11.8-14.6",
+  inr: "0.9-1.1",
+  ptt: "25.0-37.0",
+
+  // Urinalysis / urine protein
+  urine_specific_gravity: "1.005-1.030",
+  urine_ph: "5.0-8.0",
+  urine_rbc: "0-2",
+  urine_wbc: "0-5",
+  albumin_creatinine_ratio: "0-30",
+};
+
 function normalizeLine(line = "") {
   return String(line || "")
     .toLowerCase()
@@ -111,6 +209,25 @@ function parseExpectedRange(expectedRangeText = "") {
 
   if (Number.isNaN(min) || Number.isNaN(max)) return null;
   return { min, max };
+}
+
+function getReferenceRangeText(lab) {
+  if (!lab) return "";
+  return UMC_REFERENCE_RANGES[lab.key] || "";
+}
+
+function computeResultSymbol(value, referenceRangeText = "") {
+  if (value === null || value === undefined || value === "") return "";
+
+  const numeric = Number(String(value).replace(/,/g, "").trim());
+  if (Number.isNaN(numeric)) return "";
+
+  const parsedRange = parseExpectedRange(referenceRangeText);
+  if (!parsedRange) return "";
+
+  if (numeric < parsedRange.min) return "L";
+  if (numeric > parsedRange.max) return "H";
+  return "";
 }
 
 function rescueNumericValueByRange(value, lab) {
@@ -812,6 +929,12 @@ function buildParsedLab(
       ? String(valueSourceLine).trim()
       : String(rawLine || valueSourceLine || "").trim();
 
+    const referenceRangeText = getReferenceRangeText(lab);
+  const resultSymbol =
+    lab.resultType === "numeric"
+      ? computeResultSymbol(value, referenceRangeText)
+      : "";
+
   return withDebugMeta(
     {
       key: lab.key,
@@ -820,7 +943,14 @@ function buildParsedLab(
       value,
       rawLine: effectiveRawLine,
       suspicious: valueLooksSuspicious(lab, value),
+
+      // parser-only
       expectedRangeText: lab.expectedRangeText || "",
+
+      // display-only
+      referenceRangeText,
+      resultSymbol,
+
       missing,
       autoFilled: false,
       confidence:
@@ -971,7 +1101,7 @@ function expandPanels(results) {
 
       const labDef = findLabByAlias(key) || {};
 
-      expanded.push({
+            expanded.push({
         key,
         displayName: labDef.displayName || key,
         group: labDef.group || "Other",
@@ -979,11 +1109,14 @@ function expandPanels(results) {
         rawLine: "panel autofill",
         suspicious: false,
         autoFilled: true,
+
         expectedRangeText: labDef.expectedRangeText || "",
+        referenceRangeText: getReferenceRangeText(labDef),
+        resultSymbol: "",
+
         missing: true,
         confidence: "low",
       });
-
       foundKeys.add(key);
     }
   }

@@ -466,6 +466,7 @@ export default function QueueView({
                 {/* Assignment info */}
                 <p className="text-xs text-slate-500">
                   Student: {encounter.assignedStudent || "—"} • Upper: {encounter.assignedUpperLevel || "—"}
+{encounter.skipUpperLevel ? " • Skip Upper Approved" : ""}
                 </p>
 
                 {/* Badges */}
