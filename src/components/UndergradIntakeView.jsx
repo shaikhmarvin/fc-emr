@@ -127,7 +127,7 @@ const EMPTY_FORM = {
 export default function UndergradIntakeView({ onSave, patients }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [matchPatientId, setMatchPatientId] = useState(null);
-const [autoFilledMatchPatientId, setAutoFilledMatchPatientId] = useState(null);
+  const [autoFilledMatchPatientId, setAutoFilledMatchPatientId] = useState(null);
 
   function handleChange(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -171,6 +171,11 @@ const [autoFilledMatchPatientId, setAutoFilledMatchPatientId] = useState(null);
   }
 
   const age = useMemo(() => calculateAge(form.dob), [form.dob]);
+  const matchedPatient = useMemo(
+    () => (patients || []).find((patient) => patient.id === matchPatientId) || null,
+    [patients, matchPatientId]
+  );
+  const matchedPatientFired = !!matchedPatient?.fired;
 
   useEffect(() => {
   if (!form.firstName || !form.lastName || !form.dob) {
@@ -239,29 +244,42 @@ zipCode: prev.zipCode || matchedPatient.zipCode || "",
 }, [matchPatientId, autoFilledMatchPatientId, patients]);
 
   async function handleSubmit() {
-  const payload = {
-    ...form,
-    age,
-    matchedPatientId: matchPatientId || null,
-    address: [form.addressLine1, form.city, form.state, form.zipCode]
-      .filter(Boolean)
-      .join(", "),
-    emergencyContact: {
-      name: form.emergencyContactName,
-      relation: form.emergencyContactRelation,
-      phone: form.emergencyContactPhone,
-    },
-    intakeStatus: "started",
-  };
+    if (matchedPatientFired) {
+      const firedDateLabel = matchedPatient?.firedAt
+        ? new Date(matchedPatient.firedAt).toLocaleDateString()
+        : "an unknown date";
+      const firedReasonLabel = matchedPatient?.firedReason || "No reason entered.";
 
-  const didSave = await onSave(payload);
+      const shouldContinue = window.confirm(
+        `This patient is marked as fired.\n\nFired on: ${firedDateLabel}\nReason: ${firedReasonLabel}\n\nDo you still want to start the encounter?`
+      );
 
-  if (!didSave) return;
+      if (!shouldContinue) return;
+    }
 
-  setForm(EMPTY_FORM);
-  setMatchPatientId(null);
-  setAutoFilledMatchPatientId(null);
-}
+    const payload = {
+      ...form,
+      age,
+      matchedPatientId: matchPatientId || null,
+      address: [form.addressLine1, form.city, form.state, form.zipCode]
+        .filter(Boolean)
+        .join(", "),
+      emergencyContact: {
+        name: form.emergencyContactName,
+        relation: form.emergencyContactRelation,
+        phone: form.emergencyContactPhone,
+      },
+      intakeStatus: "started",
+    };
+
+    const didSave = await onSave(payload);
+
+    if (!didSave) return;
+
+    setForm(EMPTY_FORM);
+    setMatchPatientId(null);
+    setAutoFilledMatchPatientId(null);
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 p-4 md:p-6">
@@ -276,11 +294,30 @@ zipCode: prev.zipCode || matchedPatient.zipCode || "",
         </div>
 
         {matchPatientId && (
-  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-    Possible duplicate found. Existing patient data has been filled in where available.
-    Submitting will create a new encounter on the matched patient instead of creating a duplicate chart.
-  </div>
-)}
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            Possible duplicate found. Existing patient data has been filled in where available.
+            Submitting will create a new encounter on the matched patient instead of creating a duplicate chart.
+          </div>
+        )}
+
+        {matchedPatientFired && (
+          <div className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900 shadow-sm">
+            <p className="font-semibold">Warning: this patient has been marked as fired.</p>
+            <div className="mt-1 grid gap-1 sm:grid-cols-2">
+              <p>
+                <span className="font-medium">Date:</span>{" "}
+                {matchedPatient?.firedAt ? new Date(matchedPatient.firedAt).toLocaleDateString() : "—"}
+              </p>
+              <p>
+                <span className="font-medium">Reason:</span>{" "}
+                {matchedPatient?.firedReason || "—"}
+              </p>
+            </div>
+            <p className="mt-2 text-xs text-rose-800">
+              You will be asked to confirm before starting the encounter.
+            </p>
+          </div>
+        )}
 
         <div className="grid gap-6">
           <div className="rounded-2xl bg-white p-5 shadow-sm md:p-6">

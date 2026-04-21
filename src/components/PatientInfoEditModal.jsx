@@ -23,6 +23,9 @@ const EMPTY_FORM = {
   spanishOnly: "",
   chronicConditions: [],
   chronicConditionsOther: "",
+  fired: false,
+  firedReason: "",
+  firedAt: "",
 };
 
 const CHRONIC_CONDITION_OPTIONS = [
@@ -36,6 +39,19 @@ const CHRONIC_CONDITION_OPTIONS = [
   "Other",
 ];
 
+function FieldLabel({ children }) {
+  return <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">{children}</label>;
+}
+
+function FieldInput({ className = "", ...props }) {
+  return (
+    <input
+      {...props}
+      className={`w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 ${className}`.trim()}
+    />
+  );
+}
+
 export default function PatientInfoEditModal({
   show,
   patient,
@@ -46,7 +62,7 @@ export default function PatientInfoEditModal({
 }) {
   const [form, setForm] = useState(EMPTY_FORM);
 
-    useEffect(() => {
+  useEffect(() => {
     if (!show || !patient?.id) return;
 
     setForm({
@@ -72,6 +88,9 @@ export default function PatientInfoEditModal({
       spanishOnly: patient.spanishOnly || "",
       chronicConditions: patient.chronicConditions || [],
       chronicConditionsOther: patient.chronicConditionsOther || "",
+      fired: patient.fired || false,
+      firedReason: patient.firedReason || "",
+      firedAt: patient.firedAt || "",
     });
   }, [show, patient?.id]);
 
@@ -140,6 +159,9 @@ export default function PatientInfoEditModal({
       spanishOnly: form.spanishOnly,
       chronicConditions: form.chronicConditions,
       chronicConditionsOther: form.chronicConditionsOther,
+      fired: form.fired,
+      firedReason: form.fired ? form.firedReason : "",
+      firedAt: form.fired ? (form.firedAt || new Date().toISOString().slice(0, 10)) : null,
     };
 
     onSave(patient.id, payload);
@@ -175,69 +197,98 @@ export default function PatientInfoEditModal({
               </h3>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <input
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  placeholder="First Name"
-                  value={form.firstName}
-                  onChange={(e) => updateField("firstName", e.target.value)}
-                />
-                <input
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  placeholder="Last Name"
-                  value={form.lastName}
-                  onChange={(e) => updateField("lastName", e.target.value)}
-                />
-                <input
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  placeholder="Preferred Name"
-                  value={form.preferredName}
-                  onChange={(e) => updateField("preferredName", e.target.value)}
-                />
-                <input
-                  type="date"
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  value={form.dob}
-                  onChange={(e) => updateField("dob", e.target.value)}
-                />
-                <input
-  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-  placeholder="MRN"
-  value={form.mrn}
-  onChange={(e) => updateField("mrn", e.target.value.trimStart())}
-/>
-                <input
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  placeholder="Phone"
-                  value={form.phone}
-                  onChange={(e) => updateField("phone", e.target.value)}
-                />
-                <input
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  placeholder="Pronouns"
-                  value={form.pronouns}
-                  onChange={(e) => updateField("pronouns", e.target.value)}
-                />
-                <input
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  placeholder="Ethnicity"
-                  value={form.ethnicity}
-                  onChange={(e) => updateField("ethnicity", e.target.value)}
-                />
-                <input
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  placeholder="Sex"
-                  value={form.sex}
-                  onChange={(e) => updateField("sex", e.target.value)}
-                />
-
-                <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={form.ttuStudent}
-                    onChange={(e) => updateField("ttuStudent", e.target.checked)}
+                <div>
+                  <FieldLabel>First Name</FieldLabel>
+                  <FieldInput
+                    placeholder="Enter first name"
+                    value={form.firstName}
+                    onChange={(e) => updateField("firstName", e.target.value)}
                   />
-                  TTU Student
-                </label>
+                </div>
+
+                <div>
+                  <FieldLabel>Last Name</FieldLabel>
+                  <FieldInput
+                    placeholder="Enter last name"
+                    value={form.lastName}
+                    onChange={(e) => updateField("lastName", e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>Preferred Name</FieldLabel>
+                  <FieldInput
+                    placeholder="Enter preferred name"
+                    value={form.preferredName}
+                    onChange={(e) => updateField("preferredName", e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>Date of Birth</FieldLabel>
+                  <FieldInput
+                    type="date"
+                    value={form.dob}
+                    onChange={(e) => updateField("dob", e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>MRN</FieldLabel>
+                  <FieldInput
+                    placeholder="Enter MRN"
+                    value={form.mrn}
+                    onChange={(e) => updateField("mrn", e.target.value.trimStart())}
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>Phone</FieldLabel>
+                  <FieldInput
+                    placeholder="Enter phone number"
+                    value={form.phone}
+                    onChange={(e) => updateField("phone", e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>Pronouns</FieldLabel>
+                  <FieldInput
+                    placeholder="Enter pronouns"
+                    value={form.pronouns}
+                    onChange={(e) => updateField("pronouns", e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>Ethnicity</FieldLabel>
+                  <FieldInput
+                    placeholder="Enter ethnicity"
+                    value={form.ethnicity}
+                    onChange={(e) => updateField("ethnicity", e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>Sex</FieldLabel>
+                  <FieldInput
+                    placeholder="Enter sex"
+                    value={form.sex}
+                    onChange={(e) => updateField("sex", e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>TTU Student</FieldLabel>
+                  <label className="flex min-h-[42px] items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={form.ttuStudent}
+                      onChange={(e) => updateField("ttuStudent", e.target.checked)}
+                    />
+                    Yes
+                  </label>
+                </div>
               </div>
             </div>
           )}
@@ -249,66 +300,95 @@ export default function PatientInfoEditModal({
               </h3>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <input
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  placeholder="Last 4 SSN"
-                  value={form.last4ssn}
-                  onChange={(e) => updateField("last4ssn", e.target.value)}
-                />
-                <input
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  placeholder="Address"
-                  value={form.address}
-                  onChange={(e) => updateField("address", e.target.value)}
-                />
-                <input
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  placeholder="City"
-                  value={form.city}
-                  onChange={(e) => updateField("city", e.target.value)}
-                />
-                <input
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  placeholder="State"
-                  value={form.state}
-                  onChange={(e) => updateField("state", e.target.value)}
-                />
-                <input
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  placeholder="Zip Code"
-                  value={form.zipCode}
-                  onChange={(e) => updateField("zipCode", e.target.value)}
-                />
-                <input
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  placeholder="Emergency Contact Name"
-                  value={form.emergencyContactName}
-                  onChange={(e) => updateField("emergencyContactName", e.target.value)}
-                />
-                <input
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  placeholder="Emergency Contact Relation"
-                  value={form.emergencyContactRelation}
-                  onChange={(e) => updateField("emergencyContactRelation", e.target.value)}
-                />
-                <input
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  placeholder="Emergency Contact Phone"
-                  value={form.emergencyContactPhone}
-                  onChange={(e) => updateField("emergencyContactPhone", e.target.value)}
-                />
-                <input
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  placeholder="Income Range"
-                  value={form.incomeRange}
-                  onChange={(e) => updateField("incomeRange", e.target.value)}
-                />
-                <input
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  placeholder="Spanish Only"
-                  value={form.spanishOnly}
-                  onChange={(e) => updateField("spanishOnly", e.target.value)}
-                />
+                <div>
+                  <FieldLabel>Last 4 SSN</FieldLabel>
+                  <FieldInput
+                    placeholder="Enter last 4 of SSN"
+                    value={form.last4ssn}
+                    onChange={(e) => updateField("last4ssn", e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>Address</FieldLabel>
+                  <FieldInput
+                    placeholder="Enter address"
+                    value={form.address}
+                    onChange={(e) => updateField("address", e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>City</FieldLabel>
+                  <FieldInput
+                    placeholder="Enter city"
+                    value={form.city}
+                    onChange={(e) => updateField("city", e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>State</FieldLabel>
+                  <FieldInput
+                    placeholder="Enter state"
+                    value={form.state}
+                    onChange={(e) => updateField("state", e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>Zip Code</FieldLabel>
+                  <FieldInput
+                    placeholder="Enter zip code"
+                    value={form.zipCode}
+                    onChange={(e) => updateField("zipCode", e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>Emergency Contact Name</FieldLabel>
+                  <FieldInput
+                    placeholder="Enter emergency contact name"
+                    value={form.emergencyContactName}
+                    onChange={(e) => updateField("emergencyContactName", e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>Emergency Contact Relation</FieldLabel>
+                  <FieldInput
+                    placeholder="Enter relationship"
+                    value={form.emergencyContactRelation}
+                    onChange={(e) => updateField("emergencyContactRelation", e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>Emergency Contact Phone</FieldLabel>
+                  <FieldInput
+                    placeholder="Enter emergency contact phone"
+                    value={form.emergencyContactPhone}
+                    onChange={(e) => updateField("emergencyContactPhone", e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>Income Range</FieldLabel>
+                  <FieldInput
+                    placeholder="Enter income range"
+                    value={form.incomeRange}
+                    onChange={(e) => updateField("incomeRange", e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>Spanish Only</FieldLabel>
+                  <FieldInput
+                    placeholder="Enter yes/no or notes"
+                    value={form.spanishOnly}
+                    onChange={(e) => updateField("spanishOnly", e.target.value)}
+                  />
+                </div>
               </div>
 
               <div className="mt-4">
@@ -332,14 +412,70 @@ export default function PatientInfoEditModal({
                   ))}
                 </div>
 
+                <div className="mt-3">
+                  <FieldLabel>Other Chronic Conditions</FieldLabel>
+                  <textarea
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    rows={3}
+                    placeholder="Add any other chronic conditions"
+                    value={form.chronicConditionsOther}
+                    onChange={(e) =>
+                      updateField("chronicConditionsOther", e.target.value)
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {canEditAllPatientFields && (
+            <div className="rounded-2xl border border-red-200 bg-red-50/60 p-4">
+              <h3 className="mb-4 text-lg font-semibold text-red-900">
+                Patient Flags
+              </h3>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <FieldLabel>Fired Patient</FieldLabel>
+                  <label className="flex min-h-[42px] items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm text-red-900">
+                    <input
+                      type="checkbox"
+                      checked={!!form.fired}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setForm((prev) => ({
+                          ...prev,
+                          fired: checked,
+                          firedAt: checked ? prev.firedAt || new Date().toISOString().slice(0, 10) : "",
+                          firedReason: checked ? prev.firedReason : "",
+                        }));
+                      }}
+                    />
+                    Mark patient as fired
+                  </label>
+                </div>
+
+                <div>
+                  <FieldLabel>Fired Date</FieldLabel>
+                  <FieldInput
+                    type="date"
+                    value={form.firedAt}
+                    disabled={!form.fired}
+                    onChange={(e) => updateField("firedAt", e.target.value)}
+                    className={!form.fired ? "bg-slate-100 text-slate-400" : ""}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <FieldLabel>Reason for Firing</FieldLabel>
                 <textarea
-                  className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className={`w-full rounded-lg border px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 ${form.fired ? "border-red-300 focus:border-red-500 focus:ring-red-200" : "border-slate-300 bg-slate-100 text-slate-400 focus:border-slate-300 focus:ring-slate-100"}`}
                   rows={3}
-                  placeholder="Other chronic conditions"
-                  value={form.chronicConditionsOther}
-                  onChange={(e) =>
-                    updateField("chronicConditionsOther", e.target.value)
-                  }
+                  placeholder="Enter reason the patient was fired"
+                  value={form.firedReason}
+                  disabled={!form.fired}
+                  onChange={(e) => updateField("firedReason", e.target.value)}
                 />
               </div>
             </div>

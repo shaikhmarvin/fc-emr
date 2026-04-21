@@ -63,6 +63,9 @@ function mapPatientFromSupabase(row) {
   chronicConditions: row.chronic_conditions ?? [],
   chronicConditionsOther: row.chronic_conditions_other ?? "",
   intakeStatus: row.intake_status ?? "",
+  fired: row.fired ?? false,
+  firedReason: row.fired_reason ?? "",
+  firedAt: row.fired_at ?? "",
     medications: [],
     encounters: [],
   };
@@ -109,6 +112,9 @@ export async function createPatientInSupabase(intakeForm) {
   chronic_conditions_other: intakeForm.chronicConditionsOther || "",
 
   intake_status: intakeForm.intakeStatus || "undergrad-complete",
+  fired: intakeForm.fired || false,
+  fired_reason: intakeForm.firedReason || "",
+  fired_at: intakeForm.firedAt || null,
 };
 
   const { data, error } = await supabase
@@ -212,6 +218,18 @@ export async function updatePatientInSupabase(patientId, updates) {
 
   if (updates.intakeStatus !== undefined) {
     rowToUpdate.intake_status = updates.intakeStatus || "";
+  }
+
+  if (updates.fired !== undefined) {
+    rowToUpdate.fired = !!updates.fired;
+  }
+
+  if (updates.firedReason !== undefined) {
+    rowToUpdate.fired_reason = updates.firedReason || "";
+  }
+
+  if (updates.firedAt !== undefined) {
+    rowToUpdate.fired_at = updates.firedAt || null;
   }
 
   const { data, error } = await supabase

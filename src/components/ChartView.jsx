@@ -874,6 +874,33 @@ export default function ChartView({
       >
         ← Back to Patients
       </button>
+
+      {selectedPatient?.fired ? (
+        <div className="rounded-2xl border border-red-300 bg-red-50 px-4 py-4 shadow-sm">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-wide text-red-700">
+                Fired Patient Alert
+              </p>
+              <p className="mt-1 text-base font-semibold text-red-900">
+                This patient has been marked as fired.
+              </p>
+            </div>
+
+            <div className="text-sm text-red-800">
+              <p>
+                <span className="font-semibold">Fired on:</span>{" "}
+                {selectedPatient?.firedAt ? formatDate(selectedPatient.firedAt) : "—"}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-3 rounded-xl border border-red-200 bg-white/70 px-3 py-3 text-sm text-red-900">
+            <span className="font-semibold">Reason:</span>{" "}
+            {selectedPatient?.firedReason || "No reason entered."}
+          </div>
+        </div>
+      ) : null}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <div className="rounded-2xl bg-white p-3 shadow sm:p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">

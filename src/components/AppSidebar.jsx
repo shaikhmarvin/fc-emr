@@ -1,3 +1,5 @@
+import logo from "../assets/free-clinic-logo.png";
+
 export default function AppSidebar({
   activeView,
   setActiveView,
@@ -50,10 +52,13 @@ export default function AppSidebar({
         className={`fixed inset-y-0 left-0 z-50 w-64 transform border-r border-slate-200 bg-white transition-transform duration-300 lg:translate-x-0 lg:overflow-y-auto ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
           }`}
       >
-        <div className="border-b border-slate-200 px-6 py-6">
-          <h1 className="text-2xl font-bold text-red-700">Free Clinic</h1>
-          <p className="mt-1 text-sm text-slate-500">Wednesday Clinic Flow</p>
-        </div>
+      <div className="border-b border-slate-200 px-4 py-4">
+  <img
+    src={logo}
+    alt="Free Clinic"
+    className="h-10 w-auto max-w-[180px] object-contain object-left"
+  />
+</div>
 
         <nav className="space-y-4 p-4">
           {userRole === "pharmacy" ? (
