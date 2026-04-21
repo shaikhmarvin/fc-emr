@@ -509,7 +509,7 @@ export default function App() {
   );
 }
 
-  function canAttendingSignSoap(role, encounter) {
+function canAttendingSignSoap(role, encounter) {
   if (!encounter) return false;
 
   const allowedRole =
@@ -520,11 +520,7 @@ export default function App() {
 
   if (!allowedRole || !!encounter.attendingSignedAt) return false;
 
-  if (encounter.skipUpperLevel && encounter.soapStatus === "awaiting_attending") {
-    return true;
-  }
-
-  return !!encounter.upperLevelSignedAt;
+  return encounter.soapStatus === "awaiting_attending";
 }
 
   function formatRoleLabel(role) {
@@ -6533,19 +6529,19 @@ async function handleUndergradStartEncounter(data) {
     }
   }
 
-  async function setSkipUpperLevelApproval(enabled) {
+ async function setSkipUpperLevelApproval(enabled) {
   if (!selectedPatient || !selectedEncounter || !session?.user?.id) return;
   if (userRole !== "leadership") return;
 
   const hasSoapStarted =
-  !!(soapDraft.soapSubjective || "").trim() ||
-  !!(soapDraft.soapObjective || "").trim() ||
-  !!(soapDraft.soapAssessment || "").trim() ||
-  !!(soapDraft.soapPlan || "").trim() ||
-  !!(soapDraft.ophthalmologyNote?.hpi || "").trim() ||
-  !!(soapDraft.ophthalmologyNote?.ocularHistory || "").trim() ||
-  !!(soapDraft.ophthalmologyNote?.assessment || "").trim() ||
-  !!(soapDraft.ophthalmologyNote?.plan || "").trim();
+    !!(soapDraft.soapSubjective || "").trim() ||
+    !!(soapDraft.soapObjective || "").trim() ||
+    !!(soapDraft.soapAssessment || "").trim() ||
+    !!(soapDraft.soapPlan || "").trim() ||
+    !!(soapDraft.ophthalmologyNote?.hpi || "").trim() ||
+    !!(soapDraft.ophthalmologyNote?.ocularHistory || "").trim() ||
+    !!(soapDraft.ophthalmologyNote?.assessment || "").trim() ||
+    !!(soapDraft.ophthalmologyNote?.plan || "").trim();
 
   if (enabled && !hasSoapStarted) {
     showToast({
@@ -6559,35 +6555,46 @@ async function handleUndergradStartEncounter(data) {
   try {
     const nowIso = new Date().toISOString();
 
-    await updateEncounterInSupabase(selectedEncounter.id, {
-      skipUpperLevel: enabled,
-      skipUpperLevelBy: enabled ? session.user.id : null,
-      skipUpperLevelAt: enabled ? nowIso : null,
-    });
+    const updatedEncounter = await updateEncounterInSupabase(selectedEncounter.id, {
+  skipUpperLevel: enabled,
+  skipUpperLevelBy: enabled ? session.user.id : null,
+  skipUpperLevelAt: enabled ? nowIso : null,
+  soapStatus: enabled ? "awaiting_attending" : "draft",
+});
 
-    setPatients((prev) =>
-      prev.map((patient) =>
-        patient.id === selectedPatient.id
-          ? {
-              ...patient,
-              encounters: patient.encounters.map((encounter) =>
-                encounter.id === selectedEncounter.id
-                  ? {
-                      ...encounter,
-                      skipUpperLevel: enabled,
-                      skipUpperLevelBy: enabled ? session.user.id : null,
-                      skipUpperLevelAt: enabled ? nowIso : null,
-                    }
-                  : encounter
-              ),
-            }
-          : patient
-      )
+// optional local optimistic update
+setPatients((prev) =>
+  prev.map((patient) =>
+    patient.id === selectedPatient.id
+      ? {
+          ...patient,
+          encounters: patient.encounters.map((encounter) =>
+            encounter.id === selectedEncounter.id
+              ? {
+  ...encounter,
+  skipUpperLevel: enabled,
+  skipUpperLevelBy: enabled ? session.user.id : null,
+  skipUpperLevelAt: enabled ? nowIso : null,
+  soapStatus: enabled ? "awaiting_attending" : "draft",
+}
+              : encounter
+          ),
+        }
+      : patient
+  )
+);
+
+// THIS is the important part:
+await refreshClinicData();
+setSelectedPatientId(selectedPatient.id);
+setSelectedEncounterId(selectedEncounter.id);
+
+    await logAuditEvent(
+      enabled ? "skip_upper_level_approved" : "skip_upper_level_revoked",
+      {
+        skipUpperLevel: enabled,
+      }
     );
-
-    await logAuditEvent(enabled ? "skip_upper_level_approved" : "skip_upper_level_revoked", {
-      skipUpperLevel: enabled,
-    });
     await loadAuditLog();
 
     showToast({

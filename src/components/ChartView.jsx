@@ -1,6 +1,8 @@
 import { getStatusClasses, getStatusLabel } from "../utils";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import OphthalmologySoapForm from "./OphthalmologySoapForm";
+import { downloadEncounterPdf } from "../utils/pdfGenerator";
+import logo from "../assets/free-clinic-logo.png";
 export default function ChartView({
   selectedPatient,
   selectedEncounter,
@@ -733,6 +735,22 @@ export default function ChartView({
     });
   }
 
+
+  async function handleExportEncounterPdf() {
+  if (!selectedPatient || !selectedEncounter) return;
+
+  await downloadEncounterPdf({
+    patient: selectedPatient,
+    encounter: selectedEncounter,
+    sortedMedications,
+    logoSrc: logo,
+    getFullPatientName,
+    soapAuthorName,
+    upperLevelSignerName,
+    attendingSignerName,
+  });
+}
+
   if (!selectedPatient) return null;
 
   const sortedEncounters = [...selectedPatient.encounters].sort((a, b) => {
@@ -800,6 +818,7 @@ export default function ChartView({
   const isSpecialtyVisit =
     selectedEncounter?.visitType === "specialty_only" ||
     selectedEncounter?.visitType === "both";
+  const soapStatusInfo = formatSoapStatus(soapStatus);
   const normalizedAssignedStudent = String(assignmentForm.studentName || "").trim().toLowerCase();
   const normalizedAssignedUpperLevel = String(assignmentForm.upperLevelName || "").trim().toLowerCase();
 
@@ -874,33 +893,6 @@ export default function ChartView({
       >
         ← Back to Patients
       </button>
-
-      {selectedPatient?.fired ? (
-        <div className="rounded-2xl border border-red-300 bg-red-50 px-4 py-4 shadow-sm">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-wide text-red-700">
-                Fired Patient Alert
-              </p>
-              <p className="mt-1 text-base font-semibold text-red-900">
-                This patient has been marked as fired.
-              </p>
-            </div>
-
-            <div className="text-sm text-red-800">
-              <p>
-                <span className="font-semibold">Fired on:</span>{" "}
-                {selectedPatient?.firedAt ? formatDate(selectedPatient.firedAt) : "—"}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-3 rounded-xl border border-red-200 bg-white/70 px-3 py-3 text-sm text-red-900">
-            <span className="font-semibold">Reason:</span>{" "}
-            {selectedPatient?.firedReason || "No reason entered."}
-          </div>
-        </div>
-      ) : null}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <div className="rounded-2xl bg-white p-3 shadow sm:p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -997,19 +989,19 @@ export default function ChartView({
         <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
           <button
             onClick={() => setShowTimeline((prev) => !prev)}
-            className="mb-4 flex w-full items-center justify-between rounded-lg bg-slate-50 px-4 py-3 text-left text-lg font-semibold text-slate-900 hover:bg-slate-100"
+            className="mb-4 flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-lg font-semibold text-slate-900 hover:bg-slate-100"
           >
             Visit Timeline
             <span>{showTimeline ? "▲" : "▼"}</span>
           </button>
 
           {showTimeline && (
-            <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1 lg:max-h-[560px]">
+            <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1 lg:max-h-[560px]">
               {sortedEncounters.map((encounter, index) => (
                 <button
                   key={encounter.id}
                   onClick={() => openPatientChart(selectedPatient.id, encounter.id)}
-                  className={`w-full rounded-xl border p-3 text-left transition ${selectedEncounterId === encounter.id
+                  className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${selectedEncounterId === encounter.id
                     ? "border-blue-400 bg-blue-50 ring-2 ring-blue-100"
                     : "border-slate-200 bg-white hover:bg-slate-50"
                     }`}
@@ -1018,7 +1010,7 @@ export default function ChartView({
                     <div className="flex gap-3">
                       <div className="mt-1 h-3 w-3 shrink-0 rounded-full bg-blue-500" />
 
-                      <div className="space-y-1">
+                      <div className="space-y-0.5">
                         <p className="font-semibold text-slate-800">
                           Encounter #{selectedPatient.encounters.length - index}
                         </p>
@@ -1043,13 +1035,12 @@ export default function ChartView({
                             ? ` • ${getSpecialtyTypeLabel(encounter.specialtyType)}`
                             : ""}
                         </p>
-                        <p className="text-xs text-slate-500">
-                          Room: {encounter.roomNumber || "—"} • Student: {encounter.assignedStudent || "—"}
-                        </p>
-
-                        <p className="text-xs text-slate-500">
-                          Vitals: {encounter.vitalsHistory?.length || 0} • SOAP saved: {encounter.soapSavedAt || "Not yet"}
-                        </p>
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+                          <span>Room: {encounter.roomNumber || "—"}</span>
+                          <span>Student: {encounter.assignedStudent || "—"}</span>
+                          <span>Vitals: {encounter.vitalsHistory?.length || 0}</span>
+                          <span>SOAP saved: {encounter.soapSavedAt || "Not yet"}</span>
+                        </div>
                       </div>
 
                     </div>
@@ -1135,15 +1126,25 @@ export default function ChartView({
                   />
                 </div>
 
-                <p>
-                  <span className="font-medium">Encounter Status:</span>{" "}
-                  {selectedEncounter.status}
-                </p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      Encounter Status
+                    </p>
+                    <span className={`mt-2 inline-block rounded-full border px-3 py-1 text-xs ${getStatusClasses(selectedEncounter.status)}`}>
+                      {getStatusLabel(selectedEncounter.status, selectedEncounter.soapStatus)}
+                    </span>
+                  </div>
 
-                <p>
-                  <span className="font-medium">SOAP Status:</span>{" "}
-                  {formatSoapStatus(soapStatus).label}
-                </p>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      SOAP Status
+                    </p>
+                    <span className={`mt-2 inline-block rounded-full px-3 py-1 text-xs font-semibold ${soapStatusInfo.color}`}>
+                      {soapStatusInfo.label}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1376,7 +1377,12 @@ export default function ChartView({
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:gap-6">
             <div className="rounded-2xl bg-white p-4 shadow">
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <h3 className="text-lg font-semibold">Medications</h3>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Active Treatment
+                  </p>
+                  <h3 className="text-lg font-semibold text-slate-900">Medications</h3>
+                </div>
 
                 <button
                   onClick={() => {
@@ -1397,7 +1403,7 @@ export default function ChartView({
 
               <div
                 className={`space-y-3 ${sortedMedications.length > 6
-                  ? "max-h-[300px] overflow-y-auto pr-1"
+                  ? "max-h-[320px] overflow-y-auto pr-1"
                   : ""
                   }`}
               >
@@ -1405,69 +1411,100 @@ export default function ChartView({
                   sortedMedications.map((med) => (
                     <div
                       key={med.id}
-                      className={`rounded-xl border p-4 ${med.isActive
+                      className={`rounded-xl border p-3 ${med.isActive
                         ? "border-slate-200 bg-white"
-                        : "border-slate-200 bg-slate-100 text-slate-400"
+                        : "border-slate-200 bg-slate-100 text-slate-500"
                         }`}
                     >
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="space-y-1">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <p className="font-semibold">{med.name || "—"}</p>
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0 space-y-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-base font-semibold text-slate-900">{med.name || "—"}</p>
 
-                              {med.lastUpdatedEncounterId === selectedEncounter?.id && (
-                                <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">
-                                  Updated This Visit
-                                </span>
-                              )}
-                            </div>
+                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${med.isActive
+                              ? "bg-green-100 text-green-700"
+                              : "bg-slate-200 text-slate-600"
+                              }`}>
+                              {med.isActive ? "Active" : "Inactive"}
+                            </span>
 
-                            <p className="text-sm">Dosage: {med.dosage || "—"}</p>
-                            <p className="text-sm">Frequency: {med.frequency || "—"}</p>
-                            <p className="text-sm">Route: {med.route || "—"}</p>
-
-                            <p className="text-sm">
-                              Dispense: {med.dispenseAmount || "—"}
-                            </p>
-
-                            <p className="text-sm">
-                              Refills: {med.refillCount ?? "0"}
-                            </p>
-
-                            {med.instructions ? (
-                              <p className="text-sm">Instructions: {med.instructions}</p>
-                            ) : null}
-
-                            {(() => {
-                              const supply = getMedicationSupplyInfo(med);
-
-                              if (!supply.daysUntilRefill) return null;
-
-                              return (
-                                <div className="mt-1 text-xs text-slate-600 space-y-0.5">
-                                  <p>Days Until Refill: {supply.daysUntilRefill}</p>
-                                  <p>Refill Due: {supply.refillDueDate}</p>
-                                  <p>Total Coverage: {supply.totalDaysCovered} days</p>
-                                  <p>Estimated Runout: {supply.runoutDate}</p>
-                                </div>
-                              );
-                            })()}
+                            {med.lastUpdatedEncounterId === selectedEncounter?.id && (
+                              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                                Updated This Visit
+                              </span>
+                            )}
                           </div>
+
+                          <div className="grid grid-cols-1 gap-2 text-sm text-slate-700 sm:grid-cols-2 xl:grid-cols-3">
+                            <div className="rounded-lg bg-slate-50 px-3 py-2">
+                              <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Dose</span>
+                              <span className="mt-1 block font-medium text-slate-800">{med.dosage || "—"}</span>
+                            </div>
+                            <div className="rounded-lg bg-slate-50 px-3 py-2">
+                              <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Frequency</span>
+                              <span className="mt-1 block font-medium text-slate-800">{med.frequency || "—"}</span>
+                            </div>
+                            <div className="rounded-lg bg-slate-50 px-3 py-2">
+                              <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Route</span>
+                              <span className="mt-1 block font-medium text-slate-800">{med.route || "—"}</span>
+                            </div>
+                            <div className="rounded-lg bg-slate-50 px-3 py-2">
+                              <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Dispense</span>
+                              <span className="mt-1 block font-medium text-slate-800">{med.dispenseAmount || "—"}</span>
+                            </div>
+                            <div className="rounded-lg bg-slate-50 px-3 py-2">
+                              <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Refills</span>
+                              <span className="mt-1 block font-medium text-slate-800">{med.refillCount ?? "0"}</span>
+                            </div>
+                          </div>
+
+                          {med.instructions ? (
+                            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                              <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Instructions</span>
+                              <span className="mt-1 block">{med.instructions}</span>
+                            </div>
+                          ) : null}
+
+                          {(() => {
+                            const supply = getMedicationSupplyInfo(med);
+
+                            if (!supply.daysUntilRefill) return null;
+
+                            return (
+                              <div className="grid grid-cols-1 gap-2 text-xs text-slate-600 sm:grid-cols-2 xl:grid-cols-4">
+                                <div className="rounded-lg bg-slate-50 px-3 py-2">
+                                  <span className="block font-semibold text-slate-500">Days Until Refill</span>
+                                  <span className="mt-1 block text-slate-700">{supply.daysUntilRefill}</span>
+                                </div>
+                                <div className="rounded-lg bg-slate-50 px-3 py-2">
+                                  <span className="block font-semibold text-slate-500">Refill Due</span>
+                                  <span className="mt-1 block text-slate-700">{supply.refillDueDate}</span>
+                                </div>
+                                <div className="rounded-lg bg-slate-50 px-3 py-2">
+                                  <span className="block font-semibold text-slate-500">Total Coverage</span>
+                                  <span className="mt-1 block text-slate-700">{supply.totalDaysCovered} days</span>
+                                </div>
+                                <div className="rounded-lg bg-slate-50 px-3 py-2">
+                                  <span className="block font-semibold text-slate-500">Estimated Runout</span>
+                                  <span className="mt-1 block text-slate-700">{supply.runoutDate}</span>
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </div>
 
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-1">
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-1">
                           <button
                             onClick={() => {
                               if (isEncounterLocked) return;
                               toggleMedicationActive(med.id);
                             }}
-                            className={`rounded-lg px-4 py-3 text-sm ${med.isActive
+                            className={`rounded-lg px-4 py-2.5 text-sm font-medium ${med.isActive
                               ? "bg-green-100 text-green-700"
                               : "bg-slate-200 text-slate-600"
                               }`}
                           >
-                            {med.isActive ? "Active" : "Inactive"}
+                            {med.isActive ? "Mark Inactive" : "Mark Active"}
                           </button>
 
                           <button
@@ -1475,7 +1512,7 @@ export default function ChartView({
                               if (isEncounterLocked) return;
                               startEditMedication(med);
                             }}
-                            className="rounded-lg bg-slate-200 px-4 py-3 text-sm text-slate-700"
+                            className="rounded-lg bg-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700"
                           >
                             Edit
                           </button>
@@ -1485,7 +1522,7 @@ export default function ChartView({
                               if (isEncounterLocked) return;
                               deleteMedication(med.id);
                             }}
-                            className="rounded-lg bg-red-100 px-4 py-3 text-sm text-red-700"
+                            className="rounded-lg bg-red-100 px-4 py-2.5 text-sm font-medium text-red-700"
                           >
                             Delete
                           </button>
@@ -1496,7 +1533,7 @@ export default function ChartView({
                                 if (isEncounterLocked) return;
                                 onStartRefillRequest(med);
                               }}
-                              className="rounded-lg bg-purple-600 px-3 py-2 text-sm text-white"
+                              className="rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-medium text-white"
                             >
                               Refill
                             </button>
@@ -1514,9 +1551,10 @@ export default function ChartView({
             </div>
 
             <div className="mt-6 border-t border-slate-200 pt-4">
-              <h4 className="text-sm font-semibold text-slate-800">
-                Refill History
-              </h4>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Medication Changes</p>
+                <h4 className="text-sm font-semibold text-slate-800">Refill History</h4>
+              </div>
 
               {approvedRefillHistory.length > 0 ? (
                 <div className="mt-3 space-y-2">
@@ -1544,7 +1582,7 @@ export default function ChartView({
                     return (
                       <div
                         key={req.id}
-                        className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                        className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3"
                       >
                         <div className="text-sm font-medium text-slate-800">
                           {approvedMedication?.name || "Medication"}
@@ -1759,7 +1797,7 @@ export default function ChartView({
 
               {vitalsHistory.length >= 2 ? (
                 <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
                     <p className="text-xs font-medium text-slate-500">Blood Pressure</p>
                     <p className={`mt-1 text-sm font-semibold ${getColorClasses(bpCategory)}`}>
                       {latestVitals?.bp || "—"}
@@ -1821,43 +1859,45 @@ export default function ChartView({
 
 
 
-              <h4 className="mb-3 font-semibold">Vitals History</h4>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Recent Entries</p>
+                  <h4 className="font-semibold text-slate-900">Vitals History</h4>
+                </div>
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                  {selectedEncounter.vitalsHistory?.length || 0} recorded
+                </span>
+              </div>
 
               {selectedEncounter.vitalsHistory?.length > 0 ? (
                 <>
-                  <div className="hidden overflow-x-auto md:block">
-                    <table className="min-w-[700px] w-full text-left">
-                      <thead className="bg-slate-50">
+                  <div className="hidden overflow-x-auto rounded-xl border border-slate-200 md:block">
+                    <table className="min-w-[700px] w-full text-left text-sm">
+                      <thead className="bg-slate-50 text-slate-700">
                         <tr>
-                          <th className="p-3">Recorded</th>
-                          <th className="p-3">BP</th>
-                          <th className="p-3">HR</th>
-                          <th className="p-3">Temp</th>
-                          <th className="p-3">RR</th>
-                          <th className="p-3">SpO2</th>
-                          <th className="p-3">Weight</th>
-                          <th className="p-3">Height</th>
-                          <th className="p-3">BMI</th>
-                          <th className="p-3">Pain</th>
-                          <th className="p-3">Edit</th>
+                          <th className="p-3 font-semibold">Recorded</th>
+                          <th className="p-3 font-semibold">BP</th>
+                          <th className="p-3 font-semibold">HR</th>
+                          <th className="p-3 font-semibold">Temp</th>
+                          <th className="p-3 font-semibold">RR</th>
+                          <th className="p-3 font-semibold">SpO2</th>
+                          <th className="p-3 font-semibold">Weight</th>
+                          <th className="p-3 font-semibold">Height</th>
+                          <th className="p-3 font-semibold">BMI</th>
+                          <th className="p-3 font-semibold">Pain</th>
+                          <th className="p-3 font-semibold">Edit</th>
                         </tr>
                       </thead>
                       <tbody>
                         {selectedEncounter.vitalsHistory.map((entry, index) => (
-                          <tr key={index} className="border-t">
-                            <td className="p-3">{entry.recordedAt}</td>
-                            <td className="p-3">{entry.bp || "—"}</td>
+                          <tr key={index} className="border-t border-slate-200 align-top">
+                            <td className="p-3 text-slate-700">{entry.recordedAt}</td>
+                            <td className="p-3 font-medium text-slate-900">{entry.bp || "—"}</td>
                             <td className="p-3">{entry.hr || "—"}</td>
-                            <td className="p-3">
-                              {entry.temp ? `${entry.temp} °F` : "—"}
-                            </td>
+                            <td className="p-3">{entry.temp ? `${entry.temp} °F` : "—"}</td>
                             <td className="p-3">{entry.rr || "—"}</td>
-                            <td className="p-3">
-                              {entry.spo2 ? `${entry.spo2}%` : "—"}
-                            </td>
-                            <td className="p-3">
-                              {entry.weight ? `${entry.weight} lb` : "—"}
-                            </td>
+                            <td className="p-3">{entry.spo2 ? `${entry.spo2}%` : "—"}</td>
+                            <td className="p-3">{entry.weight ? `${entry.weight} lb` : "—"}</td>
                             <td className="p-3">{entry.height || "—"}</td>
                             <td className="p-3">{entry.bmi || "—"}</td>
                             <td className="p-3">{entry.pain || "—"}</td>
@@ -1867,7 +1907,7 @@ export default function ChartView({
                                   if (isEncounterLocked) return;
                                   startEditVitals(entry, index);
                                 }}
-                                className="rounded-lg bg-slate-200 px-4 py-3 text-sm text-slate-700"
+                                className="rounded-lg bg-slate-200 px-3 py-2 text-sm font-medium text-slate-700"
                               >
                                 Edit
                               </button>
@@ -1878,65 +1918,36 @@ export default function ChartView({
                     </table>
                   </div>
 
-                  <div className="space-y-3 md:hidden">
+                  <div className="space-y-2 md:hidden">
                     {selectedEncounter.vitalsHistory.map((entry, index) => (
                       <div
                         key={index}
-                        className="rounded-xl border border-slate-200 p-4"
+                        className="rounded-xl border border-slate-200 bg-white p-3"
                       >
-                        <div className="space-y-1 text-sm">
-                          <p>
-                            <span className="font-medium">Recorded:</span>{" "}
-                            {entry.recordedAt}
-                          </p>
-                          <p>
-                            <span className="font-medium">BP:</span>{" "}
-                            {entry.bp || "—"}
-                          </p>
-                          <p>
-                            <span className="font-medium">HR:</span>{" "}
-                            {entry.hr || "—"}
-                          </p>
-                          <p>
-                            <span className="font-medium">Temp:</span>{" "}
-                            {entry.temp ? `${entry.temp} °F` : "—"}
-                          </p>
-                          <p>
-                            <span className="font-medium">RR:</span>{" "}
-                            {entry.rr || "—"}
-                          </p>
-                          <p>
-                            <span className="font-medium">SpO2:</span>{" "}
-                            {entry.spo2 ? `${entry.spo2}%` : "—"}
-                          </p>
-                          <p>
-                            <span className="font-medium">Weight:</span>{" "}
-                            {entry.weight ? `${entry.weight} lb` : "—"}
-                          </p>
-                          <p>
-                            <span className="font-medium">Height:</span>{" "}
-                            {entry.height || "—"}
-                          </p>
-                          <p>
-                            <span className="font-medium">BMI:</span>{" "}
-                            {entry.bmi || "—"}
-                          </p>
-                          <p>
-                            <span className="font-medium">Pain:</span>{" "}
-                            {entry.pain || "—"}
-                          </p>
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <p className="text-sm font-semibold text-slate-800">{entry.recordedAt}</p>
+                          <button
+                            onClick={() => {
+                              if (isEncounterLocked) return;
+                              startEditVitals(entry, index);
+                            }}
+                            disabled={isEncounterLocked}
+                            className="rounded-lg bg-slate-200 px-3 py-2 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Edit
+                          </button>
                         </div>
 
-                        <button
-                          onClick={() => {
-                            if (isEncounterLocked) return;
-                            startEditVitals(entry, index);
-                          }}
-                          disabled={isEncounterLocked}
-                          className="mt-3 rounded-lg bg-slate-200 px-4 py-3 text-sm text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          Edit
-                        </button>
+                        <div className="grid grid-cols-2 gap-2 text-sm text-slate-700">
+                          <div className="rounded-lg bg-slate-50 px-3 py-2"><span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500">BP</span>{entry.bp || "—"}</div>
+                          <div className="rounded-lg bg-slate-50 px-3 py-2"><span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500">HR</span>{entry.hr || "—"}</div>
+                          <div className="rounded-lg bg-slate-50 px-3 py-2"><span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Temp</span>{entry.temp ? `${entry.temp} °F` : "—"}</div>
+                          <div className="rounded-lg bg-slate-50 px-3 py-2"><span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500">RR</span>{entry.rr || "—"}</div>
+                          <div className="rounded-lg bg-slate-50 px-3 py-2"><span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500">SpO2</span>{entry.spo2 ? `${entry.spo2}%` : "—"}</div>
+                          <div className="rounded-lg bg-slate-50 px-3 py-2"><span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Pain</span>{entry.pain || "—"}</div>
+                          <div className="rounded-lg bg-slate-50 px-3 py-2"><span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Weight</span>{entry.weight ? `${entry.weight} lb` : "—"}</div>
+                          <div className="rounded-lg bg-slate-50 px-3 py-2"><span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500">BMI</span>{entry.bmi || "—"}</div>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -2098,9 +2109,14 @@ export default function ChartView({
           <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
             <button
               onClick={() => setShowLabs((prev) => !prev)}
-              className="flex w-full items-center justify-between text-left text-lg font-semibold"
+              className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-lg font-semibold text-slate-900"
             >
-              Full Lab View
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Longitudinal Trends
+                </p>
+                <p className="text-lg font-semibold text-slate-900">Full Lab View</p>
+              </div>
               <span>{showLabs ? "▲" : "▼"}</span>
             </button>
 
@@ -2122,7 +2138,7 @@ export default function ChartView({
                         key={chip.key}
                         type="button"
                         onClick={() => setLabFilter(chip.key)}
-                        className={`rounded-full border px-3 py-1.5 text-sm ${active
+                        className={`rounded-full border px-3 py-1.5 text-sm font-medium ${active
                           ? "border-blue-600 bg-blue-100 text-blue-800"
                           : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
                           }`}
@@ -2133,414 +2149,216 @@ export default function ChartView({
                   })}
                 </div>
 
-                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                  <span className="font-medium">Dates:</span>{" "}
-                  {longitudinalLabData.dateKeys.length}
-                  {" • "}
-                  <span className="font-medium">Abnormal results:</span>{" "}
-                  {longitudinalLabData.abnormalCount}
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                    <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Dates tracked</span>
+                    <span className="mt-1 block text-lg font-semibold text-slate-900">{longitudinalLabData.dateKeys.length}</span>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                    <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Abnormal results</span>
+                    <span className="mt-1 block text-lg font-semibold text-slate-900">{longitudinalLabData.abnormalCount}</span>
+                  </div>
                 </div>
 
                 {longitudinalLabData.dateKeys.length === 0 ? (
-  <div className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
-    No saved lab results yet.
-  </div>
-) : (
-  <>
-    <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200">
-      <table className="min-w-[900px] border-separate border-spacing-0 text-sm">
-        <thead>
-          <tr>
-            <th className="sticky left-0 z-20 w-[170px] border-b border-r border-slate-200 bg-slate-100 px-3 py-2 text-left font-semibold text-slate-800">
-              Lab
-            </th>
-
-            {longitudinalLabData.dateKeys.map((dateKey) => (
-              <th
-                key={dateKey}
-                className="border-b border-slate-200 bg-slate-100 px-2 py-2 text-left font-semibold text-slate-800"
-              >
-                {formatLabHeaderDate(dateKey)}
-              </th>
-            ))}
-          </tr>
-        </thead>
-
-        <tbody>
-          {longitudinalLabData.groupedRows
-            .filter((groupBlock) => {
-              if (labFilter === "all" || labFilter === "abnormal") return true;
-              return groupBlock.group === labFilter;
-            })
-            .map((groupBlock) => {
-              const visibleRows = groupBlock.rows.filter((row) => {
-                if (labFilter === "abnormal") return row.abnormal;
-                return true;
-              });
-
-              if (visibleRows.length === 0) return null;
-
-              return (
-                <Fragment key={groupBlock.group}>
-                  <tr>
-                    <td
-                      colSpan={longitudinalLabData.dateKeys.length + 1}
-                      className="bg-slate-75 border-b border-t border-slate-200 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600"
-                    >
-                      {groupBlock.group}
-                    </td>
-                  </tr>
-
-                  {visibleRows.map((row) => (
-                    <tr key={row.analyte}>
-                      <td className="sticky left-0 z-10 w-[170px] border-b border-r border-slate-200 bg-white px-3 py-2 font-medium text-slate-900">
-                        {row.analyte}
-                      </td>
-
-                      {longitudinalLabData.dateKeys.map((dateKey) => {
-                        const cellResults = row.valuesByDate[dateKey] || [];
-
-                        return (
-                          <td
-                            key={`${row.analyte}-${dateKey}`}
-                            className="min-w-[120px] border-b border-slate-200 px-2 py-2 align-top"
-                          >
-                            {cellResults.length === 0 ? (
-                              <span className="text-slate-300">—</span>
-                            ) : (
-                              <div className="space-y-2">
-                                {cellResults.map((result, index) => (
-                                  <div
-                                    key={`${row.analyte}-${dateKey}-${index}`}
-                                    className="rounded-lg bg-slate-50 px-2.5 py-2"
-                                    title={result.fullValueText}
-                                  >
-                                    <div className="flex items-start gap-2">
-  <span
-    className={`inline-flex min-w-[22px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-      result.flag === "H"
-        ? "bg-red-100 text-red-700"
-        : result.flag === "L"
-        ? "bg-blue-100 text-blue-700"
-        : "invisible"
-    }`}
-  >
-    {result.flag || "•"}
-  </span>
-
-  <div className="min-w-0">
-                                        <div className={`font-semibold ${getLabFlagClasses(result.flag)}`}>
-                                          {result.valueText}
-                                        </div>
-
-                                        <div className="mt-1 text-xs text-slate-500">
-                                          {result.sourceLabel}
-                                          {result.unitText ? ` • ${result.unitText}` : ""}
-                                        </div>
-
-                                        {result.referenceRange ? (
-                                          <div className="text-xs text-slate-400">
-                                            Ref: {result.referenceRange}
-                                          </div>
-                                        ) : null}
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </Fragment>
-              );
-            })}
-        </tbody>
-      </table>
-    </div>
-
-    <div className="space-y-4 md:hidden">
-      {longitudinalLabData.groupedRows
-        .filter((groupBlock) => {
-          if (labFilter === "all" || labFilter === "abnormal") return true;
-          return groupBlock.group === labFilter;
-        })
-        .map((groupBlock) => {
-          const visibleRows = groupBlock.rows.filter((row) => {
-            if (labFilter === "abnormal") return row.abnormal;
-            return true;
-          });
-
-          if (visibleRows.length === 0) return null;
-
-          return (
-            <div key={groupBlock.group} className="space-y-3">
-              <div className="text-xs font-semibold uppercase text-slate-500">
-                {groupBlock.group}
-              </div>
-
-              {visibleRows.map((row) => {
-                const allResults = Object.values(row.valuesByDate || {}).flat();
-
-                if (allResults.length === 0) return null;
-
-                return (
-                  <div
-                    key={row.analyte}
-                    className="rounded-xl border border-slate-200 bg-white p-3"
-                  >
-                    <div className="mb-2 font-semibold text-slate-800">
-                      {row.analyte}
-                    </div>
-
-                    <div className="space-y-2">
-                      {allResults.map((result, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-start justify-between text-sm"
-                        >
-                          <div className="text-slate-600">
-                            {formatLabHeaderDate(result.dateKey)}
-                          </div>
-
-                          <div className="text-right">
-                            <div className={`font-semibold ${getLabFlagClasses(result.flag)}`}>
-                              {result.valueText}
-                            </div>
-
-                            <div className="text-xs text-slate-500">
-                              {result.sourceLabel}
-                              {result.unitText ? ` • ${result.unitText}` : ""}
-                            </div>
-
-                            {result.referenceRange ? (
-                              <div className="text-xs text-slate-400">
-                                Ref: {result.referenceRange}
-                              </div>
-                            ) : null}
-                          </div>
-
-                          <div
-  className={`ml-2 rounded-full px-2 py-0.5 text-xs font-bold ${
-    result.flag === "H"
-      ? "bg-red-100 text-red-700"
-      : result.flag === "L"
-      ? "bg-blue-100 text-blue-700"
-      : "invisible"
-  }`}
->
-  {result.flag || "•"}
-</div>
-                        </div>
-                      ))}
-                    </div>
+                  <div className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
+                    No saved lab results yet.
                   </div>
-                );
-              })}
-            </div>
-          );
-        })}
-    </div>
-  </>
-)}
-                  <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200">
-                    <table className="min-w-[900px] border-separate border-spacing-0 text-sm">
-                      <thead>
-                        <tr>
-                          <th className="sticky left-0 z-20 w-[170px] border-b border-r border-slate-200 bg-slate-100 px-3 py-2 text-left font-semibold text-slate-800">
-                            Lab
-                          </th>
-
-                          {longitudinalLabData.dateKeys.map((dateKey) => (
-                            <th
-                              key={dateKey}
-                              className="border-b border-slate-200 bg-slate-100 px-2 py-2 text-left font-semibold text-slate-800"
-                            >
-                              {formatLabHeaderDate(dateKey)}
+                ) : (
+                  <>
+                    <div className="hidden overflow-x-auto rounded-xl border border-slate-200 md:block">
+                      <table className="min-w-[900px] border-separate border-spacing-0 text-sm">
+                        <thead>
+                          <tr>
+                            <th className="sticky left-0 z-20 w-[170px] border-b border-r border-slate-200 bg-slate-100 px-3 py-2 text-left font-semibold text-slate-800">
+                              Lab
                             </th>
-                          ))}
-                        </tr>
-                      </thead>
 
-                      <tbody>
-                        {longitudinalLabData.groupedRows
-                          .filter((groupBlock) => {
-                            if (labFilter === "all" || labFilter === "abnormal") return true;
-                            return groupBlock.group === labFilter;
-                          })
-                          .map((groupBlock) => {
-                            const visibleRows = groupBlock.rows.filter((row) => {
-                              if (labFilter === "abnormal") return row.abnormal;
-                              return true;
-                            });
+                            {longitudinalLabData.dateKeys.map((dateKey) => (
+                              <th
+                                key={dateKey}
+                                className="border-b border-slate-200 bg-slate-100 px-2 py-2 text-left font-semibold text-slate-800"
+                              >
+                                {formatLabHeaderDate(dateKey)}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
 
-                            if (visibleRows.length === 0) return null;
+                        <tbody>
+                          {longitudinalLabData.groupedRows
+                            .filter((groupBlock) => {
+                              if (labFilter === "all" || labFilter === "abnormal") return true;
+                              return groupBlock.group === labFilter;
+                            })
+                            .map((groupBlock) => {
+                              const visibleRows = groupBlock.rows.filter((row) => {
+                                if (labFilter === "abnormal") return row.abnormal;
+                                return true;
+                              });
 
-                            return (
-                              <Fragment key={groupBlock.group}>
-                                <tr>
-                                  <td
-                                    colSpan={longitudinalLabData.dateKeys.length + 1}
-                                    className="bg-slate-75 border-b border-t border-slate-200 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600"
-                                  >
-                                    {groupBlock.group}
-                                  </td>
-                                </tr>
+                              if (visibleRows.length === 0) return null;
 
-                                {visibleRows.map((row) => (
-                                  <tr key={row.analyte}>
-                                    <td className="sticky left-0 z-10 w-[170px] border-b border-r border-slate-200 bg-white px-3 py-2 font-medium text-slate-900">
-                                      {row.analyte}
+                              return (
+                                <Fragment key={groupBlock.group}>
+                                  <tr>
+                                    <td
+                                      colSpan={longitudinalLabData.dateKeys.length + 1}
+                                      className="border-b border-t border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600"
+                                    >
+                                      {groupBlock.group}
                                     </td>
+                                  </tr>
 
-                                    {longitudinalLabData.dateKeys.map((dateKey) => {
-                                      const cellResults = row.valuesByDate[dateKey] || [];
+                                  {visibleRows.map((row) => (
+                                    <tr key={row.analyte}>
+                                      <td className="sticky left-0 z-10 w-[170px] border-b border-r border-slate-200 bg-white px-3 py-2 font-medium text-slate-900">
+                                        {row.analyte}
+                                      </td>
 
-                                      return (
-                                        <td
-                                          key={`${row.analyte}-${dateKey}`}
-                                          className="min-w-[120px] border-b border-slate-200 px-2 py-2 align-top"
-                                        >
-                                          {cellResults.length === 0 ? (
-                                            <span className="text-slate-300">—</span>
-                                          ) : (
-                                            <div className="space-y-2">
-                                              {cellResults.map((result, index) => (
-                                                <div
-                                                  key={`${row.analyte}-${dateKey}-${index}`}
-                                                  className="rounded-lg bg-slate-50 px-2.5 py-2"
-                                                  title={result.fullValueText}
-                                                >
-                                                  <div className="flex items-start gap-2">
-                                                    {result.flag ? (
-                                                      <span
-                                                        className={`inline-flex min-w-[22px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold ${result.flag === "H"
-                                                          ? "bg-red-100 text-red-700"
-                                                          : "bg-blue-100 text-blue-700"
-                                                          }`}
-                                                      >
-                                                        {result.flag}
-                                                      </span>
-                                                    ) : null}
+                                      {longitudinalLabData.dateKeys.map((dateKey) => {
+                                        const cellResults = row.valuesByDate[dateKey] || [];
 
-                                                    <div className="min-w-0">
-                                                      <div className={`font-semibold ${getLabFlagClasses(result.flag)}`}>
-                                                        {result.valueText}
-                                                      </div>
-
-                                                      <div className="mt-1 text-xs text-slate-500">
-                                                        {result.sourceLabel}
-                                                        {result.unitText ? ` • ${result.unitText}` : ""}
-                                                      </div>
-
-                                                      {result.referenceRange ? (
-                                                        <div className="text-xs text-slate-400">
-                                                          Ref: {result.referenceRange}
+                                        return (
+                                          <td
+                                            key={`${row.analyte}-${dateKey}`}
+                                            className="min-w-[140px] border-b border-slate-200 px-2 py-2 align-top"
+                                          >
+                                            {cellResults.length === 0 ? (
+                                              <span className="text-slate-300">—</span>
+                                            ) : (
+                                              <div className="space-y-2">
+                                                {cellResults.map((result, index) => (
+                                                  <div
+                                                    key={`${row.analyte}-${dateKey}-${index}`}
+                                                    className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                                                    title={result.fullValueText}
+                                                  >
+                                                    <div className="flex items-start justify-between gap-2">
+                                                      <div className="min-w-0">
+                                                        <div className={`text-base font-semibold ${getLabFlagClasses(result.flag)}`}>
+                                                          {result.valueText}
                                                         </div>
+                                                        <div className="mt-1 text-xs text-slate-500">
+                                                          {result.sourceLabel}
+                                                          {result.unitText ? ` • ${result.unitText}` : ""}
+                                                        </div>
+                                                        {result.referenceRange ? (
+                                                          <div className="text-xs text-slate-400">
+                                                            Ref: {result.referenceRange}
+                                                          </div>
+                                                        ) : null}
+                                                      </div>
+
+                                                      {result.flag ? (
+                                                        <span
+                                                          className={`inline-flex min-w-[22px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold ${result.flag === "H"
+                                                            ? "bg-red-100 text-red-700"
+                                                            : "bg-blue-100 text-blue-700"
+                                                            }`}
+                                                        >
+                                                          {result.flag}
+                                                        </span>
                                                       ) : null}
                                                     </div>
                                                   </div>
-                                                </div>
-                                              ))}
-                                            </div>
-                                          )}
-                                        </td>
-                                      );
-                                    })}
-                                  </tr>
-                                ))}
-                              </Fragment>
-                            );
-                          })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* MOBILE LAB VIEW */}
-                <div className="space-y-4 md:hidden">
-                  {longitudinalLabData.groupedRows
-                    .filter((groupBlock) => {
-                      if (labFilter === "all" || labFilter === "abnormal") return true;
-                      return groupBlock.group === labFilter;
-                    })
-                    .map((groupBlock) => {
-                      const visibleRows = groupBlock.rows.filter((row) => {
-                        if (labFilter === "abnormal") return row.abnormal;
-                        return true;
-                      });
-
-                      if (visibleRows.length === 0) return null;
-
-                      return (
-                        <div key={groupBlock.group} className="space-y-3">
-                          <div className="text-xs font-semibold uppercase text-slate-500">
-                            {groupBlock.group}
-                          </div>
-
-                          {visibleRows.map((row) => {
-                            const allResults = Object.values(row.valuesByDate || {}).flat();
-
-                            if (allResults.length === 0) return null;
-
-                            return (
-                              <div
-                                key={row.analyte}
-                                className="rounded-xl border border-slate-200 p-3 bg-white"
-                              >
-                                <div className="font-semibold text-slate-800 mb-2">
-                                  {row.analyte}
-                                </div>
-
-                                <div className="space-y-2">
-                                  {allResults.map((result, idx) => (
-                                    <div
-                                      key={idx}
-                                      className="flex justify-between items-start text-sm"
-                                    >
-                                      <div className="text-slate-600">
-                                        {formatLabHeaderDate(result.dateKey)}
-                                      </div>
-
-                                      <div className="text-right">
-                                        <div className={`font-semibold ${getLabFlagClasses(result.flag)}`}>
-                                          {result.valueText}
-                                        </div>
-
-                                        <div className="text-xs text-slate-500">
-                                          {result.sourceLabel}
-                                          {result.unitText ? ` • ${result.unitText}` : ""}
-                                        </div>
-
-                                        {result.referenceRange && (
-                                          <div className="text-xs text-slate-400">
-                                            Ref: {result.referenceRange}
-                                          </div>
-                                        )}
-                                      </div>
-
-                                      {result.flag && (
-                                        <div
-                                          className={`ml-2 rounded-full px-2 py-0.5 text-xs font-bold ${result.flag === "H"
-                                              ? "bg-red-100 text-red-700"
-                                              : "bg-blue-100 text-blue-700"
-                                            }`}
-                                        >
-                                          {result.flag}
-                                        </div>
-                                      )}
-                                    </div>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </td>
+                                        );
+                                      })}
+                                    </tr>
                                   ))}
-                                </div>
+                                </Fragment>
+                              );
+                            })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="space-y-4 md:hidden">
+                      {longitudinalLabData.groupedRows
+                        .filter((groupBlock) => {
+                          if (labFilter === "all" || labFilter === "abnormal") return true;
+                          return groupBlock.group === labFilter;
+                        })
+                        .map((groupBlock) => {
+                          const visibleRows = groupBlock.rows.filter((row) => {
+                            if (labFilter === "abnormal") return row.abnormal;
+                            return true;
+                          });
+
+                          if (visibleRows.length === 0) return null;
+
+                          return (
+                            <div key={groupBlock.group} className="space-y-3">
+                              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                {groupBlock.group}
                               </div>
-                            );
-                          })}
-                        </div>
-                      );
-                    })}
-                </div>
-                )
+
+                              {visibleRows.map((row) => {
+                                const allResults = Object.values(row.valuesByDate || {}).flat();
+
+                                if (allResults.length === 0) return null;
+
+                                return (
+                                  <div
+                                    key={row.analyte}
+                                    className="rounded-xl border border-slate-200 bg-white p-3"
+                                  >
+                                    <div className="mb-2 text-sm font-semibold text-slate-800">
+                                      {row.analyte}
+                                    </div>
+
+                                    <div className="space-y-2">
+                                      {allResults.map((result, idx) => (
+                                        <div
+                                          key={idx}
+                                          className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                                        >
+                                          <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                              <div className="text-xs font-medium text-slate-500">
+                                                {formatLabHeaderDate(result.dateKey)}
+                                              </div>
+                                              <div className={`mt-1 text-base font-semibold ${getLabFlagClasses(result.flag)}`}>
+                                                {result.valueText}
+                                              </div>
+                                              <div className="text-xs text-slate-500">
+                                                {result.sourceLabel}
+                                                {result.unitText ? ` • ${result.unitText}` : ""}
+                                              </div>
+                                              {result.referenceRange ? (
+                                                <div className="text-xs text-slate-400">
+                                                  Ref: {result.referenceRange}
+                                                </div>
+                                              ) : null}
+                                            </div>
+
+                                            {result.flag ? (
+                                              <span
+                                                className={`rounded-full px-2 py-0.5 text-xs font-bold ${result.flag === "H"
+                                                  ? "bg-red-100 text-red-700"
+                                                  : "bg-blue-100 text-blue-700"
+                                                  }`}
+                                              >
+                                                {result.flag}
+                                              </span>
+                                            ) : null}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -2548,154 +2366,162 @@ export default function ChartView({
 
 
           <div className="rounded-2xl bg-white p-4 shadow">
-            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <h3 className="text-lg font-semibold">SOAP Note</h3>
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Documentation</p>
+                <h3 className="text-lg font-semibold text-slate-900">SOAP Note</h3>
+              </div>
 
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2">
                 {selectedEncounter.soapSavedAt && (
                   <span className="text-sm text-slate-500">
                     Saved: {selectedEncounter.soapSavedAt}
                   </span>
                 )}
 
-                {(() => {
-                  const statusInfo = formatSoapStatus(soapStatus);
-                  return (
-                    <div className={`inline-block rounded-lg px-4 py-3 text-sm font-semibold ${statusInfo.color}`}>
-                      SOAP Status: {statusInfo.label}
-                    </div>
-                  );
-                })()}
+                <div className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${soapStatusInfo.color}`}>
+                  {soapStatusInfo.label}
+                </div>
 
                 <button
                   onClick={saveSoapNote}
                   disabled={isSoapLocked || soapBusy}
-                  className="rounded-lg bg-blue-600 px-4 py-3 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {soapBusy ? "Saving..." : isSoapLocked ? "SOAP Locked" : "Save Note"}
                 </button>
+
+                <button
+  onClick={handleExportEncounterPdf}
+  className="rounded-lg bg-slate-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800"
+>
+  Export PDF
+</button>
               </div>
             </div>
 
             {soapUiMessage && (
-              <div className="mb-3 min-h-[32px] text-sm text-slate-700">
+              <div className="mb-3 min-h-[32px] rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
                 {soapUiMessage}
               </div>
             )}
 
-            <div className="mt-3 grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
-              {canSubmitForUpperLevel ? (
-                <button
-                  onClick={submitSoapForUpperLevel}
-                  disabled={soapBusy}
-                  className="rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white"
-                >
-                  Submit Note for Upper Level Signature
-                </button>
-              ) : null}
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Routing</p>
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
+                  {canSubmitForUpperLevel ? (
+                    <button
+                      onClick={submitSoapForUpperLevel}
+                      disabled={soapBusy}
+                      className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white"
+                    >
+                      Submit to Upper Level
+                    </button>
+                  ) : null}
 
-              {isLeadershipView && !selectedEncounter?.skipUpperLevel ? (
-                <button
-                  onClick={() => setSkipUpperLevelApproval(true)}
-                  disabled={!!selectedEncounter?.assignedUpperLevel}
-                  className="rounded-lg bg-amber-500 px-3 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Skip Upper Level
-                </button>
-              ) : null}
+                  {isLeadershipView && !selectedEncounter?.skipUpperLevel ? (
+                    <button
+                      onClick={() => setSkipUpperLevelApproval(true)}
+                      disabled={!!selectedEncounter?.assignedUpperLevel}
+                      className="rounded-lg bg-amber-500 px-3 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Skip Upper Level
+                    </button>
+                  ) : null}
 
-              {isLeadershipView && selectedEncounter?.skipUpperLevel ? (
-                <button
-                  onClick={() => setSkipUpperLevelApproval(false)}
-                  className="rounded-lg bg-slate-400 px-3 py-2 text-sm text-white"
-                >
-                  Remove Skip Upper
-                </button>
-              ) : null}
+                  {isLeadershipView && selectedEncounter?.skipUpperLevel ? (
+                    <button
+                      onClick={() => setSkipUpperLevelApproval(false)}
+                      className="rounded-lg bg-slate-400 px-3 py-2.5 text-sm font-medium text-white"
+                    >
+                      Remove Skip Upper
+                    </button>
+                  ) : null}
 
-              {canSubmitForAttending ? (
-                <button
-                  onClick={submitSoapForAttending}
-                  disabled={soapBusy}
-                  className="rounded-lg bg-indigo-600 px-4 py-3 text-sm font-medium text-white"
-                >
-                  {selectedEncounter?.skipUpperLevel
-                    ? "Submit Note Directly to Attending"
-                    : "Submit Note for Attending Signature"}
-                </button>
-              ) : null}
-
-              {selectedEncounter?.skipUpperLevel ? (
-                <div className="inline-block rounded-lg bg-amber-100 px-4 py-3 text-sm font-semibold text-amber-800">
-                  Skip Upper Level Approved
+                  {canSubmitForAttending ? (
+                    <button
+                      onClick={submitSoapForAttending}
+                      disabled={soapBusy}
+                      className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white"
+                    >
+                      {selectedEncounter?.skipUpperLevel
+                        ? "Submit Directly to Attending"
+                        : "Submit to Attending"}
+                    </button>
+                  ) : null}
                 </div>
-              ) : null}
-            </div>
 
-            {isSoapLocked ? (
-              <div className="mt-3 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">
-                This SOAP note has been fully signed by the attending and is now locked.
-              </div>
-            ) : null}
-
-            {canReopenSoap ? (
-              <button
-                onClick={reopenSoapNote}
-                disabled={soapBusy}
-                className="mt-3 rounded-lg bg-red-600 px-4 py-3 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
-              >
-                Reopen Note
-              </button>
-            ) : null}
-
-
-            <div className="mt-4 space-y-2">
-              <div className="mt-3 grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
-                {canSignAsUpperLevel ? (
-                  <button
-                    onClick={signSoapAsUpperLevel}
-                    disabled={soapBusy}
-                    className="rounded-lg bg-amber-600 px-4 py-3 text-sm font-medium text-white"
-                  >
-                    Sign as Upper Level
-                  </button>
+                {selectedEncounter?.skipUpperLevel ? (
+                  <div className="mt-2 inline-block rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+                    Skip Upper Level Approved
+                  </div>
                 ) : null}
 
-                {canSignAsAttending ? (
+                {isSoapLocked ? (
+                  <div className="mt-3 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
+                    This SOAP note has been fully signed by the attending and is now locked.
+                  </div>
+                ) : null}
+
+                {canReopenSoap ? (
                   <button
-                    onClick={() => {
-                      setSelectedAttendingId("");
-                      setAttendingPin("");
-                      setShowSignModal(true);
-                    }}
+                    onClick={reopenSoapNote}
                     disabled={soapBusy}
-                    className="rounded-lg bg-emerald-600 px-4 py-3 text-sm font-medium text-white"
+                    className="mt-3 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
                   >
-                    Sign as Attending
+                    Reopen Note
                   </button>
                 ) : null}
               </div>
 
-              <div className="space-y-1 text-sm text-slate-600">
-                {selectedEncounter.soapAuthorRole ? (
-                  <p>
-                    Author: {soapAuthorName || "Unknown User"} ({formatRoleLabel(selectedEncounter.soapAuthorRole)})
-                  </p>
-                ) : null}
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Signatures</p>
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
+                  {canSignAsUpperLevel ? (
+                    <button
+                      onClick={signSoapAsUpperLevel}
+                      disabled={soapBusy}
+                      className="rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-medium text-white"
+                    >
+                      Sign as Upper Level
+                    </button>
+                  ) : null}
 
-                {selectedEncounter.upperLevelSignedAt ? (
-                  <p>
-                    Upper Level Signed by {upperLevelSignerName || "Unknown User"} on{" "}
-                    {formatDate(selectedEncounter.upperLevelSignedAt)}
-                  </p>
-                ) : null}
+                  {canSignAsAttending ? (
+                    <button
+                      onClick={() => {
+                        setSelectedAttendingId("");
+                        setAttendingPin("");
+                        setShowSignModal(true);
+                      }}
+                      disabled={soapBusy}
+                      className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white"
+                    >
+                      Sign as Attending
+                    </button>
+                  ) : null}
+                </div>
 
-                {selectedEncounter.attendingSignedAt ? (
-                  <p>
-                    Attending Signed by {attendingSignerName || "Unknown User"} on{" "}
-                    {formatDate(selectedEncounter.attendingSignedAt)}
-                  </p>
-                ) : null}
+                <div className="mt-3 space-y-1 text-sm text-slate-600">
+                  {selectedEncounter.soapAuthorRole ? (
+                    <p>
+                      Author: {soapAuthorName || "Unknown User"} ({formatRoleLabel(selectedEncounter.soapAuthorRole)})
+                    </p>
+                  ) : null}
+
+                  {selectedEncounter.upperLevelSignedAt ? (
+                    <p>
+                      Upper Level Signed by {upperLevelSignerName || "Unknown User"} on {formatDate(selectedEncounter.upperLevelSignedAt)}
+                    </p>
+                  ) : null}
+
+                  {selectedEncounter.attendingSignedAt ? (
+                    <p>
+                      Attending Signed by {attendingSignerName || "Unknown User"} on {formatDate(selectedEncounter.attendingSignedAt)}
+                    </p>
+                  ) : null}
+                </div>
               </div>
             </div>
 
@@ -2769,7 +2595,7 @@ export default function ChartView({
           <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
             <button
               onClick={() => setShowAudit((prev) => !prev)}
-              className="mb-4 flex w-full items-center justify-between text-left text-lg font-semibold"
+              className="mb-4 flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-lg font-semibold text-slate-900"
             >
               Audit Trail
               <span>{showAudit ? "▲" : "▼"}</span>

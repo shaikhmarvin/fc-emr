@@ -1,6 +1,8 @@
 import { useState } from "react";
 import PatientSearch from "./PatientSearch";
 import PatientTable from "./PatientTable";
+import { downloadSignedEncountersZip } from "../utils/pdfGenerator";
+import logo from "../assets/free-clinic-logo.png";
 
 export default function DashboardView({
   isLeadershipView,
@@ -37,6 +39,36 @@ const notifyPatientEncounters = allEncounterRows.filter(
 );
 
 const [showLabFollowUp, setShowLabFollowUp] = useState(false);
+
+const [exportingRecords, setExportingRecords] = useState(false);
+
+async function handleExportSignedRecords() {
+  try {
+    setExportingRecords(true);
+
+    const rowsForExport = allEncounterRows.filter(({ encounter }) => {
+      if (!encounter) return false;
+      if (!selectedClinicDate) {
+        return encounter.soapStatus === "signed" || !!encounter.attendingSignedAt;
+      }
+      return (
+        encounter.clinicDate === selectedClinicDate &&
+        (encounter.soapStatus === "signed" || !!encounter.attendingSignedAt)
+      );
+    });
+
+    await downloadSignedEncountersZip({
+      rows: rowsForExport,
+      logoSrc: logo,
+      getFullPatientName,
+    });
+  } catch (error) {
+    console.error("Failed to export signed records:", error);
+    alert(error.message || "Failed to export signed records.");
+  } finally {
+    setExportingRecords(false);
+  }
+}
 
 const labFollowUpCount =
   pendingLabEncounters.length + notifyPatientEncounters.length;
@@ -87,6 +119,20 @@ function formatPhone(phone) {
               : "All Encounters"}
           </p>
         </div>
+
+        <div className="rounded-xl bg-white p-3 shadow">
+  <button
+    onClick={handleExportSignedRecords}
+    disabled={exportingRecords}
+    className="w-full rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+  >
+    {exportingRecords
+      ? "Exporting..."
+      : selectedClinicDate
+      ? "Export Records for Selected Date"
+      : "Export Signed Records"}
+  </button>
+</div>
 
       </div>
 
