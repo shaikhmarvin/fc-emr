@@ -1,3 +1,4 @@
+
 import { jsPDF } from "jspdf";
 import JSZip from "jszip";
 
@@ -201,7 +202,6 @@ function inHouseLabRows(encounter) {
         : normalizeText(rawValue);
 
     rows.push([
-      config.section,
       config.label,
       displayValue,
       normalizeText(automaticInHouseFlag(config, rawValue, entry.flag)),
@@ -381,7 +381,6 @@ function drawGridTable(doc, title, headers, rows, startY, opts = {}) {
     let x = margin;
     doc.setFillColor(245, 247, 250);
     doc.rect(margin, y, tableWidth, headerHeight, "F");
-    doc.rect(margin, y, tableWidth, headerHeight);
     headers.forEach((header, idx) => {
       doc.rect(x, y, colWidths[idx], headerHeight);
       doc.text(String(header), x + padding, y + 5);
@@ -404,7 +403,6 @@ function drawGridTable(doc, title, headers, rows, startY, opts = {}) {
     }
 
     let x = margin;
-    doc.rect(margin, y, tableWidth, rowHeight);
     row.forEach((_, idx) => {
       doc.rect(x, y, colWidths[idx], rowHeight);
       doc.setFont("helvetica", "normal");
@@ -573,9 +571,9 @@ async function buildEncounterPdfDoc({
     y += 8;
 
     if (labRows.length) {
-      y = drawGridTable(doc, "In-House Labs", ["Section", "Test", "Value", "Flag", "Reference"], labRows, y, {
+      y = drawGridTable(doc, "In-House Labs", ["Test", "Value", "Flag", "Reference"], labRows, y, {
         margin,
-        colWidths: [36, 44, 30, 16, 56],
+        colWidths: [58, 28, 16, 84],
       });
     }
 

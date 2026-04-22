@@ -130,10 +130,16 @@ export function calculateBmi(weight, height) {
 }
 
 export function normalizeBp(value) {
-  const cleaned = value.replace(/[^\d/]/g, "");
-  const parts = cleaned.split("/");
-  if (parts.length === 1) return parts[0].slice(0, 3);
-  return `${parts[0].slice(0, 3)}/${(parts[1] || "").slice(0, 3)}`;
+  const digits = String(value || "").replace(/[^\d]/g, "").slice(0, 5);
+  if (!digits) return "";
+
+  const firstDigit = digits[0];
+  const slashAfter = firstDigit === "8" || firstDigit === "9" ? 2 : 3;
+
+  if (digits.length < slashAfter) return digits;
+  if (digits.length === slashAfter) return `${digits}/`;
+
+  return `${digits.slice(0, slashAfter)}/${digits.slice(slashAfter, slashAfter + 2)}`;
 }
 
 export function normalizePain(value) {
