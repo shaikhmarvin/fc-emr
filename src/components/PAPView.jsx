@@ -45,6 +45,8 @@ export default function PAPView({
 
   const [expandedEntryIds, setExpandedEntryIds] = useState([]);
 
+  const [papDrafts, setPapDrafts] = useState({});
+
   const [showAddPapEntry, setShowAddPapEntry] = useState(false);
 
   const [newEntry, setNewEntry] = useState({
@@ -87,6 +89,65 @@ export default function PAPView({
   const showNewPrescriptionChangeNotes =
     newEntry.status === "Approved" ||
     newEntry.status === "Refill In Progress";
+
+  function getPapDraftValue(entry, field) {
+  return papDrafts[entry.id]?.[field] ?? entry[field] ?? "";
+}
+
+function setPapDraftValue(entryId, field, value) {
+  setPapDrafts((prev) => ({
+    ...prev,
+    [entryId]: {
+      ...prev[entryId],
+      [field]: value,
+    },
+  }));
+}
+
+function clearPapDraftValue(entryId, field) {
+  setPapDrafts((prev) => {
+    if (!prev[entryId]) return prev;
+
+    const nextEntryDraft = { ...prev[entryId] };
+    delete nextEntryDraft[field];
+
+    if (Object.keys(nextEntryDraft).length === 0) {
+      const next = { ...prev };
+      delete next[entryId];
+      return next;
+    }
+
+    return {
+      ...prev,
+      [entryId]: nextEntryDraft,
+    };
+  });
+}
+
+function savePapDraftValue(entry, field) {
+  setPapDrafts((prev) => {
+    const value =
+      prev[entry.id]?.[field] ?? entry[field] ?? "";
+
+    updatePapEntry(entry.id, field, value);
+
+    if (!prev[entry.id]) return prev;
+
+    const nextEntryDraft = { ...prev[entry.id] };
+    delete nextEntryDraft[field];
+
+    if (Object.keys(nextEntryDraft).length === 0) {
+      const next = { ...prev };
+      delete next[entry.id];
+      return next;
+    }
+
+    return {
+      ...prev,
+      [entry.id]: nextEntryDraft,
+    };
+  });
+}
 
   const filteredPatientOptions = useMemo(() => {
     return patients
@@ -770,78 +831,75 @@ export default function PAPView({
                       </div>
 
                       {showDenialReason && (
-                        <div className="mt-4">
-                          <Field label="Denial Reason">
-                            <input
-                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                              value={entry.denialReason || ""}
-                              onChange={(e) =>
-                                updatePapEntry(entry.id, "denialReason", e.target.value)
-                              }
-                            />
-                          </Field>
-                        </div>
-                      )}
+  <div className="mt-4">
+    <Field label="Denial Reason">
+      <input
+        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        value={getPapDraftValue(entry, "denialReason")}
+        onChange={(e) =>
+          setPapDraftValue(entry.id, "denialReason", e.target.value)
+        }
+        onBlur={() => savePapDraftValue(entry, "denialReason")}
+      />
+    </Field>
+  </div>
+)}
 
                       {showDiscontinuedReason && (
-                        <div className="mt-4">
-                          <Field label="Discontinued Reason">
-                            <input
-                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                              value={entry.discontinuedReason || ""}
-                              onChange={(e) =>
-                                updatePapEntry(
-                                  entry.id,
-                                  "discontinuedReason",
-                                  e.target.value
-                                )
-                              }
-                            />
-                          </Field>
-                        </div>
-                      )}
+  <div className="mt-4">
+    <Field label="Discontinued Reason">
+      <input
+        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        value={getPapDraftValue(entry, "discontinuedReason")}
+        onChange={(e) =>
+          setPapDraftValue(entry.id, "discontinuedReason", e.target.value)
+        }
+        onBlur={() => savePapDraftValue(entry, "discontinuedReason")}
+      />
+    </Field>
+  </div>
+)}
 
                       {showPrescriptionChangeNotes && (
-                        <div className="mt-4">
-                          <Field label="Prescription Change Notes">
-                            <textarea
-                              className="min-h-[80px] w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                              value={entry.prescriptionChangeNotes || ""}
-                              onChange={(e) =>
-                                updatePapEntry(
-                                  entry.id,
-                                  "prescriptionChangeNotes",
-                                  e.target.value
-                                )
-                              }
-                            />
-                          </Field>
-                        </div>
-                      )}
+  <div className="mt-4">
+    <Field label="Prescription Change Notes">
+      <textarea
+        className="min-h-[80px] w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        value={getPapDraftValue(entry, "prescriptionChangeNotes")}
+        onChange={(e) =>
+          setPapDraftValue(entry.id, "prescriptionChangeNotes", e.target.value)
+        }
+        onBlur={() => savePapDraftValue(entry, "prescriptionChangeNotes")}
+      />
+    </Field>
+  </div>
+)}
 
                       <div className="mt-4">
-                        <Field label="To-Do Notes">
-                          <textarea
-                            className="min-h-[80px] w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                            value={entry.todoNotes || ""}
-                            onChange={(e) =>
-                              updatePapEntry(entry.id, "todoNotes", e.target.value)
-                            }
-                          />
-                        </Field>
-                      </div>
+  <Field label="To-Do Notes">
+    <textarea
+      className="min-h-[80px] w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+      value={getPapDraftValue(entry, "todoNotes")}
+      onChange={(e) =>
+        setPapDraftValue(entry.id, "todoNotes", e.target.value)
+      }
+      onBlur={() => savePapDraftValue(entry, "todoNotes")}
+    />
+  </Field>
+</div>
 
                       <div className="mt-4">
-                        <Field label="General Notes">
-                          <textarea
-                            className="min-h-[80px] w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                            value={entry.generalNotes || ""}
-                            onChange={(e) =>
-                              updatePapEntry(entry.id, "generalNotes", e.target.value)
-                            }
-                          />
-                        </Field>
-                      </div>
+  <Field label="General Notes">
+    <textarea
+      className="min-h-[80px] w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+      value={getPapDraftValue(entry, "generalNotes")}
+      onChange={(e) =>
+        setPapDraftValue(entry.id, "generalNotes", e.target.value)
+      }
+      onBlur={() => savePapDraftValue(entry, "generalNotes")}
+    />
+  </Field>
+</div>
 
                       <div className="mt-4 flex flex-wrap gap-2">
                         <button

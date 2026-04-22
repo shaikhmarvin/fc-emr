@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { PT_TIME_SLOTS, ROOM_OPTIONS } from "../constants";
 import { fetchProgramSettings, updateProgramSetting } from "../api/programSettings";
 
+
+
 const PROGRAM_TYPES = [
   "Physical Therapy",
   "Dermatology",
@@ -56,7 +58,11 @@ export default function ProgramsView({
 );
 
   const [expandedEntryIds, setExpandedEntryIds] = useState([]);
+
+  const [programDrafts, setProgramDrafts] = useState({});
+
   const [showAddReferral, setShowAddReferral] = useState(false);
+  
 
   const [newEntry, setNewEntry] = useState({
     patientId: "",
@@ -74,6 +80,65 @@ export default function ProgramsView({
     schedulePosition: null,
     appointmentSlot: "",
   });
+
+  function getProgramDraftValue(entry, field) {
+  return programDrafts[entry.id]?.[field] ?? entry[field] ?? "";
+}
+
+function setProgramDraftValue(entryId, field, value) {
+  setProgramDrafts((prev) => ({
+    ...prev,
+    [entryId]: {
+      ...prev[entryId],
+      [field]: value,
+    },
+  }));
+}
+
+function clearProgramDraftValue(entryId, field) {
+  setProgramDrafts((prev) => {
+    if (!prev[entryId]) return prev;
+
+    const nextEntryDraft = { ...prev[entryId] };
+    delete nextEntryDraft[field];
+
+    if (Object.keys(nextEntryDraft).length === 0) {
+      const next = { ...prev };
+      delete next[entryId];
+      return next;
+    }
+
+    return {
+      ...prev,
+      [entryId]: nextEntryDraft,
+    };
+  });
+}
+
+function saveProgramDraftValue(entry, field) {
+  setProgramDrafts((prev) => {
+    const value =
+      prev[entry.id]?.[field] ?? entry[field] ?? "";
+
+    updateProgramEntry(entry.id, field, value);
+
+    if (!prev[entry.id]) return prev;
+
+    const nextEntryDraft = { ...prev[entry.id] };
+    delete nextEntryDraft[field];
+
+    if (Object.keys(nextEntryDraft).length === 0) {
+      const next = { ...prev };
+      delete next[entry.id];
+      return next;
+    }
+
+    return {
+      ...prev,
+      [entry.id]: nextEntryDraft,
+    };
+  });
+}
 
   const filteredPatientOptions = useMemo(() => {
     return patients
@@ -773,28 +838,30 @@ export default function ProgramsView({
                         </div>
 
                         <div className="mt-4">
-                          <Field label="Reason">
-                            <input
-                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                              value={entry.reason || ""}
-                              onChange={(e) =>
-                                updateProgramEntry(entry.id, "reason", e.target.value)
-                              }
-                            />
-                          </Field>
-                        </div>
+  <Field label="Reason">
+    <input
+      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+      value={getProgramDraftValue(entry, "reason")}
+      onChange={(e) =>
+        setProgramDraftValue(entry.id, "reason", e.target.value)
+      }
+      onBlur={() => saveProgramDraftValue(entry, "reason")}
+    />
+  </Field>
+</div>
 
                         <div className="mt-4">
-                          <Field label="Notes">
-                            <textarea
-                              className="min-h-[90px] w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                              value={entry.notes || ""}
-                              onChange={(e) =>
-                                updateProgramEntry(entry.id, "notes", e.target.value)
-                              }
-                            />
-                          </Field>
-                        </div>
+  <Field label="Notes">
+    <textarea
+      className="min-h-[90px] w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+      value={getProgramDraftValue(entry, "notes")}
+      onChange={(e) =>
+        setProgramDraftValue(entry.id, "notes", e.target.value)
+      }
+      onBlur={() => saveProgramDraftValue(entry, "notes")}
+    />
+  </Field>
+</div>
 
                         <div className="mt-4 flex flex-wrap gap-2">
                           <button
@@ -1185,16 +1252,17 @@ const entries = (specialtyEntries[programType] || []).filter((entry) => {
               </div>
 
               <div className="mt-4">
-                <Field label="Notes">
-                  <textarea
-                    className="min-h-[80px] w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    value={entry.notes || ""}
-                    onChange={(e) =>
-                      updateProgramEntry(entry.id, "notes", e.target.value)
-                    }
-                  />
-                </Field>
-              </div>
+  <Field label="Notes">
+    <textarea
+      className="min-h-[80px] w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+      value={getProgramDraftValue(entry, "notes")}
+      onChange={(e) =>
+        setProgramDraftValue(entry.id, "notes", e.target.value)
+      }
+      onBlur={() => saveProgramDraftValue(entry, "notes")}
+    />
+  </Field>
+</div>
 
               <div className="mt-4 flex flex-wrap gap-2">
                 {config.schedulingType === "timed" ? (

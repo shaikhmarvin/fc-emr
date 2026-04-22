@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getStatusLabel } from "../utils";
+import { getClinicAlert } from "../utils/clinicAlerts";
 
 const CLINIC_URL = "https://fc-emr.vercel.app/"; // CHANGE THIS
 const WIFI_NAME = "Volunteers"; // CHANGE THIS
@@ -61,28 +62,48 @@ export default function BoardDisplay({
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-900 p-4 text-white">
-      <div className="mb-4 flex items-start justify-between">
+    <div className="flex h-screen flex-col overflow-hidden bg-slate-900 p-3 text-white">
+<div className="mb-2 flex items-start justify-between">
   <div>
     <h1 className="text-3xl font-bold">Free Clinic Room Board</h1>
     <p className="text-sm text-slate-300">Live Display</p>
+
+{(() => {
+  const alert = getClinicAlert(now);
+  if (!alert) return null;
+
+  const colorMap = {
+    low: "bg-blue-100 text-blue-900 border-blue-300",
+    medium: "bg-yellow-100 text-yellow-900 border-yellow-300",
+    high: "bg-orange-100 text-orange-900 border-orange-300",
+    critical: "bg-red-100 text-red-900 border-red-300",
+  };
+
+  return (
+    <div
+      className={`mt-1 rounded-lg border px-3 py-1 text-xs font-semibold ${colorMap[alert.level]}`}
+    >
+      {alert.message}
+    </div>
+  );
+})()}
   </div>
 
-  <div className="flex items-start gap-6">
+  <div className="flex items-start gap-4">
     {/* Info Panel */}
-    <div className="rounded-xl bg-slate-800/80 p-3 text-xs text-slate-200 shadow">
-      <p className="font-semibold text-white mb-1">Connect Here</p>
+    <div className="rounded-xl bg-slate-800/85 px-4 py-3 text-slate-100 shadow">
+      <p className="mb-1 text-xl font-bold text-white">Connect Here</p>
 
-      <p>
+      <p className="text-sm leading-6">
         <span className="font-semibold">Site:</span>{" "}
         <span className="break-all">{CLINIC_URL}</span>
       </p>
 
-      <p>
+      <p className="text-sm leading-6">
         <span className="font-semibold">WiFi:</span> {WIFI_NAME}
       </p>
 
-      <p>
+      <p className="text-sm leading-6">
         <span className="font-semibold">Password:</span> {WIFI_PASSWORD}
       </p>
     </div>
@@ -101,7 +122,14 @@ export default function BoardDisplay({
   </div>
 </div>
 
-      <div className="grid h-[calc(100vh-96px)] grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+<div className="mb-2 rounded-lg border border-amber-300 bg-amber-100 px-3 py-1.5 text-center shadow">
+  <p className="text-sm font-bold text-amber-900">
+    ⚠️ Please inform board when your room is CLEANED & EMPTY!
+  </p>
+</div>
+
+      <div className="min-h-0 flex-1">
+  <div className="grid h-full grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {ROOM_OPTIONS.map((room) => {
           const computedRows = getRoomRows(allEncounterRows, room.number);
           const fallbackRows =
@@ -130,7 +158,7 @@ export default function BoardDisplay({
           return (
             <div
               key={room.number}
-              className={`min-h-[200px] rounded-2xl border p-3 shadow ${
+              className={`min-h-[170px] rounded-2xl border p-2.5 shadow ${
                 occupied
                   ? primaryEncounter.status === "roomed"
                     ? "border-green-300 bg-green-100 text-slate-900"
@@ -140,13 +168,13 @@ export default function BoardDisplay({
                   : "border-slate-700 bg-slate-800 text-white"
               }`}
             >
-              <div className="mb-3">
+              <div className="mb-2">
                 <p className="text-xl font-bold">{room.label}</p>
                 <p className="text-xs opacity-70">{room.area}</p>
               </div>
 
               {occupied ? (
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <p className="text-lg font-semibold leading-tight">
                     {getPatientBoardName(primaryPatient)}
                   </p>
@@ -208,6 +236,7 @@ export default function BoardDisplay({
             </div>
           );
         })}
+        </div>
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import OphthalmologySoapForm from "./OphthalmologySoapForm";
 import { downloadEncounterPdf } from "../utils/pdfGenerator";
 import logo from "../assets/free-clinic-logo.png";
+import { getClinicAlert } from "../utils/clinicAlerts";
 export default function ChartView({
   selectedPatient,
   selectedEncounter,
@@ -978,6 +979,7 @@ async function persistInHouseLabs(nextLabs = null) {
     : [];
   const isSoapLocked = selectedEncounter?.soapStatus === "signed";
 const isSupportDataLocked = false;
+const clinicAlert = getClinicAlert(new Date());
   const vitalsHistory = selectedEncounter?.vitalsHistory || [];
   const latestVitals = vitalsHistory[0] || null;
   const previousVitals = vitalsHistory[1] || null;
@@ -2728,6 +2730,22 @@ disabled={isSupportDataLocked}
                 {soapUiMessage}
               </div>
             )}
+
+            {clinicAlert && selectedEncounter?.soapStatus !== "signed" && (
+  <div
+    className={`mb-3 rounded-lg border px-3 py-2 text-sm font-medium ${
+      clinicAlert.level === "critical"
+        ? "border-red-300 bg-red-50 text-red-800"
+        : clinicAlert.level === "high"
+        ? "border-orange-300 bg-orange-50 text-orange-800"
+        : clinicAlert.level === "medium"
+        ? "border-yellow-300 bg-yellow-50 text-yellow-800"
+        : "border-blue-300 bg-blue-50 text-blue-800"
+    }`}
+  >
+    {clinicAlert.message}
+  </div>
+)}
 
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">

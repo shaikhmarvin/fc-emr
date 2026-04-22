@@ -101,29 +101,121 @@ function getEncounterNarrative(encounter) {
   };
 }
 
+const IN_HOUSE_LAB_EXPORT_CONFIG = [
+  { section: "iSTAT", sectionKey: "istat", fieldKey: "na", label: "Na", reference: "138-146 mEq/L", type: "numeric", low: 138, high: 146 },
+  { section: "iSTAT", sectionKey: "istat", fieldKey: "k", label: "K", reference: "3.5-4.9 mEq/L", type: "numeric", low: 3.5, high: 4.9 },
+  { section: "iSTAT", sectionKey: "istat", fieldKey: "cl", label: "Cl", reference: "98-109 mEq/L", type: "numeric", low: 98, high: 109 },
+  { section: "iSTAT", sectionKey: "istat", fieldKey: "iCa", label: "iCa", reference: "1.2-1.32 mEq/L", type: "numeric", low: 1.2, high: 1.32 },
+  { section: "iSTAT", sectionKey: "istat", fieldKey: "glucose", label: "Glucose", reference: "Fast: 70-110 | 2-h post: <120", type: "numeric", low: 70, high: 110 },
+  { section: "iSTAT", sectionKey: "istat", fieldKey: "tco2", label: "TCO2", reference: "", type: "text" },
+  { section: "iSTAT", sectionKey: "istat", fieldKey: "bun", label: "BUN", reference: "8-26 mg/dL", type: "numeric", low: 8, high: 26 },
+  { section: "iSTAT", sectionKey: "istat", fieldKey: "creatinine", label: "Creatinine", reference: "0.6-1.3 mg/dL", type: "numeric", low: 0.6, high: 1.3 },
+  { section: "iSTAT", sectionKey: "istat", fieldKey: "hct", label: "HCT", reference: "M: 41-53% | F: 36-46%", type: "text" },
+  { section: "iSTAT", sectionKey: "istat", fieldKey: "hgb", label: "Hgb", reference: "M: >14 mg/dL | F: >12 mg/dL", type: "text" },
+  { section: "iSTAT", sectionKey: "istat", fieldKey: "anGap", label: "AnGap", reference: "", type: "text" },
+
+  { section: "Core", sectionKey: "core", fieldKey: "bloodGlucose", label: "Blood Glucose", reference: "", type: "text" },
+  { section: "Core", sectionKey: "core", fieldKey: "a1c", label: "HbA1C", reference: "", type: "text" },
+  { section: "Core", sectionKey: "core", fieldKey: "hiv", label: "HIV", reference: "", type: "categorical" },
+
+  { section: "Microalbumin / Creatinine", sectionKey: "microalbumin", fieldKey: "albumin", label: "Albumin", reference: "", type: "text" },
+  { section: "Microalbumin / Creatinine", sectionKey: "microalbumin", fieldKey: "creatinine", label: "Creatinine", reference: "", type: "text" },
+  { section: "Microalbumin / Creatinine", sectionKey: "microalbumin", fieldKey: "acRatio", label: "A/C Ratio", reference: "", type: "text" },
+
+  { section: "Lipids", sectionKey: "lipids", fieldKey: "hdl", label: "HDL", reference: "N: >40", type: "numeric", low: 40, high: null, invert: true },
+  { section: "Lipids", sectionKey: "lipids", fieldKey: "triglycerides", label: "Triglycerides", reference: "N: <150", type: "numeric", low: null, high: 150 },
+  { section: "Lipids", sectionKey: "lipids", fieldKey: "ldl", label: "LDL", reference: "N: <130", type: "numeric", low: null, high: 130 },
+  { section: "Lipids", sectionKey: "lipids", fieldKey: "tcHdl", label: "TC/HDL", reference: "", type: "text" },
+  { section: "Lipids", sectionKey: "lipids", fieldKey: "totalCholesterol", label: "Total Cholesterol", reference: "N: <200", type: "numeric", low: null, high: 200 },
+
+  { section: "Antigen Testing", sectionKey: "rapid", fieldKey: "flu", label: "Flu", reference: "", type: "categorical" },
+  { section: "Antigen Testing", sectionKey: "rapid", fieldKey: "strep", label: "Strep", reference: "", type: "categorical" },
+  { section: "Antigen Testing", sectionKey: "rapid", fieldKey: "guaiac", label: "Guaiac", reference: "", type: "categorical" },
+  { section: "Antigen Testing", sectionKey: "rapid", fieldKey: "hcg", label: "HCG", reference: "", type: "categorical" },
+  { section: "Antigen Testing", sectionKey: "rapid", fieldKey: "mono", label: "Mono", reference: "", type: "categorical" },
+];
+
+function normalizeInHouseLabValue(result) {
+  if (result && typeof result === "object" && !Array.isArray(result)) {
+    return {
+      value: result.value ?? "",
+      flag: result.flag ?? "",
+      referenceRange: result.referenceRange || result.reference || result.range || "",
+    };
+  }
+
+  return {
+    value: result ?? "",
+    flag: "",
+    referenceRange: "",
+  };
+}
+
+function normalizeCategoricalLabValue(value) {
+  const text = String(value || "").trim().toLowerCase();
+  if (!text) return "";
+  if (["positive", "+", "pos", "reactive", "detected"].includes(text)) return "Positive";
+  if (["negative", "-", "neg", "non-reactive", "not detected"].includes(text)) return "Negative";
+  if (text === "indeterminate") return "Indeterminate";
+  return String(value).trim();
+}
+
+function automaticInHouseFlag(config, value, storedFlag = "") {
+  if (storedFlag) return storedFlag;
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+
+  if (config.type === "categorical") {
+    const normalized = normalizeCategoricalLabValue(raw);
+    return normalized === "Positive" ? "H" : "";
+  }
+
+  const numeric = Number(raw);
+  if (!Number.isFinite(numeric)) return "";
+
+  if (config.invert) {
+    if (config.low != null && numeric <= config.low) return "L";
+    return "";
+  }
+
+  if (config.low != null && numeric < config.low) return "L";
+  if (config.high != null && numeric >= config.high) return "H";
+  return "";
+}
+
 function inHouseLabRows(encounter) {
   const labs = encounter?.inHouseLabs || {};
   const rows = [];
 
-  Object.entries(labs).forEach(([sectionName, values]) => {
-    if (!values || typeof values !== "object") return;
-    Object.entries(values).forEach(([testName, result]) => {
-      if (result === null || result === undefined || result === "") return;
-      if (typeof result === "object") {
-        rows.push([
-          sectionName,
-          testName,
-          normalizeText(result.value),
-          normalizeText(result.flag),
-          normalizeText(result.referenceRange || result.reference || result.range),
-        ]);
-      } else {
-        rows.push([sectionName, testName, normalizeText(result), "—", "—"]);
-      }
-    });
+  IN_HOUSE_LAB_EXPORT_CONFIG.forEach((config) => {
+    const section = labs?.[config.sectionKey];
+    if (!section || typeof section !== "object") return;
+
+    const entry = normalizeInHouseLabValue(section?.[config.fieldKey]);
+    const rawValue = entry.value;
+    if (rawValue === null || rawValue === undefined || String(rawValue).trim() === "") return;
+
+    const displayValue =
+      config.type === "categorical"
+        ? normalizeCategoricalLabValue(rawValue)
+        : normalizeText(rawValue);
+
+    rows.push([
+      config.section,
+      config.label,
+      displayValue,
+      normalizeText(automaticInHouseFlag(config, rawValue, entry.flag)),
+      normalizeText(entry.referenceRange || config.reference),
+    ]);
   });
 
   return rows;
+}
+
+function inHouseNursingNotes(encounter) {
+  const notes = encounter?.inHouseLabs?.nursingNotes;
+  const text = String(notes || "").trim();
+  return text || "";
 }
 
 function getDosesPerDay(frequency) {
@@ -461,17 +553,25 @@ async function buildEncounterPdfDoc({
   y = drawWrappedLine(doc, "Signatures", signaturesLine, margin, y, 180, { labelWidth: 20, fontSize: 10, lineHeight: 4.5 });
 
   const labRows = inHouseLabRows(encounter);
-  if (labRows.length) {
+  const nursingNotes = inHouseNursingNotes(encounter);
+  if (labRows.length || nursingNotes) {
     doc.addPage();
     y = await addLogo(doc, logoSrc, margin);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(14);
     doc.text(`${patientName} — In-House Labs`, margin, y + 2);
     y += 8;
-    drawGridTable(doc, "In-House Labs", ["Section", "Test", "Value", "Flag", "Reference"], labRows, y, {
-      margin,
-      colWidths: [28, 52, 25, 18, 50],
-    });
+
+    if (labRows.length) {
+      y = drawGridTable(doc, "In-House Labs", ["Section", "Test", "Value", "Flag", "Reference"], labRows, y, {
+        margin,
+        colWidths: [36, 44, 30, 16, 56],
+      });
+    }
+
+    if (nursingNotes) {
+      y = drawSection(doc, "Nursing Notes", nursingNotes, y + 2, { margin });
+    }
   }
 
   doc.addPage();
