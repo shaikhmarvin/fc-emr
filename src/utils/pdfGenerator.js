@@ -521,6 +521,7 @@ async function buildEncounterPdfDoc({
   const margin = 14;
   const patientName = fullNameFromPatient(patient, getFullPatientName);
   const narrative = getEncounterNarrative(encounter);
+  const isSigned = encounter?.soapStatus === "signed";
 
   let y = await addLogo(doc, logoSrc, margin);
 
@@ -528,6 +529,15 @@ async function buildEncounterPdfDoc({
   doc.setFontSize(16);
   doc.text(patientName, margin, y + 2);
   y += 8;
+
+  if (!isSigned) {
+    doc.setTextColor(200, 0, 0);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text("UNSIGNED DRAFT – NOT YET SIGNED", margin, y);
+    doc.setTextColor(0, 0, 0);
+    y += 6;
+  }
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
@@ -549,7 +559,7 @@ async function buildEncounterPdfDoc({
   y = drawSection(doc, "Assessment", narrative.assessment, y, { margin });
   y = drawSection(doc, "Plan", narrative.plan, y, { margin });
 
-  const signaturesLine = `Student: ${normalizeText(soapAuthorName)} | Upper Level: ${normalizeText(upperLevelSignerName)} | Attending: ${normalizeText(attendingSignerName)}`;
+  const signaturesLine = `Student: ${normalizeText(soapAuthorName)} | Upper Level: ${isSigned ? normalizeText(upperLevelSignerName) : "Pending"} | Attending: ${isSigned ? normalizeText(attendingSignerName) : "Pending"}`;
   y = drawWrappedLine(doc, "Signatures", signaturesLine, margin, y, 180, { labelWidth: 20, fontSize: 10, lineHeight: 4.5 });
 
   const labRows = inHouseLabRows(encounter);
