@@ -6533,6 +6533,10 @@ async function handleUndergradStartEncounter(data) {
   if (!selectedPatient || !selectedEncounter || !session?.user?.id) return;
   if (userRole !== "leadership") return;
 
+  if (!!selectedEncounter?.skipUpperLevel === !!enabled) {
+    return;
+  }
+
   const hasSoapStarted =
     !!(soapDraft.soapSubjective || "").trim() ||
     !!(soapDraft.soapObjective || "").trim() ||
@@ -6552,49 +6556,53 @@ async function handleUndergradStartEncounter(data) {
     return;
   }
 
+  const fromSoapStatus = selectedEncounter?.soapStatus || "draft";
+  const toSoapStatus = enabled ? "awaiting_attending" : "draft";
+
   try {
     const nowIso = new Date().toISOString();
 
-    const updatedEncounter = await updateEncounterInSupabase(selectedEncounter.id, {
-  skipUpperLevel: enabled,
-  skipUpperLevelBy: enabled ? session.user.id : null,
-  skipUpperLevelAt: enabled ? nowIso : null,
-  soapStatus: enabled ? "awaiting_attending" : "draft",
-});
+    await updateEncounterInSupabase(selectedEncounter.id, {
+      skipUpperLevel: enabled,
+      skipUpperLevelBy: enabled ? session.user.id : null,
+      skipUpperLevelAt: enabled ? nowIso : null,
+      soapStatus: toSoapStatus,
+    });
 
-// optional local optimistic update
-setPatients((prev) =>
-  prev.map((patient) =>
-    patient.id === selectedPatient.id
-      ? {
-          ...patient,
-          encounters: patient.encounters.map((encounter) =>
-            encounter.id === selectedEncounter.id
-              ? {
-  ...encounter,
-  skipUpperLevel: enabled,
-  skipUpperLevelBy: enabled ? session.user.id : null,
-  skipUpperLevelAt: enabled ? nowIso : null,
-  soapStatus: enabled ? "awaiting_attending" : "draft",
-}
-              : encounter
-          ),
-        }
-      : patient
-  )
-);
+    setPatients((prev) =>
+      prev.map((patient) =>
+        patient.id === selectedPatient.id
+          ? {
+              ...patient,
+              encounters: patient.encounters.map((encounter) =>
+                encounter.id === selectedEncounter.id
+                  ? {
+                      ...encounter,
+                      skipUpperLevel: enabled,
+                      skipUpperLevelBy: enabled ? session.user.id : null,
+                      skipUpperLevelAt: enabled ? nowIso : null,
+                      soapStatus: toSoapStatus,
+                    }
+                  : encounter
+              ),
+            }
+          : patient
+      )
+    );
 
-// THIS is the important part:
-await refreshClinicData();
-setSelectedPatientId(selectedPatient.id);
-setSelectedEncounterId(selectedEncounter.id);
+    await refreshClinicData();
+    setSelectedPatientId(selectedPatient.id);
+    setSelectedEncounterId(selectedEncounter.id);
 
     await logAuditEvent(
-      enabled ? "skip_upper_level_approved" : "skip_upper_level_revoked",
+      enabled ? "skip_upper_level_approved" : "skip_upper_level_removed",
       {
-        skipUpperLevel: enabled,
+        fromSoapStatus,
+        toSoapStatus,
+        bypassedUpperLevel: enabled,
       }
     );
+
     await loadAuditLog();
 
     showToast({

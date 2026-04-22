@@ -8,10 +8,12 @@ function normalizeText(value) {
 }
 
 function cleanFilePart(value) {
-  return String(value || "")
-    .trim()
-    .replace(/[^a-zA-Z0-9_-]+/g, "_")
-    .replace(/^_+|_+$/g, "") || "Unknown";
+  return (
+    String(value || "")
+      .trim()
+      .replace(/[^a-zA-Z0-9_-]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "Unknown"
+  );
 }
 
 function formatDate(value) {
@@ -21,11 +23,11 @@ function formatDate(value) {
   return d.toISOString().slice(0, 10);
 }
 
-function formatDateTime(value) {
+function formatDisplayDate(value) {
   if (!value) return "—";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return String(value);
-  return d.toLocaleString();
+  return d.toLocaleDateString();
 }
 
 function fullNameFromPatient(patient, getFullPatientName) {
@@ -40,29 +42,39 @@ function fullNameFromPatient(patient, getFullPatientName) {
 }
 
 function condensedMedicationList(medications) {
-  if (!Array.isArray(medications) || medications.length === 0) return ["No medications on file"];
-  return medications.map((med) => {
-    const parts = [med?.name, med?.dosage, med?.frequency, med?.route]
-      .map((v) => String(v || "").trim())
-      .filter(Boolean);
-    return parts.join(" • ") || "Unnamed medication";
-  });
+  if (!Array.isArray(medications) || medications.length === 0) {
+    return "No medications on file";
+  }
+  return medications
+    .map((med) => {
+      const parts = [med?.name, med?.dosage, med?.frequency, med?.route]
+        .map((v) => String(v || "").trim())
+        .filter(Boolean);
+      return parts.join(" • ") || "Unnamed medication";
+    })
+    .join("  |  ");
 }
 
 function condensedAllergyList(allergies) {
-  if (!Array.isArray(allergies) || allergies.length === 0) return ["No allergies on file"];
-  return allergies.map((allergy) => {
-    const parts = [allergy?.name || allergy?.allergen, allergy?.reaction]
-      .map((v) => String(v || "").trim())
-      .filter(Boolean);
-    return parts.join(" — ") || "Unnamed allergy";
-  });
+  if (!Array.isArray(allergies) || allergies.length === 0) {
+    return "No allergies on file";
+  }
+  return allergies
+    .map((allergy) => {
+      const parts = [allergy?.name || allergy?.allergen, allergy?.reaction]
+        .map((v) => String(v || "").trim())
+        .filter(Boolean);
+      return parts.join(" — ") || "Unnamed allergy";
+    })
+    .join("  |  ");
 }
 
 function latestVitalsSummary(encounter) {
-  const vitalsHistory = Array.isArray(encounter?.vitalsHistory) ? encounter.vitalsHistory : [];
+  const vitalsHistory = Array.isArray(encounter?.vitalsHistory)
+    ? encounter.vitalsHistory
+    : [];
   const latest = vitalsHistory[0] || vitalsHistory[vitalsHistory.length - 1] || null;
-  if (!latest) return ["No vitals on file"];
+  if (!latest) return "No vitals on file";
 
   const fields = [
     latest.bp && `BP ${latest.bp}`,
@@ -76,7 +88,7 @@ function latestVitalsSummary(encounter) {
     latest.pain && `Pain ${latest.pain}`,
   ].filter(Boolean);
 
-  return fields.length ? [fields.join(" | ")] : ["No vitals on file"];
+  return fields.length ? fields.join(" | ") : "No vitals on file";
 }
 
 function getEncounterNarrative(encounter) {
@@ -87,23 +99,6 @@ function getEncounterNarrative(encounter) {
     assessment: normalizeText(encounter?.soapAssessment),
     plan: normalizeText(encounter?.soapPlan),
   };
-}
-
-function medicationReconciliationRows(medications) {
-  if (!Array.isArray(medications) || medications.length === 0) {
-    return [["No medications on file", "—", "—", "—", "—", "—", "—", "—"]];
-  }
-
-  return medications.map((med) => [
-    normalizeText(med?.name),
-    normalizeText(med?.dosage),
-    normalizeText(med?.frequency),
-    normalizeText(med?.route),
-    med?.dispenseAmount ?? med?.dispense_amount ?? "—",
-    med?.refillCount ?? med?.refill_count ?? "—",
-    normalizeText(med?.instructions),
-    med?.isActive === false ? "Inactive" : "Active",
-  ]);
 }
 
 function inHouseLabRows(encounter) {
@@ -131,6 +126,83 @@ function inHouseLabRows(encounter) {
   return rows;
 }
 
+function getDosesPerDay(frequency) {
+  const freq = String(frequency || "").trim().toLowerCase();
+  switch (freq) {
+    case "daily":
+    case "qd":
+      return 1;
+    case "bid":
+    case "twice daily":
+      return 2;
+    case "tid":
+    case "three times daily":
+      return 3;
+    case "qid":
+    case "four times daily":
+      return 4;
+    case "weekly":
+      return 1 / 7;
+    default:
+      return null;
+  }
+}
+
+function getMedicationSupplyInfo(med) {
+  const dispense = Number(med?.dispenseAmount ?? med?.dispense_amount);
+  const dosesPerDay = getDosesPerDay(med?.frequency);
+  const refillCount = Number(med?.refillCount ?? med?.refill_count);
+
+  if (!dispense || !dosesPerDay || dosesPerDay <= 0) {
+    return {
+      daysUntilRefill: "",
+      refillDueDate: "",
+      totalDaysCovered: "",
+      runoutDate: "",
+    };
+  }
+
+  const daysUntilRefill = Math.floor(dispense / dosesPerDay);
+  if (!daysUntilRefill || daysUntilRefill < 1) {
+    return {
+      daysUntilRefill: "",
+      refillDueDate: "",
+      totalDaysCovered: "",
+      runoutDate: "",
+    };
+  }
+
+  const safeRefills = Number.isFinite(refillCount) && refillCount >= 0 ? refillCount : 0;
+  const totalDaysCovered = daysUntilRefill * (safeRefills + 1);
+
+  const today = new Date();
+  const refillDue = new Date();
+  refillDue.setDate(today.getDate() + daysUntilRefill);
+
+  const runout = new Date();
+  runout.setDate(today.getDate() + totalDaysCovered);
+
+  return {
+    daysUntilRefill,
+    refillDueDate: refillDue.toLocaleDateString(),
+    totalDaysCovered,
+    runoutDate: runout.toLocaleDateString(),
+  };
+}
+
+function medicationOrigin(med, encounter) {
+  const currentEncounterId = encounter?.id;
+  const sourceEncounterId = med?.lastUpdatedEncounterId ?? med?.last_updated_encounter_id ?? med?.encounterId ?? med?.encounter_id;
+  if (currentEncounterId && sourceEncounterId && String(currentEncounterId) === String(sourceEncounterId)) {
+    return "This Encounter";
+  }
+  return sourceEncounterId ? "Previous Encounter" : "—";
+}
+
+function medicationAddedDate(med) {
+  return formatDisplayDate(med?.createdAt || med?.created_at || med?.addedAt || med?.added_at);
+}
+
 function loadImageDimensions(src) {
   return new Promise((resolve) => {
     if (!src) {
@@ -144,27 +216,18 @@ function loadImageDimensions(src) {
   });
 }
 
-async function addLogo(doc, logoSrc, pageWidth, margin) {
+async function addLogo(doc, logoSrc, margin) {
   const meta = await loadImageDimensions(logoSrc);
-  if (!meta) return 20;
+  if (!meta) return 18;
 
-  const maxWidth = 70;
-  const maxHeight = 20;
+  const maxWidth = 74;
+  const maxHeight = 18;
   const scale = Math.min(maxWidth / meta.width, maxHeight / meta.height);
   const width = meta.width * scale;
   const height = meta.height * scale;
 
   doc.addImage(meta.src, "PNG", margin, 10, width, height, undefined, "FAST");
   return 10 + height + 4;
-}
-
-function addWrappedText(doc, text, x, y, width, options = {}) {
-  const fontSize = options.fontSize || 10.5;
-  const lineHeight = options.lineHeight || 5;
-  doc.setFontSize(fontSize);
-  const lines = doc.splitTextToSize(text, width);
-  doc.text(lines, x, y);
-  return y + lines.length * lineHeight;
 }
 
 function ensurePageSpace(doc, y, needed, marginBottom = 15) {
@@ -176,41 +239,17 @@ function ensurePageSpace(doc, y, needed, marginBottom = 15) {
   return y;
 }
 
-function drawInfoTable(doc, startY, rows, opts = {}) {
-  const margin = opts.margin || 14;
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const tableWidth = pageWidth - margin * 2;
-  const labelWidth = opts.labelWidth || 32;
-  const rowPadding = 3;
-  const lineHeight = 4.5;
-  let y = startY;
-
-  doc.setDrawColor(210, 214, 220);
-  doc.setLineWidth(0.2);
-
-  rows.forEach(({ label, values }) => {
-    const valueLines = Array.isArray(values) ? values : [values];
-    const wrapped = valueLines.flatMap((value) => doc.splitTextToSize(String(value), tableWidth - labelWidth - 6));
-    const contentLines = wrapped.length ? wrapped : ["—"];
-    const rowHeight = Math.max(10, contentLines.length * lineHeight + rowPadding * 2);
-
-    y = ensurePageSpace(doc, y, rowHeight + 2);
-
-    doc.rect(margin, y, tableWidth, rowHeight);
-    doc.line(margin + labelWidth, y, margin + labelWidth, y + rowHeight);
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.text(String(label), margin + 2, y + 6);
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.text(contentLines, margin + labelWidth + 3, y + 6);
-
-    y += rowHeight;
-  });
-
-  return y + 4;
+function drawWrappedLine(doc, label, text, x, y, width, opts = {}) {
+  const labelWidth = opts.labelWidth || 24;
+  const fontSize = opts.fontSize || 10;
+  const lineHeight = opts.lineHeight || 4.5;
+  doc.setFontSize(fontSize);
+  doc.setFont("helvetica", "bold");
+  doc.text(label, x, y);
+  doc.setFont("helvetica", "normal");
+  const lines = doc.splitTextToSize(String(text || "—"), width - labelWidth);
+  doc.text(lines, x + labelWidth, y);
+  return y + Math.max(1, lines.length) * lineHeight;
 }
 
 function drawSection(doc, title, text, startY, opts = {}) {
@@ -225,9 +264,9 @@ function drawSection(doc, title, text, startY, opts = {}) {
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
-  y = addWrappedText(doc, text, margin, y, width, { fontSize: 10, lineHeight: 4.5 });
-
-  return y + 3;
+  const lines = doc.splitTextToSize(text, width);
+  doc.text(lines, margin, y);
+  return y + lines.length * 4.5 + 3;
 }
 
 function drawGridTable(doc, title, headers, rows, startY, opts = {}) {
@@ -287,6 +326,95 @@ function drawGridTable(doc, title, headers, rows, startY, opts = {}) {
   return y + 4;
 }
 
+function drawMedicationReconciliationPage(doc, medications, encounter, patientName, startY, margin) {
+  let y = startY;
+  const width = doc.internal.pageSize.getWidth() - margin * 2;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.text(`${patientName} — Medication Reconciliation`, margin, y + 2);
+  y += 10;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11.5);
+  doc.text("Medication Reconciliation", margin, y);
+  y += 6;
+
+  if (!Array.isArray(medications) || medications.length === 0) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text("No medications on file", margin, y);
+    return y + 6;
+  }
+
+  medications.forEach((med) => {
+    const supply = getMedicationSupplyInfo(med);
+    const row1 = [
+      normalizeText(med?.name),
+      normalizeText(med?.dosage),
+      normalizeText(med?.frequency),
+      normalizeText(med?.route),
+      med?.isActive === false ? "Inactive" : "Active",
+    ].join(" — ");
+
+    const detail1 = [
+      `Disp: ${normalizeText(med?.dispenseAmount ?? med?.dispense_amount)}`,
+      `Refills: ${normalizeText(med?.refillCount ?? med?.refill_count)}`,
+      `Added: ${medicationAddedDate(med)}`,
+      `Origin: ${medicationOrigin(med, encounter)}`,
+    ].join(" | ");
+
+    const detail2 = [
+      `Days Until Refill: ${normalizeText(supply.daysUntilRefill)}`,
+      `Refill Due: ${normalizeText(supply.refillDueDate)}`,
+      `Total Coverage: ${normalizeText(supply.totalDaysCovered)}${supply.totalDaysCovered ? " days" : ""}`,
+      `Runout: ${normalizeText(supply.runoutDate)}`,
+    ].join(" | ");
+
+    const instructionText = med?.instructions ? `Instructions: ${String(med.instructions).trim()}` : "";
+
+    const estimateHeight = 8 +
+      Math.max(1, doc.splitTextToSize(row1, width - 6).length) * 4.5 +
+      Math.max(1, doc.splitTextToSize(detail1, width - 6).length) * 4 +
+      Math.max(1, doc.splitTextToSize(detail2, width - 6).length) * 4 +
+      (instructionText ? Math.max(1, doc.splitTextToSize(instructionText, width - 6).length) * 4 : 0) +
+      8;
+
+    y = ensurePageSpace(doc, y, estimateHeight);
+
+    doc.setDrawColor(210, 214, 220);
+    doc.setLineWidth(0.2);
+    doc.roundedRect(margin, y, width, estimateHeight - 2, 2, 2);
+
+    let innerY = y + 5;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.5);
+    const row1Lines = doc.splitTextToSize(row1, width - 6);
+    doc.text(row1Lines, margin + 3, innerY);
+    innerY += row1Lines.length * 4.5 + 1;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.25);
+    const detail1Lines = doc.splitTextToSize(detail1, width - 6);
+    doc.text(detail1Lines, margin + 3, innerY);
+    innerY += detail1Lines.length * 4 + 1;
+
+    const detail2Lines = doc.splitTextToSize(detail2, width - 6);
+    doc.text(detail2Lines, margin + 3, innerY);
+    innerY += detail2Lines.length * 4 + 1;
+
+    if (instructionText) {
+      const instructionLines = doc.splitTextToSize(instructionText, width - 6);
+      doc.text(instructionLines, margin + 3, innerY);
+      innerY += instructionLines.length * 4;
+    }
+
+    y += estimateHeight + 2;
+  });
+
+  return y;
+}
+
 async function buildEncounterPdfDoc({
   patient,
   encounter,
@@ -299,76 +427,56 @@ async function buildEncounterPdfDoc({
 }) {
   const doc = new jsPDF({ unit: "mm", format: "letter" });
   const margin = 14;
-  const pageWidth = doc.internal.pageSize.getWidth();
   const patientName = fullNameFromPatient(patient, getFullPatientName);
   const narrative = getEncounterNarrative(encounter);
-  const allergies = condensedAllergyList(patient?.allergies || []);
-  const meds = condensedMedicationList(sortedMedications);
-  const vitals = latestVitalsSummary(encounter);
 
-  let y = await addLogo(doc, logoSrc, pageWidth, margin);
+  let y = await addLogo(doc, logoSrc, margin);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
   doc.text(patientName, margin, y + 2);
   y += 8;
 
-  const infoRows = [
-    { label: "DOB", values: [normalizeText(formatDate(patient?.dob))] },
-    { label: "MRN", values: [normalizeText(patient?.mrn)] },
-    { label: "Clinic Date", values: [normalizeText(formatDate(encounter?.clinicDate || encounter?.createdAt))] },
-    { label: "Medications", values: meds },
-    { label: "Allergies", values: allergies },
-    { label: "Vitals", values: vitals },
-  ];
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.text(
+    `DOB ${normalizeText(formatDate(patient?.dob))}   MRN ${normalizeText(patient?.mrn)}   Clinic Date ${normalizeText(formatDate(encounter?.clinicDate || encounter?.createdAt))}`,
+    margin,
+    y
+  );
+  y += 6;
 
-  y = drawInfoTable(doc, y, infoRows, { margin, labelWidth: 32 });
+  y = drawWrappedLine(doc, "Medications", condensedMedicationList(sortedMedications), margin, y, 180, { labelWidth: 24, fontSize: 10, lineHeight: 4.5 });
+  y = drawWrappedLine(doc, "Allergies", condensedAllergyList(patient?.allergies || []), margin, y, 180, { labelWidth: 24, fontSize: 10, lineHeight: 4.5 });
+  y = drawWrappedLine(doc, "Vitals", latestVitalsSummary(encounter), margin, y, 180, { labelWidth: 24, fontSize: 10, lineHeight: 4.5 });
+  y += 2;
+
   y = drawSection(doc, "Chief Complaint", narrative.chiefComplaint, y, { margin });
   y = drawSection(doc, "Subjective", narrative.subjective, y, { margin });
   y = drawSection(doc, "Objective", narrative.objective, y, { margin });
   y = drawSection(doc, "Assessment", narrative.assessment, y, { margin });
   y = drawSection(doc, "Plan", narrative.plan, y, { margin });
 
-  const signatures = [
-    `Student: ${normalizeText(soapAuthorName)}`,
-    `Upper Level: ${normalizeText(upperLevelSignerName)}`,
-    `Attending: ${normalizeText(attendingSignerName)}`,
-  ];
-
-  y = drawInfoTable(doc, y, [{ label: "Signatures", values: signatures }], { margin, labelWidth: 32 });
+  const signaturesLine = `Student: ${normalizeText(soapAuthorName)} | Upper Level: ${normalizeText(upperLevelSignerName)} | Attending: ${normalizeText(attendingSignerName)}`;
+  y = drawWrappedLine(doc, "Signatures", signaturesLine, margin, y, 180, { labelWidth: 20, fontSize: 10, lineHeight: 4.5 });
 
   const labRows = inHouseLabRows(encounter);
   if (labRows.length) {
     doc.addPage();
-    y = await addLogo(doc, logoSrc, pageWidth, margin);
+    y = await addLogo(doc, logoSrc, margin);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(14);
     doc.text(`${patientName} — In-House Labs`, margin, y + 2);
     y += 8;
-    y = drawGridTable(
-      doc,
-      "In-House Labs",
-      ["Section", "Test", "Value", "Flag", "Reference"],
-      labRows,
-      y,
-      { margin, colWidths: [28, 52, 25, 18, 50] }
-    );
+    drawGridTable(doc, "In-House Labs", ["Section", "Test", "Value", "Flag", "Reference"], labRows, y, {
+      margin,
+      colWidths: [28, 52, 25, 18, 50],
+    });
   }
 
   doc.addPage();
-  y = await addLogo(doc, logoSrc, pageWidth, margin);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
-  doc.text(`${patientName} — Medication Reconciliation`, margin, y + 2);
-  y += 8;
-  drawGridTable(
-    doc,
-    "Medication Reconciliation",
-    ["Medication", "Dose", "Freq", "Route", "Disp", "Refills", "Instructions", "Status"],
-    medicationReconciliationRows(sortedMedications),
-    y,
-    { margin, colWidths: [32, 18, 19, 16, 14, 14, 44, 17] }
-  );
+  y = await addLogo(doc, logoSrc, margin);
+  drawMedicationReconciliationPage(doc, sortedMedications, encounter, patientName, y, margin);
 
   return doc;
 }
