@@ -272,6 +272,21 @@ export default function ChartView({
     }, obj);
   }
 
+  function formatSignatureDateTime(value) {
+  if (!value) return "—";
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value);
+
+  return parsed.toLocaleString([], {
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 
   function hasMeaningfulLabValue(value) {
     if (value === null || value === undefined) return false;
@@ -2852,16 +2867,16 @@ disabled={isSupportDataLocked}
                   ) : null}
 
                   {selectedEncounter.upperLevelSignedAt ? (
-                    <p>
-                      Upper Level Signed by {upperLevelSignerName || "Unknown User"} on {formatDate(selectedEncounter.upperLevelSignedAt)}
-                    </p>
-                  ) : null}
+  <div className="rounded-lg bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+    Upper Level Signed by {upperLevelSignerName || "Unknown User"} on {formatSignatureDateTime(selectedEncounter.upperLevelSignedAt)}
+  </div>
+) : null}
 
                   {selectedEncounter.attendingSignedAt ? (
-                    <p>
-                      Attending Signed by {attendingSignerName || "Unknown User"} on {formatDate(selectedEncounter.attendingSignedAt)}
-                    </p>
-                  ) : null}
+  <div className="rounded-lg bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+    Attending Signed by {attendingSignerName || "Unknown User"} on {formatSignatureDateTime(selectedEncounter.attendingSignedAt)}
+  </div>
+) : null}
                 </div>
               </div>
             </div>
