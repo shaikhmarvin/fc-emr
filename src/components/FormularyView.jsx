@@ -120,23 +120,39 @@ export default function FormularyView({
   }
 
   const filteredFormulary = useMemo(() => {
-    return formulary.filter((item) => {
-      const matchesSearch =
-        !searchTerm ||
-        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item.strength || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item.dosageForm || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item.use || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item.notes || "").toLowerCase().includes(searchTerm.toLowerCase());
+  const filtered = formulary.filter((item) => {
+    const matchesSearch =
+      !searchTerm ||
+      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.strength || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.dosageForm || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.use || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.notes || "").toLowerCase().includes(searchTerm.toLowerCase());
 
-      const matchesStock =
-        stockFilter === "all" ||
-        (stockFilter === "in" && item.inStock) ||
-        (stockFilter === "out" && !item.inStock);
+    const matchesStock =
+      stockFilter === "all" ||
+      (stockFilter === "in" && item.inStock) ||
+      (stockFilter === "out" && !item.inStock);
 
-      return matchesSearch && matchesStock;
-    });
-  }, [formulary, searchTerm, stockFilter]);
+    return matchesSearch && matchesStock;
+  });
+
+  // 🔥 ADD THIS SORT
+  return filtered.sort((a, b) => {
+    // 1. sort by name
+    const nameCompare = (a.name || "").localeCompare(b.name || "");
+    if (nameCompare !== 0) return nameCompare;
+
+    // 2. extract numeric dose from strength
+    const getDose = (med) => {
+      const match = String(med.strength || "").match(/[\d.]+/);
+      return match ? parseFloat(match[0]) : 0;
+    };
+
+    return getDose(a) - getDose(b);
+  });
+
+}, [formulary, searchTerm, stockFilter]);
 
   const inStockCount = formulary.filter((item) => item.inStock).length;
   const outOfStockCount = formulary.filter((item) => !item.inStock).length;
