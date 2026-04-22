@@ -99,27 +99,27 @@ export default function ChartView({
 
 
   function formatAuditAction(action) {
-  switch (action) {
-    case "soap_saved":
-      return "SOAP note saved";
-    case "soap_submitted_upper":
-      return "Submitted to upper level";
-    case "soap_submitted_attending":
-      return "Submitted to attending";
-    case "soap_signed_upper":
-      return "Signed by upper level";
-    case "soap_signed_attending":
-      return "Signed by attending";
-    case "soap_reopened":
-      return "SOAP note reopened";
-    case "skip_upper_level_approved":
-      return "Skip Upper Level approved";
-    case "skip_upper_level_removed":
-      return "Skip Upper Level removed";
-    default:
-      return action;
+    switch (action) {
+      case "soap_saved":
+        return "SOAP note saved";
+      case "soap_submitted_upper":
+        return "Submitted to upper level";
+      case "soap_submitted_attending":
+        return "Submitted to attending";
+      case "soap_signed_upper":
+        return "Signed by upper level";
+      case "soap_signed_attending":
+        return "Signed by attending";
+      case "soap_reopened":
+        return "SOAP note reopened";
+      case "skip_upper_level_approved":
+        return "Skip Upper Level approved";
+      case "skip_upper_level_removed":
+        return "Skip Upper Level removed";
+      default:
+        return action;
+    }
   }
-}
 
   function getNumericValue(value) {
     if (value === null || value === undefined) return null;
@@ -273,19 +273,19 @@ export default function ChartView({
   }
 
   function formatSignatureDateTime(value) {
-  if (!value) return "—";
+    if (!value) return "—";
 
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return String(value);
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return String(value);
 
-  return parsed.toLocaleString([], {
-    month: "2-digit",
-    day: "2-digit",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
+    return parsed.toLocaleString([], {
+      month: "2-digit",
+      day: "2-digit",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
 
 
   function hasMeaningfulLabValue(value) {
@@ -464,41 +464,41 @@ export default function ChartView({
   }
 
   function flattenInHouseLabs(encounter) {
-  const inHouseLabs = encounter?.inHouseLabs || {};
-  const dateKey = normalizeLabDate(encounter?.clinicDate || encounter?.createdAt);
+    const inHouseLabs = encounter?.inHouseLabs || {};
+    const dateKey = normalizeLabDate(encounter?.clinicDate || encounter?.createdAt);
 
-  return IN_HOUSE_LAB_CONFIG
-    .map((config) => {
-      const rawEntry = getNestedValue(inHouseLabs, config.path);
-      if (!hasMeaningfulLabValue(rawEntry)) return null;
+    return IN_HOUSE_LAB_CONFIG
+      .map((config) => {
+        const rawEntry = getNestedValue(inHouseLabs, config.path);
+        if (!hasMeaningfulLabValue(rawEntry)) return null;
 
-      const entry =
-        rawEntry && typeof rawEntry === "object" && !Array.isArray(rawEntry)
-          ? rawEntry
-          : { value: rawEntry, flag: "", referenceRange: "" };
+        const entry =
+          rawEntry && typeof rawEntry === "object" && !Array.isArray(rawEntry)
+            ? rawEntry
+            : { value: rawEntry, flag: "", referenceRange: "" };
 
-      if (!hasMeaningfulLabValue(entry.value)) return null;
+        if (!hasMeaningfulLabValue(entry.value)) return null;
 
-      const label = normalizeLabName(config.label);
-const [sectionKey, fieldKey] = config.path;
-const autoReference = getInHouseReference(sectionKey, fieldKey);
-const autoFlag = getAutomaticInHouseFlag(sectionKey, fieldKey, entry.value);
+        const label = normalizeLabName(config.label);
+        const [sectionKey, fieldKey] = config.path;
+        const autoReference = getInHouseReference(sectionKey, fieldKey);
+        const autoFlag = getAutomaticInHouseFlag(sectionKey, fieldKey, entry.value);
 
-return {
-  analyte: label,
-  group: config.group || inferLabGroup(label),
-  dateKey,
-  value: entry.value,
-  valueText: truncateLabValue(entry.value),
-  fullValueText: String(entry.value ?? "").trim(),
-  unitText: "",
-  sourceLabel: "In-house",
-  flag: autoFlag,
-  referenceRange: autoReference,
-};
-    })
-    .filter(Boolean);
-}
+        return {
+          analyte: label,
+          group: config.group || inferLabGroup(label),
+          dateKey,
+          value: entry.value,
+          valueText: truncateLabValue(entry.value),
+          fullValueText: String(entry.value ?? "").trim(),
+          unitText: "",
+          sourceLabel: "In-house",
+          flag: autoFlag,
+          referenceRange: autoReference,
+        };
+      })
+      .filter(Boolean);
+  }
 
   function flattenImportedLabs(encounter) {
     const importedLabs = Array.isArray(encounter?.importedSendOutLabs)
@@ -730,235 +730,235 @@ return {
   };
 
   const inHouseReferenceRanges = {
-  istat: {
-    na: "138-146 mEq/L",
-    k: "3.5-4.9 mEq/L",
-    cl: "98-109 mEq/L",
-    iCa: "1.2-1.32 mEq/L",
-    glucose: "Fast: 70-110 | 2-h post: <120",
-    tco2: "",
-    bun: "8-26 mg/dL",
-    creatinine: "0.6-1.3 mg/dL",
-    hct: "M: 41-53% | F: 36-46%",
-    hgb: "M: >14 mg/dL | F: >12 mg/dL",
-    anGap: "",
-  },
-  core: {
-    bloodGlucose: "",
-    a1c: "",
-    hiv: "",
-  },
-  microalbumin: {
-    albumin: "",
-    creatinine: "",
-    acRatio: "",
-  },
-  lipids: {
-    totalCholesterol: "N: <200",
-    triglycerides: "N: <150",
-    hdl: "N: >40",
-    ldl: "N: <130",
-    tcHdl: "",
-  },
-  rapid: {
-    flu: "",
-    strep: "",
-    guaiac: "",
-    hcg: "",
-    mono: "",
-  },
-};
-
-function getInHouseReference(sectionKey, fieldKey) {
-  return inHouseReferenceRanges?.[sectionKey]?.[fieldKey] || "";
-}
-
-function parseNumeric(value) {
-  const n = Number(String(value ?? "").trim());
-  return Number.isFinite(n) ? n : null;
-}
-
-function getAutomaticInHouseFlag(sectionKey, fieldKey, value) {
-  const text = String(value ?? "").trim();
-  if (!text) return "";
-
-  const lower = text.toLowerCase();
-
-  if (
-    lower === "positive" ||
-    lower === "detected" ||
-    lower === "reactive" ||
-    lower === "+"
-  ) {
-    return "H";
-  }
-
-  if (
-    lower === "negative" ||
-    lower === "non-reactive" ||
-    lower === "not detected" ||
-    lower === "-"
-  ) {
-    return "";
-  }
-
-  const numeric = parseNumeric(text);
-  if (numeric === null) return "";
-
-  if (sectionKey === "istat") {
-    switch (fieldKey) {
-      case "na":
-        return numeric < 138 ? "L" : numeric > 146 ? "H" : "";
-      case "k":
-        return numeric < 3.5 ? "L" : numeric > 4.9 ? "H" : "";
-      case "cl":
-        return numeric < 98 ? "L" : numeric > 109 ? "H" : "";
-      case "iCa":
-        return numeric < 1.2 ? "L" : numeric > 1.32 ? "H" : "";
-      case "glucose":
-        return numeric < 70 ? "L" : numeric > 110 ? "H" : "";
-      case "bun":
-        return numeric < 8 ? "L" : numeric > 26 ? "H" : "";
-      case "creatinine":
-        return numeric < 0.6 ? "L" : numeric > 1.3 ? "H" : "";
-      default:
-        return "";
-    }
-  }
-
-  if (sectionKey === "lipids") {
-    switch (fieldKey) {
-      case "totalCholesterol":
-        return numeric >= 200 ? "H" : "";
-      case "triglycerides":
-        return numeric >= 150 ? "H" : "";
-      case "hdl":
-        return numeric <= 40 ? "L" : "";
-      case "ldl":
-        return numeric >= 130 ? "H" : "";
-      default:
-        return "";
-    }
-  }
-
-  return "";
-}
-
-
-  function normalizeInHouseLabEntry(entry) {
-  if (entry && typeof entry === "object" && !Array.isArray(entry)) {
-    return {
-      value: entry.value ?? "",
-      flag: entry.flag ?? "",
-      referenceRange: entry.referenceRange ?? "",
-    };
-  }
-
-  return {
-    value: entry ?? "",
-    flag: "",
-    referenceRange: "",
-  };
-}
-
-function calculateACRatio(albumin, creatinine) {
-  const a = Number(albumin);
-  const c = Number(creatinine);
-
-  if (!a || !c) return "";
-
-  // avoid divide by zero + bad values
-  if (!Number.isFinite(a) || !Number.isFinite(c) || c === 0) return "";
-
-  return (a / c).toFixed(2);
-}
-
-function calculateTCHDLRatio(totalCholesterol, hdl) {
-  const tc = Number(totalCholesterol);
-  const goodHdl = Number(hdl);
-
-  if (!tc || !goodHdl) return "";
-  if (!Number.isFinite(tc) || !Number.isFinite(goodHdl) || goodHdl === 0) return "";
-
-  return (tc / goodHdl).toFixed(2);
-}
-
-function updateInHouseLabSection(sectionKey, fieldKey, patch) {
-  const currentLabs = selectedEncounter?.inHouseLabs || {};
-  const currentEntry = normalizeInHouseLabEntry(currentLabs?.[sectionKey]?.[fieldKey]);
-
-  const nextLabs = {
-    ...currentLabs,
-    [sectionKey]: {
-      ...(currentLabs[sectionKey] || {}),
-      [fieldKey]: {
-        ...currentEntry,
-        ...patch,
-      },
+    istat: {
+      na: "138-146 mEq/L",
+      k: "3.5-4.9 mEq/L",
+      cl: "98-109 mEq/L",
+      iCa: "1.2-1.32 mEq/L",
+      glucose: "Fast: 70-110 | 2-h post: <120",
+      tco2: "",
+      bun: "8-26 mg/dL",
+      creatinine: "0.6-1.3 mg/dL",
+      hct: "M: 41-53% | F: 36-46%",
+      hgb: "M: >14 mg/dL | F: >12 mg/dL",
+      anGap: "",
+    },
+    core: {
+      bloodGlucose: "",
+      a1c: "",
+      hiv: "",
+    },
+    microalbumin: {
+      albumin: "",
+      creatinine: "",
+      acRatio: "",
+    },
+    lipids: {
+      totalCholesterol: "N: <200",
+      triglycerides: "N: <150",
+      hdl: "N: >40",
+      ldl: "N: <130",
+      tcHdl: "",
+    },
+    rapid: {
+      flu: "",
+      strep: "",
+      guaiac: "",
+      hcg: "",
+      mono: "",
     },
   };
 
-  updateEncounterField("inHouseLabs", nextLabs);
-  return nextLabs;
-}
+  function getInHouseReference(sectionKey, fieldKey) {
+    return inHouseReferenceRanges?.[sectionKey]?.[fieldKey] || "";
+  }
 
-function updateInHouseNestedLabSection(sectionKey, subsectionKey, fieldKey, patch) {
-  const currentLabs = selectedEncounter?.inHouseLabs || {};
-  const currentSection = currentLabs[sectionKey] || {};
-  const currentEntry = normalizeInHouseLabEntry(
-    currentSection?.[subsectionKey]?.[fieldKey]
-  );
+  function parseNumeric(value) {
+    const n = Number(String(value ?? "").trim());
+    return Number.isFinite(n) ? n : null;
+  }
 
-  const nextLabs = {
-    ...currentLabs,
-    [sectionKey]: {
-      ...currentSection,
-      [subsectionKey]: {
-        ...(currentSection[subsectionKey] || {}),
+  function getAutomaticInHouseFlag(sectionKey, fieldKey, value) {
+    const text = String(value ?? "").trim();
+    if (!text) return "";
+
+    const lower = text.toLowerCase();
+
+    if (
+      lower === "positive" ||
+      lower === "detected" ||
+      lower === "reactive" ||
+      lower === "+"
+    ) {
+      return "H";
+    }
+
+    if (
+      lower === "negative" ||
+      lower === "non-reactive" ||
+      lower === "not detected" ||
+      lower === "-"
+    ) {
+      return "";
+    }
+
+    const numeric = parseNumeric(text);
+    if (numeric === null) return "";
+
+    if (sectionKey === "istat") {
+      switch (fieldKey) {
+        case "na":
+          return numeric < 138 ? "L" : numeric > 146 ? "H" : "";
+        case "k":
+          return numeric < 3.5 ? "L" : numeric > 4.9 ? "H" : "";
+        case "cl":
+          return numeric < 98 ? "L" : numeric > 109 ? "H" : "";
+        case "iCa":
+          return numeric < 1.2 ? "L" : numeric > 1.32 ? "H" : "";
+        case "glucose":
+          return numeric < 70 ? "L" : numeric > 110 ? "H" : "";
+        case "bun":
+          return numeric < 8 ? "L" : numeric > 26 ? "H" : "";
+        case "creatinine":
+          return numeric < 0.6 ? "L" : numeric > 1.3 ? "H" : "";
+        default:
+          return "";
+      }
+    }
+
+    if (sectionKey === "lipids") {
+      switch (fieldKey) {
+        case "totalCholesterol":
+          return numeric >= 200 ? "H" : "";
+        case "triglycerides":
+          return numeric >= 150 ? "H" : "";
+        case "hdl":
+          return numeric <= 40 ? "L" : "";
+        case "ldl":
+          return numeric >= 130 ? "H" : "";
+        default:
+          return "";
+      }
+    }
+
+    return "";
+  }
+
+
+  function normalizeInHouseLabEntry(entry) {
+    if (entry && typeof entry === "object" && !Array.isArray(entry)) {
+      return {
+        value: entry.value ?? "",
+        flag: entry.flag ?? "",
+        referenceRange: entry.referenceRange ?? "",
+      };
+    }
+
+    return {
+      value: entry ?? "",
+      flag: "",
+      referenceRange: "",
+    };
+  }
+
+  function calculateACRatio(albumin, creatinine) {
+    const a = Number(albumin);
+    const c = Number(creatinine);
+
+    if (!a || !c) return "";
+
+    // avoid divide by zero + bad values
+    if (!Number.isFinite(a) || !Number.isFinite(c) || c === 0) return "";
+
+    return (a / c).toFixed(2);
+  }
+
+  function calculateTCHDLRatio(totalCholesterol, hdl) {
+    const tc = Number(totalCholesterol);
+    const goodHdl = Number(hdl);
+
+    if (!tc || !goodHdl) return "";
+    if (!Number.isFinite(tc) || !Number.isFinite(goodHdl) || goodHdl === 0) return "";
+
+    return (tc / goodHdl).toFixed(2);
+  }
+
+  function updateInHouseLabSection(sectionKey, fieldKey, patch) {
+    const currentLabs = selectedEncounter?.inHouseLabs || {};
+    const currentEntry = normalizeInHouseLabEntry(currentLabs?.[sectionKey]?.[fieldKey]);
+
+    const nextLabs = {
+      ...currentLabs,
+      [sectionKey]: {
+        ...(currentLabs[sectionKey] || {}),
         [fieldKey]: {
           ...currentEntry,
           ...patch,
         },
       },
-    },
-  };
+    };
 
-  updateEncounterField("inHouseLabs", nextLabs);
-  return nextLabs;
-}
+    updateEncounterField("inHouseLabs", nextLabs);
+    return nextLabs;
+  }
 
-function updateInHouseLabRoot(fieldKey, value) {
-  const currentLabs = selectedEncounter?.inHouseLabs || {};
+  function updateInHouseNestedLabSection(sectionKey, subsectionKey, fieldKey, patch) {
+    const currentLabs = selectedEncounter?.inHouseLabs || {};
+    const currentSection = currentLabs[sectionKey] || {};
+    const currentEntry = normalizeInHouseLabEntry(
+      currentSection?.[subsectionKey]?.[fieldKey]
+    );
 
-  const nextLabs = {
-    ...currentLabs,
-    [fieldKey]: value,
-  };
+    const nextLabs = {
+      ...currentLabs,
+      [sectionKey]: {
+        ...currentSection,
+        [subsectionKey]: {
+          ...(currentSection[subsectionKey] || {}),
+          [fieldKey]: {
+            ...currentEntry,
+            ...patch,
+          },
+        },
+      },
+    };
 
-  updateEncounterField("inHouseLabs", nextLabs);
-}
+    updateEncounterField("inHouseLabs", nextLabs);
+    return nextLabs;
+  }
 
-async function persistInHouseLabs(nextLabs = null) {
-  if (!selectedEncounter) return;
-  await saveInHouseLabs(nextLabs || selectedEncounter?.inHouseLabs || {});
-}
+  function updateInHouseLabRoot(fieldKey, value) {
+    const currentLabs = selectedEncounter?.inHouseLabs || {};
+
+    const nextLabs = {
+      ...currentLabs,
+      [fieldKey]: value,
+    };
+
+    updateEncounterField("inHouseLabs", nextLabs);
+  }
+
+  async function persistInHouseLabs(nextLabs = null) {
+    if (!selectedEncounter) return;
+    await saveInHouseLabs(nextLabs || selectedEncounter?.inHouseLabs || {});
+  }
 
 
 
   async function handleExportEncounterPdf() {
-  if (!selectedPatient || !selectedEncounter) return;
+    if (!selectedPatient || !selectedEncounter) return;
 
-  await downloadEncounterPdf({
-    patient: selectedPatient,
-    encounter: selectedEncounter,
-    sortedMedications,
-    logoSrc: logo,
-    getFullPatientName,
-    soapAuthorName,
-    upperLevelSignerName,
-    attendingSignerName,
-  });
-}
+    await downloadEncounterPdf({
+      patient: selectedPatient,
+      encounter: selectedEncounter,
+      sortedMedications,
+      logoSrc: logo,
+      getFullPatientName,
+      soapAuthorName,
+      upperLevelSignerName,
+      attendingSignerName,
+    });
+  }
 
   if (!selectedPatient) return null;
 
@@ -993,8 +993,8 @@ async function persistInHouseLabs(nextLabs = null) {
     ? selectedEncounter.importedSendOutLabs
     : [];
   const isSoapLocked = selectedEncounter?.soapStatus === "signed";
-const isSupportDataLocked = false;
-const clinicAlert = getClinicAlert(new Date());
+  const isSupportDataLocked = false;
+  const clinicAlert = getClinicAlert(new Date());
   const vitalsHistory = selectedEncounter?.vitalsHistory || [];
   const latestVitals = vitalsHistory[0] || null;
   const previousVitals = vitalsHistory[1] || null;
@@ -1033,9 +1033,9 @@ const clinicAlert = getClinicAlert(new Date());
   const normalizedAssignedUpperLevel = String(assignmentForm.upperLevelName || "").trim().toLowerCase();
 
   const canShowSkipUpperControls =
-  isLeadershipView &&
-  selectedEncounter?.soapStatus !== "awaiting_attending" &&
-  selectedEncounter?.soapStatus !== "signed";
+    isLeadershipView &&
+    selectedEncounter?.soapStatus !== "awaiting_attending" &&
+    selectedEncounter?.soapStatus !== "signed";
 
   function roomMatchesCurrentAssignment(room) {
     const roomStudents = (room.assignedStudentsInRoom || []).map((name) =>
@@ -1433,7 +1433,7 @@ const clinicAlert = getClinicAlert(new Date());
                       ))}
                     </select>
 
-                   
+
                   </div>
 
 
@@ -1567,11 +1567,11 @@ const clinicAlert = getClinicAlert(new Date());
 
                 <button
                   onClick={() => {
-  setEditingMedicationId(null);
-  setNewMedication(EMPTY_MEDICATION);
-  setShowMedicationModal(true);
-}}
-className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+                    setEditingMedicationId(null);
+                    setNewMedication(EMPTY_MEDICATION);
+                    setShowMedicationModal(true);
+                  }}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
                 >
                   + Add Medication
                 </button>
@@ -1819,10 +1819,10 @@ className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
 
                 <button
                   onClick={() => {
-  setEditingAllergyId(null);
-  setNewAllergy(EMPTY_ALLERGY);
-  setShowAllergyModal(true);
-}}
+                    setEditingAllergyId(null);
+                    setNewAllergy(EMPTY_ALLERGY);
+                    setShowAllergyModal(true);
+                  }}
                   className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
                 >
                   + Add Allergy
@@ -1890,10 +1890,10 @@ className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
               <h3 className="text-lg font-semibold">Vitals</h3>
 
               <button
-  onClick={() => {
-    if (isSupportDataLocked) return;
-    saveVitals();
-  }}
+                onClick={() => {
+                  if (isSupportDataLocked) return;
+                  saveVitals();
+                }}
                 className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
               >
                 {editingVitalsIndex !== null ? "Update Vitals" : "Save Vitals"}
@@ -2163,25 +2163,25 @@ className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
                     ].map(([key, label]) => (
                       <div key={key}>
                         <label className="mb-1 block text-sm font-medium text-slate-700">
-  {label}
-  {getInHouseReference("istat", key) ? (
-    <span className="ml-2 text-xs font-normal text-slate-500">
-      ({getInHouseReference("istat", key)})
-    </span>
-  ) : null}
-</label>
+                          {label}
+                          {getInHouseReference("istat", key) ? (
+                            <span className="ml-2 text-xs font-normal text-slate-500">
+                              ({getInHouseReference("istat", key)})
+                            </span>
+                          ) : null}
+                        </label>
                         <input
-  type="number"
-  step="any"
-  className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-  value={normalizeInHouseLabEntry(selectedEncounter.inHouseLabs?.istat?.[key]).value}
-  onChange={(e) => {
-    if (isSupportDataLocked) return;
-    updateInHouseLabSection("istat", key, { value: e.target.value });
-  }}
-  onBlur={() => persistInHouseLabs()}
-  disabled={isSupportDataLocked}
-/>
+                          type="number"
+                          step="any"
+                          className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
+                          value={normalizeInHouseLabEntry(selectedEncounter.inHouseLabs?.istat?.[key]).value}
+                          onChange={(e) => {
+                            if (isSupportDataLocked) return;
+                            updateInHouseLabSection("istat", key, { value: e.target.value });
+                          }}
+                          onBlur={() => persistInHouseLabs()}
+                          disabled={isSupportDataLocked}
+                        />
                       </div>
                     ))}
 
@@ -2195,125 +2195,125 @@ className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
 
                     <div>
                       <label className="mb-1 block text-sm font-medium text-slate-700">
-  Blood Glucose
-  {getInHouseReference("core", "bloodGlucose") ? (
-    <span className="ml-2 text-xs font-normal text-slate-500">
-      ({getInHouseReference("core", "bloodGlucose")})
-    </span>
-  ) : null}
-</label>
+                        Blood Glucose
+                        {getInHouseReference("core", "bloodGlucose") ? (
+                          <span className="ml-2 text-xs font-normal text-slate-500">
+                            ({getInHouseReference("core", "bloodGlucose")})
+                          </span>
+                        ) : null}
+                      </label>
                       <input
-  type="number"
-  step="any"
-  className="min-h-[44px] w-full rounded-lg border px-3 py-2"
-  value={normalizeInHouseLabEntry(selectedEncounter.inHouseLabs?.core?.bloodGlucose).value}
-  onChange={(e) => {
-    if (isSupportDataLocked) return;
-    updateInHouseLabSection("core", "bloodGlucose", { value: e.target.value });
-  }}
-  onBlur={() => persistInHouseLabs()}
-  disabled={isSupportDataLocked}
-/>
+                        type="number"
+                        step="any"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2"
+                        value={normalizeInHouseLabEntry(selectedEncounter.inHouseLabs?.core?.bloodGlucose).value}
+                        onChange={(e) => {
+                          if (isSupportDataLocked) return;
+                          updateInHouseLabSection("core", "bloodGlucose", { value: e.target.value });
+                        }}
+                        onBlur={() => persistInHouseLabs()}
+                        disabled={isSupportDataLocked}
+                      />
                     </div>
 
                     <div>
                       <label className="mb-1 block text-sm font-medium text-slate-700">
-  A1c
-  {getInHouseReference("core", "a1c") ? (
-    <span className="ml-2 text-xs font-normal text-slate-500">
-      ({getInHouseReference("core", "a1c")})
-    </span>
-  ) : null}
-</label>
+                        A1c
+                        {getInHouseReference("core", "a1c") ? (
+                          <span className="ml-2 text-xs font-normal text-slate-500">
+                            ({getInHouseReference("core", "a1c")})
+                          </span>
+                        ) : null}
+                      </label>
                       <input
-  type="number"
-  step="any"
-  className="min-h-[44px] w-full rounded-lg border px-3 py-2"
-  value={normalizeInHouseLabEntry(selectedEncounter.inHouseLabs?.core?.a1c).value}
-  onChange={(e) => {
-    if (isSupportDataLocked) return;
-    updateInHouseLabSection("core", "a1c", { value: e.target.value });
-  }}
-  onBlur={() => persistInHouseLabs()}
-  disabled={isSupportDataLocked}
-/>
+                        type="number"
+                        step="any"
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2"
+                        value={normalizeInHouseLabEntry(selectedEncounter.inHouseLabs?.core?.a1c).value}
+                        onChange={(e) => {
+                          if (isSupportDataLocked) return;
+                          updateInHouseLabSection("core", "a1c", { value: e.target.value });
+                        }}
+                        onBlur={() => persistInHouseLabs()}
+                        disabled={isSupportDataLocked}
+                      />
                     </div>
 
                     <div>
-  <label className="mb-1 block text-sm font-medium text-slate-700">
-  HIV
-  {getInHouseReference("core", "hiv") ? (
-    <span className="ml-2 text-xs font-normal text-slate-500">
-      ({getInHouseReference("core", "hiv")})
-    </span>
-  ) : null}
-</label>
-  <select
-    className="min-h-[44px] w-full rounded-lg border px-3 py-2"
-    value={normalizeInHouseLabEntry(selectedEncounter.inHouseLabs?.core?.hiv).value}
-    onChange={(e) => {
-      if (isSupportDataLocked) return;
-      updateInHouseLabSection("core", "hiv", { value: e.target.value });
-    }}
-    onBlur={() => persistInHouseLabs()}
-    disabled={isSupportDataLocked}
-  >
-    {hivOptions.map((option) => (
-      <option key={option.value} value={option.value}>
-        {option.label}
-      </option>
-    ))}
-  </select>
-</div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">
+                        HIV
+                        {getInHouseReference("core", "hiv") ? (
+                          <span className="ml-2 text-xs font-normal text-slate-500">
+                            ({getInHouseReference("core", "hiv")})
+                          </span>
+                        ) : null}
+                      </label>
+                      <select
+                        className="min-h-[44px] w-full rounded-lg border px-3 py-2"
+                        value={normalizeInHouseLabEntry(selectedEncounter.inHouseLabs?.core?.hiv).value}
+                        onChange={(e) => {
+                          if (isSupportDataLocked) return;
+                          updateInHouseLabSection("core", "hiv", { value: e.target.value });
+                        }}
+                        onBlur={() => persistInHouseLabs()}
+                        disabled={isSupportDataLocked}
+                      >
+                        {hivOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
                   </div>
 
                   {/* Microalbumin / Creatinine */}
-<div>
-  <h4 className="mb-3 font-semibold text-slate-800">Microalbumin / Creatinine</h4>
-  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-    {[
-      ["albumin", "Albumin"],
-      ["creatinine", "Creatinine"],
-      ["acRatio", "A/C Ratio"],
-    ].map(([key, label]) => (
-      <div key={key}>
-        <label className="mb-1 block text-sm font-medium text-slate-700">
-  {label}
-  {getInHouseReference("microalbumin", key) ? (
-    <span className="ml-2 text-xs font-normal text-slate-500">
-      ({getInHouseReference("microalbumin", key)})
-    </span>
-  ) : null}
-</label>
-        {key === "acRatio" ? (
-  <input
-    type="text"
-    className="min-h-[44px] w-full rounded-lg border bg-slate-100 px-3 py-2 text-slate-700"
-    value={calculateACRatio(
-      normalizeInHouseLabEntry(selectedEncounter.inHouseLabs?.microalbumin?.albumin).value,
-      normalizeInHouseLabEntry(selectedEncounter.inHouseLabs?.microalbumin?.creatinine).value
-    )}
-    readOnly
-  />
-) : (
-  <input
-    type="number"
-    step="any"
-    className="min-h-[44px] w-full rounded-lg border px-3 py-2"
-    value={normalizeInHouseLabEntry(selectedEncounter.inHouseLabs?.microalbumin?.[key]).value}
-    onChange={(e) => {
-      if (isSupportDataLocked) return;
-      updateInHouseLabSection("microalbumin", key, { value: e.target.value });
-    }}
-    onBlur={() => persistInHouseLabs()}
-    disabled={isSupportDataLocked}
-  />
-)}
-      </div>
-    ))}
-  </div>
-</div>
+                  <div>
+                    <h4 className="mb-3 font-semibold text-slate-800">Microalbumin / Creatinine</h4>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      {[
+                        ["albumin", "Albumin"],
+                        ["creatinine", "Creatinine"],
+                        ["acRatio", "A/C Ratio"],
+                      ].map(([key, label]) => (
+                        <div key={key}>
+                          <label className="mb-1 block text-sm font-medium text-slate-700">
+                            {label}
+                            {getInHouseReference("microalbumin", key) ? (
+                              <span className="ml-2 text-xs font-normal text-slate-500">
+                                ({getInHouseReference("microalbumin", key)})
+                              </span>
+                            ) : null}
+                          </label>
+                          {key === "acRatio" ? (
+                            <input
+                              type="text"
+                              className="min-h-[44px] w-full rounded-lg border bg-slate-100 px-3 py-2 text-slate-700"
+                              value={calculateACRatio(
+                                normalizeInHouseLabEntry(selectedEncounter.inHouseLabs?.microalbumin?.albumin).value,
+                                normalizeInHouseLabEntry(selectedEncounter.inHouseLabs?.microalbumin?.creatinine).value
+                              )}
+                              readOnly
+                            />
+                          ) : (
+                            <input
+                              type="number"
+                              step="any"
+                              className="min-h-[44px] w-full rounded-lg border px-3 py-2"
+                              value={normalizeInHouseLabEntry(selectedEncounter.inHouseLabs?.microalbumin?.[key]).value}
+                              onChange={(e) => {
+                                if (isSupportDataLocked) return;
+                                updateInHouseLabSection("microalbumin", key, { value: e.target.value });
+                              }}
+                              onBlur={() => persistInHouseLabs()}
+                              disabled={isSupportDataLocked}
+                            />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Lipids */}
@@ -2330,37 +2330,37 @@ className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
                     ].map(([key, label]) => (
                       <div key={key}>
                         <label className="mb-1 block text-sm font-medium text-slate-700">
-  {label}
-  {getInHouseReference("lipids", key) ? (
-    <span className="ml-2 text-xs font-normal text-slate-500">
-      ({getInHouseReference("lipids", key)})
-    </span>
-  ) : null}
-</label>
+                          {label}
+                          {getInHouseReference("lipids", key) ? (
+                            <span className="ml-2 text-xs font-normal text-slate-500">
+                              ({getInHouseReference("lipids", key)})
+                            </span>
+                          ) : null}
+                        </label>
                         {key === "tcHdl" ? (
-  <input
-    type="text"
-    className="min-h-[44px] w-full rounded-lg border bg-slate-100 px-3 py-2 text-slate-700"
-    value={calculateTCHDLRatio(
-      normalizeInHouseLabEntry(selectedEncounter.inHouseLabs?.lipids?.totalCholesterol).value,
-      normalizeInHouseLabEntry(selectedEncounter.inHouseLabs?.lipids?.hdl).value
-    )}
-    readOnly
-  />
-) : (
-  <input
-    type="number"
-    step="any"
-    className="min-h-[44px] w-full rounded-lg border px-3 py-2"
-    value={normalizeInHouseLabEntry(selectedEncounter.inHouseLabs?.lipids?.[key]).value}
-    onChange={(e) => {
-      if (isSupportDataLocked) return;
-      updateInHouseLabSection("lipids", key, { value: e.target.value });
-    }}
-    onBlur={() => persistInHouseLabs()}
-    disabled={isSupportDataLocked}
-  />
-)}
+                          <input
+                            type="text"
+                            className="min-h-[44px] w-full rounded-lg border bg-slate-100 px-3 py-2 text-slate-700"
+                            value={calculateTCHDLRatio(
+                              normalizeInHouseLabEntry(selectedEncounter.inHouseLabs?.lipids?.totalCholesterol).value,
+                              normalizeInHouseLabEntry(selectedEncounter.inHouseLabs?.lipids?.hdl).value
+                            )}
+                            readOnly
+                          />
+                        ) : (
+                          <input
+                            type="number"
+                            step="any"
+                            className="min-h-[44px] w-full rounded-lg border px-3 py-2"
+                            value={normalizeInHouseLabEntry(selectedEncounter.inHouseLabs?.lipids?.[key]).value}
+                            onChange={(e) => {
+                              if (isSupportDataLocked) return;
+                              updateInHouseLabSection("lipids", key, { value: e.target.value });
+                            }}
+                            onBlur={() => persistInHouseLabs()}
+                            disabled={isSupportDataLocked}
+                          />
+                        )}
                       </div>
                     ))}
 
@@ -2368,60 +2368,59 @@ className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
                 </div>
 
                 {/* Antigen Testing */}
-<div>
-  <h4 className="mb-3 font-semibold text-slate-800">Antigen Testing</h4>
-  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-    {[
-      ["flu", "Flu"],
-      ["strep", "Strep"],
-      ["guaiac", "Guaiac"],
-      ["hcg", "HCG"],
-      ["mono", "Mono"],
-    ].map(([key, label]) => (
-      <div key={key}>
-        <label className="mb-1 block text-sm font-medium text-slate-700">
-          {label}
-        </label>
-        <div className="flex flex-wrap gap-2">
-  {[
-    { value: "positive", label: "Positive" },
-    { value: "negative", label: "Negative" },
-  ].map((option) => {
-    const currentValue = normalizeInHouseLabEntry(
-      selectedEncounter.inHouseLabs?.rapid?.[key]
-    ).value;
+                <div>
+                  <h4 className="mb-3 font-semibold text-slate-800">Antigen Testing</h4>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    {[
+                      ["flu", "Flu"],
+                      ["strep", "Strep"],
+                      ["guaiac", "Guaiac"],
+                      ["hcg", "HCG"],
+                      ["mono", "Mono"],
+                    ].map(([key, label]) => (
+                      <div key={key}>
+                        <label className="mb-1 block text-sm font-medium text-slate-700">
+                          {label}
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { value: "positive", label: "Positive" },
+                            { value: "negative", label: "Negative" },
+                          ].map((option) => {
+                            const currentValue = normalizeInHouseLabEntry(
+                              selectedEncounter.inHouseLabs?.rapid?.[key]
+                            ).value;
 
-    const isActive = currentValue === option.value;
+                            const isActive = currentValue === option.value;
 
-    return (
-      <button
-        key={option.value}
-        type="button"
-        onClick={async () => {
-  if (isSupportDataLocked) return;
-  const nextLabs = updateInHouseLabSection("rapid", key, {
-    value: isActive ? "" : option.value,
-  });
-  await persistInHouseLabs(nextLabs);
-}}
-        disabled={isSupportDataLocked}
-        className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
-          isActive
-            ? option.value === "positive"
-              ? "border-red-300 bg-red-50 text-red-700"
-              : "border-emerald-300 bg-emerald-50 text-emerald-700"
-            : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-        }`}
-      >
-        {option.label}
-      </button>
-    );
-  })}
-</div>
-      </div>
-    ))}
-  </div>
-</div>
+                            return (
+                              <button
+                                key={option.value}
+                                type="button"
+                                onClick={async () => {
+                                  if (isSupportDataLocked) return;
+                                  const nextLabs = updateInHouseLabSection("rapid", key, {
+                                    value: isActive ? "" : option.value,
+                                  });
+                                  await persistInHouseLabs(nextLabs);
+                                }}
+                                disabled={isSupportDataLocked}
+                                className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${isActive
+                                  ? option.value === "positive"
+                                    ? "border-red-300 bg-red-50 text-red-700"
+                                    : "border-emerald-300 bg-emerald-50 text-emerald-700"
+                                  : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                                  }`}
+                              >
+                                {option.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
 
                 {/* Notes */}
                 <div>
@@ -2429,14 +2428,14 @@ className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
                   <textarea
                     value={selectedEncounter.inHouseLabs?.nursingNotes || ""}
                     onChange={(e) => {
-  if (isSupportDataLocked) return;
-  updateInHouseLabRoot("nursingNotes", e.target.value);
-}}
-onBlur={() => persistInHouseLabs()}
-className="w-full rounded-lg border px-3 py-2"
-rows={3}
-placeholder="Enter any lab notes..."
-disabled={isSupportDataLocked}
+                      if (isSupportDataLocked) return;
+                      updateInHouseLabRoot("nursingNotes", e.target.value);
+                    }}
+                    onBlur={() => persistInHouseLabs()}
+                    className="w-full rounded-lg border px-3 py-2"
+                    rows={3}
+                    placeholder="Enter any lab notes..."
+                    disabled={isSupportDataLocked}
                   />
                 </div>
 
@@ -2732,11 +2731,11 @@ disabled={isSupportDataLocked}
                 </button>
 
                 <button
-  onClick={handleExportEncounterPdf}
-  className="rounded-lg bg-slate-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800"
->
-  Export PDF
-</button>
+                  onClick={handleExportEncounterPdf}
+                  className="rounded-lg bg-slate-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800"
+                >
+                  Export PDF
+                </button>
               </div>
             </div>
 
@@ -2747,20 +2746,19 @@ disabled={isSupportDataLocked}
             )}
 
             {clinicAlert && selectedEncounter?.soapStatus !== "signed" && (
-  <div
-    className={`mb-3 rounded-lg border px-3 py-2 text-sm font-medium ${
-      clinicAlert.level === "critical"
-        ? "border-red-300 bg-red-50 text-red-800"
-        : clinicAlert.level === "high"
-        ? "border-orange-300 bg-orange-50 text-orange-800"
-        : clinicAlert.level === "medium"
-        ? "border-yellow-300 bg-yellow-50 text-yellow-800"
-        : "border-blue-300 bg-blue-50 text-blue-800"
-    }`}
-  >
-    {clinicAlert.message}
-  </div>
-)}
+              <div
+                className={`mb-3 rounded-lg border px-3 py-2 text-sm font-medium ${clinicAlert.level === "critical"
+                  ? "border-red-300 bg-red-50 text-red-800"
+                  : clinicAlert.level === "high"
+                    ? "border-orange-300 bg-orange-50 text-orange-800"
+                    : clinicAlert.level === "medium"
+                      ? "border-yellow-300 bg-yellow-50 text-yellow-800"
+                      : "border-blue-300 bg-blue-50 text-blue-800"
+                  }`}
+              >
+                {clinicAlert.message}
+              </div>
+            )}
 
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -2809,10 +2807,10 @@ disabled={isSupportDataLocked}
                 </div>
 
                 {canShowSkipUpperControls && selectedEncounter?.skipUpperLevel ? (
-  <div className="inline-block rounded-lg bg-amber-100 px-4 py-3 text-sm font-semibold text-amber-800">
-    Skip Upper Level Approved
-  </div>
-) : null}
+                  <div className="inline-block rounded-lg bg-amber-100 px-4 py-3 text-sm font-semibold text-amber-800">
+                    Skip Upper Level Approved
+                  </div>
+                ) : null}
 
                 {isSoapLocked ? (
                   <div className="mt-3 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
@@ -2867,16 +2865,16 @@ disabled={isSupportDataLocked}
                   ) : null}
 
                   {selectedEncounter.upperLevelSignedAt ? (
-  <div className="rounded-lg bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
-    Upper Level Signed by {upperLevelSignerName || "Unknown User"} on {formatSignatureDateTime(selectedEncounter.upperLevelSignedAt)}
-  </div>
-) : null}
+                    <div className="rounded-lg bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+                      Upper Level Signed by {upperLevelSignerName || "Unknown User"} on {formatSignatureDateTime(selectedEncounter.upperLevelSignedAt)}
+                    </div>
+                  ) : null}
 
                   {selectedEncounter.attendingSignedAt ? (
-  <div className="rounded-lg bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
-    Attending Signed by {attendingSignerName || "Unknown User"} on {formatSignatureDateTime(selectedEncounter.attendingSignedAt)}
-  </div>
-) : null}
+                    <div className="rounded-lg bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+                      Attending Signed by {attendingSignerName || "Unknown User"} on {formatSignatureDateTime(selectedEncounter.attendingSignedAt)}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -3035,20 +3033,20 @@ disabled={isSupportDataLocked}
                   4-Digit PIN
                 </label>
                 <input
+                  id="attending-signature-pin"
                   type="password"
                   inputMode="numeric"
-                  pattern="[0-9]*"
-                  autoComplete="new-password"
+                  autoComplete="one-time-code"
                   autoCorrect="off"
                   autoCapitalize="off"
                   spellCheck={false}
-                  maxLength={4}
-                  name="attending-signature-pin"
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                  name="one-time-code"
                   value={attendingPin}
                   onChange={(e) =>
                     setAttendingPin(e.target.value.replace(/\D/g, "").slice(0, 4))
                   }
-                  className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
+                  onPaste={(e) => e.preventDefault()}
                   placeholder="Enter PIN"
                 />
               </div>

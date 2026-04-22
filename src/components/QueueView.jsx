@@ -466,7 +466,7 @@ export default function QueueView({
                 {/* Assignment info */}
                 <p className="text-xs text-slate-500">
                   Student: {encounter.assignedStudent || "—"} • Upper: {encounter.assignedUpperLevel || "—"}
-{encounter.skipUpperLevel ? " • Skip Upper Approved" : ""}
+                  {encounter.skipUpperLevel ? " • Skip Upper Approved" : ""}
                 </p>
 
                 {/* Badges */}
@@ -638,15 +638,20 @@ export default function QueueView({
                   4-digit PIN
                 </label>
                 <input
+                  id="refill-approval-pin"
                   type="password"
                   inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={4}
+                  autoComplete="one-time-code"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                  name="one-time-code"
                   value={refillPin}
                   onChange={(e) =>
                     setRefillPin(e.target.value.replace(/\D/g, "").slice(0, 4))
                   }
-                  className="w-full rounded-lg border px-3 py-3 text-sm"
+                  onPaste={(e) => e.preventDefault()}
                   placeholder="Enter PIN"
                 />
               </div>
