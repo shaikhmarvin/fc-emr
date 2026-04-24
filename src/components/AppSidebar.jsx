@@ -43,14 +43,15 @@ export default function AppSidebar({
     <>
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+          className="fixed inset-0 z-40 bg-black/40 xl:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 transform border-r border-slate-200 bg-white transition-transform duration-300 lg:translate-x-0 lg:overflow-y-auto ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-          }`}
+        className={`fixed inset-y-0 left-0 z-50 w-64 transform overflow-y-auto border-r border-slate-200 bg-white transition-transform duration-300 xl:translate-x-0 ${
+  sidebarOpen ? "translate-x-0" : "-translate-x-full xl:translate-x-0"
+}`}
       >
       <div className="border-b border-slate-200 px-4 py-4">
   <img

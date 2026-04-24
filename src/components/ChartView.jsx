@@ -2044,7 +2044,7 @@ export default function ChartView({
 
               {selectedEncounter.vitalsHistory?.length > 0 ? (
                 <>
-                  <div className="hidden overflow-x-auto rounded-xl border border-slate-200 md:block">
+                  <div className="hidden overflow-x-auto rounded-xl border border-slate-200 lg:block">
                     <table className="min-w-[700px] w-full text-left text-sm">
                       <thead className="bg-slate-50 text-slate-700">
                         <tr>
@@ -2091,7 +2091,7 @@ export default function ChartView({
                     </table>
                   </div>
 
-                  <div className="space-y-2 md:hidden">
+                  <div className="space-y-2 lg:hidden">
                     {selectedEncounter.vitalsHistory.map((entry, index) => (
                       <div
                         key={index}
@@ -2505,7 +2505,7 @@ export default function ChartView({
                   </div>
                 ) : (
                   <>
-                    <div className="hidden overflow-x-auto rounded-xl border border-slate-200 md:block">
+                    <div className="hidden overflow-x-auto rounded-xl border border-slate-200 lg:block">
                       <table className="min-w-[900px] border-separate border-spacing-0 text-sm">
                         <thead>
                           <tr>
@@ -2616,7 +2616,7 @@ export default function ChartView({
                       </table>
                     </div>
 
-                    <div className="space-y-4 md:hidden">
+                    <div className="space-y-4 lg:hidden">
                       {longitudinalLabData.groupedRows
                         .filter((groupBlock) => {
                           if (labFilter === "all" || labFilter === "abnormal") return true;

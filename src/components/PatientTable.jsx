@@ -17,7 +17,7 @@ export default function PatientTable({
         <h3 className="text-lg font-semibold">{title}</h3>
       </div>
 
-      <div className="hidden overflow-x-auto md:block">
+      <div className="hidden overflow-x-auto lg:block">
         <table className="w-full text-left">
           <thead className="bg-slate-50">
             <tr>
@@ -84,7 +84,7 @@ export default function PatientTable({
         </table>
       </div>
 
-      <div className="divide-y md:hidden">
+      <div className="divide-y lg:hidden">
         {patients.map((patient) => (
           <button
             key={patient.id}

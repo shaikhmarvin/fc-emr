@@ -7556,7 +7556,7 @@ async function handleUndergradStartEncounter(data) {
 
 
   return (
-    <div className="min-h-screen bg-slate-100 lg:flex">
+    <div className="min-h-screen bg-slate-100 xl:flex">
       <AppSidebar
         activeView={activeView}
         setActiveView={setActiveView}
@@ -7573,7 +7573,7 @@ async function handleUndergradStartEncounter(data) {
         canRefillAccess={canRefillAccess}
       />
 
-      <div className="min-w-0 flex-1 bg-slate-100 lg:ml-64 lg:flex lg:flex-col">
+      <div className="min-w-0 flex-1 bg-slate-100 xl:ml-64 xl:flex xl:flex-col">
         <AppHeader
           activeView={activeView}
           selectedPatient={selectedPatient}

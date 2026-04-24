@@ -23,7 +23,7 @@ export default function AppHeader({
           <div className="flex min-w-0 items-start gap-3">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-slate-700 lg:hidden"
+              className="rounded-lg border border-slate-300 px-3 py-2 text-slate-700 xl:hidden"
             >
               ☰
             </button>
