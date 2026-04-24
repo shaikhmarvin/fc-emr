@@ -667,15 +667,20 @@ function canAttendingSignSoap(role, encounter) {
 
   const canRefill = canRefillAccess || userRole === "attending" || userRole === "leadership";
   const canAccessDashboard =
-    userRole === "leadership" ||
-    userRole === "undergraduate" ||
-    canRefill;
+  userRole === "leadership" ||
+  userRole === "undergraduate" ||
+  userRole === "upper_level" ||
+  userRole === "attending" ||
+  canRefill;
 
 
   const [clinicSummary, setClinicSummary] = useState({
     refillCount: "",
     labsCount: "",
     mentalHealthCount: "",
+    addictionMedicineCount: "",
+    ptCount: "",
+    dermatologyCount: "",
     socialWorkCount: "",
     ophthalmologyCount: "",
     lwobsCount: "",
@@ -3219,6 +3224,69 @@ const [soapDraft, setSoapDraft] = useState({
 
   const totalPatientCount = visibleEncounterRows.length;
 
+  const autoLwobsCount = visibleEncounterRows.filter(
+    ({ encounter }) => String(encounter.status || "").toLowerCase() === "cancelled"
+  ).length;
+
+  const [profiles, setProfiles] = useState([]);
+  const [loadingProfiles, setLoadingProfiles] = useState(false);
+  const [savingProfileId, setSavingProfileId] = useState(null);
+  const [profilesMessage, setProfilesMessage] = useState("");
+  const [userSearch, setUserSearch] = useState("");
+  const [editingProfileNameId, setEditingProfileNameId] = useState(null);
+  const [editingProfileNameValue, setEditingProfileNameValue] = useState("");
+  const [showOnlyActiveToday, setShowOnlyActiveToday] = useState(false);
+
+  function dateKeyFromTimestamp(value) {
+    if (!value) return "";
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return String(value).slice(0, 10);
+    }
+
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Chicago",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(date);
+  }
+
+  const profileById = useMemo(() => {
+    const map = new Map();
+    profiles.forEach((profile) => {
+      map.set(String(profile.id), profile);
+    });
+    return map;
+  }, [profiles]);
+
+  const autoRefillPatientCount = useMemo(() => {
+    const patientIds = new Set();
+
+    refillRequests.forEach((request) => {
+      const status = String(request.status || "").toLowerCase();
+      if (status !== "approved") return;
+      if (!request.patient_id) return;
+      if (!request.approved_by || !request.approved_at) return;
+      if (dateKeyFromTimestamp(request.approved_at) !== selectedClinicDate) return;
+
+      const requester = profileById.get(String(request.requested_by));
+      const approver = profileById.get(String(request.approved_by));
+      const requesterHasRefillAccess =
+        requester?.can_refill === true ||
+        requester?.role === "attending" ||
+        requester?.role === "leadership";
+      const signedByAttending = approver?.role === "attending";
+
+      if (!requesterHasRefillAccess || !signedByAttending) return;
+
+      patientIds.add(String(request.patient_id));
+    });
+
+    return patientIds.size;
+  }, [refillRequests, profileById, selectedClinicDate]);
+
   const specialtyCounts = useMemo(() => {
     const counts = {
       pt: 0,
@@ -3232,8 +3300,6 @@ const [soapDraft, setSoapDraft] = useState({
       patient.encounters.forEach((encounter) => {
         if (encounter.clinicDate !== selectedClinicDate) return;
 
-        const { visitType, specialtyType } = encounter;
-
         if (
           (encounter.visitType === "specialty_only" || encounter.visitType === "both") &&
           encounter.specialtyType
@@ -3241,29 +3307,33 @@ const [soapDraft, setSoapDraft] = useState({
           counts[encounter.specialtyType] =
             (counts[encounter.specialtyType] || 0) + 1;
         }
-
-        // 👇 dual visit counts twice (general + specialty)
-        if (visitType === "both") {
-          if (counts[specialtyType] !== undefined) {
-            // already counted above, no extra needed
-            // BUT we are intentionally counting specialty once per encounter
-            // (dual visit already included in both categories)
-          }
-        }
       });
     });
 
     return counts;
   }, [patients, selectedClinicDate]);
 
-  const [profiles, setProfiles] = useState([]);
-  const [loadingProfiles, setLoadingProfiles] = useState(false);
-  const [savingProfileId, setSavingProfileId] = useState(null);
-  const [profilesMessage, setProfilesMessage] = useState("");
-  const [userSearch, setUserSearch] = useState("");
-  const [editingProfileNameId, setEditingProfileNameId] = useState(null);
-  const [editingProfileNameValue, setEditingProfileNameValue] = useState("");
-  const [showOnlyActiveToday, setShowOnlyActiveToday] = useState(false);
+  useEffect(() => {
+    setClinicSummary((prev) => ({
+      ...prev,
+      refillCount: String(autoRefillPatientCount),
+      lwobsCount: String(autoLwobsCount),
+      mentalHealthCount: String(specialtyCounts.mental_health || 0),
+      addictionMedicineCount: String(specialtyCounts.addiction || 0),
+      ptCount: String(specialtyCounts.pt || 0),
+      dermatologyCount: String(specialtyCounts.dermatology || 0),
+      ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
+    }));
+  }, [
+    autoRefillPatientCount,
+    autoLwobsCount,
+    specialtyCounts.mental_health,
+    specialtyCounts.addiction,
+    specialtyCounts.pt,
+    specialtyCounts.dermatology,
+    specialtyCounts.ophthalmology,
+  ]);
+
 
 
   const filteredProfiles = useMemo(() => {
@@ -7046,6 +7116,30 @@ async function handleUndergradStartEncounter(data) {
           children: [
             bodyCell(""),
             bodyCell(""),
+            bodyCell("Addiction Medicine"),
+            bodyCell(clinicSummary.addictionMedicineCount || "", AlignmentType.CENTER),
+          ],
+        }),
+        new TableRow({
+          children: [
+            bodyCell(""),
+            bodyCell(""),
+            bodyCell("Physical Therapy"),
+            bodyCell(clinicSummary.ptCount || "", AlignmentType.CENTER),
+          ],
+        }),
+        new TableRow({
+          children: [
+            bodyCell(""),
+            bodyCell(""),
+            bodyCell("Dermatology"),
+            bodyCell(clinicSummary.dermatologyCount || "", AlignmentType.CENTER),
+          ],
+        }),
+        new TableRow({
+          children: [
+            bodyCell(""),
+            bodyCell(""),
             bodyCell("Ophthalmology"),
             bodyCell(clinicSummary.ophthalmologyCount || "", AlignmentType.CENTER),
           ],
@@ -7909,6 +8003,8 @@ async function handleUndergradStartEncounter(data) {
               totalPatientCount={totalPatientCount}
               exportClinicSummaryToWord={exportClinicSummaryToWord}
               specialtyCounts={specialtyCounts}
+              autoLwobsCount={autoLwobsCount}
+              autoRefillPatientCount={autoRefillPatientCount}
             />
           )}
 

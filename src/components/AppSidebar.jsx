@@ -76,7 +76,11 @@ export default function AppSidebar({
               <div className="space-y-2">
                 <SectionLabel>Workflow</SectionLabel>
 
-                {(isLeadershipView || userRole === "undergraduate" || canRefillAccess) && (
+                {(isLeadershipView ||
+  userRole === "undergraduate" ||
+  userRole === "upper_level" ||
+  userRole === "attending" ||
+  canRefillAccess) && (
                   <button
                     onClick={() => handleViewChange("dashboard")}
                     className={getNavItemClass("dashboard")}
