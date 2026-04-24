@@ -20,16 +20,19 @@ function Field({ label, children, className = "" }) {
   );
 }
 
-function StockBadge({ inStock, onClick, clickable = false }) {
+function StockBadge({ inStock, onClick, clickable = false, className = "" }) {
   const badgeClass = inStock
-    ? "bg-green-100 text-green-700"
-    : "bg-red-100 text-red-700";
+    ? "border-green-200 bg-green-50 text-green-700"
+    : "border-red-200 bg-red-50 text-red-700";
+
+  const baseClass = `inline-flex items-center justify-center rounded-full border px-3 h-8 text-xs font-semibold whitespace-nowrap transition ${badgeClass} ${className}`;
 
   if (clickable) {
     return (
       <button
+        type="button"
         onClick={onClick}
-        className={`rounded-full px-3 py-1 text-sm font-medium ${badgeClass}`}
+        className={`${baseClass} hover:brightness-95 active:scale-[0.98]`}
       >
         {inStock ? "In Stock" : "Out of Stock"}
       </button>
@@ -37,7 +40,7 @@ function StockBadge({ inStock, onClick, clickable = false }) {
   }
 
   return (
-    <span className={`rounded-full px-3 py-1 text-sm font-medium ${badgeClass}`}>
+    <span className={baseClass}>
       {inStock ? "In Stock" : "Out of Stock"}
     </span>
   );
@@ -221,9 +224,16 @@ export default function FormularyView({
           </Field>
         </div>
 
-        <div className="space-y-3 sm:hidden">
+        <div className="space-y-3 lg:hidden">
           {filteredFormulary.map((item) => (
-            <div key={item.id} className="rounded-2xl border border-slate-200 p-4 shadow-sm">
+            <div
+  key={item.id}
+  className={`rounded-2xl border p-4 shadow-sm transition ${
+    item.inStock
+      ? "border-green-100 bg-green-50/20"
+      : "border-red-200 bg-red-50/40"
+  }`}
+>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h4 className="text-base font-semibold text-slate-900">{item.name}</h4>
@@ -232,10 +242,11 @@ export default function FormularyView({
                   </p>
                 </div>
                 <StockBadge
-                  inStock={item.inStock}
-                  clickable={isLeadershipView}
-                  onClick={() => toggleStock(item.id)}
-                />
+  inStock={item.inStock}
+  clickable={isLeadershipView}
+  onClick={() => toggleStock(item.id)}
+  className="shrink-0"
+/>
               </div>
 
               <div className="mt-3 space-y-2 text-sm text-slate-700">
@@ -249,7 +260,7 @@ export default function FormularyView({
                 </div>
               </div>
 
-              <div className="mt-4 grid grid-cols-1 gap-2">
+              <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-2">
                 <button
                   onClick={() => onPrescribeMedication(item)}
                   disabled={!selectedPatient}
@@ -263,7 +274,7 @@ export default function FormularyView({
                 </button>
 
                 {isLeadershipView ? (
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-2 sm:col-span-2">
                     <button
                       onClick={() => openEditMedication(item)}
                       className="rounded-lg bg-slate-200 px-3 py-2 text-sm text-slate-700"
@@ -291,7 +302,7 @@ export default function FormularyView({
           )}
         </div>
 
-        <div className="hidden overflow-x-auto sm:block">
+        <div className="hidden overflow-x-auto lg:block">
           <table className="w-full text-left">
             <thead className="bg-slate-50">
               <tr>
@@ -307,18 +318,28 @@ export default function FormularyView({
             </thead>
             <tbody>
               {filteredFormulary.map((item) => (
-                <tr key={item.id} className="border-t align-top">
+                <tr
+  key={item.id}
+  className={`border-t align-middle transition ${
+    item.inStock
+      ? "bg-green-50/20 hover:bg-green-50/40"
+      : "bg-red-50/40 hover:bg-red-50"
+  }`}
+>
                   <td className="p-3 font-medium">{item.name}</td>
                   <td className="p-3">{item.strength || "—"}</td>
                   <td className="p-3">{item.dosageForm || "—"}</td>
                   <td className="p-3">{item.use || "—"}</td>
-                  <td className="p-3">
-                    <StockBadge
-                      inStock={item.inStock}
-                      clickable={isLeadershipView}
-                      onClick={() => toggleStock(item.id)}
-                    />
-                  </td>
+                  <td className="px-4 py-2 align-middle">
+  <div className="flex items-center">
+    <StockBadge
+      inStock={item.inStock}
+      clickable={isLeadershipView}
+      onClick={() => toggleStock(item.id)}
+      className="h-8 px-3 text-xs"
+    />
+  </div>
+</td>
 
                   <td className="p-3">{item.notes || "—"}</td>
 
