@@ -691,6 +691,7 @@ function canAttendingSignSoap(role, encounter) {
     ms34Names: "",
     ms12Names: "",
   });
+  const [summaryRefreshStatus, setSummaryRefreshStatus] = useState("");
   const [programEntries, setProgramEntries] = useState([]);
   const [programsLoaded, setProgramsLoaded] = useState(false);
   const [programSettings, setProgramSettings] = useState([]);
@@ -869,20 +870,41 @@ function canAttendingSignSoap(role, encounter) {
     loadFormulary();
   }, [session, formularyLoaded]);
 
-  useEffect(() => {
-    if (!session) return;
+  async function loadRefillRequests() {
+  try {
+    const rows = await fetchRefillRequests();
+    setRefillRequests(rows);
+  } catch (error) {
+    console.error("Failed to load refill requests:", error);
+  }
+}
 
-    async function loadRefillRequests() {
-      try {
-        const rows = await fetchRefillRequests();
-        setRefillRequests(rows);
-      } catch (error) {
-        console.error("Failed to load refill requests:", error);
-      }
-    }
+useEffect(() => {
+  if (!session) return;
+  loadRefillRequests();
+}, [session]);
 
-    loadRefillRequests();
-  }, [session]);
+async function refreshClinicSummaryData() {
+  try {
+    setSummaryRefreshStatus("Refreshing...");
+
+    await Promise.all([
+      refreshClinicData(),
+      loadRefillRequests(),
+      loadProfiles(),
+    ]);
+
+    setSummaryRefreshStatus("Refreshed");
+
+    setTimeout(() => {
+      setSummaryRefreshStatus("");
+    }, 2000);
+  } catch (error) {
+    console.error("Failed to refresh clinic summary:", error);
+    setSummaryRefreshStatus("Refresh failed");
+    alert(`Failed to refresh clinic summary: ${error.message}`);
+  }
+}
 
 
   useEffect(() => {
@@ -8005,6 +8027,8 @@ async function handleUndergradStartEncounter(data) {
               specialtyCounts={specialtyCounts}
               autoLwobsCount={autoLwobsCount}
               autoRefillPatientCount={autoRefillPatientCount}
+              onRefreshSummary={refreshClinicSummaryData}
+              summaryRefreshStatus={summaryRefreshStatus}
             />
           )}
 

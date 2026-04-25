@@ -10,6 +10,8 @@ export default function ClinicSummaryView({
   specialtyCounts,
   autoLwobsCount = 0,
   autoRefillPatientCount = 0,
+  onRefreshSummary,
+  summaryRefreshStatus = "",
 }) {
   function SummaryCard({ label, value }) {
     return (
@@ -83,11 +85,25 @@ export default function ClinicSummaryView({
             />
 
             <button
-              onClick={exportClinicSummaryToWord}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-            >
-              Export to Word
-            </button>
+  type="button"
+  onClick={onRefreshSummary}
+  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+>
+  {summaryRefreshStatus === "Refreshing..." ? "Refreshing..." : "Refresh"}
+</button>
+
+{summaryRefreshStatus && summaryRefreshStatus !== "Refreshing..." && (
+  <span className="text-xs font-medium text-slate-500">
+    {summaryRefreshStatus}
+  </span>
+)}
+
+<button
+  onClick={exportClinicSummaryToWord}
+  className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+>
+  Export to Word
+</button>
           </div>
         </div>
 
