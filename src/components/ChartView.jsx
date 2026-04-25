@@ -2897,6 +2897,9 @@ export default function ChartView({
                     onChange={(e) =>
                       updateSoapDraftField("soapSubjective", e.target.value)
                     }
+                    onBlur={() => {
+  if (soapAutoSaveEnabled && !isSoapLocked) saveSoapNote(false);
+}}
                     disabled={isSoapLocked}
                   />
                 </div>
@@ -2911,6 +2914,9 @@ export default function ChartView({
                     onChange={(e) =>
                       updateSoapDraftField("soapObjective", e.target.value)
                     }
+                    onBlur={() => {
+  if (soapAutoSaveEnabled && !isSoapLocked) saveSoapNote(false);
+}}
                     disabled={isSoapLocked}
                   />
                 </div>
@@ -2925,6 +2931,9 @@ export default function ChartView({
                     onChange={(e) =>
                       updateSoapDraftField("soapAssessment", e.target.value)
                     }
+                    onBlur={() => {
+  if (soapAutoSaveEnabled && !isSoapLocked) saveSoapNote(false);
+}}
                     disabled={isSoapLocked}
                   />
                 </div>
@@ -2939,6 +2948,9 @@ export default function ChartView({
                     onChange={(e) =>
                       updateSoapDraftField("soapPlan", e.target.value)
                     }
+                    onBlur={() => {
+  if (soapAutoSaveEnabled && !isSoapLocked) saveSoapNote(false);
+}}
                     disabled={isSoapLocked}
                   />
                 </div>
