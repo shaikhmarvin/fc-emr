@@ -7,11 +7,15 @@ function normalizeName(value) {
 function isVisibleOnBoard(encounter) {
   if (!encounter) return false;
   if (!encounter.roomNumber) return false;
+
+  // keep signed out (optional — you can remove this later if needed)
   if (encounter.soapStatus === "signed") return false;
+
   return (
     encounter.status === "roomed" ||
     encounter.status === "in_visit" ||
-    encounter.status === "ready"
+    encounter.status === "ready" ||
+    encounter.status === "done" // ✅ ADD THIS
   );
 }
 
@@ -79,6 +83,7 @@ export default function RoomBoard({
   getStudentBoardName,
   spanishBadge,
   priorityBadge,
+  newReturningBadge,
   diabetesBadge,
   elevatorBadge,
   fluBadge,
@@ -99,9 +104,11 @@ export default function RoomBoard({
           <p className="mt-1 text-2xl font-bold">
             {
               ROOM_OPTIONS.filter((room) => {
-                const groups = getRoomEncounterGroups(allEncounterRows, room.number);
-                return groups.length === 0;
-              }).length
+  const groups = getRoomEncounterGroups(allEncounterRows, room.number);
+  return !groups.some(
+    (group) => group.primary?.encounter?.status !== "done"
+  );
+}).length
             }
           </p>
         </div>
@@ -143,11 +150,15 @@ export default function RoomBoard({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
         {ROOM_OPTIONS.map((room) => {
           const groups = getRoomEncounterGroups(allEncounterRows, room.number);
-          const primaryGroup = getPrimarySlot(groups);
-          const primaryRow = primaryGroup?.primary || null;
-          const primaryEncounter = primaryRow?.encounter || null;
-          const primaryPatient = primaryRow?.patient || null;
-          const occupied = Boolean(primaryEncounter);
+const activeGroups = groups.filter(
+  (group) => group.primary?.encounter?.status !== "done"
+);
+const primaryGroup = getPrimarySlot(activeGroups.length > 0 ? activeGroups : groups);
+const primaryRow = primaryGroup?.primary || null;
+const primaryEncounter = primaryRow?.encounter || null;
+const primaryPatient = primaryRow?.patient || null;
+const hasRoomHistory = Boolean(primaryEncounter);
+const occupied = activeGroups.length > 0;
 
           const reservedSpecialty = Object.values(SPECIALTY_ROOM_RULES || {}).find(
             (rule) => rule.allowedRooms?.includes(String(room.number))
@@ -209,14 +220,16 @@ export default function RoomBoard({
                 }
               }}
               className={`min-h-[220px] rounded-2xl border p-3 text-left shadow transition ${
-                occupied
-                  ? primaryEncounter.status === "in_visit"
-                    ? "border-blue-200 bg-blue-50"
-                    : "border-yellow-200 bg-yellow-50"
-                  : reservedSpecialty
-                  ? "border-violet-300 bg-violet-50 hover:bg-violet-100"
-                  : "border-slate-200 bg-white hover:bg-slate-50"
-              }`}
+  hasRoomHistory
+    ? primaryEncounter.status === "done"
+      ? "border-slate-300 bg-slate-100 opacity-70"
+      : primaryEncounter.status === "in_visit"
+      ? "border-blue-200 bg-blue-50"
+      : "border-yellow-200 bg-yellow-50"
+    : reservedSpecialty
+    ? "border-violet-300 bg-violet-50 hover:bg-violet-100"
+    : "border-slate-200 bg-white hover:bg-slate-50"
+}`}
             >
               <div className="mb-2 flex items-start justify-between gap-2">
                 <div>
@@ -241,7 +254,7 @@ export default function RoomBoard({
                 </span>
               </div>
 
-              {occupied ? (
+              {hasRoomHistory ? (
                 <div className="space-y-2">
                   <div>
                     <p className="font-medium text-slate-800">
@@ -274,6 +287,12 @@ export default function RoomBoard({
                       </span>
                     )}
 
+                    {newReturningBadge?.(primaryEncounter)}
+                    {primaryEncounter.dailyNumber && (
+                      <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800">
+                        #{primaryEncounter.dailyNumber}
+                      </span>
+                    )}
                     {priorityBadge(primaryEncounter)}
                     {spanishBadge(primaryEncounter)}
                     {diabetesBadge?.(primaryEncounter)}

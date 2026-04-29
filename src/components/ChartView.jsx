@@ -19,6 +19,7 @@ export default function ChartView({
   openPatientChart,
   spanishBadge,
   priorityBadge,
+  newReturningBadge,
   papBadge,
   diabetesBadge,
   elevatorBadge,
@@ -1301,6 +1302,12 @@ export default function ChartView({
       {selectedEncounter && (
         <>
           <div className="flex flex-wrap gap-2">
+            {newReturningBadge?.(selectedEncounter)}
+            {selectedEncounter.dailyNumber && (
+              <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800">
+                #{selectedEncounter.dailyNumber}
+              </span>
+            )}
             {priorityBadge(selectedEncounter)}
             {spanishBadge(selectedEncounter)}
             {diabetesBadge?.(selectedEncounter)}

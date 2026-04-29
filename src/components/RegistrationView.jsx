@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 function getRegistrationStatusBadge(status) {
   switch (status) {
     case "started":
@@ -38,16 +39,59 @@ function getRegistrationStatusBadge(status) {
 }
 
 
+function normalizeSearchText(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function getDailyCardNumber(patient, encounter) {
+  return (
+    encounter?.dailyNumber ??
+    encounter?.daily_number ??
+    encounter?.cardNumber ??
+    encounter?.card_number ??
+    encounter?.queueNumber ??
+    encounter?.queue_number ??
+    patient?.dailyNumber ??
+    patient?.daily_number ??
+    patient?.cardNumber ??
+    patient?.card_number ??
+    patient?.queueNumber ??
+    patient?.queue_number ??
+    ""
+  );
+}
+
+
 export default function RegistrationView({
   registrationRows,
   openUndergradRegistration,
   openLeadershipRegistration,
   getFullPatientName,
   formatDate,
+  newReturningBadge,
   userRole,
   isLeadershipView,
   onRemoveFromRegistration
 }) {
+  const [registrationSearch, setRegistrationSearch] = useState("");
+
+  const filteredRegistrationRows = useMemo(() => {
+    const query = normalizeSearchText(registrationSearch);
+    if (!query) return registrationRows;
+
+    return registrationRows.filter(({ patient, encounter }) => {
+      const name = normalizeSearchText(getFullPatientName(patient));
+      const dob = normalizeSearchText(formatDate(patient?.dob) || patient?.dob);
+      const dailyCardNumber = normalizeSearchText(getDailyCardNumber(patient, encounter));
+
+      return (
+        name.includes(query) ||
+        dob.includes(query) ||
+        dailyCardNumber.includes(query)
+      );
+    });
+  }, [registrationRows, registrationSearch, getFullPatientName, formatDate]);
+
   return (
     <div className="p-4 md:p-6">
       <div className="rounded-2xl bg-white p-5 shadow-sm md:p-6">
@@ -57,15 +101,24 @@ export default function RegistrationView({
     ? "Complete initial registration details for arriving patients."
     : "Finish intake and prepare patients for assignment."}
 </p>
+
+        <div className="mt-4">
+          <input
+            className="w-full rounded-lg border border-slate-300 p-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 md:max-w-md"
+            placeholder="Search by name, DOB, or daily card #"
+            value={registrationSearch}
+            onChange={(e) => setRegistrationSearch(e.target.value)}
+          />
+        </div>
       </div>
 
       <div className="mt-6 space-y-4">
-        {registrationRows.length === 0 ? (
+        {filteredRegistrationRows.length === 0 ? (
           <div className="rounded-2xl bg-white p-6 text-sm text-slate-500 shadow-sm">
             No patients waiting in registration.
           </div>
         ) : (
-          registrationRows.map(({ patient, encounter }) => (
+          filteredRegistrationRows.map(({ patient, encounter }) => (
             <div
               key={encounter.id}
               className="rounded-2xl bg-white p-5 shadow-sm"
@@ -77,6 +130,12 @@ export default function RegistrationView({
       {getFullPatientName(patient)}
     </h2>
     {getRegistrationStatusBadge(encounter.status)}
+    {newReturningBadge?.(encounter)}
+    {getDailyCardNumber(patient, encounter) && (
+      <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800">
+        Daily #{getDailyCardNumber(patient, encounter)}
+      </span>
+    )}
   </div>
 
   <div className="mt-1 text-sm text-slate-600">

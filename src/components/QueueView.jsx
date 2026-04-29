@@ -8,6 +8,7 @@ export default function QueueView({
   getPatientBoardName,
   spanishBadge,
   priorityBadge,
+  newReturningBadge,
   diabetesBadge,
   elevatorBadge,
   fluBadge,
@@ -28,6 +29,7 @@ export default function QueueView({
 }) {
 
   const [queueAssignmentDrafts, setQueueAssignmentDrafts] = useState({});
+  const [queueSearch, setQueueSearch] = useState("");
   const [showRefillApproveModal, setShowRefillApproveModal] = useState(false);
   const [selectedRefillRequest, setSelectedRefillRequest] = useState(null);
   const [selectedAttendingId, setSelectedAttendingId] = useState("");
@@ -70,6 +72,43 @@ export default function QueueView({
       );
     }
     return null;
+  }
+
+  function normalizeSearchText(value) {
+    return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  }
+
+  function getDailyCardNumber(patient, encounter) {
+    return (
+      encounter?.dailyNumber ??
+      encounter?.daily_number ??
+      encounter?.cardNumber ??
+      encounter?.card_number ??
+      encounter?.queueNumber ??
+      encounter?.queue_number ??
+      patient?.dailyNumber ??
+      patient?.daily_number ??
+      patient?.cardNumber ??
+      patient?.card_number ??
+      patient?.queueNumber ??
+      patient?.queue_number ??
+      ""
+    );
+  }
+
+  function rowMatchesQueueSearch(patient, encounter) {
+    const query = normalizeSearchText(queueSearch);
+    if (!query) return true;
+
+    const name = normalizeSearchText(getPatientBoardName(patient));
+    const dob = normalizeSearchText(patient?.dob);
+    const dailyCardNumber = normalizeSearchText(getDailyCardNumber(patient, encounter));
+
+    return (
+      name.includes(query) ||
+      dob.includes(query) ||
+      dailyCardNumber.includes(query)
+    );
   }
 
   function normalizeAssignmentName(value) {
@@ -236,17 +275,21 @@ export default function QueueView({
     }
   }
 
+  const filteredWaitingEncounterRows = waitingEncounterRows.filter(({ patient, encounter }) =>
+    rowMatchesQueueSearch(patient, encounter)
+  );
+
   const unassignedRows =
     userRole === "leadership"
-      ? waitingEncounterRows.filter(
+      ? filteredWaitingEncounterRows.filter(
         ({ encounter }) =>
           !encounter.assignedStudent && !encounter.assignedUpperLevel
       )
-      : waitingEncounterRows;
+      : filteredWaitingEncounterRows;
 
   const assignedRows =
     userRole === "leadership"
-      ? waitingEncounterRows.filter(
+      ? filteredWaitingEncounterRows.filter(
         ({ encounter }) =>
           encounter.assignedStudent || encounter.assignedUpperLevel
       )
@@ -276,9 +319,9 @@ export default function QueueView({
 
           <input
             className="w-full rounded-lg border p-3 lg:w-80"
-            placeholder="Search by MRN, first name, last name, DOB, last 4 SSN"
-            value={`${searchForm.mrn} ${searchForm.firstName} ${searchForm.lastName} ${searchForm.last4ssn}`.trim()}
-            readOnly
+            placeholder="Search by name, DOB, or daily card #"
+            value={queueSearch}
+            onChange={(e) => setQueueSearch(e.target.value)}
           />
         </div>
 
@@ -472,6 +515,12 @@ export default function QueueView({
                 {/* Badges */}
                 <div className="flex flex-wrap gap-2">
                   {dualVisitBadge(encounter)}
+                  {newReturningBadge?.(encounter)}
+                  {getDailyCardNumber(patient, encounter) && (
+                    <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800">
+                      Daily #{getDailyCardNumber(patient, encounter)}
+                    </span>
+                  )}
                   {priorityBadge(encounter)}
                   {spanishBadge(encounter)}
                   {diabetesBadge?.(encounter)}
@@ -590,6 +639,12 @@ export default function QueueView({
 
                   <div className="flex flex-wrap gap-2">
                     {dualVisitBadge(encounter)}
+                    {newReturningBadge?.(encounter)}
+                    {getDailyCardNumber(patient, encounter) && (
+                      <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800">
+                        Daily #{getDailyCardNumber(patient, encounter)}
+                      </span>
+                    )}
                     {priorityBadge(encounter)}
                     {spanishBadge(encounter)}
                     {diabetesBadge?.(encounter)}

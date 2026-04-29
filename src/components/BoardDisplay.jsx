@@ -45,6 +45,7 @@ export default function BoardDisplay({
   getStudentBoardName,
   spanishBadge,
   priorityBadge,
+  newReturningBadge,
   diabetesBadge,
   elevatorBadge,
   fluBadge,
@@ -190,6 +191,12 @@ export default function BoardDisplay({
                       </span>
                     )}
 
+                    {newReturningBadge?.(primaryEncounter)}
+                    {primaryEncounter.dailyNumber && (
+                      <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800">
+                        #{primaryEncounter.dailyNumber}
+                      </span>
+                    )}
                     {priorityBadge(primaryEncounter)}
                     {spanishBadge(primaryEncounter)}
                     {diabetesBadge(primaryEncounter)}

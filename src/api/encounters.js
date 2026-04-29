@@ -32,6 +32,7 @@ function mapEncounterRow(row) {
     roomNumber: row.room || "",
     notes: row.notes || "",
 
+    dailyNumber: intake.dailyNumber ?? "",
     newReturning: intake.newReturning ?? "Returning",
     visitLocation: intake.visitLocation ?? "In Clinic",
     transportation: intake.transportation ?? "",
@@ -101,6 +102,7 @@ export async function fetchEncounters() {
 
 function buildIntakeData(encounter) {
   return {
+    dailyNumber: encounter.dailyNumber ?? "",
     newReturning: encounter.newReturning ?? "Returning",
     visitLocation: encounter.visitLocation ?? "In Clinic",
     transportation: encounter.transportation ?? "",
@@ -267,6 +269,7 @@ export async function updateEncounterInSupabase(encounterId, updates) {
   }
 
   const intakeFields = [
+    "dailyNumber",
     "newReturning",
     "visitLocation",
     "transportation",
@@ -301,6 +304,7 @@ export async function updateEncounterInSupabase(encounterId, updates) {
 
   if (hasIntakeUpdates) {
     payload.intake_data = {
+      dailyNumber: updates.dailyNumber ?? "",
       newReturning: updates.newReturning ?? "Returning",
       visitLocation: updates.visitLocation ?? "In Clinic",
       transportation: updates.transportation ?? "",

@@ -121,6 +121,68 @@ import {
   sortEncountersByDate,
 } from "./utils";
 
+function newReturningBadge(encounter) {
+  const value = String(encounter?.newReturning || encounter?.new_returning || "").trim().toLowerCase();
+
+  if (value === "new") {
+    return (
+      <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">
+        New
+      </span>
+    );
+  }
+
+  if (value === "returning") {
+    return (
+      <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+        Returning
+      </span>
+    );
+  }
+
+  return null;
+}
+
+function getDailyVisitNumber(row) {
+  const patient = row?.patient || {};
+  const encounter = row?.encounter || {};
+
+  // This is the temporary number on the paper card for today's clinic.
+  // MRN is intentionally NOT used because it gets added later.
+  const candidates = [
+    encounter.dailyNumber, encounter.daily_number,
+    encounter.cardNumber, encounter.card_number,
+    encounter.queueNumber, encounter.queue_number,
+    encounter.visitNumber, encounter.visit_number,
+    encounter.registrationNumber, encounter.registration_number,
+    encounter.patientNumber, encounter.patient_number,
+    patient.dailyNumber, patient.daily_number,
+    patient.cardNumber, patient.card_number,
+    patient.queueNumber, patient.queue_number,
+    patient.visitNumber, patient.visit_number,
+    patient.registrationNumber, patient.registration_number,
+    patient.patientNumber, patient.patient_number,
+  ];
+
+  for (const value of candidates) {
+    const match = String(value || "").match(/\d+/);
+    if (match) return Number(match[0]);
+  }
+
+  return Number.POSITIVE_INFINITY;
+}
+
+function sortRowsByDailyNumberThenTime(a, b) {
+  const aNumber = getDailyVisitNumber(a);
+  const bNumber = getDailyVisitNumber(b);
+
+  if (aNumber !== bNumber) return aNumber - bNumber;
+
+  const aTime = new Date(a?.encounter?.createdAt || 0).getTime();
+  const bTime = new Date(b?.encounter?.createdAt || 0).getTime();
+  return aTime - bTime;
+}
+
 
 function priorityBadge(encounter) {
   if (encounter.transportation === "Bus/Public Transport") {
@@ -3174,11 +3236,7 @@ const [soapDraft, setSoapDraft] = useState({
 
       return false;
     })
-    .sort((a, b) => {
-      const aTime = new Date(a.encounter.createdAt || 0).getTime();
-      const bTime = new Date(b.encounter.createdAt || 0).getTime();
-      return aTime - bTime;
-    });
+    .sort(sortRowsByDailyNumberThenTime);
 }, [allEncounterRows, userRole, isLeadershipView]);
 
   async function removeFromRegistration(patientId, encounterId) {
@@ -3428,6 +3486,7 @@ async function handleUndergradStartEncounter(data) {
     const encounterBase = {
       clinicDate: formatClinicDate(),
       createdAt: new Date().toISOString(),
+      dailyNumber: data.dailyNumber || "",
       newReturning: data.matchedPatientId ? "Returning" : (data.isReturning || "New"),
       visitLocation: "In Clinic",
       chiefComplaint: "",
@@ -3763,26 +3822,13 @@ async function handleUndergradStartEncounter(data) {
 
         if (aUnassigned !== bUnassigned) return aUnassigned - bUnassigned;
 
-        const aBus =
-          a.encounter.transportation === "Bus/Public Transport" ? 0 : 1;
-        const bBus =
-          b.encounter.transportation === "Bus/Public Transport" ? 0 : 1;
-
-        if (aBus !== bBus) return aBus - bBus;
-
-        const aTime = new Date(a.encounter.createdAt || 0).getTime();
-        const bTime = new Date(b.encounter.createdAt || 0).getTime();
-        return aTime - bTime;
+        return sortRowsByDailyNumberThenTime(a, b);
       });
 
       return rows;
     }
 
-    return [...rows].sort((a, b) => {
-      const aTime = new Date(a.encounter.createdAt || 0).getTime();
-      const bTime = new Date(b.encounter.createdAt || 0).getTime();
-      return aTime - bTime;
-    });
+    return [...rows].sort(sortRowsByDailyNumberThenTime);
   }, [
     filteredEncounterRows,
     profileNameMap,
@@ -4261,6 +4307,7 @@ async function handleUndergradStartEncounter(data) {
       sex: selectedPatient.sex || "",
       ethnicity: selectedPatient.ethnicity || "",
       pronouns: selectedPatient.pronouns || "",
+      dailyNumber: selectedEncounter.dailyNumber || "",
       newReturning: selectedEncounter.newReturning || "",
       ttuStudent: selectedPatient.ttuStudent || false,
       visitLocation: selectedEncounter.visitLocation || "",
@@ -4455,6 +4502,7 @@ async function handleUndergradStartEncounter(data) {
         const savedEncounter = await updateEncounterInSupabase(selectedEncounter.id, {
           chiefComplaint: intakeForm.chiefComplaint,
           notes: intakeForm.notes,
+          dailyNumber: intakeForm.dailyNumber,
           newReturning: intakeForm.newReturning,
           visitLocation: intakeForm.visitLocation,
           transportation: intakeForm.transportation,
@@ -4507,7 +4555,8 @@ async function handleUndergradStartEncounter(data) {
                       ...encounter,
                       status: nextStatus,
                       leadershipIntakeComplete: true,
-                      newReturning: intakeForm.newReturning,
+                      dailyNumber: intakeForm.dailyNumber,
+          newReturning: intakeForm.newReturning,
                       visitLocation: intakeForm.visitLocation,
                       chiefComplaint: intakeForm.chiefComplaint,
                       notes: intakeForm.notes,
@@ -4598,6 +4647,7 @@ async function handleUndergradStartEncounter(data) {
           status: mapDbStatusToUi(savedEncounter.status),
           roomNumber: savedEncounter.room || encounter.roomNumber || "",
 
+          dailyNumber: intakeData.dailyNumber ?? encounter.dailyNumber ?? "",
           newReturning: intakeData.newReturning ?? encounter.newReturning ?? "Returning",
           visitLocation: intakeData.visitLocation ?? encounter.visitLocation ?? "In Clinic",
           transportation: intakeData.transportation ?? encounter.transportation ?? "",
@@ -4727,6 +4777,8 @@ async function handleUndergradStartEncounter(data) {
                 status: mapDbStatusToUi(savedEncounter.status),
                 roomNumber: savedEncounter.room || encounter.roomNumber || "",
 
+                dailyNumber:
+                  intakeData.dailyNumber ?? encounter.dailyNumber ?? "",
                 newReturning:
                   intakeData.newReturning ?? encounter.newReturning ?? "Returning",
                 visitLocation:
@@ -5372,35 +5424,26 @@ async function handleUndergradStartEncounter(data) {
     }
   }
   async function clearEncounterRoom() {
-    if (!canManageRooms) return;
-    if (leadershipActionLocked) return;
-    if (!selectedPatient || !selectedEncounter) return;
+  if (!canManageRooms) return;
+  if (leadershipActionLocked) return;
+  if (!selectedPatient || !selectedEncounter) return;
 
-    lockLeadershipActions();
+  lockLeadershipActions();
 
-    try {
-      await applyEncounterTransition(selectedEncounter.id, {
-        roomNumber: "",
-        status: "in_visit",
-      });
-
-    } catch (error) {
-      console.error("Failed to clear encounter room:", error);
-      showToast({
-        title: "Failed to clear room",
-        message: error.message,
-        type: "error",
-        duration: 5000,
-      });
-      return;
-    }
-
-
-    setAssignmentForm((prev) => ({
-      ...prev,
-      roomNumber: "",
-    }));
+  try {
+    await applyEncounterTransition(selectedEncounter.id, {
+      status: "done",
+    });
+  } catch (error) {
+    console.error("Failed to complete visit / free room:", error);
+    showToast({
+      title: "Failed to complete visit",
+      message: error.message,
+      type: "error",
+      duration: 5000,
+    });
   }
+}
 
   function updatePatientField(field, value) {
     if (!selectedPatient) return;
@@ -7566,6 +7609,7 @@ async function handleUndergradStartEncounter(data) {
         getStudentBoardName={getStudentBoardName}
         spanishBadge={spanishBadge}
         priorityBadge={priorityBadge}
+        newReturningBadge={newReturningBadge}
         elevatorBadge={elevatorBadge}
         diabetesBadge={diabetesBadge}
         fluBadge={fluBadge}
@@ -7804,6 +7848,7 @@ async function handleUndergradStartEncounter(data) {
               openLeadershipRegistration={openLeadershipRegistration}
               getFullPatientName={getFullPatientName}
               formatDate={formatDate}
+              newReturningBadge={newReturningBadge}
               userRole={userRole}
               isLeadershipView={isLeadershipView}
               onRemoveFromRegistration={removeFromRegistration}
@@ -7826,6 +7871,7 @@ async function handleUndergradStartEncounter(data) {
               getPatientBoardName={getPatientBoardName}
               spanishBadge={spanishBadge}
               priorityBadge={priorityBadge}
+              newReturningBadge={newReturningBadge}
               diabetesBadge={diabetesBadge}
               elevatorBadge={elevatorBadge}
               fluBadge={fluBadge}
@@ -7867,6 +7913,7 @@ async function handleUndergradStartEncounter(data) {
               getStudentBoardName={getStudentBoardName}
               spanishBadge={spanishBadge}
               priorityBadge={priorityBadge}
+              newReturningBadge={newReturningBadge}
               elevatorBadge={elevatorBadge}
               diabetesBadge={diabetesBadge}
               fluBadge={fluBadge}
@@ -7938,6 +7985,7 @@ async function handleUndergradStartEncounter(data) {
               elevatorBadge={elevatorBadge}
               fluBadge={fluBadge}
               priorityBadge={priorityBadge}
+              newReturningBadge={newReturningBadge}
               assignmentForm={assignmentForm}
               setAssignmentForm={setAssignmentForm}
               studentNameOptions={studentNameOptions}

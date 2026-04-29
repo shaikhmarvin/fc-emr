@@ -99,6 +99,7 @@ const INCOME_OPTIONS = [
 ];
 
 const EMPTY_FORM = {
+  dailyNumber: "",
   firstName: "",
   preferredName: "",
   lastName: "",
@@ -326,6 +327,19 @@ zipCode: prev.zipCode || matchedPatient.zipCode || "",
             </h2>
 
             <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Daily Card #
+                </label>
+                <input
+                  inputMode="numeric"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={form.dailyNumber}
+                  onChange={(e) => handleChange("dailyNumber", e.target.value.replace(/\D/g, ""))}
+                  placeholder="Example: 7"
+                />
+              </div>
+              <div className="hidden md:block" />
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
                   First Name
