@@ -32,6 +32,24 @@ function getVisitTypeLabel(visitType) {
     }
 }
 
+function getDailyCardNumber(patient, encounter) {
+    return (
+        encounter?.dailyNumber ??
+        encounter?.daily_number ??
+        encounter?.cardNumber ??
+        encounter?.card_number ??
+        encounter?.queueNumber ??
+        encounter?.queue_number ??
+        patient?.dailyNumber ??
+        patient?.daily_number ??
+        patient?.cardNumber ??
+        patient?.card_number ??
+        patient?.queueNumber ??
+        patient?.queue_number ??
+        ""
+    );
+}
+
 function matchesSearch(row, query, getFullPatientName) {
     if (!query.trim()) return true;
 
@@ -43,6 +61,7 @@ function matchesSearch(row, query, getFullPatientName) {
     const specialty = getSpecialtyLabel(row.encounter.specialtyType).toLowerCase();
     const visitType = getVisitTypeLabel(row.encounter.visitType).toLowerCase();
     const complaint = (row.encounter.chiefComplaint || "").toLowerCase();
+    const dailyCardNumber = String(getDailyCardNumber(row.patient, row.encounter) || "").toLowerCase();
 
     return (
         patientName.includes(q) ||
@@ -51,7 +70,8 @@ function matchesSearch(row, query, getFullPatientName) {
         phone.includes(q) ||
         specialty.includes(q) ||
         visitType.includes(q) ||
-        complaint.includes(q)
+        complaint.includes(q) ||
+        dailyCardNumber.includes(q)
     );
 }
 
@@ -103,6 +123,12 @@ function SpecialtyTable({
                                                 {getFullPatientName(patient)}
                                             </div>
 
+                                            {getDailyCardNumber(patient, encounter) && (
+                                                <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800">
+                                                    Daily #{getDailyCardNumber(patient, encounter)}
+                                                </span>
+                                            )}
+
                                             {isDualVisit(encounter) && (
                                                 <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
                                                     Dual Visit
@@ -111,7 +137,7 @@ function SpecialtyTable({
                                         </div>
 
                                         <div className="mt-1 text-xs text-slate-500">
-                                            MRN: {patient.mrn || "—"}
+                                            MRN: {patient.mrn || "—"}{getDailyCardNumber(patient, encounter) ? ` • Daily #${getDailyCardNumber(patient, encounter)}` : ""}
                                         </div>
                                     </div>
 
@@ -159,6 +185,12 @@ function SpecialtyTable({
                                                 {getFullPatientName(patient)}
                                             </div>
 
+                                            {getDailyCardNumber(patient, encounter) && (
+                                                <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800">
+                                                    Daily #{getDailyCardNumber(patient, encounter)}
+                                                </span>
+                                            )}
+
                                             {isDualVisit(encounter) && (
                                                 <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
                                                     Dual Visit
@@ -166,7 +198,7 @@ function SpecialtyTable({
                                             )}
                                         </div>
                                         <div className="mt-1 text-xs text-slate-500">
-                                            MRN: {patient.mrn || "—"}
+                                            MRN: {patient.mrn || "—"}{getDailyCardNumber(patient, encounter) ? ` • Daily #${getDailyCardNumber(patient, encounter)}` : ""}
                                         </div>
                                     </div>
 
@@ -262,7 +294,7 @@ export default function SpecialtyQueueView({
                             type="text"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            placeholder="Search name, DOB, MRN, phone, specialty, complaint"
+                            placeholder="Search name, DOB, daily #, MRN, phone, specialty, complaint"
                             className="min-h-[44px] w-full rounded-lg border border-slate-300 px-3 py-2 text-sm sm:text-base"
                         />
                     </div>

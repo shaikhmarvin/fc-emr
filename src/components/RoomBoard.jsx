@@ -95,6 +95,9 @@ export default function RoomBoard({
   openPatientChart,
   isLeadershipView,
   SPECIALTY_ROOM_RULES,
+  todayStaffRoster,
+  onTodayStaffRosterChange,
+onTodayStaffRosterSave,
 }) {
   return (
     <div className="space-y-4 p-3 sm:p-4 lg:p-6">
@@ -134,6 +137,46 @@ export default function RoomBoard({
         <div className="rounded-2xl bg-white p-3 shadow">
           <p className="text-sm text-slate-500">In Visit</p>
           <p className="mt-1 text-2xl font-bold">{inVisitCount}</p>
+        </div>
+      </div>
+
+      <div className="rounded-2xl bg-white p-3 shadow">
+        <div className="grid grid-cols-1 gap-2 lg:grid-cols-3">
+          {[
+            { key: "attendings", label: "Attendings here today", placeholder: "Dr. Prabhu, Dr. Bennett" },
+            { key: "residents", label: "Residents here today", placeholder: "Resident names" },
+            { key: "upperLevels", label: "Upper Levels here today", placeholder: "MS3/MS4 names" },
+          ].map((field) => (
+            <label key={field.key} className="block">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {field.label}
+              </span>
+              <input
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                value={todayStaffRoster?.[field.key] || ""}
+                onChange={(e) =>
+  onTodayStaffRosterChange?.((prev) => ({
+    ...(prev || {}),
+    [field.key]: e.target.value,
+  }))
+}
+onBlur={async (e) => {
+  const nextRoster = {
+    ...(todayStaffRoster || {}),
+    [field.key]: e.target.value,
+  };
+
+  onTodayStaffRosterChange?.(nextRoster);
+
+  try {
+    await onTodayStaffRosterSave?.(nextRoster);
+  } catch (error) {
+    console.error("Failed to save today staff roster:", error);
+  }
+}}
+              />
+            </label>
+          ))}
         </div>
       </div>
 

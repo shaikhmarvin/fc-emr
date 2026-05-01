@@ -25,6 +25,10 @@ import {
   approveRefillRequestInSupabase,
   deleteRefillRequestInSupabase,
 } from "./api/encounters";
+import {
+  fetchTodayStaffRoster,
+  saveTodayStaffRoster,
+} from "./api/clinicStaffRoster";
 import { useAuthSession } from "./hooks/useAuthSession";
 import { useClinicData } from "./hooks/useClinicData";
 import ToastStack from "./components/ToastStack";
@@ -1142,12 +1146,61 @@ async function refreshClinicSummaryData() {
     new URLSearchParams(window.location.search).get("display") === "board";
   const [selectedPatientId, setSelectedPatientId] = useState(null);
   const [selectedEncounterId, setSelectedEncounterId] = useState(null);
+  const [todayStaffRoster, setTodayStaffRoster] = useState({
+  attendings: "",
+  residents: "",
+  upperLevels: "",
+});
   const [refillRequests, setRefillRequests] = useState([]);
   const { patients, setPatients, refreshClinicData } = useClinicData({
     authReady,
     session,
     userRole,
   });
+
+  useEffect(() => {
+  if (!session) return;
+
+  let cancelled = false;
+
+  async function loadRoster() {
+    const roster = await fetchTodayStaffRoster();
+    if (!cancelled) {
+      setTodayStaffRoster(roster);
+    }
+  }
+
+  loadRoster();
+
+  const channel = supabase
+    .channel("clinic_staff_roster_today")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "clinic_staff_roster",
+      },
+      () => {
+        loadRoster();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    cancelled = true;
+    supabase.removeChannel(channel);
+  };
+}, [session]);
+
+async function handleSaveTodayStaffRoster() {
+  try {
+    await saveTodayStaffRoster(todayStaffRoster);
+  } catch (error) {
+    showToast?.("Unable to save staff roster.", "error");
+  }
+}
+
   const dashboardSelectedPatient =
     patients.find((p) => p.id === dashboardSelectedPatientId) || null;
 
@@ -4496,8 +4549,7 @@ async function handleUndergradStartEncounter(data) {
         });
 
         console.log("savedPatient update worked:", savedPatient);
-        const nextStatus =
-          selectedEncounter.status === "undergrad_complete" ? "ready" : "started";
+        const nextStatus = "ready";
 
         const savedEncounter = await updateEncounterInSupabase(selectedEncounter.id, {
           chiefComplaint: intakeForm.chiefComplaint,
@@ -5407,9 +5459,17 @@ async function handleUndergradStartEncounter(data) {
     lockLeadershipActions();
 
     const updates =
-      status === "ready"
-        ? { status: "ready", roomNumber: "" }
-        : { status };
+  status === "ready"
+    ? {
+        status: "ready",
+        roomNumber: "",
+        assignedStudent: "",
+        assignedUpperLevel: "",
+        skipUpperLevel: false,
+        skipUpperLevelBy: null,
+        skipUpperLevelAt: null,
+      }
+    : { status };
 
     try {
       await applyEncounterTransition(selectedEncounter.id, updates);
@@ -7616,6 +7676,7 @@ async function handleUndergradStartEncounter(data) {
         papBadge={papBadge}
         getStatusClasses={getStatusClasses}
         allEncounterRows={allEncounterRows}
+        todayStaffRoster={todayStaffRoster}
       />
     );
   }
@@ -7879,6 +7940,8 @@ async function handleUndergradStartEncounter(data) {
               formatWaitTime={formatWaitTime}
               studentNameOptions={studentNameOptions}
               upperLevelNameOptions={upperLevelNameOptions}
+              activeStudents={activeStudents}
+activeUpperLevels={activeUpperLevels}
               ROOM_OPTIONS={roomDropdownOptions}
               onAssignFromQueue={assignEncounterFromQueue}
               refillRequests={refillRequests}
@@ -7925,6 +7988,9 @@ async function handleUndergradStartEncounter(data) {
               openPatientChart={openPatientChart}
               isLeadershipView={canManageRooms}
               SPECIALTY_ROOM_RULES={specialtyRoomRulesForBoard}
+              todayStaffRoster={todayStaffRoster}
+              onTodayStaffRosterChange={setTodayStaffRoster}
+              onTodayStaffRosterSave={handleSaveTodayStaffRoster}
             />
           )}
           {activeView === "formulary" && (

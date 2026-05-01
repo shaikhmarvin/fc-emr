@@ -16,6 +16,8 @@ export default function QueueView({
   formatWaitTime,
   studentNameOptions,
   upperLevelNameOptions,
+  activeStudents,
+  activeUpperLevels,
   ROOM_OPTIONS,
   onAssignFromQueue,
   refillRequests,
@@ -30,6 +32,7 @@ export default function QueueView({
 
   const [queueAssignmentDrafts, setQueueAssignmentDrafts] = useState({});
   const [queueSearch, setQueueSearch] = useState("");
+  const [openAssignmentMenu, setOpenAssignmentMenu] = useState(null);
   const [showRefillApproveModal, setShowRefillApproveModal] = useState(false);
   const [selectedRefillRequest, setSelectedRefillRequest] = useState(null);
   const [selectedAttendingId, setSelectedAttendingId] = useState("");
@@ -275,8 +278,90 @@ export default function QueueView({
     }
   }
 
-  const filteredWaitingEncounterRows = waitingEncounterRows.filter(({ patient, encounter }) =>
-    rowMatchesQueueSearch(patient, encounter)
+  function normalizeName(value) {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function getPersonDisplayName(person) {
+  if (!person) return "";
+
+  if (typeof person === "string") {
+    return profileNameMap?.[person] || person;
+  }
+
+  return (
+    person.fullName ||
+    person.full_name ||
+    person.displayName ||
+    person.display_name ||
+    person.name ||
+    profileNameMap?.[person.id] ||
+    profileNameMap?.[person.user_id] ||
+    person.email ||
+    ""
+  );
+}
+
+function activeNameSet(list) {
+  const set = new Set();
+
+  (list || []).forEach((person) => {
+    const displayName = getPersonDisplayName(person);
+    if (displayName) set.add(normalizeName(displayName));
+
+    if (person?.id && profileNameMap?.[person.id]) {
+      set.add(normalizeName(profileNameMap[person.id]));
+    }
+
+    if (person?.user_id && profileNameMap?.[person.user_id]) {
+      set.add(normalizeName(profileNameMap[person.user_id]));
+    }
+  });
+
+  return set;
+}
+
+const activeStudentNames = activeNameSet(activeStudents);
+const activeUpperLevelNames = activeNameSet(activeUpperLevels);
+
+function mergeActiveIntoOptions(options, activeList) {
+  const names = new Set((options || []).filter(Boolean));
+
+  (activeList || []).forEach((person) => {
+    const displayName = getPersonDisplayName(person);
+    if (displayName) names.add(displayName);
+  });
+
+  return [...names];
+}
+
+function sortActiveFirst(options, activeSet) {
+  return [...(options || [])].sort((a, b) => {
+    const aActive = activeSet.has(normalizeName(a));
+    const bActive = activeSet.has(normalizeName(b));
+
+    if (aActive !== bActive) return aActive ? -1 : 1;
+    return String(a).localeCompare(String(b));
+  });
+}
+
+const sortedStudentNameOptions = sortActiveFirst(
+  mergeActiveIntoOptions(studentNameOptions, activeStudents),
+  activeStudentNames
+);
+
+const sortedUpperLevelNameOptions = sortActiveFirst(
+  mergeActiveIntoOptions(upperLevelNameOptions, activeUpperLevels),
+  activeUpperLevelNames
+);
+
+  const filteredWaitingEncounterRows = waitingEncounterRows.filter(
+    ({ patient, encounter }) => {
+      if (encounter?.visitType === "specialty") return false;
+      if (encounter?.visit_type === "specialty") return false;
+
+      return rowMatchesQueueSearch(patient, encounter);
+    }
   );
 
   const unassignedRows =
@@ -476,7 +561,7 @@ export default function QueueView({
             <div
               key={encounter.id}
               onClick={(e) => {
-                if (e.target.closest("select, button")) return;
+                if (e.target.closest("select, input, button")) return;
                 openPatientChart(patient.id, encounter.id);
               }}
               className="cursor-pointer rounded-xl border bg-white p-3 shadow-sm transition hover:bg-slate-50"
@@ -532,35 +617,151 @@ export default function QueueView({
                 {/* Leadership controls */}
                 {userRole === "leadership" && (
                   <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <select
-                      className="min-h-[40px] w-full rounded-lg border px-3 py-2 text-sm"
-                      value={getDraftValue(encounter, "assignedStudent")}
-                      onChange={(e) =>
-                        updateDraft(encounter.id, "assignedStudent", e.target.value)
-                      }
-                    >
-                      <option value="">Student</option>
-                      {studentNameOptions.map((name) => (
-                        <option key={name} value={name}>
-                          {name}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="space-y-1">
+  <label className="text-xs font-medium text-slate-600">
+    Student
+  </label>
 
-                    <select
-                      className="min-h-[40px] w-full rounded-lg border px-3 py-2 text-sm"
-                      value={getDraftValue(encounter, "assignedUpperLevel")}
-                      onChange={(e) =>
-                        updateDraft(encounter.id, "assignedUpperLevel", e.target.value)
-                      }
-                    >
-                      <option value="">Upper Level</option>
-                      {upperLevelNameOptions.map((name) => (
-                        <option key={name} value={name}>
-                          {name}
-                        </option>
-                      ))}
-                    </select>
+  <div className="relative">
+    <input
+      className={`min-h-[40px] w-full rounded-lg px-3 py-2 text-sm ${
+  activeStudentNames.has(
+    normalizeName(getDraftValue(encounter, "assignedStudent"))
+  )
+    ? "border-green-500 bg-green-50 text-green-800 font-semibold"
+    : "border-slate-300"
+}`}
+      value={getDraftValue(encounter, "assignedStudent")}
+      onChange={(e) => {
+        updateDraft(encounter.id, "assignedStudent", e.target.value);
+        setOpenAssignmentMenu(`${encounter.id}-student`);
+      }}
+      onFocus={() => setOpenAssignmentMenu(`${encounter.id}-student`)}
+      onBlur={() => {
+        setTimeout(() => setOpenAssignmentMenu(null), 150);
+      }}
+      placeholder="Student name"
+    />
+
+    {openAssignmentMenu === `${encounter.id}-student` && (
+      <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border bg-white shadow-lg">
+        {sortedStudentNameOptions.map((name) => {
+          const isActive = activeStudentNames.has(normalizeName(name));
+          const isSelected =
+            normalizeName(getDraftValue(encounter, "assignedStudent")) ===
+            normalizeName(name);
+
+          return (
+            <button
+              key={name}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                updateDraft(encounter.id, "assignedStudent", name);
+                setOpenAssignmentMenu(null);
+              }}
+              className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 ${
+                isSelected ? "bg-blue-50 font-semibold text-blue-700" : "text-slate-700"
+              }`}
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <span
+                  className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                    isActive ? "bg-green-500" : "bg-slate-300"
+                  }`}
+                />
+                <span className="truncate">{name}</span>
+              </span>
+
+              {isActive && (
+                <span className="shrink-0 text-[11px] font-medium text-green-700">
+                  Active
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    )}
+  </div>
+
+  <p className="text-[11px] text-slate-500">
+    Active Today: {activeStudents?.length || 0}
+  </p>
+</div>
+
+                    <div className="space-y-1">
+  <label className="text-xs font-medium text-slate-600">
+    Upper Level
+  </label>
+
+  <div className="relative">
+    <input
+      className={`min-h-[40px] w-full rounded-lg px-3 py-2 text-sm ${
+  activeUpperLevelNames.has(
+    normalizeName(getDraftValue(encounter, "assignedUpperLevel"))
+  )
+    ? "border-green-500 bg-green-50 text-green-800 font-semibold"
+    : "border-slate-300"
+}`}
+      value={getDraftValue(encounter, "assignedUpperLevel")}
+      onChange={(e) => {
+        updateDraft(encounter.id, "assignedUpperLevel", e.target.value);
+        setOpenAssignmentMenu(`${encounter.id}-upper`);
+      }}
+      onFocus={() => setOpenAssignmentMenu(`${encounter.id}-upper`)}
+      onBlur={() => {
+        setTimeout(() => setOpenAssignmentMenu(null), 150);
+      }}
+      placeholder="Upper level name"
+    />
+
+    {openAssignmentMenu === `${encounter.id}-upper` && (
+      <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border bg-white shadow-lg">
+        {sortedUpperLevelNameOptions.map((name) => {
+          const isActive = activeUpperLevelNames.has(normalizeName(name));
+          const isSelected =
+            normalizeName(getDraftValue(encounter, "assignedUpperLevel")) ===
+            normalizeName(name);
+
+          return (
+            <button
+              key={name}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                updateDraft(encounter.id, "assignedUpperLevel", name);
+                setOpenAssignmentMenu(null);
+              }}
+              className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 ${
+                isSelected ? "bg-blue-50 font-semibold text-blue-700" : "text-slate-700"
+              }`}
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <span
+                  className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                    isActive ? "bg-green-500" : "bg-slate-300"
+                  }`}
+                />
+                <span className="truncate">{name}</span>
+              </span>
+
+              {isActive && (
+                <span className="shrink-0 text-[11px] font-medium text-green-700">
+                  Active
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    )}
+  </div>
+
+  <p className="text-[11px] text-slate-500">
+    Active Today: {activeUpperLevels?.length || 0}
+  </p>
+</div>
 
                     <select
                       className="min-h-[40px] w-full rounded-lg border px-3 py-2 text-sm"
@@ -606,7 +807,7 @@ export default function QueueView({
               <div
                 key={encounter.id}
                 onClick={(e) => {
-                  if (e.target.closest("select, button")) return;
+                  if (e.target.closest("select, input, button")) return;
                   openPatientChart(patient.id, encounter.id);
                 }}
                 className="cursor-pointer rounded-xl border bg-white p-3 shadow-sm transition hover:bg-slate-50"

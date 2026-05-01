@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { getStatusLabel } from "../utils";
 import { getClinicAlert } from "../utils/clinicAlerts";
+import { fetchTodayStaffRoster } from "../api/clinicStaffRoster";
+import { supabase } from "../lib/supabase";
 
 const CLINIC_URL = "https://fc-emr.vercel.app/"; // CHANGE THIS
 const WIFI_NAME = "Volunteers"; // CHANGE THIS
@@ -51,23 +53,72 @@ export default function BoardDisplay({
   fluBadge,
   papBadge,
   getStatusClasses,
+  todayStaffRoster,
 }) {
   const [now, setNow] = useState(new Date());
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setNow(new Date());
-    }, 1000);
+    const [displayRoster, setDisplayRoster] = useState({
+  attendings: "",
+  residents: "",
+  upperLevels: "",
+});
 
-    return () => clearInterval(interval);
-  }, []);
+  useEffect(() => {
+  const interval = setInterval(() => {
+    setNow(new Date());
+  }, 1000);
+
+  return () => clearInterval(interval);
+}, []);
+
+useEffect(() => {
+  let cancelled = false;
+
+  async function loadRoster() {
+    const roster = await fetchTodayStaffRoster();
+    if (!cancelled) {
+      setDisplayRoster(roster);
+    }
+  }
+
+  loadRoster();
+
+  const channel = supabase
+    .channel("board_display_staff_roster")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "clinic_staff_roster",
+      },
+      loadRoster
+    )
+    .subscribe();
+
+  return () => {
+    cancelled = true;
+    supabase.removeChannel(channel);
+  };
+}, []);
+
+  const roster =
+  todayStaffRoster?.attendings ||
+  todayStaffRoster?.residents ||
+  todayStaffRoster?.upperLevels
+    ? todayStaffRoster
+    : displayRoster;
+
+
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-slate-900 p-3 text-white">
-<div className="mb-2 flex items-start justify-between">
+<div className="relative mb-2 flex min-h-[150px] items-start justify-between">
   <div>
     <h1 className="text-3xl font-bold">Free Clinic Room Board</h1>
     <p className="text-sm text-slate-300">Live Display</p>
+
+   
 
 {(() => {
   const alert = getClinicAlert(now);
@@ -89,6 +140,45 @@ export default function BoardDisplay({
   );
 })()}
   </div>
+
+   <div className="absolute left-1/2 top-1/2 w-full max-w-5xl -translate-x-1/2 -translate-y-1/2 px-4">
+  {(roster.attendings || roster.residents || roster.upperLevels) && (
+  <div className="mt-2 grid max-w-5xl grid-cols-3 gap-2">
+    {[
+      { label: "Attendings", value: roster.attendings },
+      { label: "Residents / Fellows", value: roster.residents },
+      { label: "MS III / IV", value: roster.upperLevels },
+    ].map((section) => {
+      const names = String(section.value || "")
+        .split(",")
+        .map((name) => name.trim())
+        .filter(Boolean);
+
+      return (
+        <div
+          key={section.label}
+          className="rounded-xl border border-slate-500 bg-slate-800/90 px-3 py-2 shadow"
+        >
+          <div className="mb-1 border-b border-slate-500 pb-1 text-center text-sm font-extrabold text-white">
+            {section.label}
+          </div>
+
+          <div className="grid grid-cols-1 gap-0.5">
+            {names.slice(0, section.label === "MS III / IV" ? 8 : 5).map((name, idx) => (
+              <div
+                key={`${section.label}-${idx}`}
+                className="truncate text-base font-bold leading-tight text-white"
+              >
+                {idx + 1}. {name}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    })}
+  </div>
+)}
+</div>
 
   <div className="flex items-start gap-4">
     {/* Info Panel */}
