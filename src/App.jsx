@@ -31,6 +31,10 @@ import {
 } from "./api/clinicStaffRoster";
 import { useAuthSession } from "./hooks/useAuthSession";
 import { useClinicData } from "./hooks/useClinicData";
+import {
+  fetchClinicResourceSettings,
+  updateClinicResourceSetting,
+} from "./api/clinicResourceSettings";
 import ToastStack from "./components/ToastStack";
 import { canStartIntake, canManageRoomBoard, canEditFormulary, canPrescribe, canChart, } from "./utils/permissions";
 import { fetchProfiles, updateProfileRole, updateProfileDetails } from "./api/profiles";
@@ -886,9 +890,11 @@ const [lastPharmacyToastKey, setLastPharmacyToastKey] = useState("");
   });
   const [summaryRefreshStatus, setSummaryRefreshStatus] = useState("");
   const [programEntries, setProgramEntries] = useState([]);
-  const [programsLoaded, setProgramsLoaded] = useState(false);
-  const [programSettings, setProgramSettings] = useState([]);
-  const todayIso = formatClinicDate();
+const [programsLoaded, setProgramsLoaded] = useState(false);
+const [programSettings, setProgramSettings] = useState([]);
+const [clinicResourceSettings, setClinicResourceSettings] = useState([]);
+const [clinicResourceSettingsLoaded, setClinicResourceSettingsLoaded] = useState(false);
+const todayIso = formatClinicDate();
 
 const tonightSpecialtyPrograms = useMemo(() => {
   return (programSettings || []).filter(
@@ -915,20 +921,25 @@ const tonightReservedRooms = tonightSpecialtyPrograms.flatMap((program) =>
 
 
   useEffect(() => {
-    if (!session || programsLoaded) return;
+  if (!session || clinicResourceSettingsLoaded) return;
 
-    async function loadProgramEntries() {
-      try {
-        const rows = await fetchProgramEntries();
-        setProgramEntries(rows);
-        setProgramsLoaded(true); // 🔥 important
-      } catch (error) {
-        console.error("Failed to load program entries:", error);
-      }
+  async function loadClinicResourceSettings() {
+    try {
+      const rows = await fetchClinicResourceSettings();
+      setClinicResourceSettings(rows || []);
+      setClinicResourceSettingsLoaded(true);
+    } catch (error) {
+      console.error("Failed to load clinic resource settings:", error);
+      showToast({
+        title: "Settings error",
+        message: "Unable to load intake resource settings.",
+        type: "error",
+      });
     }
+  }
 
-    loadProgramEntries();
-  }, [session, programsLoaded]);
+  loadClinicResourceSettings();
+}, [session, clinicResourceSettingsLoaded]);
 
   useEffect(() => {
     if (!session || papLoaded) return;
@@ -1349,6 +1360,32 @@ const tonightReservedRooms = tonightSpecialtyPrograms.flatMap((program) =>
       showToast?.("Unable to save staff roster.", "error");
     }
   }
+
+  async function saveClinicResourceSetting(resourceKey, updates) {
+  const previousSettings = [...clinicResourceSettings];
+
+  setClinicResourceSettings((prev) =>
+    prev.map((setting) =>
+      setting.resource_key === resourceKey
+        ? { ...setting, ...updates }
+        : setting
+    )
+  );
+
+  try {
+    const saved = await updateClinicResourceSetting(resourceKey, updates);
+
+    setClinicResourceSettings((prev) =>
+      prev.map((setting) =>
+        setting.resource_key === resourceKey ? saved : setting
+      )
+    );
+  } catch (error) {
+    console.error("Failed to save clinic resource setting:", error);
+    setClinicResourceSettings(previousSettings);
+    alert(`Failed to save setting: ${error.message}`);
+  }
+}
 
   const dashboardSelectedPatient =
     patients.find((p) => p.id === dashboardSelectedPatientId) || null;
@@ -4775,6 +4812,7 @@ const tonightReservedRooms = tonightSpecialtyPrograms.flatMap((program) =>
           needsElevator: intakeForm.needsElevator,
           spanishSpeaking: intakeForm.spanishSpeaking,
           mammogramStatus: intakeForm.mammogramStatus,
+          colonoscopyStatus: intakeForm.colonoscopyStatus,
           papStatus: intakeForm.papStatus,
           fluShot: intakeForm.fluShot,
           htn: intakeForm.htn,
@@ -4832,6 +4870,7 @@ const tonightReservedRooms = tonightSpecialtyPrograms.flatMap((program) =>
                       mammogramStatus: intakeForm.mammogramStatus,
                       papStatus: intakeForm.papStatus,
                       fluShot: intakeForm.fluShot,
+                      colonoscopyStatus: intakeForm.colonoscopyStatus,
                       htn: intakeForm.htn,
                       dm: intakeForm.dm,
                       labsLast6Months: intakeForm.labsLast6Months,
@@ -8213,17 +8252,19 @@ tonightReservedRooms={tonightReservedRooms}
 
           {activeView === "registration" && (
             <RegistrationView
-              registrationRows={registrationRows}
-              openUndergradRegistration={openUndergradRegistration}
-              openLeadershipRegistration={openLeadershipRegistration}
-              getFullPatientName={getFullPatientName}
-              formatDate={formatDate}
-              newReturningBadge={newReturningBadge}
-              dualVisitBadge={dualVisitBadge}
-              userRole={userRole}
-              isLeadershipView={isLeadershipView}
-              onRemoveFromRegistration={removeFromRegistration}
-            />
+  registrationRows={registrationRows}
+  openUndergradRegistration={openUndergradRegistration}
+  openLeadershipRegistration={openLeadershipRegistration}
+  getFullPatientName={getFullPatientName}
+  formatDate={formatDate}
+  newReturningBadge={newReturningBadge}
+  dualVisitBadge={dualVisitBadge}
+  userRole={userRole}
+  isLeadershipView={isLeadershipView}
+  onRemoveFromRegistration={removeFromRegistration}
+  clinicResourceSettings={clinicResourceSettings}
+  onSaveClinicResourceSetting={saveClinicResourceSetting}
+/>
           )}
 
           {activeView === "undergrad-intake" && userRole === "undergraduate" && (
@@ -8538,19 +8579,20 @@ tonightReservedRooms={tonightReservedRooms}
       />
 
       <IntakeModal
-        showIntakeModal={showIntakeModal}
-        setShowIntakeModal={setShowIntakeModal}
-        intakeTab={intakeTab}
-        setIntakeTab={setIntakeTab}
-        intakeForm={intakeForm}
-        updateIntakeField={updateIntakeField}
-        submitPatient={submitPatient}
-        isEditingIntake={isEditingIntake}
-        intakeMatchPatientId={intakeMatchPatientId}
-        intakeMatchedPatient={intakeMatchedPatient}
-        autoFilledMatchPatientId={autoFilledMatchPatientId}
-        applyMatchedPatientToIntake={applyMatchedPatientToIntake}
-      />
+  showIntakeModal={showIntakeModal}
+  setShowIntakeModal={setShowIntakeModal}
+  intakeTab={intakeTab}
+  setIntakeTab={setIntakeTab}
+  intakeForm={intakeForm}
+  updateIntakeField={updateIntakeField}
+  submitPatient={submitPatient}
+  isEditingIntake={isEditingIntake}
+  intakeMatchPatientId={intakeMatchPatientId}
+  intakeMatchedPatient={intakeMatchedPatient}
+  autoFilledMatchPatientId={autoFilledMatchPatientId}
+  applyMatchedPatientToIntake={applyMatchedPatientToIntake}
+  clinicResourceSettings={clinicResourceSettings}
+/>
 
       <UndergradRegistrationModal
         show={showUndergradRegistrationModal}

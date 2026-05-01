@@ -11,6 +11,7 @@ export default function IntakeModal({
   intakeMatchedPatient,
   autoFilledMatchPatientId,
   applyMatchedPatientToIntake,
+  clinicResourceSettings = [],
 }) {
   const SEX_OPTIONS = ["Male", "Female", "Other", "Prefer not to say"];
 
@@ -45,6 +46,61 @@ export default function IntakeModal({
     intakeForm.substanceUseTreatment === "Yes" ||
     intakeForm.substanceUseTreatment === "Maybe";
 
+  const patientSex = String(intakeForm.sex || "").trim().toLowerCase();
+const patientAge = Number(intakeForm.age);
+
+function getResourceSetting(resourceKey) {
+  return clinicResourceSettings.find(
+    (setting) => setting.resource_key === resourceKey
+  );
+}
+
+function isResourceAvailable(resourceKey) {
+  const setting = getResourceSetting(resourceKey);
+
+  if (!setting) return false;
+  if (!setting.enabled) return false;
+
+  if (setting.sex_restriction === "female" && patientSex !== "female") {
+    return false;
+  }
+
+  if (setting.sex_restriction === "male" && patientSex !== "male") {
+    return false;
+  }
+
+  if (setting.min_age !== null && setting.min_age !== undefined) {
+    if (!patientAge || patientAge < Number(setting.min_age)) return false;
+  }
+
+  if (setting.max_age !== null && setting.max_age !== undefined) {
+    if (!patientAge || patientAge > Number(setting.max_age)) return false;
+  }
+
+  if (setting.seasonal) {
+    const currentMonth = new Date().getMonth() + 1;
+    const start = Number(setting.season_start_month);
+    const end = Number(setting.season_end_month);
+
+    if (start && end) {
+      const inSeason =
+        start <= end
+          ? currentMonth >= start && currentMonth <= end
+          : currentMonth >= start || currentMonth <= end;
+
+      if (!inSeason) return false;
+    }
+  }
+
+  return true;
+}
+
+const showPapScreening = isResourceAvailable("pap");
+const showMammogramScreening = isResourceAvailable("mammogram");
+const showFluShotScreening = isResourceAvailable("flu_shot");
+const showCounselingService = isResourceAvailable("counseling");
+const showColonoscopyScreening = isResourceAvailable("colonoscopy");
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4 sm:p-6">
       <div className="flex max-h-[95vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
@@ -72,11 +128,10 @@ export default function IntakeModal({
               <button
                 key={tab}
                 onClick={() => setIntakeTab(index)}
-                className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-                  intakeTab === index
+                className={`rounded-full px-4 py-2 text-sm font-medium transition ${intakeTab === index
                     ? "bg-blue-600 text-white shadow-sm"
                     : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
-                }`}
+                  }`}
               >
                 {tab}
               </button>
@@ -340,86 +395,109 @@ export default function IntakeModal({
             <div className="space-y-6">
               <SectionCard title="Screenings">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <Field label="Mammogram">
-                    <select
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      value={intakeForm.mammogramStatus}
-                      onChange={(e) =>
-                        updateIntakeField("mammogramStatus", e.target.value)
-                      }
-                    >
-                      <option value="">Select one</option>
-                      <option>Interested</option>
-                      <option>Not Interested</option>
-                      <option>UTD</option>
-                      <option>N/A</option>
-                    </select>
-                  </Field>
+                  {showMammogramScreening && (
+                    <Field label="Mammogram">
+                      <select
+                        className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                        value={intakeForm.mammogramStatus}
+                        onChange={(e) =>
+                          updateIntakeField("mammogramStatus", e.target.value)
+                        }
+                      >
+                        <option value="">Select one</option>
+                        <option>Interested</option>
+                        <option>Not Interested</option>
+                        <option>UTD</option>
+                        <option>N/A</option>
+                      </select>
+                    </Field>
+                  )}
 
-                  <Field label="Pap Smear">
-                    <select
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      value={intakeForm.papStatus}
-                      onChange={(e) =>
-                        updateIntakeField("papStatus", e.target.value)
-                      }
-                    >
-                      <option value="">Select one</option>
-                      <option>Interested</option>
-                      <option>Not Interested</option>
-                      <option>UTD</option>
-                      <option>N/A</option>
-                    </select>
-                  </Field>
+                  {showPapScreening && (
+                    <Field label="Pap Smear">
+                      <select
+                        className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                        value={intakeForm.papStatus}
+                        onChange={(e) =>
+                          updateIntakeField("papStatus", e.target.value)
+                        }
+                      >
+                        <option value="">Select one</option>
+                        <option>Interested</option>
+                        <option>Not Interested</option>
+                        <option>UTD</option>
+                        <option>N/A</option>
+                      </select>
+                    </Field>
+                  )}
 
-                  <Field label="Flu Shot">
-                    <select
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      value={intakeForm.fluShot}
-                      onChange={(e) =>
-                        updateIntakeField("fluShot", e.target.value)
-                      }
-                    >
-                      <option value="">Select one</option>
-                      <option>Interested</option>
-                      <option>Not Interested</option>
-                      <option>UTD</option>
-                    </select>
-                  </Field>
+                  {showFluShotScreening && (
+                    <Field label="Flu Shot">
+                      <select
+                        className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                        value={intakeForm.fluShot}
+                        onChange={(e) =>
+                          updateIntakeField("fluShot", e.target.value)
+                        }
+                      >
+                        <option value="">Select one</option>
+                        <option>Interested</option>
+                        <option>Not Interested</option>
+                        <option>UTD</option>
+                      </select>
+                    </Field>
+                  )}
+
+                  {showColonoscopyScreening && (
+  <Field label="Colonoscopy">
+    <select
+      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+      value={intakeForm.colonoscopyStatus || ""}
+      onChange={(e) =>
+        updateIntakeField("colonoscopyStatus", e.target.value)
+      }
+    >
+      <option value="">Select one</option>
+      <option>Interested</option>
+      <option>Not Interested</option>
+      <option>UTD</option>
+      <option>N/A</option>
+    </select>
+  </Field>
+)}
 
                   <Field label="HTN / DM + Labs in last 6 months" className="md:col-span-2">
-  <div className="flex flex-wrap items-center gap-4">
-    <InlineCheckbox
-      label="HTN"
-      checked={intakeForm.htn}
-      onChange={(checked) => updateIntakeField("htn", checked)}
-    />
+                    <div className="flex flex-wrap items-center gap-4">
+                      <InlineCheckbox
+                        label="HTN"
+                        checked={intakeForm.htn}
+                        onChange={(checked) => updateIntakeField("htn", checked)}
+                      />
 
-    <InlineCheckbox
-      label="DM"
-      checked={intakeForm.dm}
-      onChange={(checked) => updateIntakeField("dm", checked)}
-    />
+                      <InlineCheckbox
+                        label="DM"
+                        checked={intakeForm.dm}
+                        onChange={(checked) => updateIntakeField("dm", checked)}
+                      />
 
-    <select
-      className={`rounded-xl border px-3 py-2 text-sm ${
-        intakeForm.htn || intakeForm.dm
-          ? "border-slate-200"
-          : "border-slate-200 bg-slate-50 text-slate-400"
-      }`}
-      value={intakeForm.labsLast6Months}
-      onChange={(e) =>
-        updateIntakeField("labsLast6Months", e.target.value)
-      }
-      disabled={!intakeForm.htn && !intakeForm.dm}
-    >
-      <option value="">Labs in last 6 months?</option>
-      <option>Yes</option>
-      <option>No</option>
-      <option>Not sure</option>
-    </select>
-  </div>
-</Field>
+                      <select
+                        className={`rounded-xl border px-3 py-2 text-sm ${intakeForm.htn || intakeForm.dm
+                            ? "border-slate-200"
+                            : "border-slate-200 bg-slate-50 text-slate-400"
+                          }`}
+                        value={intakeForm.labsLast6Months}
+                        onChange={(e) =>
+                          updateIntakeField("labsLast6Months", e.target.value)
+                        }
+                        disabled={!intakeForm.htn && !intakeForm.dm}
+                      >
+                        <option value="">Labs in last 6 months?</option>
+                        <option>Yes</option>
+                        <option>No</option>
+                        <option>Not sure</option>
+                      </select>
+                    </div>
+                  </Field>
 
                   <Field label="Nicotine Use">
                     <select
@@ -619,23 +697,25 @@ export default function IntakeModal({
                     />
                   </Field>
 
-                  <Field label="Counseling">
-                    <input
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      placeholder="Relevant details"
-                      value={
-                        intakeForm.counseling === "N/A"
-                          ? ""
-                          : intakeForm.counseling
-                      }
-                      onChange={(e) =>
-                        updateIntakeField(
-                          "counseling",
-                          e.target.value.trim() === "" ? "N/A" : e.target.value
-                        )
-                      }
-                    />
-                  </Field>
+                  {showCounselingService && (
+                    <Field label="Counseling">
+                      <input
+                        className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                        placeholder="Relevant details"
+                        value={
+                          intakeForm.counseling === "N/A"
+                            ? ""
+                            : intakeForm.counseling
+                        }
+                        onChange={(e) =>
+                          updateIntakeField(
+                            "counseling",
+                            e.target.value.trim() === "" ? "N/A" : e.target.value
+                          )
+                        }
+                      />
+                    </Field>
+                  )}
 
                   <CheckboxCard
                     label="Any mental health screen positive"

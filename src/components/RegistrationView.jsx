@@ -72,9 +72,26 @@ export default function RegistrationView({
   dualVisitBadge,
   userRole,
   isLeadershipView,
-  onRemoveFromRegistration
+  onRemoveFromRegistration,
+  clinicResourceSettings = [],
+  onSaveClinicResourceSetting,
 }) {
   const [registrationSearch, setRegistrationSearch] = useState("");
+  const [showIntakeSettings, setShowIntakeSettings] = useState(false);
+  const MONTH_NAMES = {
+  1: "January",
+  2: "February",
+  3: "March",
+  4: "April",
+  5: "May",
+  6: "June",
+  7: "July",
+  8: "August",
+  9: "September",
+  10: "October",
+  11: "November",
+  12: "December",
+};
 
   const filteredRegistrationRows = useMemo(() => {
     const query = normalizeSearchText(registrationSearch);
@@ -96,12 +113,161 @@ export default function RegistrationView({
   return (
     <div className="p-4 md:p-6">
       <div className="rounded-2xl bg-white p-5 shadow-sm md:p-6">
-        <h1 className="text-2xl font-bold text-slate-900">Registration</h1>
-        <p className="mt-2 text-sm text-slate-600">
-  {userRole === "undergraduate"
-    ? "Complete initial registration details for arriving patients."
-    : "Finish intake and prepare patients for assignment."}
-</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+  <div>
+    <h1 className="text-2xl font-bold text-slate-900">Registration</h1>
+    <p className="mt-2 text-sm text-slate-600">
+      {userRole === "undergraduate"
+        ? "Complete initial registration details for arriving patients."
+        : "Finish intake and prepare patients for assignment."}
+    </p>
+  </div>
+
+  {isLeadershipView && (
+    <button
+      type="button"
+      onClick={() => setShowIntakeSettings((prev) => !prev)}
+      className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+    >
+      ⚙️ Intake Settings
+    </button>
+  )}
+</div>
+
+{isLeadershipView && showIntakeSettings && (
+  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+    <div className="mb-3">
+      <h2 className="text-sm font-semibold text-slate-900">
+        Intake Resource Settings
+      </h2>
+      <p className="mt-1 text-xs text-slate-500">
+        Controls which leadership intake screening/service fields are shown.
+      </p>
+    </div>
+
+    <div className="space-y-3">
+      {clinicResourceSettings.map((setting) => (
+        <div
+          key={setting.resource_key}
+          className="rounded-xl border border-slate-200 bg-white p-3"
+        >
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="font-semibold text-slate-900">
+                {setting.display_name}
+              </div>
+              <div className="mt-1 text-xs text-slate-500">
+                {setting.sex_restriction !== "any"
+                  ? `Sex: ${setting.sex_restriction}`
+                  : "Sex: any"}
+                {setting.min_age ? ` • Min age: ${setting.min_age}` : ""}
+                {setting.max_age ? ` • Max age: ${setting.max_age}` : ""}
+                {setting.seasonal
+  ? ` • Seasonal: ${MONTH_NAMES[setting.season_start_month] || setting.season_start_month} to ${MONTH_NAMES[setting.season_end_month] || setting.season_end_month}`
+  : ""}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:items-center">
+              <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={!!setting.enabled}
+                  onChange={(e) =>
+                    onSaveClinicResourceSetting?.(setting.resource_key, {
+                      enabled: e.target.checked,
+                    })
+                  }
+                />
+                Enabled
+              </label>
+
+              <select
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                value={setting.sex_restriction || "any"}
+                onChange={(e) =>
+                  onSaveClinicResourceSetting?.(setting.resource_key, {
+                    sex_restriction: e.target.value,
+                  })
+                }
+              >
+                <option value="any">Any sex</option>
+                <option value="female">Female only</option>
+                <option value="male">Male only</option>
+              </select>
+
+              <input
+                type="number"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm lg:w-24"
+                placeholder="Min age"
+                value={setting.min_age ?? ""}
+                onChange={(e) =>
+                  onSaveClinicResourceSetting?.(setting.resource_key, {
+                    min_age:
+                      e.target.value === "" ? null : Number(e.target.value),
+                  })
+                }
+              />
+
+              <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={!!setting.seasonal}
+                  onChange={(e) =>
+                    onSaveClinicResourceSetting?.(setting.resource_key, {
+                      seasonal: e.target.checked,
+                    })
+                  }
+                />
+                Seasonal
+              </label>
+
+              {setting.seasonal && (
+  <>
+    <select
+      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm lg:w-36"
+      value={setting.season_start_month ?? ""}
+      onChange={(e) =>
+        onSaveClinicResourceSetting?.(setting.resource_key, {
+          season_start_month:
+            e.target.value === "" ? null : Number(e.target.value),
+        })
+      }
+    >
+      <option value="">Start month</option>
+      {Object.entries(MONTH_NAMES).map(([monthNumber, monthName]) => (
+        <option key={monthNumber} value={monthNumber}>
+          {monthName}
+        </option>
+      ))}
+    </select>
+
+    <select
+      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm lg:w-36"
+      value={setting.season_end_month ?? ""}
+      onChange={(e) =>
+        onSaveClinicResourceSetting?.(setting.resource_key, {
+          season_end_month:
+            e.target.value === "" ? null : Number(e.target.value),
+        })
+      }
+    >
+      <option value="">End month</option>
+      {Object.entries(MONTH_NAMES).map(([monthNumber, monthName]) => (
+        <option key={monthNumber} value={monthNumber}>
+          {monthName}
+        </option>
+      ))}
+    </select>
+  </>
+)}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
 
         <div className="mt-4">
           <input
