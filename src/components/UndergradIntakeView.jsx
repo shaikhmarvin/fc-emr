@@ -125,7 +125,11 @@ const EMPTY_FORM = {
   specialtyType: "",
 };
 
-export default function UndergradIntakeView({ onSave, patients }) {
+export default function UndergradIntakeView({
+  onSave,
+  patients,
+  tonightSpecialtyNames = [],
+}) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [matchPatientId, setMatchPatientId] = useState(null);
   const [autoFilledMatchPatientId, setAutoFilledMatchPatientId] = useState(null);
@@ -179,70 +183,70 @@ export default function UndergradIntakeView({ onSave, patients }) {
   const matchedPatientFired = !!matchedPatient?.fired;
 
   useEffect(() => {
-  if (!form.firstName || !form.lastName || !form.dob) {
-    setMatchPatientId(null);
-    return;
-  }
+    if (!form.firstName || !form.lastName || !form.dob) {
+      setMatchPatientId(null);
+      return;
+    }
 
-  const possibleMatch = findPotentialDuplicatePatient(
-    patients || [],
-    form.firstName,
-    form.lastName,
-    form.dob,
-    form.last4Ssn,
-    null
-  );
+    const possibleMatch = findPotentialDuplicatePatient(
+      patients || [],
+      form.firstName,
+      form.lastName,
+      form.dob,
+      form.last4Ssn,
+      null
+    );
 
-  setMatchPatientId(possibleMatch ? possibleMatch.id : null);
-}, [form.firstName, form.lastName, form.dob, form.last4Ssn, patients]);
+    setMatchPatientId(possibleMatch ? possibleMatch.id : null);
+  }, [form.firstName, form.lastName, form.dob, form.last4Ssn, patients]);
 
-useEffect(() => {
-  if (!matchPatientId) return;
+  useEffect(() => {
+    if (!matchPatientId) return;
 
-  setForm((prev) => ({
-    ...prev,
-    isReturning: "Returning",
-  }));
-}, [matchPatientId]);
+    setForm((prev) => ({
+      ...prev,
+      isReturning: "Returning",
+    }));
+  }, [matchPatientId]);
 
-useEffect(() => {
-  if (!matchPatientId) return;
-  if (autoFilledMatchPatientId === matchPatientId) return;
+  useEffect(() => {
+    if (!matchPatientId) return;
+    if (autoFilledMatchPatientId === matchPatientId) return;
 
-  const matchedPatient = (patients || []).find((p) => p.id === matchPatientId);
-  if (!matchedPatient) return;
+    const matchedPatient = (patients || []).find((p) => p.id === matchPatientId);
+    if (!matchedPatient) return;
 
-  setAutoFilledMatchPatientId(matchPatientId);
+    setAutoFilledMatchPatientId(matchPatientId);
 
-  setForm((prev) => ({
-    ...prev,
-    firstName: prev.firstName || matchedPatient.firstName || "",
-    preferredName: prev.preferredName || matchedPatient.preferredName || "",
-    lastName: prev.lastName || matchedPatient.lastName || "",
-    dob: prev.dob || matchedPatient.dob || "",
-    phone: prev.phone || matchedPatient.phone || "",
-    sex: prev.sex || matchedPatient.sex || "",
-    ethnicity: prev.ethnicity || matchedPatient.ethnicity || "",
-    addressLine1: prev.addressLine1 || matchedPatient.address || "",
-city: prev.city || matchedPatient.city || "",
-state: prev.state || matchedPatient.state || "",
-zipCode: prev.zipCode || matchedPatient.zipCode || "",
-    emergencyContactName:
-      prev.emergencyContactName || matchedPatient.emergencyContactName || "",
-    emergencyContactRelation:
-      prev.emergencyContactRelation || matchedPatient.emergencyContactRelation || "",
-    emergencyContactPhone:
-      prev.emergencyContactPhone || matchedPatient.emergencyContactPhone || "",
-    last4Ssn: prev.last4Ssn || matchedPatient.last4ssn || "",
-    incomeRange: prev.incomeRange || matchedPatient.incomeRange || "",
-    spanishOnly: prev.spanishOnly || matchedPatient.spanishOnly || "",
-    chronicConditions: prev.chronicConditions?.length
-      ? prev.chronicConditions
-      : matchedPatient.chronicConditions || [],
-    chronicConditionsOther:
-      prev.chronicConditionsOther || matchedPatient.chronicConditionsOther || "",
-  }));
-}, [matchPatientId, autoFilledMatchPatientId, patients]);
+    setForm((prev) => ({
+      ...prev,
+      firstName: prev.firstName || matchedPatient.firstName || "",
+      preferredName: prev.preferredName || matchedPatient.preferredName || "",
+      lastName: prev.lastName || matchedPatient.lastName || "",
+      dob: prev.dob || matchedPatient.dob || "",
+      phone: prev.phone || matchedPatient.phone || "",
+      sex: prev.sex || matchedPatient.sex || "",
+      ethnicity: prev.ethnicity || matchedPatient.ethnicity || "",
+      addressLine1: prev.addressLine1 || matchedPatient.address || "",
+      city: prev.city || matchedPatient.city || "",
+      state: prev.state || matchedPatient.state || "",
+      zipCode: prev.zipCode || matchedPatient.zipCode || "",
+      emergencyContactName:
+        prev.emergencyContactName || matchedPatient.emergencyContactName || "",
+      emergencyContactRelation:
+        prev.emergencyContactRelation || matchedPatient.emergencyContactRelation || "",
+      emergencyContactPhone:
+        prev.emergencyContactPhone || matchedPatient.emergencyContactPhone || "",
+      last4Ssn: prev.last4Ssn || matchedPatient.last4ssn || "",
+      incomeRange: prev.incomeRange || matchedPatient.incomeRange || "",
+      spanishOnly: prev.spanishOnly || matchedPatient.spanishOnly || "",
+      chronicConditions: prev.chronicConditions?.length
+        ? prev.chronicConditions
+        : matchedPatient.chronicConditions || [],
+      chronicConditionsOther:
+        prev.chronicConditionsOther || matchedPatient.chronicConditionsOther || "",
+    }));
+  }, [matchPatientId, autoFilledMatchPatientId, patients]);
 
   async function handleSubmit() {
     if (matchedPatientFired) {
@@ -292,6 +296,11 @@ zipCode: prev.zipCode || matchedPatient.zipCode || "",
           <p className="mt-2 text-sm text-slate-600">
             Enter patient demographics and form details before full registration.
           </p>
+          {tonightSpecialtyNames.length > 0 && (
+  <div className="mt-3 rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-sm font-semibold text-purple-800">
+    Tonight’s Specialties: {tonightSpecialtyNames.join(", ")}
+  </div>
+)}
         </div>
 
         {matchPatientId && (
@@ -371,7 +380,7 @@ zipCode: prev.zipCode || matchedPatient.zipCode || "",
                 />
               </div>
 
-             
+
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -412,25 +421,25 @@ zipCode: prev.zipCode || matchedPatient.zipCode || "",
               </div>
 
               {form.visitType !== "general" && (
-  <div>
-    <label className="mb-1 block text-sm font-medium text-slate-700">
-      Specialty Type
-    </label>
-    <select
-      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-      value={form.specialtyType || ""}
-      onChange={(e) => handleChange("specialtyType", e.target.value)}
-    >
-      <option value="">Select Specialty</option>
-      <option value="pt">Physical Therapy</option>
-      <option value="dermatology">Dermatology</option>
-      <option value="ophthalmology">Ophthalmology</option>
-      <option value="mental_health">Mental Health</option>
-      <option value="addiction">Addiction Medicine</option>
-    </select>
-  </div>
-)}
-              
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Specialty Type
+                  </label>
+                  <select
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    value={form.specialtyType || ""}
+                    onChange={(e) => handleChange("specialtyType", e.target.value)}
+                  >
+                    <option value="">Select Specialty</option>
+                    <option value="pt">Physical Therapy</option>
+                    <option value="dermatology">Dermatology</option>
+                    <option value="ophthalmology">Ophthalmology</option>
+                    <option value="mental_health">Mental Health</option>
+                    <option value="addiction">Addiction Medicine</option>
+                  </select>
+                </div>
+              )}
+
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -511,10 +520,10 @@ zipCode: prev.zipCode || matchedPatient.zipCode || "",
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
             <button
               onClick={() => {
-  setForm(EMPTY_FORM);
-  setMatchPatientId(null);
-  setAutoFilledMatchPatientId(null);
-}}
+                setForm(EMPTY_FORM);
+                setMatchPatientId(null);
+                setAutoFilledMatchPatientId(null);
+              }}
               className="rounded-lg bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-300"
             >
               Clear Form

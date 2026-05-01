@@ -888,6 +888,28 @@ const [lastPharmacyToastKey, setLastPharmacyToastKey] = useState("");
   const [programEntries, setProgramEntries] = useState([]);
   const [programsLoaded, setProgramsLoaded] = useState(false);
   const [programSettings, setProgramSettings] = useState([]);
+  const todayIso = formatClinicDate();
+
+const tonightSpecialtyPrograms = useMemo(() => {
+  return (programSettings || []).filter(
+    (program) =>
+      program?.next_specialty_date &&
+      String(program.next_specialty_date).slice(0, 10) === todayIso
+  );
+}, [programSettings, todayIso]);
+
+const tonightSpecialtyNames = tonightSpecialtyPrograms.map(
+  (program) => program.program_type
+);
+
+const tonightReservedRooms = tonightSpecialtyPrograms.flatMap((program) =>
+  (program.rooms_assigned?.rooms || []).map((roomNumber) => ({
+    roomNumber: String(roomNumber),
+    specialty: program.program_type,
+  }))
+);
+
+
   const [papEntries, setPapEntries] = useState([]);
   const [papLoaded, setPapLoaded] = useState(false);
 
@@ -7962,6 +7984,8 @@ medicationStartedAt:
         getStatusClasses={getStatusClasses}
         allEncounterRows={allEncounterRows}
         todayStaffRoster={todayStaffRoster}
+        tonightSpecialtyNames={tonightSpecialtyNames}
+tonightReservedRooms={tonightReservedRooms}
       />
     );
   }
@@ -8206,6 +8230,7 @@ medicationStartedAt:
             <UndergradIntakeView
               onSave={handleUndergradStartEncounter}
               patients={patients}
+              tonightSpecialtyNames={tonightSpecialtyNames}
             />
           )}
 
@@ -8286,6 +8311,8 @@ medicationStartedAt:
               todayStaffRoster={todayStaffRoster}
               onTodayStaffRosterChange={setTodayStaffRoster}
               onTodayStaffRosterSave={handleSaveTodayStaffRoster}
+              tonightSpecialtyNames={tonightSpecialtyNames}
+tonightReservedRooms={tonightReservedRooms}
             />
           )}
           {activeView === "formulary" && (

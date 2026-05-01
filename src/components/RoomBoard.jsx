@@ -97,12 +97,27 @@ export default function RoomBoard({
   isLeadershipView,
   SPECIALTY_ROOM_RULES,
   todayStaffRoster,
-  onTodayStaffRosterChange,
+onTodayStaffRosterChange,
 onTodayStaffRosterSave,
+tonightSpecialtyNames = [],
+tonightReservedRooms = [],
 }) {
+
+function getReservedSpecialtyForRoom(roomNumber) {
+  return (tonightReservedRooms || []).find(
+    (reserved) => String(reserved.roomNumber) === String(roomNumber)
+  );
+}
+
   return (
-    <div className="space-y-4 p-3 sm:p-4 lg:p-6">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+  <div className="space-y-4 p-3 sm:p-4 lg:p-6">
+    {tonightSpecialtyNames.length > 0 && (
+      <div className="rounded-2xl border border-purple-200 bg-purple-50 px-4 py-3 text-sm font-semibold text-purple-800 shadow-sm">
+        Tonight’s Specialties: {tonightSpecialtyNames.join(", ")}
+      </div>
+    )}
+
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className="rounded-2xl bg-white p-3 shadow">
           <p className="text-sm text-slate-500">Available Rooms</p>
           <p className="mt-1 text-2xl font-bold">
@@ -204,9 +219,7 @@ const primaryPatient = primaryRow?.patient || null;
 const hasRoomHistory = Boolean(primaryEncounter);
 const occupied = activeGroups.length > 0;
 
-          const reservedSpecialty = Object.values(SPECIALTY_ROOM_RULES || {}).find(
-            (rule) => rule.allowedRooms?.includes(String(room.number))
-          );
+          const reservedSpecialty = getReservedSpecialtyForRoom(room.number);
 
           const specialtyType = primaryEncounter?.specialtyType;
           const specialtyLabelMap = {
@@ -282,7 +295,7 @@ const occupied = activeGroups.length > 0;
 
                   {reservedSpecialty && (
                     <p className="mt-1 text-xs font-medium text-violet-700">
-                      {reservedSpecialty.label} Reserved
+                      {reservedSpecialty.specialty || reservedSpecialty.label} Reserved
                     </p>
                   )}
                 </div>
