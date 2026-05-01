@@ -12,6 +12,7 @@ export default function IntakeModal({
   autoFilledMatchPatientId,
   applyMatchedPatientToIntake,
   clinicResourceSettings = [],
+  programEntries = [],
 }) {
   const SEX_OPTIONS = ["Male", "Female", "Other", "Prefer not to say"];
 
@@ -100,6 +101,66 @@ const showMammogramScreening = isResourceAvailable("mammogram");
 const showFluShotScreening = isResourceAvailable("flu_shot");
 const showCounselingService = isResourceAvailable("counseling");
 const showColonoscopyScreening = isResourceAvailable("colonoscopy");
+
+function getOpenProgramEntry(programType) {
+  const intakeFullName = `${intakeForm.firstName || ""} ${intakeForm.lastName || ""}`
+    .trim()
+    .toLowerCase();
+
+  return (programEntries || []).find((entry) => {
+    const entryFullName = String(entry.patientName || "").trim().toLowerCase();
+
+    const samePatientById =
+      intakeForm.patientId &&
+      entry.patientId &&
+      String(entry.patientId) === String(intakeForm.patientId);
+
+    const samePatientByMrn =
+      intakeForm.mrn &&
+      entry.mrn &&
+      String(entry.mrn).trim().toLowerCase() ===
+        String(intakeForm.mrn).trim().toLowerCase();
+
+    const samePatientByNameDob =
+      intakeFullName &&
+      entryFullName &&
+      intakeForm.dob &&
+      entry.dob &&
+      intakeFullName === entryFullName &&
+      String(intakeForm.dob) === String(entry.dob);
+
+    return (
+      entry.programType === programType &&
+      entry.status !== "Completed" &&
+      entry.status !== "Declined" &&
+      (samePatientById || samePatientByMrn || samePatientByNameDob)
+    );
+  });
+}
+
+function ExistingProgramWarning({ programType }) {
+  const entry = getOpenProgramEntry(programType);
+  if (!entry) return null;
+
+  return (
+    <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+      <div className="font-semibold">
+        Already on {programType} tracker
+      </div>
+      <div className="mt-1">
+        Status: {entry.status || "—"} • Reason: {entry.reason || "—"}
+      </div>
+      {entry.notes && (
+        <div className="mt-1">
+          Notes: {entry.notes}
+        </div>
+      )}
+      <div className="mt-1 font-medium">
+        New issues entered here will be merged into the existing tracker entry instead of creating a duplicate.
+      </div>
+    </div>
+  );
+}
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4 sm:p-6">
@@ -410,6 +471,7 @@ const showColonoscopyScreening = isResourceAvailable("colonoscopy");
                         <option>UTD</option>
                         <option>N/A</option>
                       </select>
+                      <ExistingProgramWarning programType="Mammogram" />
                     </Field>
                   )}
 
@@ -463,6 +525,7 @@ const showColonoscopyScreening = isResourceAvailable("colonoscopy");
       <option>UTD</option>
       <option>N/A</option>
     </select>
+    <ExistingProgramWarning programType="Colonoscopy" />
   </Field>
 )}
 
@@ -598,6 +661,7 @@ const showColonoscopyScreening = isResourceAvailable("colonoscopy");
                         )
                       }
                     />
+                    <ExistingProgramWarning programType="Dermatology" />
                   </Field>
 
                   <Field label="Ophthalmology">
@@ -618,6 +682,7 @@ const showColonoscopyScreening = isResourceAvailable("colonoscopy");
                         )
                       }
                     />
+                    <ExistingProgramWarning programType="Ophthalmology" />
                   </Field>
 
                   <Field label="Optometry">
@@ -636,6 +701,7 @@ const showColonoscopyScreening = isResourceAvailable("colonoscopy");
                         )
                       }
                     />
+                    <ExistingProgramWarning programType="Optometry" />
                   </Field>
 
                   <Field label="Diabetic Eye Exam in Past Year">
@@ -675,6 +741,7 @@ const showColonoscopyScreening = isResourceAvailable("colonoscopy");
                         )
                       }
                     />
+                    <ExistingProgramWarning programType="Physical Therapy" />
                   </Field>
 
                   <Field label="Mental Health Screening / Medications">
@@ -695,6 +762,7 @@ const showColonoscopyScreening = isResourceAvailable("colonoscopy");
                         )
                       }
                     />
+                    <ExistingProgramWarning programType="Mental Health" />
                   </Field>
 
                   {showCounselingService && (
@@ -714,6 +782,7 @@ const showColonoscopyScreening = isResourceAvailable("colonoscopy");
                           )
                         }
                       />
+                      <ExistingProgramWarning programType="Counseling" />
                     </Field>
                   )}
 

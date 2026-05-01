@@ -24,6 +24,7 @@ import {
   fetchRefillRequests,
   approveRefillRequestInSupabase,
   deleteRefillRequestInSupabase,
+  deleteRefillRequestsForPatient,
 } from "./api/encounters";
 import {
   fetchTodayStaffRoster,
@@ -76,12 +77,14 @@ import {
   createProgramEntryInSupabase,
   updateProgramEntryInSupabase,
   deleteProgramEntryInSupabase,
+  deleteProgramEntriesForPatient,
 } from "./api/programs";
 import {
   fetchPapEntries,
   createPapEntryInSupabase,
   updatePapEntryInSupabase,
   deletePapEntryInSupabase,
+  deletePapEntriesForPatient,
 } from "./api/pap";
 import {
   Document,
@@ -323,12 +326,12 @@ function dualVisitBadge(encounter) {
     "";
 
   const isDualVisit =
-  visitType === "both" ||
-  encounter?.dualVisit === true ||
-  intakeData?.dualVisit === true ||
-  (visitType === "general" && Boolean(specialtyType));
+    visitType === "both" ||
+    encounter?.dualVisit === true ||
+    intakeData?.dualVisit === true ||
+    (visitType === "general" && Boolean(specialtyType));
 
-if (!isDualVisit) return null;
+  if (!isDualVisit) return null;
 
   const specialtyMap = {
     dermatology: "Derm",
@@ -514,26 +517,26 @@ export default function App() {
   }
 
   function showToast({
-  title = "Notice",
-  message = "",
-  type = "info",
-  duration = 3500,
-  onClick = null,
-  actionLabel = "",
-}) {
-  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    title = "Notice",
+    message = "",
+    type = "info",
+    duration = 3500,
+    onClick = null,
+    actionLabel = "",
+  }) {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
-  setToasts((prev) => [
-    ...prev,
-    { id, title, message, type, onClick, actionLabel },
-  ]);
+    setToasts((prev) => [
+      ...prev,
+      { id, title, message, type, onClick, actionLabel },
+    ]);
 
-  if (duration > 0) {
-    window.setTimeout(() => {
-      setToasts((prev) => prev.filter((toast) => toast.id !== id));
-    }, duration);
+    if (duration > 0) {
+      window.setTimeout(() => {
+        setToasts((prev) => prev.filter((toast) => toast.id !== id));
+      }, duration);
+    }
   }
-}
 
   const {
     session,
@@ -836,8 +839,8 @@ export default function App() {
   const [registrationEncounterId, setRegistrationEncounterId] = useState(null);
 
   const [activeView, setActiveView] = useState("dashboard");
-const [pharmacyToast, setPharmacyToast] = useState(null);
-const [lastPharmacyToastKey, setLastPharmacyToastKey] = useState("");
+  const [pharmacyToast, setPharmacyToast] = useState(null);
+  const [lastPharmacyToastKey, setLastPharmacyToastKey] = useState("");
 
   useEffect(() => {
     if (userRole === "undergraduate") {
@@ -890,30 +893,30 @@ const [lastPharmacyToastKey, setLastPharmacyToastKey] = useState("");
   });
   const [summaryRefreshStatus, setSummaryRefreshStatus] = useState("");
   const [programEntries, setProgramEntries] = useState([]);
-const [programsLoaded, setProgramsLoaded] = useState(false);
-const [programSettings, setProgramSettings] = useState([]);
-const [clinicResourceSettings, setClinicResourceSettings] = useState([]);
-const [clinicResourceSettingsLoaded, setClinicResourceSettingsLoaded] = useState(false);
-const todayIso = formatClinicDate();
+  const [programsLoaded, setProgramsLoaded] = useState(false);
+  const [programSettings, setProgramSettings] = useState([]);
+  const [clinicResourceSettings, setClinicResourceSettings] = useState([]);
+  const [clinicResourceSettingsLoaded, setClinicResourceSettingsLoaded] = useState(false);
+  const todayIso = formatClinicDate();
 
-const tonightSpecialtyPrograms = useMemo(() => {
-  return (programSettings || []).filter(
-    (program) =>
-      program?.next_specialty_date &&
-      String(program.next_specialty_date).slice(0, 10) === todayIso
+  const tonightSpecialtyPrograms = useMemo(() => {
+    return (programSettings || []).filter(
+      (program) =>
+        program?.next_specialty_date &&
+        String(program.next_specialty_date).slice(0, 10) === todayIso
+    );
+  }, [programSettings, todayIso]);
+
+  const tonightSpecialtyNames = tonightSpecialtyPrograms.map(
+    (program) => program.program_type
   );
-}, [programSettings, todayIso]);
 
-const tonightSpecialtyNames = tonightSpecialtyPrograms.map(
-  (program) => program.program_type
-);
-
-const tonightReservedRooms = tonightSpecialtyPrograms.flatMap((program) =>
-  (program.rooms_assigned?.rooms || []).map((roomNumber) => ({
-    roomNumber: String(roomNumber),
-    specialty: program.program_type,
-  }))
-);
+  const tonightReservedRooms = tonightSpecialtyPrograms.flatMap((program) =>
+    (program.rooms_assigned?.rooms || []).map((roomNumber) => ({
+      roomNumber: String(roomNumber),
+      specialty: program.program_type,
+    }))
+  );
 
 
   const [papEntries, setPapEntries] = useState([]);
@@ -921,25 +924,25 @@ const tonightReservedRooms = tonightSpecialtyPrograms.flatMap((program) =>
 
 
   useEffect(() => {
-  if (!session || clinicResourceSettingsLoaded) return;
+    if (!session || clinicResourceSettingsLoaded) return;
 
-  async function loadClinicResourceSettings() {
-    try {
-      const rows = await fetchClinicResourceSettings();
-      setClinicResourceSettings(rows || []);
-      setClinicResourceSettingsLoaded(true);
-    } catch (error) {
-      console.error("Failed to load clinic resource settings:", error);
-      showToast({
-        title: "Settings error",
-        message: "Unable to load intake resource settings.",
-        type: "error",
-      });
+    async function loadClinicResourceSettings() {
+      try {
+        const rows = await fetchClinicResourceSettings();
+        setClinicResourceSettings(rows || []);
+        setClinicResourceSettingsLoaded(true);
+      } catch (error) {
+        console.error("Failed to load clinic resource settings:", error);
+        showToast({
+          title: "Settings error",
+          message: "Unable to load intake resource settings.",
+          type: "error",
+        });
+      }
     }
-  }
 
-  loadClinicResourceSettings();
-}, [session, clinicResourceSettingsLoaded]);
+    loadClinicResourceSettings();
+  }, [session, clinicResourceSettingsLoaded]);
 
   useEffect(() => {
     if (!session || papLoaded) return;
@@ -1362,30 +1365,30 @@ const tonightReservedRooms = tonightSpecialtyPrograms.flatMap((program) =>
   }
 
   async function saveClinicResourceSetting(resourceKey, updates) {
-  const previousSettings = [...clinicResourceSettings];
-
-  setClinicResourceSettings((prev) =>
-    prev.map((setting) =>
-      setting.resource_key === resourceKey
-        ? { ...setting, ...updates }
-        : setting
-    )
-  );
-
-  try {
-    const saved = await updateClinicResourceSetting(resourceKey, updates);
+    const previousSettings = [...clinicResourceSettings];
 
     setClinicResourceSettings((prev) =>
       prev.map((setting) =>
-        setting.resource_key === resourceKey ? saved : setting
+        setting.resource_key === resourceKey
+          ? { ...setting, ...updates }
+          : setting
       )
     );
-  } catch (error) {
-    console.error("Failed to save clinic resource setting:", error);
-    setClinicResourceSettings(previousSettings);
-    alert(`Failed to save setting: ${error.message}`);
+
+    try {
+      const saved = await updateClinicResourceSetting(resourceKey, updates);
+
+      setClinicResourceSettings((prev) =>
+        prev.map((setting) =>
+          setting.resource_key === resourceKey ? saved : setting
+        )
+      );
+    } catch (error) {
+      console.error("Failed to save clinic resource setting:", error);
+      setClinicResourceSettings(previousSettings);
+      alert(`Failed to save setting: ${error.message}`);
+    }
   }
-}
 
   const dashboardSelectedPatient =
     patients.find((p) => p.id === dashboardSelectedPatientId) || null;
@@ -3782,11 +3785,11 @@ const tonightReservedRooms = tonightSpecialtyPrograms.flatMap((program) =>
 
       if (data.visitType === "both" && data.specialtyType) {
         const generalEncounter = {
-  ...encounterBase,
-  visitType: "general",
-  specialtyType: data.specialtyType,
-  dualVisit: true,
-};
+          ...encounterBase,
+          visitType: "general",
+          specialtyType: data.specialtyType,
+          dualVisit: true,
+        };
 
         const specialtyEncounter = {
           ...encounterBase,
@@ -4098,48 +4101,48 @@ const tonightReservedRooms = tonightSpecialtyPrograms.flatMap((program) =>
   ]);
 
   useEffect(() => {
-  if (userRole !== "undergraduate") return;
+    if (userRole !== "undergraduate") return;
 
-  const medsReadyRows = waitingEncounterRows.filter(
-    ({ encounter }) => encounter?.pharmacyStatus === "meds_ready"
-  );
+    const medsReadyRows = waitingEncounterRows.filter(
+      ({ encounter }) => encounter?.pharmacyStatus === "meds_ready"
+    );
 
-  if (medsReadyRows.length === 0) {
-    if (lastPharmacyToastKey) {
-      setLastPharmacyToastKey("");
-      setPharmacyToast(null);
+    if (medsReadyRows.length === 0) {
+      if (lastPharmacyToastKey) {
+        setLastPharmacyToastKey("");
+        setPharmacyToast(null);
+      }
+      return;
     }
-    return;
-  }
 
-  const toastKey = medsReadyRows
-    .map(({ encounter }) => encounter.id)
-    .sort()
-    .join("|");
+    const toastKey = medsReadyRows
+      .map(({ encounter }) => encounter.id)
+      .sort()
+      .join("|");
 
-  if (toastKey === lastPharmacyToastKey) return;
+    if (toastKey === lastPharmacyToastKey) return;
 
-  setLastPharmacyToastKey(toastKey);
-  setPharmacyToast({
-    key: toastKey,
-    count: medsReadyRows.length,
-  });
+    setLastPharmacyToastKey(toastKey);
+    setPharmacyToast({
+      key: toastKey,
+      count: medsReadyRows.length,
+    });
 
-  showToast({
-    title: "Pharmacy Pickup Needed",
-    message:
-      medsReadyRows.length === 1
-        ? "A patient has medications ready. Click to open Live Queue."
-        : `${medsReadyRows.length} patients have medications ready. Click to open Live Queue.`,
-    type: "success",
-    duration: 0,
-    actionLabel: "Open Live Queue",
-    onClick: () => {
-      setActiveView("queue");
-      setPharmacyToast(null);
-    },
-  });
-}, [waitingEncounterRows, userRole, lastPharmacyToastKey]);
+    showToast({
+      title: "Pharmacy Pickup Needed",
+      message:
+        medsReadyRows.length === 1
+          ? "A patient has medications ready. Click to open Live Queue."
+          : `${medsReadyRows.length} patients have medications ready. Click to open Live Queue.`,
+      type: "success",
+      duration: 0,
+      actionLabel: "Open Live Queue",
+      onClick: () => {
+        setActiveView("queue");
+        setPharmacyToast(null);
+      },
+    });
+  }, [waitingEncounterRows, userRole, lastPharmacyToastKey]);
 
   const assignedCount = filteredEncounterRows.filter(
     ({ encounter }) =>
@@ -4700,6 +4703,10 @@ const tonightReservedRooms = tonightSpecialtyPrograms.flatMap((program) =>
       pushEntry("Dermatology", intakeForm.dermatology, chiefComplaint);
     }
 
+    if (hasText(intakeForm.ophthalmology)) {
+      pushEntry("Ophthalmology", intakeForm.ophthalmology, chiefComplaint);
+    }
+
     if (hasText(intakeForm.mentalHealthCombined)) {
       pushEntry("Mental Health", intakeForm.mentalHealthCombined, chiefComplaint);
     }
@@ -4729,6 +4736,15 @@ const tonightReservedRooms = tonightSpecialtyPrograms.flatMap((program) =>
       );
     }
 
+    if (intakeForm.colonoscopyStatus === "Interested") {
+      pushEntry(
+        "Colonoscopy",
+        "Colonoscopy screening requested",
+        chiefComplaint,
+        "Colonoscopy screening requested"
+      );
+    }
+
     return entries;
   }
 
@@ -4751,7 +4767,33 @@ const tonightReservedRooms = tonightSpecialtyPrograms.flatMap((program) =>
     };
 
     for (const entry of entries) {
-      if (hasOpenReferral(entry.patientId, entry.programType)) continue;
+      const existingEntry = programEntries.find(
+        (existing) =>
+          String(existing.patientId) === String(entry.patientId) &&
+          existing.programType === entry.programType &&
+          existing.status !== "Completed" &&
+          existing.status !== "Declined"
+      );
+
+      if (existingEntry) {
+        const nextReason = existingEntry.reason?.includes(entry.reason)
+          ? existingEntry.reason
+          : `${existingEntry.reason || ""}${existingEntry.reason ? " | " : ""}${entry.reason}`;
+
+        const nextNotes = [
+          existingEntry.notes || "",
+          entry.notes || entry.reason
+            ? `Added from intake ${new Date().toLocaleDateString()}: ${entry.notes || entry.reason}`
+            : "",
+        ]
+          .filter(Boolean)
+          .join("\n");
+
+        await updateProgramEntry(existingEntry.id, "reason", nextReason);
+        await updateProgramEntry(existingEntry.id, "notes", nextNotes);
+        continue;
+      }
+
       await addProgramEntry(entry);
     }
   }
@@ -5511,16 +5553,16 @@ const tonightReservedRooms = tonightSpecialtyPrograms.flatMap((program) =>
   }
 
   async function markMedicationsPickedUp(encounterId) {
-  if (!session?.user?.id) return;
+    if (!session?.user?.id) return;
 
-  await updateEncounterInSupabase(encounterId, {
-    pharmacyStatus: "picked_up",
-    pharmacyNotifiedAt: new Date().toISOString(),
-    pharmacyNotifiedBy: session.user.id,
-  });
+    await updateEncounterInSupabase(encounterId, {
+      pharmacyStatus: "picked_up",
+      pharmacyNotifiedAt: new Date().toISOString(),
+      pharmacyNotifiedBy: session.user.id,
+    });
 
-  refreshClinicData?.();
-}
+    refreshClinicData?.();
+  }
 
   async function clearPharmacyStatus(encounterId) {
     await updateEncounterInSupabase(encounterId, {
@@ -5739,20 +5781,40 @@ const tonightReservedRooms = tonightSpecialtyPrograms.flatMap((program) =>
     }));
   }
   async function deletePatientCompletely(patientId) {
-    const confirmed = window.confirm(
-      "Delete this patient completely? This cannot be undone."
+  const confirmed = window.confirm(
+    "Delete this patient completely? This cannot be undone."
+  );
+  if (!confirmed) return;
+
+  try {
+    await deletePapEntriesForPatient(patientId);
+    await deleteProgramEntriesForPatient(patientId);
+    await deleteRefillRequestsForPatient(patientId);
+    await deletePatientInSupabase(patientId);
+
+    setPapEntries((prev) =>
+      prev.filter((entry) => String(entry.patientId) !== String(patientId))
     );
-    if (!confirmed) return;
 
-    try {
-      await deletePatientInSupabase(patientId); // let DB handle cascade
+    setProgramEntries((prev) =>
+      prev.filter((entry) => String(entry.patientId) !== String(patientId))
+    );
 
-      setPatients((prev) => prev.filter((p) => p.id !== patientId));
-    } catch (error) {
-      console.error("Delete failed:", error);
-      alert(error.message);
+    setRefillRequests((prev) =>
+      prev.filter((req) => String(req.patient_id) !== String(patientId))
+    );
+
+    setPatients((prev) => prev.filter((p) => p.id !== patientId));
+
+    if (String(selectedPatientId) === String(patientId)) {
+      setSelectedPatientId(null);
+      setSelectedEncounterId(null);
     }
+  } catch (error) {
+    console.error("Delete failed:", error);
+    alert(error.message);
   }
+}
 
   async function updateEncounterStatus(status) {
     if (!canManageRooms) return;
@@ -6015,23 +6077,23 @@ const tonightReservedRooms = tonightSpecialtyPrograms.flatMap((program) =>
       const optimisticMedications = previousMedications.map((med) =>
         med.id === editingMedicationId
           ? {
-  ...med,
-  ...newMedication,
-  id: editingMedicationId,
-  startedDate:
-    newMedication.startedDate ||
-    newMedication.medicationStartedAt ||
-    med.startedDate ||
-    med.medicationStartedAt ||
-    "",
-  medicationStartedAt:
-    newMedication.medicationStartedAt ||
-    newMedication.startedDate ||
-    med.medicationStartedAt ||
-    med.startedDate ||
-    "",
-  lastUpdatedEncounterId: selectedEncounter.id,
-}
+            ...med,
+            ...newMedication,
+            id: editingMedicationId,
+            startedDate:
+              newMedication.startedDate ||
+              newMedication.medicationStartedAt ||
+              med.startedDate ||
+              med.medicationStartedAt ||
+              "",
+            medicationStartedAt:
+              newMedication.medicationStartedAt ||
+              newMedication.startedDate ||
+              med.medicationStartedAt ||
+              med.startedDate ||
+              "",
+            lastUpdatedEncounterId: selectedEncounter.id,
+          }
           : med
       );
 
@@ -6093,13 +6155,13 @@ const tonightReservedRooms = tonightSpecialtyPrograms.flatMap((program) =>
       lastUpdatedEncounterId: selectedEncounter.id,
       isActive: newMedication.isActive ?? true,
       startedDate:
-  newMedication.startedDate ||
-  newMedication.medicationStartedAt ||
-  new Date().toISOString().slice(0, 10),
-medicationStartedAt:
-  newMedication.medicationStartedAt ||
-  newMedication.startedDate ||
-  new Date().toISOString().slice(0, 10),
+        newMedication.startedDate ||
+        newMedication.medicationStartedAt ||
+        new Date().toISOString().slice(0, 10),
+      medicationStartedAt:
+        newMedication.medicationStartedAt ||
+        newMedication.startedDate ||
+        new Date().toISOString().slice(0, 10),
     };
     setPatients((prev) =>
       prev.map((patient) =>
@@ -6138,7 +6200,7 @@ medicationStartedAt:
         lastUpdatedEncounterId: savedMedication.last_updated_encounter_id || null,
         isActive: savedMedication.is_active ?? true,
         startedDate: savedMedication.medication_started_at || "",
-medicationStartedAt: savedMedication.medication_started_at || "",
+        medicationStartedAt: savedMedication.medication_started_at || "",
       };
 
       setPatients((prev) =>
@@ -6226,15 +6288,15 @@ medicationStartedAt: savedMedication.medication_started_at || "",
       instructions: med.instructions || "",
       isActive: med.isActive,
       startedDate:
-  med.startedDate ||
-  med.medicationStartedAt ||
-  med.medication_started_at ||
-  "",
-medicationStartedAt:
-  med.medicationStartedAt ||
-  med.medication_started_at ||
-  med.startedDate ||
-  "",
+        med.startedDate ||
+        med.medicationStartedAt ||
+        med.medication_started_at ||
+        "",
+      medicationStartedAt:
+        med.medicationStartedAt ||
+        med.medication_started_at ||
+        med.startedDate ||
+        "",
     });
     setEditingMedicationId(med.id);
     setShowMedicationModal(true);
@@ -6251,15 +6313,15 @@ medicationStartedAt:
       instructions: med.instructions || "",
       isActive: med.isActive ?? true,
       startedDate:
-  med.startedDate ||
-  med.medicationStartedAt ||
-  med.medication_started_at ||
-  "",
-medicationStartedAt:
-  med.medicationStartedAt ||
-  med.medication_started_at ||
-  med.startedDate ||
-  "",
+        med.startedDate ||
+        med.medicationStartedAt ||
+        med.medication_started_at ||
+        "",
+      medicationStartedAt:
+        med.medicationStartedAt ||
+        med.medication_started_at ||
+        med.startedDate ||
+        "",
     });
 
     setEditingMedicationId(null);
@@ -8024,7 +8086,7 @@ medicationStartedAt:
         allEncounterRows={allEncounterRows}
         todayStaffRoster={todayStaffRoster}
         tonightSpecialtyNames={tonightSpecialtyNames}
-tonightReservedRooms={tonightReservedRooms}
+        tonightReservedRooms={tonightReservedRooms}
       />
     );
   }
@@ -8252,19 +8314,19 @@ tonightReservedRooms={tonightReservedRooms}
 
           {activeView === "registration" && (
             <RegistrationView
-  registrationRows={registrationRows}
-  openUndergradRegistration={openUndergradRegistration}
-  openLeadershipRegistration={openLeadershipRegistration}
-  getFullPatientName={getFullPatientName}
-  formatDate={formatDate}
-  newReturningBadge={newReturningBadge}
-  dualVisitBadge={dualVisitBadge}
-  userRole={userRole}
-  isLeadershipView={isLeadershipView}
-  onRemoveFromRegistration={removeFromRegistration}
-  clinicResourceSettings={clinicResourceSettings}
-  onSaveClinicResourceSetting={saveClinicResourceSetting}
-/>
+              registrationRows={registrationRows}
+              openUndergradRegistration={openUndergradRegistration}
+              openLeadershipRegistration={openLeadershipRegistration}
+              getFullPatientName={getFullPatientName}
+              formatDate={formatDate}
+              newReturningBadge={newReturningBadge}
+              dualVisitBadge={dualVisitBadge}
+              userRole={userRole}
+              isLeadershipView={isLeadershipView}
+              onRemoveFromRegistration={removeFromRegistration}
+              clinicResourceSettings={clinicResourceSettings}
+              onSaveClinicResourceSetting={saveClinicResourceSetting}
+            />
           )}
 
           {activeView === "undergrad-intake" && userRole === "undergraduate" && (
@@ -8310,7 +8372,7 @@ tonightReservedRooms={tonightReservedRooms}
               profileNameMap={profileNameMap}
               onApproveRefillAsSignedInAttending={handleApproveRefillRequestAsSignedInAttending}
               onDeleteRefillRequest={handleDeleteRefillRequest}
-              
+
             />
           )}
 
@@ -8353,7 +8415,7 @@ tonightReservedRooms={tonightReservedRooms}
               onTodayStaffRosterChange={setTodayStaffRoster}
               onTodayStaffRosterSave={handleSaveTodayStaffRoster}
               tonightSpecialtyNames={tonightSpecialtyNames}
-tonightReservedRooms={tonightReservedRooms}
+              tonightReservedRooms={tonightReservedRooms}
             />
           )}
           {activeView === "formulary" && (
@@ -8579,20 +8641,21 @@ tonightReservedRooms={tonightReservedRooms}
       />
 
       <IntakeModal
-  showIntakeModal={showIntakeModal}
-  setShowIntakeModal={setShowIntakeModal}
-  intakeTab={intakeTab}
-  setIntakeTab={setIntakeTab}
-  intakeForm={intakeForm}
-  updateIntakeField={updateIntakeField}
-  submitPatient={submitPatient}
-  isEditingIntake={isEditingIntake}
-  intakeMatchPatientId={intakeMatchPatientId}
-  intakeMatchedPatient={intakeMatchedPatient}
-  autoFilledMatchPatientId={autoFilledMatchPatientId}
-  applyMatchedPatientToIntake={applyMatchedPatientToIntake}
-  clinicResourceSettings={clinicResourceSettings}
-/>
+        showIntakeModal={showIntakeModal}
+        setShowIntakeModal={setShowIntakeModal}
+        intakeTab={intakeTab}
+        setIntakeTab={setIntakeTab}
+        intakeForm={intakeForm}
+        updateIntakeField={updateIntakeField}
+        submitPatient={submitPatient}
+        isEditingIntake={isEditingIntake}
+        intakeMatchPatientId={intakeMatchPatientId}
+        intakeMatchedPatient={intakeMatchedPatient}
+        autoFilledMatchPatientId={autoFilledMatchPatientId}
+        applyMatchedPatientToIntake={applyMatchedPatientToIntake}
+        clinicResourceSettings={clinicResourceSettings}
+        programEntries={programEntries}
+      />
 
       <UndergradRegistrationModal
         show={showUndergradRegistrationModal}

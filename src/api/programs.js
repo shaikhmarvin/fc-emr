@@ -113,3 +113,12 @@ export async function deleteProgramEntryInSupabase(entryId) {
 
   if (error) throw error;
 }
+
+export async function deleteProgramEntriesForPatient(patientId) {
+  const { error } = await supabase
+    .from("program_entries")
+    .delete()
+    .eq("patient_id", patientId);
+
+  if (error) throw error;
+}

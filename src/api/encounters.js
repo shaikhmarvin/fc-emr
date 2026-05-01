@@ -611,6 +611,15 @@ export async function deleteRefillRequestInSupabase(refillRequestId) {
   if (error) throw error;
 }
 
+export async function deleteRefillRequestsForPatient(patientId) {
+  const { error } = await supabase
+    .from("refill_requests")
+    .delete()
+    .eq("patient_id", patientId);
+
+  if (error) throw error;
+}
+
 export async function fetchRefillRequests() {
   const { data, error } = await supabase
     .from("refill_requests")

@@ -123,3 +123,12 @@ export async function deletePapEntryInSupabase(entryId) {
 
   if (error) throw error;
 }
+
+export async function deletePapEntriesForPatient(patientId) {
+  const { error } = await supabase
+    .from("pap_entries")
+    .delete()
+    .eq("patient_id", patientId);
+
+  if (error) throw error;
+}
