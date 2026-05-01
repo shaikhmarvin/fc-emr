@@ -201,6 +201,7 @@ export function createEncounterFromIntake(form) {
     id: Date.now(),
     clinicDate: formatClinicDate(),
     createdAt: new Date().toISOString(),
+    dailyNumber: form.dailyNumber || "",
     newReturning: form.newReturning,
     visitLocation: form.visitLocation,
     chiefComplaint: form.chiefComplaint,

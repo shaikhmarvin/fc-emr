@@ -695,12 +695,79 @@ export default function ChartView({
 
 
 
+
+
+  function normalizeAssignmentName(value) {
+    return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+  }
+
+  function getAssignmentPersonName(person) {
+    if (!person) return "";
+
+    if (typeof person === "string") {
+      return profileNameMap?.[person] || person;
+    }
+
+    return (
+      person.fullName ||
+      person.full_name ||
+      person.displayName ||
+      person.display_name ||
+      person.name ||
+      profileNameMap?.[person.id] ||
+      profileNameMap?.[person.user_id] ||
+      person.email ||
+      ""
+    );
+  }
+
+  function activeAssignmentNameSet(list) {
+    const set = new Set();
+
+    (list || []).forEach((person) => {
+      const displayName = getAssignmentPersonName(person);
+      if (displayName) set.add(normalizeAssignmentName(displayName));
+
+      if (person?.id && profileNameMap?.[person.id]) {
+        set.add(normalizeAssignmentName(profileNameMap[person.id]));
+      }
+
+      if (person?.user_id && profileNameMap?.[person.user_id]) {
+        set.add(normalizeAssignmentName(profileNameMap[person.user_id]));
+      }
+    });
+
+    return set;
+  }
+
+  function mergeActiveAssignmentOptions(options, activeList) {
+    const names = new Set((options || []).filter(Boolean));
+
+    (activeList || []).forEach((person) => {
+      const displayName = getAssignmentPersonName(person);
+      if (displayName) names.add(displayName);
+    });
+
+    return [...names];
+  }
+
+  function sortActiveAssignmentsFirst(options, activeSet) {
+    return [...(options || [])].sort((a, b) => {
+      const aActive = activeSet.has(normalizeAssignmentName(a));
+      const bActive = activeSet.has(normalizeAssignmentName(b));
+
+      if (aActive !== bActive) return aActive ? -1 : 1;
+      return String(a).localeCompare(String(b));
+    });
+  }
+
   const [showTimeline, setShowTimeline] = useState(false);
   const [showLabs, setShowLabs] = useState(false);
   const [showSendOutLabs, setShowSendOutLabs] = useState(false);
   const [showSignModal, setShowSignModal] = useState(false);
   const [showAudit, setShowAudit] = useState(false);
   const [selectedAttendingId, setSelectedAttendingId] = useState("");
+  const [openAssignmentMenu, setOpenAssignmentMenu] = useState(null);
   const [attendingPin, setAttendingPin] = useState("");
   const [chiefComplaintDraft, setChiefComplaintDraft] = useState("");
   const [labFilter, setLabFilter] = useState("all");
@@ -1030,6 +1097,19 @@ export default function ChartView({
     selectedEncounter?.visitType === "specialty_only" ||
     selectedEncounter?.visitType === "both";
   const soapStatusInfo = formatSoapStatus(soapStatus);
+  const activeStudentNames = activeAssignmentNameSet(activeStudents);
+  const activeUpperLevelNames = activeAssignmentNameSet(activeUpperLevels);
+
+  const sortedStudentNameOptions = sortActiveAssignmentsFirst(
+    mergeActiveAssignmentOptions(studentNameOptions, activeStudents),
+    activeStudentNames
+  );
+
+  const sortedUpperLevelNameOptions = sortActiveAssignmentsFirst(
+    mergeActiveAssignmentOptions(upperLevelNameOptions, activeUpperLevels),
+    activeUpperLevelNames
+  );
+
   const normalizedAssignedStudent = String(assignmentForm.studentName || "").trim().toLowerCase();
   const normalizedAssignedUpperLevel = String(assignmentForm.upperLevelName || "").trim().toLowerCase();
 
@@ -1389,29 +1469,88 @@ export default function ChartView({
                     <p className="mb-2 text-xs text-slate-500">
                       Active Today: {activeStudents?.length || 0}
                     </p>
-                    <select
-                      value={assignmentForm.studentName}
-                      onChange={(e) =>
-                        setAssignmentForm((prev) => ({
-                          ...prev,
-                          studentName: e.target.value,
-                        }))
-                      }
-                      className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                    >
-                      <option value="">Select medical student</option>
-                      {studentNameOptions?.map((name) => {
-                        const isAssigned =
-                          assignedStudentNames?.has(name) &&
-                          assignmentForm.studentName !== name;
 
-                        return (
-                          <option key={name} value={name}>
-                            {isAssigned ? `${name} (Assigned)` : name}
-                          </option>
-                        );
-                      })}
-                    </select>
+                    <div className="relative">
+                      <input
+                        className={`min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base ${
+                          activeStudentNames.has(normalizeAssignmentName(assignmentForm.studentName))
+                            ? "border-green-500 bg-green-50 font-semibold text-green-800"
+                            : "border-slate-300"
+                        }`}
+                        value={assignmentForm.studentName}
+                        onChange={(e) => {
+                          setAssignmentForm((prev) => ({
+                            ...prev,
+                            studentName: e.target.value,
+                          }));
+                          setOpenAssignmentMenu("chart-student");
+                        }}
+                        onFocus={() => setOpenAssignmentMenu("chart-student")}
+                        onBlur={() => {
+                          setTimeout(() => setOpenAssignmentMenu(null), 150);
+                        }}
+                        placeholder="Type or select medical student"
+                      />
+
+                      {openAssignmentMenu === "chart-student" && (
+                        <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border bg-white shadow-lg">
+                          {sortedStudentNameOptions.length > 0 ? (
+                            sortedStudentNameOptions.map((name) => {
+                              const isActive = activeStudentNames.has(normalizeAssignmentName(name));
+                              const isSelected =
+                                normalizeAssignmentName(assignmentForm.studentName) ===
+                                normalizeAssignmentName(name);
+                              const isAssigned =
+                                assignedStudentNames?.has(name) &&
+                                assignmentForm.studentName !== name;
+
+                              return (
+                                <button
+                                  key={name}
+                                  type="button"
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => {
+                                    setAssignmentForm((prev) => ({
+                                      ...prev,
+                                      studentName: name,
+                                    }));
+                                    setOpenAssignmentMenu(null);
+                                  }}
+                                  className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 ${
+                                    isSelected
+                                      ? "bg-blue-50 font-semibold text-blue-700"
+                                      : isActive
+                                        ? "bg-green-50 font-semibold text-green-800"
+                                        : "text-slate-700"
+                                  }`}
+                                >
+                                  <span className="flex min-w-0 items-center gap-2">
+                                    <span
+                                      className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                                        isActive ? "bg-green-500" : "bg-slate-300"
+                                      }`}
+                                    />
+                                    <span className="truncate">
+                                      {isAssigned ? `${name} (Assigned)` : name}
+                                    </span>
+                                  </span>
+
+                                  {isActive && (
+                                    <span className="shrink-0 text-[11px] font-medium text-green-700">
+                                      Active
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })
+                          ) : (
+                            <div className="px-3 py-2 text-sm text-slate-500">
+                              No saved student options. You can still type a name manually.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div>
@@ -1422,28 +1561,84 @@ export default function ChartView({
                     <p className="mb-2 text-xs text-slate-500">
                       Active Today: {activeUpperLevels?.length || 0}
                     </p>
-                    <select
-                      value={assignmentForm.upperLevelName}
-                      onChange={(e) =>
-                        setAssignmentForm((prev) => ({
-                          ...prev,
-                          upperLevelName: e.target.value,
-                        }))
-                      }
-                      className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                    >
-                      <option value="">Select upper level</option>
-                      {upperLevelNameOptions?.map((name) => (
-                        <option key={name} value={name}>
-                          {name}
-                        </option>
-                      ))}
-                    </select>
 
+                    <div className="relative">
+                      <input
+                        className={`min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base ${
+                          activeUpperLevelNames.has(normalizeAssignmentName(assignmentForm.upperLevelName))
+                            ? "border-green-500 bg-green-50 font-semibold text-green-800"
+                            : "border-slate-300"
+                        }`}
+                        value={assignmentForm.upperLevelName}
+                        onChange={(e) => {
+                          setAssignmentForm((prev) => ({
+                            ...prev,
+                            upperLevelName: e.target.value,
+                          }));
+                          setOpenAssignmentMenu("chart-upper");
+                        }}
+                        onFocus={() => setOpenAssignmentMenu("chart-upper")}
+                        onBlur={() => {
+                          setTimeout(() => setOpenAssignmentMenu(null), 150);
+                        }}
+                        placeholder="Type or select upper level"
+                      />
 
+                      {openAssignmentMenu === "chart-upper" && (
+                        <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border bg-white shadow-lg">
+                          {sortedUpperLevelNameOptions.length > 0 ? (
+                            sortedUpperLevelNameOptions.map((name) => {
+                              const isActive = activeUpperLevelNames.has(normalizeAssignmentName(name));
+                              const isSelected =
+                                normalizeAssignmentName(assignmentForm.upperLevelName) ===
+                                normalizeAssignmentName(name);
+
+                              return (
+                                <button
+                                  key={name}
+                                  type="button"
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => {
+                                    setAssignmentForm((prev) => ({
+                                      ...prev,
+                                      upperLevelName: name,
+                                    }));
+                                    setOpenAssignmentMenu(null);
+                                  }}
+                                  className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 ${
+                                    isSelected
+                                      ? "bg-blue-50 font-semibold text-blue-700"
+                                      : isActive
+                                        ? "bg-green-50 font-semibold text-green-800"
+                                        : "text-slate-700"
+                                  }`}
+                                >
+                                  <span className="flex min-w-0 items-center gap-2">
+                                    <span
+                                      className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                                        isActive ? "bg-green-500" : "bg-slate-300"
+                                      }`}
+                                    />
+                                    <span className="truncate">{name}</span>
+                                  </span>
+
+                                  {isActive && (
+                                    <span className="shrink-0 text-[11px] font-medium text-green-700">
+                                      Active
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })
+                          ) : (
+                            <div className="px-3 py-2 text-sm text-slate-500">
+                              No saved upper-level options. You can still type a name manually.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-
-
 
                   <div>
                     <div className="mb-2 flex items-center justify-between gap-3">

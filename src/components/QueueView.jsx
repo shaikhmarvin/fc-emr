@@ -10,6 +10,7 @@ export default function QueueView({
   priorityBadge,
   newReturningBadge,
   diabetesBadge,
+  htnBadge,
   elevatorBadge,
   fluBadge,
   papBadge,
@@ -82,22 +83,44 @@ export default function QueueView({
   }
 
   function getDailyCardNumber(patient, encounter) {
-    return (
-      encounter?.dailyNumber ??
-      encounter?.daily_number ??
-      encounter?.cardNumber ??
-      encounter?.card_number ??
-      encounter?.queueNumber ??
-      encounter?.queue_number ??
-      patient?.dailyNumber ??
-      patient?.daily_number ??
-      patient?.cardNumber ??
-      patient?.card_number ??
-      patient?.queueNumber ??
-      patient?.queue_number ??
-      ""
-    );
-  }
+  const intakeData = encounter?.intakeData || encounter?.intake_data || {};
+
+  return (
+    encounter?.dailyNumber ??
+    encounter?.daily_number ??
+    intakeData?.dailyNumber ??
+    intakeData?.daily_number ??
+    intakeData?.cardNumber ??
+    intakeData?.card_number ??
+    intakeData?.queueNumber ??
+    intakeData?.queue_number ??
+    encounter?.cardNumber ??
+    encounter?.card_number ??
+    encounter?.queueNumber ??
+    encounter?.queue_number ??
+    patient?.dailyNumber ??
+    patient?.daily_number ??
+    patient?.cardNumber ??
+    patient?.card_number ??
+    patient?.queueNumber ??
+    patient?.queue_number ??
+    ""
+  );
+}
+
+function getLeadershipQueueNotes(encounter) {
+  const intakeData = encounter?.intakeData || encounter?.intake_data || {};
+
+  return (
+    encounter?.notes ||
+    encounter?.leadershipNotes ||
+    encounter?.leadership_notes ||
+    intakeData?.notes ||
+    intakeData?.leadershipNotes ||
+    intakeData?.leadership_notes ||
+    ""
+  );
+}
 
   function rowMatchesQueueSearch(patient, encounter) {
     const query = normalizeSearchText(queueSearch);
@@ -570,8 +593,11 @@ const sortedUpperLevelNameOptions = sortActiveFirst(
                 {/* Top row */}
                 <div className="flex items-center justify-between">
                   <p className="font-semibold text-slate-800">
-                    {getPatientBoardName(patient)} ({patient.age})
-                  </p>
+  {getDailyCardNumber(patient, encounter)
+    ? `#${getDailyCardNumber(patient, encounter)} — `
+    : ""}
+  {getPatientBoardName(patient)} ({patient.age})
+</p>
 
                   <span
                     className={`rounded-full border px-2 py-0.5 text-xs ${getStatusClasses(encounter.status)}`}
@@ -584,6 +610,14 @@ const sortedUpperLevelNameOptions = sortActiveFirst(
                 <p className="text-sm text-slate-600">
                   {encounter.chiefComplaint || "No chief complaint"}
                 </p>
+                {getLeadershipQueueNotes(encounter) && (
+  <div className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900">
+    <span className="font-semibold">Leadership note:</span>{" "}
+    <span className="line-clamp-2">
+      {getLeadershipQueueNotes(encounter)}
+    </span>
+  </div>
+)}
 
                 {/* Secondary info */}
                 <div className="flex flex-wrap gap-x-3 text-xs text-slate-500">
@@ -608,6 +642,7 @@ const sortedUpperLevelNameOptions = sortActiveFirst(
                   )}
                   {priorityBadge(encounter)}
                   {spanishBadge(encounter)}
+                  {htnBadge?.(encounter)}
                   {diabetesBadge?.(encounter)}
                   {fluBadge?.(encounter)}
                   {elevatorBadge(encounter)}
@@ -815,8 +850,11 @@ const sortedUpperLevelNameOptions = sortActiveFirst(
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center justify-between">
                     <p className="font-semibold text-slate-800">
-                      {getPatientBoardName(patient)} ({patient.age})
-                    </p>
+  {getDailyCardNumber(patient, encounter)
+    ? `#${getDailyCardNumber(patient, encounter)} — `
+    : ""}
+  {getPatientBoardName(patient)} ({patient.age})
+</p>
 
                     <span
                       className={`rounded-full border px-2 py-0.5 text-xs ${getStatusClasses(encounter.status)}`}
@@ -828,6 +866,14 @@ const sortedUpperLevelNameOptions = sortActiveFirst(
                   <p className="text-sm text-slate-600">
                     {encounter.chiefComplaint || "No chief complaint"}
                   </p>
+                  {getLeadershipQueueNotes(encounter) && (
+  <div className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900">
+    <span className="font-semibold">Leadership note:</span>{" "}
+    <span className="line-clamp-2">
+      {getLeadershipQueueNotes(encounter)}
+    </span>
+  </div>
+)}
 
                   <div className="flex flex-wrap gap-x-3 text-xs text-slate-500">
                     <span>MRN: {patient.mrn || "—"}</span>
@@ -848,6 +894,7 @@ const sortedUpperLevelNameOptions = sortActiveFirst(
                     )}
                     {priorityBadge(encounter)}
                     {spanishBadge(encounter)}
+                    {htnBadge?.(encounter)}
                     {diabetesBadge?.(encounter)}
                     {fluBadge?.(encounter)}
                     {elevatorBadge(encounter)}

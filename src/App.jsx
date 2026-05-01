@@ -187,28 +187,121 @@ function sortRowsByDailyNumberThenTime(a, b) {
   return aTime - bTime;
 }
 
+function getEncounterIntakeValue(encounter, ...keys) {
+  const intakeData = encounter?.intakeData || encounter?.intake_data || {};
+
+  for (const key of keys) {
+    if (encounter?.[key] !== undefined && encounter?.[key] !== null && encounter?.[key] !== "") {
+      return encounter[key];
+    }
+
+    if (intakeData?.[key] !== undefined && intakeData?.[key] !== null && intakeData?.[key] !== "") {
+      return intakeData[key];
+    }
+  }
+
+  return undefined;
+}
 
 function priorityBadge(encounter) {
-  if (encounter.transportation === "Bus/Public Transport") {
+  const transportation = getEncounterIntakeValue(encounter, "transportation");
+
+  if (transportation === "Bus/Public Transport") {
     return (
       <span className="rounded-full bg-red-100 px-2 py-1 text-xs font-semibold text-red-700">
         Bus Priority
       </span>
     );
   }
+
   return null;
 }
 
 function spanishBadge(encounter) {
-  if (encounter.spanishSpeaking) {
+  const spanishSpeaking = getEncounterIntakeValue(encounter, "spanishSpeaking");
+
+  if (spanishSpeaking === true || spanishSpeaking === "true" || spanishSpeaking === "Yes") {
     return (
       <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-700">
         Spanish
       </span>
     );
   }
+
   return null;
 }
+
+function htnBadge(encounter) {
+  const hasHTN = getEncounterIntakeValue(encounter, "htn");
+
+  if (hasHTN === true || hasHTN === "true" || hasHTN === "Yes") {
+    return (
+      <span className="rounded-full bg-rose-100 px-2 py-1 text-xs font-semibold text-rose-700">
+        HTN
+      </span>
+    );
+  }
+
+  return null;
+}
+
+function diabetesBadge(encounter) {
+  const hasDM = getEncounterIntakeValue(encounter, "dm");
+
+  if (hasDM === true || hasDM === "true" || hasDM === "Yes") {
+    return (
+      <span className="rounded-full bg-orange-100 px-2 py-1 text-xs font-semibold text-orange-700">
+        DM
+      </span>
+    );
+  }
+
+  return null;
+}
+
+function fluBadge(encounter) {
+  const fluShot = getEncounterIntakeValue(encounter, "fluShot");
+
+  if (fluShot === "Interested" || fluShot === "Yes") {
+    return (
+      <span className="rounded-full bg-cyan-100 px-2 py-1 text-xs font-semibold text-cyan-700">
+        Flu
+      </span>
+    );
+  }
+
+  return null;
+}
+
+function elevatorBadge(encounter) {
+  const needsElevator = getEncounterIntakeValue(encounter, "needsElevator");
+
+  if (needsElevator === true || needsElevator === "true" || needsElevator === "Yes") {
+    return (
+      <span className="rounded-full bg-purple-100 px-2 py-1 text-xs font-semibold text-purple-700">
+        Elevator
+      </span>
+    );
+  }
+
+  return null;
+}
+
+function papBadge(encounter) {
+  const papStatus = getEncounterIntakeValue(encounter, "papStatus");
+
+  if (papStatus === "Interested") {
+    return (
+      <span className="rounded-full bg-pink-100 px-2 py-1 text-xs font-semibold text-pink-700">
+        Pap
+      </span>
+    );
+  }
+
+  return null;
+}
+
+
 
 async function runGoogleOCR(base64Images) {
   const { data, error } = await supabase.functions.invoke("google-ocr", {
@@ -242,56 +335,6 @@ async function runGoogleOCRInChunks(base64Images = [], chunkSize = 16) {
   return allTexts;
 }
 
-function diabetesBadge(encounter) {
-  const hasDM =
-    encounter.dm === true ||
-    encounter.intake_data?.dm === true;
-
-  if (hasDM) {
-    return (
-      <span className="rounded-full bg-orange-100 px-2 py-1 text-xs font-semibold text-orange-700">
-        DM
-      </span>
-    );
-  }
-  return null;
-}
-
-function fluBadge(encounter) {
-  const val = encounter.fluShot;
-
-  if (val === "Interested" || val === "Yes") {
-    return (
-      <span className="rounded-full bg-cyan-100 px-2 py-1 text-xs font-semibold text-cyan-700">
-        Flu
-      </span>
-    );
-  }
-
-  return null;
-}
-
-function elevatorBadge(encounter) {
-  if (encounter.needsElevator) {
-    return (
-      <span className="rounded-full bg-purple-100 px-2 py-1 text-xs font-semibold text-purple-700">
-        Elevator
-      </span>
-    );
-  }
-  return null;
-}
-
-function papBadge(encounter) {
-  if (encounter.papStatus === "Interested") {
-    return (
-      <span className="rounded-full bg-pink-100 px-2 py-1 text-xs font-semibold text-pink-700">
-        Pap
-      </span>
-    );
-  }
-  return null;
-}
 
 function getLocalDateInputValue(date = new Date()) {
   const year = date.getFullYear();
@@ -3201,13 +3244,32 @@ const [soapDraft, setSoapDraft] = useState({
 
 
   const allEncounterRows = useMemo(() => {
-    return patients.flatMap((patient) =>
-      patient.encounters.map((encounter) => ({
-        patient,
-        encounter,
-      }))
-    );
-  }, [patients]);
+  return patients.flatMap((patient) =>
+    patient.encounters.map((encounter) => {
+      const dailyNumber =
+        encounter?.dailyNumber ||
+        encounter?.daily_number ||
+        encounter?.intakeData?.dailyNumber ||
+        encounter?.intake_data?.dailyNumber ||
+        encounter?.intakeData?.daily_number ||
+        encounter?.intake_data?.daily_number ||
+        patient?.dailyNumber ||
+        patient?.daily_number ||
+        "";
+
+      return {
+        patient: {
+          ...patient,
+          dailyNumber: patient?.dailyNumber || dailyNumber,
+        },
+        encounter: {
+          ...encounter,
+          dailyNumber,
+        },
+      };
+    })
+  );
+}, [patients]);
 
   const specialtyEncounterRows = useMemo(() => {
     const todayClinicDate = formatClinicDate();
@@ -3735,6 +3797,7 @@ async function handleUndergradStartEncounter(data) {
       sex: patient.sex || "",
       ethnicity: patient.ethnicity || "",
       pronouns: patient.pronouns || "",
+      dailyNumber: encounter.dailyNumber || "",
       newReturning: encounter.newReturning || "",
       ttuStudent: patient.ttuStudent || false,
       visitLocation: encounter.visitLocation || "In Clinic",
@@ -7668,6 +7731,7 @@ async function handleUndergradStartEncounter(data) {
         getPatientBoardName={getPatientBoardName}
         getStudentBoardName={getStudentBoardName}
         spanishBadge={spanishBadge}
+        htnBadge={htnBadge}
         priorityBadge={priorityBadge}
         newReturningBadge={newReturningBadge}
         elevatorBadge={elevatorBadge}
@@ -7934,6 +7998,7 @@ async function handleUndergradStartEncounter(data) {
               priorityBadge={priorityBadge}
               newReturningBadge={newReturningBadge}
               diabetesBadge={diabetesBadge}
+              htnBadge={htnBadge}
               elevatorBadge={elevatorBadge}
               fluBadge={fluBadge}
               papBadge={papBadge}
@@ -7979,6 +8044,7 @@ activeUpperLevels={activeUpperLevels}
               newReturningBadge={newReturningBadge}
               elevatorBadge={elevatorBadge}
               diabetesBadge={diabetesBadge}
+              htnBadge={htnBadge}
               fluBadge={fluBadge}
               papBadge={papBadge}
               getStatusClasses={getStatusClasses}

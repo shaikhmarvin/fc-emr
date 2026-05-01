@@ -85,6 +85,7 @@ export default function RoomBoard({
   priorityBadge,
   newReturningBadge,
   diabetesBadge,
+  htnBadge,
   elevatorBadge,
   fluBadge,
   papBadge,
@@ -331,13 +332,9 @@ const occupied = activeGroups.length > 0;
                     )}
 
                     {newReturningBadge?.(primaryEncounter)}
-                    {primaryEncounter.dailyNumber && (
-                      <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800">
-                        #{primaryEncounter.dailyNumber}
-                      </span>
-                    )}
                     {priorityBadge(primaryEncounter)}
                     {spanishBadge(primaryEncounter)}
+                    {htnBadge?.(primaryEncounter)}
                     {diabetesBadge?.(primaryEncounter)}
                     {fluBadge?.(primaryEncounter)}
                     {elevatorBadge(primaryEncounter)}

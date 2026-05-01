@@ -30,6 +30,18 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
       clinicDate: encounter.clinic_date,
       createdAt: encounter.created_at,
       newReturning: intake.newReturning ?? "Returning",
+      dailyNumber:
+  intake.dailyNumber ??
+  intake.daily_number ??
+  intake.dailyCardNumber ??
+  intake.daily_card_number ??
+  intake.cardNumber ??
+  intake.card_number ??
+  intake.queueNumber ??
+  intake.queue_number ??
+  intake.patientNumber ??
+  intake.patient_number ??
+  "",
       visitLocation: intake.visitLocation ?? "In Clinic",
       chiefComplaint: encounter.chief_complaint || "",
       transportation: intake.transportation ?? "",

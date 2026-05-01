@@ -303,36 +303,58 @@ export async function updateEncounterInSupabase(encounterId, updates) {
   );
 
   if (hasIntakeUpdates) {
-    payload.intake_data = {
-      dailyNumber: updates.dailyNumber ?? "",
-      newReturning: updates.newReturning ?? "Returning",
-      visitLocation: updates.visitLocation ?? "In Clinic",
-      transportation: updates.transportation ?? "",
-      needsElevator: updates.needsElevator ?? false,
-      spanishSpeaking: updates.spanishSpeaking ?? false,
-      mammogramStatus: updates.mammogramStatus ?? "",
-      papStatus: updates.papStatus ?? "",
-      fluShot: updates.fluShot ?? "",
-      htn: updates.htn ?? false,
-      dm: updates.dm ?? false,
-      labsLast6Months: updates.labsLast6Months ?? "",
-      nicotineUse: updates.nicotineUse ?? "",
-      nicotineDetails: updates.nicotineDetails ?? "",
-      substanceUseConcern: updates.substanceUseConcern ?? "",
-      substanceUseTreatment: updates.substanceUseTreatment ?? "",
-      substanceUseNotes: updates.substanceUseNotes ?? "",
-      dermatology: updates.dermatology ?? "N/A",
-      ophthalmology: updates.ophthalmology ?? "N/A",
-      optometry: updates.optometry ?? "N/A",
-      diabeticEyeExamPastYear: updates.diabeticEyeExamPastYear ?? "N/A",
-      physicalTherapy: updates.physicalTherapy ?? "N/A",
-      mentalHealthCombined: updates.mentalHealthCombined ?? "N/A",
-      counseling: updates.counseling ?? "N/A",
-      anyMentalHealthPositive: updates.anyMentalHealthPositive ?? false,
-      visitType: updates.visitType ?? "general",
-      specialtyType: updates.specialtyType ?? "",
-    };
-  }
+  const { data: existingEncounter, error: existingError } = await supabase
+    .from("encounters")
+    .select("intake_data")
+    .eq("id", encounterId)
+    .maybeSingle();
+
+  if (existingError) throw existingError;
+
+  const currentIntake = existingEncounter?.intake_data || {};
+
+  payload.intake_data = {
+    ...currentIntake,
+    dailyNumber: updates.dailyNumber ?? currentIntake.dailyNumber ?? "",
+    newReturning: updates.newReturning ?? currentIntake.newReturning ?? "Returning",
+    visitLocation: updates.visitLocation ?? currentIntake.visitLocation ?? "In Clinic",
+    transportation: updates.transportation ?? currentIntake.transportation ?? "",
+    needsElevator: updates.needsElevator ?? currentIntake.needsElevator ?? false,
+    spanishSpeaking: updates.spanishSpeaking ?? currentIntake.spanishSpeaking ?? false,
+    mammogramStatus: updates.mammogramStatus ?? currentIntake.mammogramStatus ?? "",
+    papStatus: updates.papStatus ?? currentIntake.papStatus ?? "",
+    fluShot: updates.fluShot ?? currentIntake.fluShot ?? "",
+    htn: updates.htn ?? currentIntake.htn ?? false,
+    dm: updates.dm ?? currentIntake.dm ?? false,
+    labsLast6Months: updates.labsLast6Months ?? currentIntake.labsLast6Months ?? "",
+    nicotineUse: updates.nicotineUse ?? currentIntake.nicotineUse ?? "",
+    nicotineDetails: updates.nicotineDetails ?? currentIntake.nicotineDetails ?? "",
+    substanceUseConcern:
+      updates.substanceUseConcern ?? currentIntake.substanceUseConcern ?? "",
+    substanceUseTreatment:
+      updates.substanceUseTreatment ?? currentIntake.substanceUseTreatment ?? "",
+    substanceUseNotes:
+      updates.substanceUseNotes ?? currentIntake.substanceUseNotes ?? "",
+    dermatology: updates.dermatology ?? currentIntake.dermatology ?? "N/A",
+    ophthalmology: updates.ophthalmology ?? currentIntake.ophthalmology ?? "N/A",
+    optometry: updates.optometry ?? currentIntake.optometry ?? "N/A",
+    diabeticEyeExamPastYear:
+      updates.diabeticEyeExamPastYear ??
+      currentIntake.diabeticEyeExamPastYear ??
+      "N/A",
+    physicalTherapy:
+      updates.physicalTherapy ?? currentIntake.physicalTherapy ?? "N/A",
+    mentalHealthCombined:
+      updates.mentalHealthCombined ?? currentIntake.mentalHealthCombined ?? "N/A",
+    counseling: updates.counseling ?? currentIntake.counseling ?? "N/A",
+    anyMentalHealthPositive:
+      updates.anyMentalHealthPositive ??
+      currentIntake.anyMentalHealthPositive ??
+      false,
+    visitType: updates.visitType ?? currentIntake.visitType ?? "general",
+    specialtyType: updates.specialtyType ?? currentIntake.specialtyType ?? "",
+  };
+}
   
   if (Object.keys(payload).length === 0) {
     throw new Error("No encounter fields were provided for update.");
