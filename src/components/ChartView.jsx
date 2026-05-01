@@ -165,49 +165,58 @@ export default function ChartView({
     }
   }
   function getMedicationSupplyInfo(med) {
-    const dispense = Number(med?.dispenseAmount);
-    const dosesPerDay = getDosesPerDay(med?.frequency);
-    const refillCount = Number(med?.refillCount);
+  const dispense = Number(med?.dispenseAmount);
+  const dosesPerDay = getDosesPerDay(med?.frequency);
+  const refillCount = Number(med?.refillCount);
 
-    if (!dispense || !dosesPerDay || dosesPerDay <= 0) {
-      return {
-        daysUntilRefill: "",
-        refillDueDate: "",
-        totalDaysCovered: "",
-        runoutDate: "",
-      };
-    }
-
-    const daysUntilRefill = Math.floor(dispense / dosesPerDay);
-    if (!daysUntilRefill || daysUntilRefill < 1) {
-      return {
-        daysUntilRefill: "",
-        refillDueDate: "",
-        totalDaysCovered: "",
-        runoutDate: "",
-      };
-    }
-
-    const safeRefills =
-      Number.isFinite(refillCount) && refillCount >= 0 ? refillCount : 0;
-
-    const totalDaysCovered = daysUntilRefill * (safeRefills + 1);
-
-    const today = new Date();
-
-    const refillDue = new Date();
-    refillDue.setDate(today.getDate() + daysUntilRefill);
-
-    const runout = new Date();
-    runout.setDate(today.getDate() + totalDaysCovered);
-
+  if (!dispense || !dosesPerDay || dosesPerDay <= 0) {
     return {
-      daysUntilRefill: daysUntilRefill,
-      refillDueDate: refillDue.toLocaleDateString(),
-      totalDaysCovered: totalDaysCovered,
-      runoutDate: runout.toLocaleDateString(),
+      daysUntilRefill: "",
+      refillDueDate: "",
+      totalDaysCovered: "",
+      runoutDate: "",
     };
   }
+
+  const daysUntilRefill = Math.floor(dispense / dosesPerDay);
+
+  if (!daysUntilRefill || daysUntilRefill < 1) {
+    return {
+      daysUntilRefill: "",
+      refillDueDate: "",
+      totalDaysCovered: "",
+      runoutDate: "",
+    };
+  }
+
+  const safeRefills =
+    Number.isFinite(refillCount) && refillCount >= 0 ? refillCount : 0;
+
+  const totalDaysCovered = daysUntilRefill * (safeRefills + 1);
+
+  const rawStartDate =
+    med?.startedDate ||
+    med?.medicationStartedAt ||
+    med?.medication_started_at ||
+    "";
+
+  const startDate = rawStartDate
+    ? new Date(`${rawStartDate}T12:00:00`)
+    : new Date();
+
+  const refillDue = new Date(startDate);
+  refillDue.setDate(startDate.getDate() + daysUntilRefill);
+
+  const runout = new Date(startDate);
+  runout.setDate(startDate.getDate() + totalDaysCovered);
+
+  return {
+    daysUntilRefill,
+    refillDueDate: refillDue.toLocaleDateString(),
+    totalDaysCovered,
+    runoutDate: runout.toLocaleDateString(),
+  };
+}
 
   const LAB_GROUP_ORDER = [
     "CBC",

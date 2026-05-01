@@ -1,12 +1,14 @@
+import { useMemo, useState } from "react";
+
 const STATES = [
-  "Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut",
-  "Delaware","Florida","Georgia","Hawaii","Idaho","Illinois","Indiana","Iowa",
-  "Kansas","Kentucky","Louisiana","Maine","Maryland","Massachusetts","Michigan",
-  "Minnesota","Mississippi","Missouri","Montana","Nebraska","Nevada",
-  "New Hampshire","New Jersey","New Mexico","New York","North Carolina",
-  "North Dakota","Ohio","Oklahoma","Oregon","Pennsylvania","Rhode Island",
-  "South Carolina","South Dakota","Tennessee","Texas","Utah","Vermont",
-  "Virginia","Washington","West Virginia","Wisconsin","Wyoming",
+  "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut",
+  "Delaware", "Florida", "Georgia", "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa",
+  "Kansas", "Kentucky", "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan",
+  "Minnesota", "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada",
+  "New Hampshire", "New Jersey", "New Mexico", "New York", "North Carolina",
+  "North Dakota", "Ohio", "Oklahoma", "Oregon", "Pennsylvania", "Rhode Island",
+  "South Carolina", "South Dakota", "Tennessee", "Texas", "Utah", "Vermont",
+  "Virginia", "Washington", "West Virginia", "Wisconsin", "Wyoming",
 ];
 
 const CHRONIC_CONDITION_OPTIONS = [
@@ -49,6 +51,19 @@ export default function UndergradRegistrationModal({
   onSubmit,
 }) {
   if (!show) return null;
+
+  const [stateSearch, setStateSearch] = useState("");
+  const [showStateDropdown, setShowStateDropdown] = useState(false);
+
+  const filteredStates = useMemo(() => {
+    const query = stateSearch.trim().toLowerCase();
+
+    if (!query) return STATES;
+
+    return STATES.filter((state) =>
+      state.toLowerCase().includes(query)
+    );
+  }, [stateSearch]);
 
   function handleChange(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -98,6 +113,10 @@ export default function UndergradRegistrationModal({
               Street Address
             </label>
             <input
+              autoComplete="new-password"
+              name="clinic-field-a1"
+              id="clinic-field-a1"
+              inputMode="text"
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               value={form.addressLine1}
               onChange={(e) => handleChange("addressLine1", e.target.value)}
@@ -110,28 +129,73 @@ export default function UndergradRegistrationModal({
                 City
               </label>
               <input
+                autoComplete="new-password"
+                name="clinic-field-c1"
+                id="clinic-field-c1"
+                inputMode="text"
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 value={form.city}
                 onChange={(e) => handleChange("city", e.target.value)}
               />
             </div>
 
-            <div>
+            <div className="relative">
               <label className="mb-1 block text-sm font-medium text-slate-700">
                 State
               </label>
+
               <input
-                list="state-options"
+                autoComplete="new-password"
+                name="clinic-field-s1"
+                id="clinic-field-s1"
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                value={form.state}
-                onChange={(e) => handleChange("state", e.target.value)}
+                value={stateSearch || form.state || ""}
+                onChange={(e) => {
+                  setStateSearch(e.target.value);
+                  handleChange("state", e.target.value);
+                  setShowStateDropdown(true);
+                }}
+                onFocus={() => {
+                  setStateSearch(form.state || "");
+                  setShowStateDropdown(true);
+                }}
+                onBlur={() => {
+                  setTimeout(() => {
+                    setShowStateDropdown(false);
+                    setStateSearch("");
+                  }, 150);
+                }}
                 placeholder="Search state"
               />
-              <datalist id="state-options">
-                {STATES.map((state) => (
-                  <option key={state} value={state} />
-                ))}
-              </datalist>
+
+              {showStateDropdown && (
+                <div className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+                  {filteredStates.length > 0 ? (
+                    filteredStates.map((state) => (
+                      <button
+                        key={state}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          handleChange("state", state);
+                          setStateSearch("");
+                          setShowStateDropdown(false);
+                        }}
+                        className={`block w-full px-3 py-2 text-left text-sm hover:bg-slate-50 ${form.state === state
+                          ? "bg-blue-50 font-semibold text-blue-700"
+                          : "text-slate-700"
+                          }`}
+                      >
+                        {state}
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-3 py-2 text-sm text-slate-500">
+                      No matching states
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div>
@@ -139,6 +203,10 @@ export default function UndergradRegistrationModal({
                 ZIP Code
               </label>
               <input
+                autoComplete="new-password"
+                name="clinic-field-z1"
+                id="clinic-field-z1"
+                inputMode="numeric"
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 value={form.zipCode}
                 onChange={(e) => handleChange("zipCode", e.target.value)}
@@ -157,6 +225,7 @@ export default function UndergradRegistrationModal({
                   Name
                 </label>
                 <input
+                  autoComplete="off"
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   value={form.emergencyContactName}
                   onChange={(e) => handleChange("emergencyContactName", e.target.value)}
@@ -168,6 +237,7 @@ export default function UndergradRegistrationModal({
                   Relation
                 </label>
                 <input
+                  autoComplete="off"
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   value={form.emergencyContactRelation}
                   onChange={(e) => handleChange("emergencyContactRelation", e.target.value)}
@@ -179,6 +249,7 @@ export default function UndergradRegistrationModal({
                   Phone Number
                 </label>
                 <input
+                  autoComplete="off"
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   value={form.emergencyContactPhone}
                   onChange={(e) =>
@@ -195,6 +266,7 @@ export default function UndergradRegistrationModal({
                 Last 4 SSN
               </label>
               <input
+                autoComplete="off"
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 value={form.last4Ssn}
                 onChange={(e) => handleChange("last4Ssn", e.target.value)}

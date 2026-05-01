@@ -472,7 +472,11 @@ export async function createMedicationInSupabase(patientId, medication, encounte
         ? null
         : Number(medication.refillCount),
     instructions: medication.instructions || "",
-    is_active: medication.isActive ?? true,
+medication_started_at:
+  medication.medicationStartedAt ||
+  medication.startedDate ||
+  null,
+is_active: medication.isActive ?? true,
   };
 
   const { data, error } = await supabase
@@ -504,7 +508,20 @@ export async function updateMedicationInSupabase(medicationId, updates) {
         : Number(updates.refillCount);
   }
   if (updates.instructions !== undefined) payload.instructions = updates.instructions;
-  if (updates.isActive !== undefined) payload.is_active = updates.isActive;
+
+if (
+  updates.medicationStartedAt !== undefined ||
+  updates.startedDate !== undefined ||
+  updates.medication_started_at !== undefined
+) {
+  payload.medication_started_at =
+    updates.medicationStartedAt ||
+    updates.startedDate ||
+    updates.medication_started_at ||
+    null;
+}
+
+if (updates.isActive !== undefined) payload.is_active = updates.isActive;
   if (updates.lastUpdatedEncounterId !== undefined) {
     payload.last_updated_encounter_id = updates.lastUpdatedEncounterId;
   }

@@ -5954,11 +5954,23 @@ const [lastPharmacyToastKey, setLastPharmacyToastKey] = useState("");
       const optimisticMedications = previousMedications.map((med) =>
         med.id === editingMedicationId
           ? {
-            ...med,
-            ...newMedication,
-            id: editingMedicationId,
-            lastUpdatedEncounterId: selectedEncounter.id,
-          }
+  ...med,
+  ...newMedication,
+  id: editingMedicationId,
+  startedDate:
+    newMedication.startedDate ||
+    newMedication.medicationStartedAt ||
+    med.startedDate ||
+    med.medicationStartedAt ||
+    "",
+  medicationStartedAt:
+    newMedication.medicationStartedAt ||
+    newMedication.startedDate ||
+    med.medicationStartedAt ||
+    med.startedDate ||
+    "",
+  lastUpdatedEncounterId: selectedEncounter.id,
+}
           : med
       );
 
@@ -6019,6 +6031,14 @@ const [lastPharmacyToastKey, setLastPharmacyToastKey] = useState("");
       instructions: newMedication.instructions || "",
       lastUpdatedEncounterId: selectedEncounter.id,
       isActive: newMedication.isActive ?? true,
+      startedDate:
+  newMedication.startedDate ||
+  newMedication.medicationStartedAt ||
+  new Date().toISOString().slice(0, 10),
+medicationStartedAt:
+  newMedication.medicationStartedAt ||
+  newMedication.startedDate ||
+  new Date().toISOString().slice(0, 10),
     };
     setPatients((prev) =>
       prev.map((patient) =>
@@ -6056,6 +6076,8 @@ const [lastPharmacyToastKey, setLastPharmacyToastKey] = useState("");
         instructions: savedMedication.instructions || "",
         lastUpdatedEncounterId: savedMedication.last_updated_encounter_id || null,
         isActive: savedMedication.is_active ?? true,
+        startedDate: savedMedication.medication_started_at || "",
+medicationStartedAt: savedMedication.medication_started_at || "",
       };
 
       setPatients((prev) =>
@@ -6142,6 +6164,16 @@ const [lastPharmacyToastKey, setLastPharmacyToastKey] = useState("");
       refillCount: med.refillCount || "",
       instructions: med.instructions || "",
       isActive: med.isActive,
+      startedDate:
+  med.startedDate ||
+  med.medicationStartedAt ||
+  med.medication_started_at ||
+  "",
+medicationStartedAt:
+  med.medicationStartedAt ||
+  med.medication_started_at ||
+  med.startedDate ||
+  "",
     });
     setEditingMedicationId(med.id);
     setShowMedicationModal(true);
@@ -6157,6 +6189,16 @@ const [lastPharmacyToastKey, setLastPharmacyToastKey] = useState("");
       refillCount: med.refillCount || "",
       instructions: med.instructions || "",
       isActive: med.isActive ?? true,
+      startedDate:
+  med.startedDate ||
+  med.medicationStartedAt ||
+  med.medication_started_at ||
+  "",
+medicationStartedAt:
+  med.medicationStartedAt ||
+  med.medication_started_at ||
+  med.startedDate ||
+  "",
     });
 
     setEditingMedicationId(null);

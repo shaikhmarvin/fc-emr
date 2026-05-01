@@ -89,7 +89,15 @@ export default function MedicationModal({
     const totalDaysCovered = Number(estimatedTotalDaysCovered);
     if (!totalDaysCovered) return "";
 
-    const baseDate = new Date();
+    const rawStartDate =
+  newMedication.startedDate ||
+  newMedication.medicationStartedAt ||
+  newMedication.medication_started_at ||
+  "";
+
+const baseDate = rawStartDate
+  ? new Date(`${rawStartDate}T12:00:00`)
+  : new Date();
     baseDate.setDate(baseDate.getDate() + totalDaysCovered);
 
     return baseDate.toLocaleDateString();
@@ -99,7 +107,15 @@ export default function MedicationModal({
     const daysUntilRefill = Number(estimatedDaysUntilRefill);
     if (!daysUntilRefill) return "";
 
-    const baseDate = new Date();
+    const rawStartDate =
+  newMedication.startedDate ||
+  newMedication.medicationStartedAt ||
+  newMedication.medication_started_at ||
+  "";
+
+const baseDate = rawStartDate
+  ? new Date(`${rawStartDate}T12:00:00`)
+  : new Date();
     baseDate.setDate(baseDate.getDate() + daysUntilRefill);
 
     return baseDate.toLocaleDateString();
@@ -261,6 +277,28 @@ export default function MedicationModal({
                 </div>
               </div>
             ) : null}
+
+            <div>
+  <label className="mb-1 block text-sm font-medium text-slate-700">
+    Medication Started Date
+  </label>
+  <input
+    type="date"
+    value={
+      newMedication.startedDate ||
+      newMedication.medicationStartedAt ||
+      ""
+    }
+    onChange={(e) =>
+      setNewMedication((prev) => ({
+        ...prev,
+        startedDate: e.target.value,
+        medicationStartedAt: e.target.value,
+      }))
+    }
+    className="w-full rounded-lg border p-3"
+  />
+</div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>

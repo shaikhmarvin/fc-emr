@@ -129,6 +129,8 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
       dispenseAmount: medication.dispense_amount ?? "",
       refillCount: medication.refill_count ?? "",
       instructions: medication.instructions || "",
+      startedDate: medication.medication_started_at || "",
+medicationStartedAt: medication.medication_started_at || "",
       lastUpdatedEncounterId: medication.last_updated_encounter_id || null,
       isActive: medication.is_active ?? true,
     });

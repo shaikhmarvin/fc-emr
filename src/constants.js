@@ -74,6 +74,8 @@ export const EMPTY_MEDICATION = {
   frequency: "",
   route: "",
   dispenseAmount: "",
+  startedDate: "",
+  medicationStartedAt: "",
   refillCount: "",
   instructions: "",
   isActive: true,
