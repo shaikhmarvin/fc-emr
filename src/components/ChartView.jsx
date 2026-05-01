@@ -1182,6 +1182,42 @@ export default function ChartView({
     };
   }
 
+  function getRoomOptionDisplay(room) {
+  const roomUsage = getRoomUsageLabel(room);
+
+  if (!room?.occupied) {
+    return {
+      label: "🟢 Available",
+      optionClass: "bg-green-50 text-green-900",
+      selectClass: "border-green-300 bg-green-50 text-green-900",
+    };
+  }
+
+  if (roomMatchesCurrentAssignment(room)) {
+    return {
+      label: "🔵 Same Student/Provider",
+      optionClass: "bg-blue-50 text-blue-900",
+      selectClass: "border-blue-300 bg-blue-50 text-blue-900",
+    };
+  }
+
+  return {
+    label: room.occupiedBy ? `🔴 In Use - ${room.occupiedBy}` : "🔴 In Use",
+    optionClass: "bg-red-50 text-red-900",
+    selectClass: "border-red-300 bg-red-50 text-red-900",
+  };
+}
+
+function getSelectedRoomOptionClass() {
+  const selectedRoom = ROOM_OPTIONS.find(
+    (room) => String(room.number) === String(assignmentForm.roomNumber)
+  );
+
+  if (!selectedRoom) return "border-slate-300 bg-white text-slate-900";
+
+  return getRoomOptionDisplay(selectedRoom).selectClass;
+}
+
   const specialtyBadgeText = isSpecialtyVisit
     ? `${getVisitTypeLabel(selectedEncounter?.visitType)}${selectedEncounter?.specialtyType
       ? ` • ${getSpecialtyTypeLabel(selectedEncounter.specialtyType)}`
@@ -1684,27 +1720,30 @@ export default function ChartView({
                     </div>
 
                     <select
-                      value={assignmentForm.roomNumber}
-                      onChange={(e) =>
-                        setAssignmentForm((prev) => ({
-                          ...prev,
-                          roomNumber: e.target.value,
-                        }))
-                      }
-                      className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
-                    >
-                      <option value="">Select room</option>
-                      {ROOM_OPTIONS.map((room) => (
-                        <option key={room.number} value={room.number}>
-                          {room.displayLabel || `${room.label} — ${room.area}`}
-                          {room.occupied
-                            ? roomMatchesCurrentAssignment(room)
-                              ? " (Same Student/Provider)"
-                              : " (In Use)"
-                            : " (Available)"}
-                        </option>
-                      ))}
-                    </select>
+  value={assignmentForm.roomNumber}
+  onChange={(e) =>
+    setAssignmentForm((prev) => ({
+      ...prev,
+      roomNumber: e.target.value,
+    }))
+  }
+  className={`min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm font-medium sm:text-base ${getSelectedRoomOptionClass()}`}
+>
+  <option value="">Select room</option>
+  {ROOM_OPTIONS.map((room) => {
+    const roomDisplay = getRoomOptionDisplay(room);
+
+    return (
+      <option
+        key={room.number}
+        value={room.number}
+        className={roomDisplay.optionClass}
+      >
+        {room.displayLabel || `${room.label} — ${room.area}`} ({roomDisplay.label})
+      </option>
+    );
+  })}
+</select>
 
                     {(() => {
                       const selectedRoom = ROOM_OPTIONS.find(

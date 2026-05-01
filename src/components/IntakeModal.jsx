@@ -84,7 +84,7 @@ export default function IntakeModal({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
           {intakeMatchPatientId && !isEditingIntake && (
             <div className="mb-6 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-4">
               <p className="text-sm font-semibold text-amber-900">

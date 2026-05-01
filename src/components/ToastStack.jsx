@@ -15,7 +15,7 @@ export default function ToastStack({ toasts, onDismiss }) {
   }
 
   return (
-    <div className="pointer-events-none fixed right-4 top-4 z-[200] flex w-full max-w-sm flex-col gap-2">
+    <div className="pointer-events-none fixed left-4 right-4 top-4 z-[200] flex w-auto flex-col gap-2 sm:left-auto sm:w-full sm:max-w-sm">
       {toasts.map((toast) => {
         const isClickable = typeof toast.onClick === "function";
 

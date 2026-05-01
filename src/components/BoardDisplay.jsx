@@ -283,9 +283,19 @@ export default function BoardDisplay({
                       {getPatientBoardName(primaryPatient)}
                     </p>
 
-                    <p className="text-sm">
-                      {getStudentBoardName(primaryEncounter.assignedStudent)}
-                    </p>
+                    <div className="space-y-0.5 text-sm">
+  <p>
+    <span className="font-semibold">Student:</span>{" "}
+    {getStudentBoardName(primaryEncounter.assignedStudent)}
+  </p>
+
+  {primaryEncounter.assignedUpperLevel && (
+    <p>
+      <span className="font-semibold">Upper:</span>{" "}
+      {getStudentBoardName(primaryEncounter.assignedUpperLevel)}
+    </p>
+  )}
+</div>
 
                     <div className="flex flex-wrap gap-1">
                       {primaryEncounter.visitType === "both" && (
@@ -320,8 +330,15 @@ export default function BoardDisplay({
                             className="rounded-lg bg-slate-400/30 px-2 py-1.5 text-xs text-slate-800"
                           >
                             <div className="font-medium leading-tight">
-                              {getPatientBoardName(patient)}
-                            </div>
+  {getPatientBoardName(patient)}
+</div>
+
+<div className="mt-0.5 text-[11px] opacity-80">
+  {encounter.assignedStudent ? `Student: ${getStudentBoardName(encounter.assignedStudent)}` : ""}
+  {encounter.assignedUpperLevel
+    ? `${encounter.assignedStudent ? " • " : ""}Upper: ${getStudentBoardName(encounter.assignedUpperLevel)}`
+    : ""}
+</div>
                           </div>
                         ))}
 

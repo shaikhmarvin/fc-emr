@@ -204,11 +204,40 @@ export default function QueueView({
     return false;
   }
 
-  function getRoomQueueLabel(room, encounter) {
-    if (!room?.occupied) return "Available";
-    if (roomMatchesDraftAssignment(room, encounter)) return "Same Student/Provider";
-    return "In Use";
+  function getRoomQueueDisplay(room, encounter) {
+  if (!room?.occupied) {
+    return {
+      label: "🟢 Available",
+      optionClass: "bg-green-50 text-green-900",
+      selectClass: "border-green-300 bg-green-50 text-green-900",
+    };
   }
+
+  if (roomMatchesDraftAssignment(room, encounter)) {
+    return {
+      label: "🔵 Same Student/Provider",
+      optionClass: "bg-blue-50 text-blue-900",
+      selectClass: "border-blue-300 bg-blue-50 text-blue-900",
+    };
+  }
+
+  return {
+    label: room.occupiedBy ? `🔴 In Use - ${room.occupiedBy}` : "🔴 In Use",
+    optionClass: "bg-red-50 text-red-900",
+    selectClass: "border-red-300 bg-red-50 text-red-900",
+  };
+}
+
+function getSelectedRoomQueueClass(encounter) {
+  const selectedRoomNumber = getDraftValue(encounter, "roomNumber");
+  const selectedRoom = ROOM_OPTIONS.find(
+    (room) => String(room.number) === String(selectedRoomNumber)
+  );
+
+  if (!selectedRoom) return "border-slate-300 bg-white text-slate-900";
+
+  return getRoomQueueDisplay(selectedRoom, encounter).selectClass;
+}
 
   const pendingRefills = (refillRequests || []).filter((r) => {
     const status = String(r.status || "pending").toLowerCase();
@@ -931,20 +960,30 @@ export default function QueueView({
                     </div>
 
                     <select
-                      className="min-h-[40px] w-full rounded-lg border px-3 py-2 text-sm"
-                      value={getDraftValue(encounter, "roomNumber")}
-                      onChange={(e) =>
-                        updateDraft(encounter.id, "roomNumber", e.target.value)
-                      }
-                    >
-                      <option value="">Room</option>
-                      {ROOM_OPTIONS.map((room) => (
-                        <option key={room.number} value={room.number}>
-                          {(room.displayLabel || `${room.label} — ${room.area}`) +
-                            ` (${getRoomQueueLabel(room, encounter)})`}
-                        </option>
-                      ))}
-                    </select>
+  className={`min-h-[40px] w-full rounded-lg border px-3 py-2 text-sm font-medium ${getSelectedRoomQueueClass(
+    encounter
+  )}`}
+  value={getDraftValue(encounter, "roomNumber")}
+  onChange={(e) =>
+    updateDraft(encounter.id, "roomNumber", e.target.value)
+  }
+>
+  <option value="">Room</option>
+  {ROOM_OPTIONS.map((room) => {
+    const roomDisplay = getRoomQueueDisplay(room, encounter);
+
+    return (
+      <option
+        key={room.number}
+        value={room.number}
+        className={roomDisplay.optionClass}
+      >
+        {(room.displayLabel || `${room.label} — ${room.area}`) +
+          ` (${roomDisplay.label})`}
+      </option>
+    );
+  })}
+</select>
 
 
 

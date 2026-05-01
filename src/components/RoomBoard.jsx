@@ -22,9 +22,9 @@ function isVisibleOnBoard(encounter) {
 function getEncounterTime(encounter) {
   return new Date(
     encounter?.createdAt ||
-      encounter?.updatedAt ||
-      encounter?.clinicDate ||
-      0
+    encounter?.updatedAt ||
+    encounter?.clinicDate ||
+    0
   ).getTime();
 }
 
@@ -97,37 +97,37 @@ export default function RoomBoard({
   isLeadershipView,
   SPECIALTY_ROOM_RULES,
   todayStaffRoster,
-onTodayStaffRosterChange,
-onTodayStaffRosterSave,
-tonightSpecialtyNames = [],
-tonightReservedRooms = [],
+  onTodayStaffRosterChange,
+  onTodayStaffRosterSave,
+  tonightSpecialtyNames = [],
+  tonightReservedRooms = [],
 }) {
 
-function getReservedSpecialtyForRoom(roomNumber) {
-  return (tonightReservedRooms || []).find(
-    (reserved) => String(reserved.roomNumber) === String(roomNumber)
-  );
-}
+  function getReservedSpecialtyForRoom(roomNumber) {
+    return (tonightReservedRooms || []).find(
+      (reserved) => String(reserved.roomNumber) === String(roomNumber)
+    );
+  }
 
   return (
-  <div className="space-y-4 p-3 sm:p-4 lg:p-6">
-    {tonightSpecialtyNames.length > 0 && (
-      <div className="rounded-2xl border border-purple-200 bg-purple-50 px-4 py-3 text-sm font-semibold text-purple-800 shadow-sm">
-        Tonight’s Specialties: {tonightSpecialtyNames.join(", ")}
-      </div>
-    )}
+    <div className="space-y-4 p-3 sm:p-4 lg:p-6">
+      {tonightSpecialtyNames.length > 0 && (
+        <div className="rounded-2xl border border-purple-200 bg-purple-50 px-4 py-3 text-sm font-semibold text-purple-800 shadow-sm">
+          Tonight’s Specialties: {tonightSpecialtyNames.join(", ")}
+        </div>
+      )}
 
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className="rounded-2xl bg-white p-3 shadow">
           <p className="text-sm text-slate-500">Available Rooms</p>
           <p className="mt-1 text-2xl font-bold">
             {
               ROOM_OPTIONS.filter((room) => {
-  const groups = getRoomEncounterGroups(allEncounterRows, room.number);
-  return !groups.some(
-    (group) => group.primary?.encounter?.status !== "done"
-  );
-}).length
+                const groups = getRoomEncounterGroups(allEncounterRows, room.number);
+                return !groups.some(
+                  (group) => group.primary?.encounter?.status !== "done"
+                );
+              }).length
             }
           </p>
         </div>
@@ -171,25 +171,25 @@ function getReservedSpecialtyForRoom(roomNumber) {
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 value={todayStaffRoster?.[field.key] || ""}
                 onChange={(e) =>
-  onTodayStaffRosterChange?.((prev) => ({
-    ...(prev || {}),
-    [field.key]: e.target.value,
-  }))
-}
-onBlur={async (e) => {
-  const nextRoster = {
-    ...(todayStaffRoster || {}),
-    [field.key]: e.target.value,
-  };
+                  onTodayStaffRosterChange?.((prev) => ({
+                    ...(prev || {}),
+                    [field.key]: e.target.value,
+                  }))
+                }
+                onBlur={async (e) => {
+                  const nextRoster = {
+                    ...(todayStaffRoster || {}),
+                    [field.key]: e.target.value,
+                  };
 
-  onTodayStaffRosterChange?.(nextRoster);
+                  onTodayStaffRosterChange?.(nextRoster);
 
-  try {
-    await onTodayStaffRosterSave?.(nextRoster);
-  } catch (error) {
-    console.error("Failed to save today staff roster:", error);
-  }
-}}
+                  try {
+                    await onTodayStaffRosterSave?.(nextRoster);
+                  } catch (error) {
+                    console.error("Failed to save today staff roster:", error);
+                  }
+                }}
               />
             </label>
           ))}
@@ -209,15 +209,15 @@ onBlur={async (e) => {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
         {ROOM_OPTIONS.map((room) => {
           const groups = getRoomEncounterGroups(allEncounterRows, room.number);
-const activeGroups = groups.filter(
-  (group) => group.primary?.encounter?.status !== "done"
-);
-const primaryGroup = getPrimarySlot(activeGroups.length > 0 ? activeGroups : groups);
-const primaryRow = primaryGroup?.primary || null;
-const primaryEncounter = primaryRow?.encounter || null;
-const primaryPatient = primaryRow?.patient || null;
-const hasRoomHistory = Boolean(primaryEncounter);
-const occupied = activeGroups.length > 0;
+          const activeGroups = groups.filter(
+            (group) => group.primary?.encounter?.status !== "done"
+          );
+          const primaryGroup = getPrimarySlot(activeGroups.length > 0 ? activeGroups : groups);
+          const primaryRow = primaryGroup?.primary || null;
+          const primaryEncounter = primaryRow?.encounter || null;
+          const primaryPatient = primaryRow?.patient || null;
+          const hasRoomHistory = Boolean(primaryEncounter);
+          const occupied = activeGroups.length > 0;
 
           const reservedSpecialty = getReservedSpecialtyForRoom(room.number);
 
@@ -276,17 +276,16 @@ const occupied = activeGroups.length > 0;
                   openPatientChart(primaryPatient.id, primaryEncounter.id);
                 }
               }}
-              className={`min-h-[220px] rounded-2xl border p-3 text-left shadow transition ${
-  hasRoomHistory
-    ? primaryEncounter.status === "done"
-      ? "border-slate-300 bg-slate-100 opacity-70"
-      : primaryEncounter.status === "in_visit"
-      ? "border-blue-200 bg-blue-50"
-      : "border-yellow-200 bg-yellow-50"
-    : reservedSpecialty
-    ? "border-violet-300 bg-violet-50 hover:bg-violet-100"
-    : "border-slate-200 bg-white hover:bg-slate-50"
-}`}
+              className={`min-h-[220px] rounded-2xl border p-3 text-left shadow transition ${hasRoomHistory
+                  ? primaryEncounter.status === "done"
+                    ? "border-slate-300 bg-slate-100 opacity-70"
+                    : primaryEncounter.status === "in_visit"
+                      ? "border-blue-200 bg-blue-50"
+                      : "border-yellow-200 bg-yellow-50"
+                  : reservedSpecialty
+                    ? "border-violet-300 bg-violet-50 hover:bg-violet-100"
+                    : "border-slate-200 bg-white hover:bg-slate-50"
+                }`}
             >
               <div className="mb-2 flex items-start justify-between gap-2">
                 <div>
@@ -301,11 +300,10 @@ const occupied = activeGroups.length > 0;
                 </div>
 
                 <span
-                  className={`rounded-full px-2 py-1 text-xs font-medium ${
-                    occupied
+                  className={`rounded-full px-2 py-1 text-xs font-medium ${occupied
                       ? "bg-slate-200 text-slate-700"
                       : "bg-emerald-100 text-emerald-700"
-                  }`}
+                    }`}
                 >
                   {occupied ? "Occupied" : "Available"}
                 </span>
@@ -324,9 +322,19 @@ const occupied = activeGroups.length > 0;
                       </div>
                     )}
 
-                    <p className="mt-1 text-sm text-slate-600">
-                      Student: {getStudentBoardName(primaryEncounter.assignedStudent)}
-                    </p>
+                    <div className="mt-1 space-y-0.5 text-sm text-slate-600">
+                      <p>
+                        <span className="font-medium">Student:</span>{" "}
+                        {getStudentBoardName(primaryEncounter.assignedStudent)}
+                      </p>
+
+                      {primaryEncounter.assignedUpperLevel && (
+                        <p>
+                          <span className="font-medium">Upper:</span>{" "}
+                          {getStudentBoardName(primaryEncounter.assignedUpperLevel)}
+                        </p>
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex flex-wrap gap-2">
@@ -375,7 +383,18 @@ const occupied = activeGroups.length > 0;
                             {getPatientBoardName(patient)}
                           </div>
                           <div className="mt-0.5 text-[11px] text-slate-600">
-                            SOAP pending
+                            {encounter.assignedStudent ? (
+                              <span>Student: {getStudentBoardName(encounter.assignedStudent)}</span>
+                            ) : (
+                              <span>SOAP pending</span>
+                            )}
+
+                            {encounter.assignedUpperLevel && (
+                              <span>
+                                {encounter.assignedStudent ? " • " : ""}
+                                Upper: {getStudentBoardName(encounter.assignedUpperLevel)}
+                              </span>
+                            )}
                           </div>
                         </div>
                       ))}

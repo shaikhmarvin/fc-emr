@@ -145,7 +145,7 @@ function SpecialtyTable({
                 </div>
             ) : (
                 <>
-                    <div className="hidden md:block">
+                    <div className="hidden lg:block">
                         <div className="grid grid-cols-[1.4fr_0.9fr_1fr_1.4fr_auto] gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 sm:px-5">
                             <div>Patient</div>
                             <div>DOB</div>
@@ -212,7 +212,7 @@ function SpecialtyTable({
                         </div>
                     </div>
 
-                    <div className="divide-y divide-slate-100 md:hidden">
+                    <div className="divide-y divide-slate-100 lg:hidden">
                         {filteredRows.map(({ patient, encounter }) => (
                             <div key={encounter.id} className="space-y-2 px-4 py-4">
                                 <div className="flex items-start justify-between gap-3">
