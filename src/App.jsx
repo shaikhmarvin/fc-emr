@@ -301,6 +301,51 @@ function papBadge(encounter) {
   return null;
 }
 
+function dualVisitBadge(encounter) {
+  const intakeData = encounter?.intakeData || encounter?.intake_data || {};
+
+  const visitType =
+    encounter?.visitType ||
+    encounter?.visit_type ||
+    intakeData?.visitType ||
+    intakeData?.visit_type ||
+    "";
+
+  const specialtyType =
+    encounter?.specialtyType ||
+    encounter?.specialty_type ||
+    intakeData?.specialtyType ||
+    intakeData?.specialty_type ||
+    "";
+
+  if (visitType !== "both") return null;
+
+  const specialtyMap = {
+    dermatology: "Derm",
+    derm: "Derm",
+    physical_therapy: "PT",
+    physicaltherapy: "PT",
+    pt: "PT",
+    mental_health: "Mental Health",
+    mentalhealth: "Mental Health",
+    counseling: "Mental Health",
+    addiction: "Addiction",
+    ophthalmology: "Ophthalmology",
+    optometry: "Optometry",
+  };
+
+  const specialtyLabel =
+    specialtyMap[String(specialtyType).toLowerCase()] ||
+    specialtyType ||
+    "Specialty";
+
+  return (
+    <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
+      General + {specialtyLabel}
+    </span>
+  );
+}
+
 
 
 async function runGoogleOCR(base64Images) {
@@ -433,21 +478,26 @@ export default function App() {
   }
 
   function showToast({
-    title = "Notice",
-    message = "",
-    type = "info",
-    duration = 3500,
-  }) {
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  title = "Notice",
+  message = "",
+  type = "info",
+  duration = 3500,
+  onClick = null,
+  actionLabel = "",
+}) {
+  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
-    setToasts((prev) => [...prev, { id, title, message, type }]);
+  setToasts((prev) => [
+    ...prev,
+    { id, title, message, type, onClick, actionLabel },
+  ]);
 
-    if (duration > 0) {
-      window.setTimeout(() => {
-        setToasts((prev) => prev.filter((toast) => toast.id !== id));
-      }, duration);
-    }
+  if (duration > 0) {
+    window.setTimeout(() => {
+      setToasts((prev) => prev.filter((toast) => toast.id !== id));
+    }, duration);
   }
+}
 
   const {
     session,
@@ -607,30 +657,30 @@ export default function App() {
   }
 
   function canSubmitSoapForAttending(role, encounter) {
-  if (!encounter) return false;
+    if (!encounter) return false;
 
-  const isDraft = encounter.soapStatus === "draft" || !encounter.soapStatus;
-  const skipUpperApproved = !!encounter.skipUpperLevel;
+    const isDraft = encounter.soapStatus === "draft" || !encounter.soapStatus;
+    const skipUpperApproved = !!encounter.skipUpperLevel;
 
-  return (
-    (role === "upper_level" && isDraft) ||
-    ((role === "student" || role === "leadership") && isDraft && skipUpperApproved)
-  );
-}
+    return (
+      (role === "upper_level" && isDraft) ||
+      ((role === "student" || role === "leadership") && isDraft && skipUpperApproved)
+    );
+  }
 
-function canAttendingSignSoap(role, encounter) {
-  if (!encounter) return false;
+  function canAttendingSignSoap(role, encounter) {
+    if (!encounter) return false;
 
-  const allowedRole =
-    role === "student" ||
-    role === "upper_level" ||
-    role === "leadership" ||
-    role === "attending";
+    const allowedRole =
+      role === "student" ||
+      role === "upper_level" ||
+      role === "leadership" ||
+      role === "attending";
 
-  if (!allowedRole || !!encounter.attendingSignedAt) return false;
+    if (!allowedRole || !!encounter.attendingSignedAt) return false;
 
-  return encounter.soapStatus === "awaiting_attending";
-}
+    return encounter.soapStatus === "awaiting_attending";
+  }
 
   function formatRoleLabel(role) {
     switch (role) {
@@ -648,36 +698,36 @@ function canAttendingSignSoap(role, encounter) {
   }
 
   function getMissingSoapFields(source, encounter = selectedEncounter) {
-  if (!source) return [];
+    if (!source) return [];
 
-  const isOphthoEncounter =
-    encounter?.specialtyType === "ophthalmology";
+    const isOphthoEncounter =
+      encounter?.specialtyType === "ophthalmology";
 
-  if (isOphthoEncounter) {
-    const ophtho = {
-      ...EMPTY_OPHTHO_NOTE,
-      ...(source.ophthalmologyNote || {}),
-    };
+    if (isOphthoEncounter) {
+      const ophtho = {
+        ...EMPTY_OPHTHO_NOTE,
+        ...(source.ophthalmologyNote || {}),
+      };
+
+      const missing = [];
+
+      if (!(ophtho.hpi || "").trim()) missing.push("Chief Complaint & HPI");
+      if (!(ophtho.ocularHistory || "").trim()) missing.push("Medical / Ocular History");
+      if (!(ophtho.assessment || "").trim()) missing.push("Assessment");
+      if (!(ophtho.plan || "").trim()) missing.push("Plan");
+
+      return missing;
+    }
 
     const missing = [];
 
-    if (!(ophtho.hpi || "").trim()) missing.push("Chief Complaint & HPI");
-    if (!(ophtho.ocularHistory || "").trim()) missing.push("Medical / Ocular History");
-    if (!(ophtho.assessment || "").trim()) missing.push("Assessment");
-    if (!(ophtho.plan || "").trim()) missing.push("Plan");
+    if (!(source.soapSubjective || "").trim()) missing.push("Subjective");
+    if (!(source.soapObjective || "").trim()) missing.push("Objective");
+    if (!(source.soapAssessment || "").trim()) missing.push("Assessment");
+    if (!(source.soapPlan || "").trim()) missing.push("Plan");
 
     return missing;
   }
-
-  const missing = [];
-
-  if (!(source.soapSubjective || "").trim()) missing.push("Subjective");
-  if (!(source.soapObjective || "").trim()) missing.push("Objective");
-  if (!(source.soapAssessment || "").trim()) missing.push("Assessment");
-  if (!(source.soapPlan || "").trim()) missing.push("Plan");
-
-  return missing;
-}
 
   function showSoapMessage(message) {
     setSoapUiMessage(message);
@@ -750,6 +800,8 @@ function canAttendingSignSoap(role, encounter) {
   const [registrationEncounterId, setRegistrationEncounterId] = useState(null);
 
   const [activeView, setActiveView] = useState("dashboard");
+const [pharmacyToast, setPharmacyToast] = useState(null);
+const [lastPharmacyToastKey, setLastPharmacyToastKey] = useState("");
 
   useEffect(() => {
     if (userRole === "undergraduate") {
@@ -758,7 +810,7 @@ function canAttendingSignSoap(role, encounter) {
     }
 
     if (userRole === "pharmacy") {
-      setActiveView("formulary");
+      setActiveView("queue");
       return;
     }
 
@@ -776,11 +828,11 @@ function canAttendingSignSoap(role, encounter) {
 
   const canRefill = canRefillAccess || userRole === "attending" || userRole === "leadership";
   const canAccessDashboard =
-  userRole === "leadership" ||
-  userRole === "undergraduate" ||
-  userRole === "upper_level" ||
-  userRole === "attending" ||
-  canRefill;
+    userRole === "leadership" ||
+    userRole === "undergraduate" ||
+    userRole === "upper_level" ||
+    userRole === "attending" ||
+    canRefill;
 
 
   const [clinicSummary, setClinicSummary] = useState({
@@ -980,40 +1032,40 @@ function canAttendingSignSoap(role, encounter) {
   }, [session, formularyLoaded]);
 
   async function loadRefillRequests() {
-  try {
-    const rows = await fetchRefillRequests();
-    setRefillRequests(rows);
-  } catch (error) {
-    console.error("Failed to load refill requests:", error);
+    try {
+      const rows = await fetchRefillRequests();
+      setRefillRequests(rows);
+    } catch (error) {
+      console.error("Failed to load refill requests:", error);
+    }
   }
-}
 
-useEffect(() => {
-  if (!session) return;
-  loadRefillRequests();
-}, [session]);
+  useEffect(() => {
+    if (!session) return;
+    loadRefillRequests();
+  }, [session]);
 
-async function refreshClinicSummaryData() {
-  try {
-    setSummaryRefreshStatus("Refreshing...");
+  async function refreshClinicSummaryData() {
+    try {
+      setSummaryRefreshStatus("Refreshing...");
 
-    await Promise.all([
-      refreshClinicData(),
-      loadRefillRequests(),
-      loadProfiles(),
-    ]);
+      await Promise.all([
+        refreshClinicData(),
+        loadRefillRequests(),
+        loadProfiles(),
+      ]);
 
-    setSummaryRefreshStatus("Refreshed");
+      setSummaryRefreshStatus("Refreshed");
 
-    setTimeout(() => {
-      setSummaryRefreshStatus("");
-    }, 2000);
-  } catch (error) {
-    console.error("Failed to refresh clinic summary:", error);
-    setSummaryRefreshStatus("Refresh failed");
-    alert(`Failed to refresh clinic summary: ${error.message}`);
+      setTimeout(() => {
+        setSummaryRefreshStatus("");
+      }, 2000);
+    } catch (error) {
+      console.error("Failed to refresh clinic summary:", error);
+      setSummaryRefreshStatus("Refresh failed");
+      alert(`Failed to refresh clinic summary: ${error.message}`);
+    }
   }
-}
 
 
   useEffect(() => {
@@ -1190,10 +1242,10 @@ async function refreshClinicSummaryData() {
   const [selectedPatientId, setSelectedPatientId] = useState(null);
   const [selectedEncounterId, setSelectedEncounterId] = useState(null);
   const [todayStaffRoster, setTodayStaffRoster] = useState({
-  attendings: "",
-  residents: "",
-  upperLevels: "",
-});
+    attendings: "",
+    residents: "",
+    upperLevels: "",
+  });
   const [refillRequests, setRefillRequests] = useState([]);
   const { patients, setPatients, refreshClinicData } = useClinicData({
     authReady,
@@ -1202,47 +1254,47 @@ async function refreshClinicSummaryData() {
   });
 
   useEffect(() => {
-  if (!session) return;
+    if (!session) return;
 
-  let cancelled = false;
+    let cancelled = false;
 
-  async function loadRoster() {
-    const roster = await fetchTodayStaffRoster();
-    if (!cancelled) {
-      setTodayStaffRoster(roster);
+    async function loadRoster() {
+      const roster = await fetchTodayStaffRoster();
+      if (!cancelled) {
+        setTodayStaffRoster(roster);
+      }
+    }
+
+    loadRoster();
+
+    const channel = supabase
+      .channel("clinic_staff_roster_today")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "clinic_staff_roster",
+        },
+        () => {
+          loadRoster();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [session]);
+
+  async function handleSaveTodayStaffRoster() {
+    try {
+      await saveTodayStaffRoster(todayStaffRoster);
+    } catch (error) {
+      showToast?.("Unable to save staff roster.", "error");
     }
   }
-
-  loadRoster();
-
-  const channel = supabase
-    .channel("clinic_staff_roster_today")
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "clinic_staff_roster",
-      },
-      () => {
-        loadRoster();
-      }
-    )
-    .subscribe();
-
-  return () => {
-    cancelled = true;
-    supabase.removeChannel(channel);
-  };
-}, [session]);
-
-async function handleSaveTodayStaffRoster() {
-  try {
-    await saveTodayStaffRoster(todayStaffRoster);
-  } catch (error) {
-    showToast?.("Unable to save staff roster.", "error");
-  }
-}
 
   const dashboardSelectedPatient =
     patients.find((p) => p.id === dashboardSelectedPatientId) || null;
@@ -2295,14 +2347,14 @@ async function handleSaveTodayStaffRoster() {
         mappedPackets.find((packet) => packet.packetId === nextSelectedId) || null
       );
     } catch (error) {
-  console.error("Failed to load shared lab import batch:", error);
-  showToast({
-    title: "Failed to load lab batch",
-    message: error.message,
-    type: "error",
-    duration: 5000,
-  });
-} finally {
+      console.error("Failed to load shared lab import batch:", error);
+      showToast({
+        title: "Failed to load lab batch",
+        message: error.message,
+        type: "error",
+        duration: 5000,
+      });
+    } finally {
       setLabImportLoading(false);
     }
   }
@@ -2356,13 +2408,13 @@ async function handleSaveTodayStaffRoster() {
   }
 
   async function updateSharedLabImportPacket(packetId, updates = {}) {
-  const { error } = await supabase
-    .from("lab_import_packets")
-    .update(updates)
-    .eq("id", packetId);
+    const { error } = await supabase
+      .from("lab_import_packets")
+      .update(updates)
+      .eq("id", packetId);
 
-  if (error) throw error;
-}
+    if (error) throw error;
+  }
 
   async function handleLiveUpdateLabPacketLabs(packetId, reviewedLabs) {
     if (!packetId) return;
@@ -2424,13 +2476,13 @@ async function handleSaveTodayStaffRoster() {
 
   async function handleParseLabImportText() {
     if (!labImportRawText.trim()) {
-  showToast({
-    title: "No lab text",
-    message: "Paste lab text first.",
-    type: "warning",
-  });
-  return;
-}
+      showToast({
+        title: "No lab text",
+        message: "Paste lab text first.",
+        type: "warning",
+      });
+      return;
+    }
 
     try {
       const cleanedText = cleanOcrLabText(labImportRawText);
@@ -2439,27 +2491,27 @@ async function handleSaveTodayStaffRoster() {
       const packets = buildBulkLabImportPacketsFromText(cleanedText);
 
       if (!packets || packets.length === 0) {
-  showToast({
-    title: "No labs detected",
-    message: "No labs were detected from the pasted text.",
-    type: "warning",
-  });
-  return;
-}
+        showToast({
+          title: "No labs detected",
+          message: "No labs were detected from the pasted text.",
+          type: "warning",
+        });
+        return;
+      }
 
       const batchId = await createSharedLabImportBatchWithPackets(packets, "manual");
 
       await loadSharedLabImportBatch(batchId);
       setActiveView("lab-import");
     } catch (error) {
-  console.error("Failed to create shared lab import batch:", error);
-  showToast({
-    title: "Failed to create lab batch",
-    message: error.message,
-    type: "error",
-    duration: 5000,
-  });
-}
+      console.error("Failed to create shared lab import batch:", error);
+      showToast({
+        title: "Failed to create lab batch",
+        message: error.message,
+        type: "error",
+        duration: 5000,
+      });
+    }
   }
 
   async function fileToBase64(file) {
@@ -2593,14 +2645,14 @@ async function handleSaveTodayStaffRoster() {
           : prev
       );
     } catch (error) {
-  console.error("Failed to confirm patient for lab packet:", error);
-  showToast({
-    title: "Failed to confirm patient",
-    message: error.message,
-    type: "error",
-    duration: 5000,
-  });
-}
+      console.error("Failed to confirm patient for lab packet:", error);
+      showToast({
+        title: "Failed to confirm patient",
+        message: error.message,
+        type: "error",
+        duration: 5000,
+      });
+    }
   }
 
   async function handleSkipLabImportPacket(packetId) {
@@ -2635,15 +2687,15 @@ async function handleSaveTodayStaffRoster() {
           }
           : prev
       );
-   } catch (error) {
-  console.error("Failed to skip lab packet:", error);
-  showToast({
-    title: "Failed to skip packet",
-    message: error.message,
-    type: "error",
-    duration: 5000,
-  });
-}
+    } catch (error) {
+      console.error("Failed to skip lab packet:", error);
+      showToast({
+        title: "Failed to skip packet",
+        message: error.message,
+        type: "error",
+        duration: 5000,
+      });
+    }
   }
 
   useEffect(() => {
@@ -2836,14 +2888,14 @@ async function handleSaveTodayStaffRoster() {
 
       URL.revokeObjectURL(url);
     } catch (error) {
-  console.error("Failed to export lab debug:", error);
-  showToast({
-    title: "Export failed",
-    message: "Failed to export lab debug JSON.",
-    type: "error",
-    duration: 5000,
-  });
-}
+      console.error("Failed to export lab debug:", error);
+      showToast({
+        title: "Export failed",
+        message: "Failed to export lab debug JSON.",
+        type: "error",
+        duration: 5000,
+      });
+    }
   }
 
 
@@ -3059,33 +3111,33 @@ async function handleSaveTodayStaffRoster() {
   const [soapBusy, setSoapBusy] = useState(false);
   const [soapUiMessage, setSoapUiMessage] = useState("");
   const EMPTY_OPHTHO_NOTE = {
-  hpi: "",
-  ocularHistory: "",
-  vaOd: "",
-  vaOs: "",
-  phOd: "",
-  phOs: "",
-  iopOd: "",
-  iopOs: "",
-  externalOd: "",
-  externalOs: "",
-  slitLampOd: "",
-  slitLampOs: "",
-  fundusOd: "",
-  fundusOs: "",
-  assessment: "",
-  plan: "",
-};
+    hpi: "",
+    ocularHistory: "",
+    vaOd: "",
+    vaOs: "",
+    phOd: "",
+    phOs: "",
+    iopOd: "",
+    iopOs: "",
+    externalOd: "",
+    externalOs: "",
+    slitLampOd: "",
+    slitLampOs: "",
+    fundusOd: "",
+    fundusOs: "",
+    assessment: "",
+    plan: "",
+  };
 
-const [soapDraft, setSoapDraft] = useState({
-  encounterId: null,
-  soapSubjective: "",
-  soapObjective: "",
-  soapAssessment: "",
-  soapPlan: "",
-  notes: "",
-  ophthalmologyNote: { ...EMPTY_OPHTHO_NOTE },
-});
+  const [soapDraft, setSoapDraft] = useState({
+    encounterId: null,
+    soapSubjective: "",
+    soapObjective: "",
+    soapAssessment: "",
+    soapPlan: "",
+    notes: "",
+    ophthalmologyNote: { ...EMPTY_OPHTHO_NOTE },
+  });
   const [auditEntries, setAuditEntries] = useState([]);
   const [auditLoading, setAuditLoading] = useState(false);
 
@@ -3176,32 +3228,32 @@ const [soapDraft, setSoapDraft] = useState({
   ).length;
 
   useEffect(() => {
-  if (!selectedEncounter?.id) {
-    setSoapDraft({
-      encounterId: null,
-      soapSubjective: "",
-      soapObjective: "",
-      soapAssessment: "",
-      soapPlan: "",
-      notes: "",
-      ophthalmologyNote: { ...EMPTY_OPHTHO_NOTE },
-    });
-    return;
-  }
+    if (!selectedEncounter?.id) {
+      setSoapDraft({
+        encounterId: null,
+        soapSubjective: "",
+        soapObjective: "",
+        soapAssessment: "",
+        soapPlan: "",
+        notes: "",
+        ophthalmologyNote: { ...EMPTY_OPHTHO_NOTE },
+      });
+      return;
+    }
 
-  setSoapDraft({
-    encounterId: selectedEncounter.id,
-    soapSubjective: selectedEncounter.soapSubjective || "",
-    soapObjective: selectedEncounter.soapObjective || "",
-    soapAssessment: selectedEncounter.soapAssessment || "",
-    soapPlan: selectedEncounter.soapPlan || "",
-    notes: selectedEncounter.notes || "",
-    ophthalmologyNote: {
-      ...EMPTY_OPHTHO_NOTE,
-      ...(selectedEncounter.ophthalmologyNote || {}),
-    },
-  });
-}, [selectedEncounter?.id]);
+    setSoapDraft({
+      encounterId: selectedEncounter.id,
+      soapSubjective: selectedEncounter.soapSubjective || "",
+      soapObjective: selectedEncounter.soapObjective || "",
+      soapAssessment: selectedEncounter.soapAssessment || "",
+      soapPlan: selectedEncounter.soapPlan || "",
+      notes: selectedEncounter.notes || "",
+      ophthalmologyNote: {
+        ...EMPTY_OPHTHO_NOTE,
+        ...(selectedEncounter.ophthalmologyNote || {}),
+      },
+    });
+  }, [selectedEncounter?.id]);
 
   useEffect(() => {
     if (selectedEncounter?.id) {
@@ -3244,32 +3296,32 @@ const [soapDraft, setSoapDraft] = useState({
 
 
   const allEncounterRows = useMemo(() => {
-  return patients.flatMap((patient) =>
-    patient.encounters.map((encounter) => {
-      const dailyNumber =
-        encounter?.dailyNumber ||
-        encounter?.daily_number ||
-        encounter?.intakeData?.dailyNumber ||
-        encounter?.intake_data?.dailyNumber ||
-        encounter?.intakeData?.daily_number ||
-        encounter?.intake_data?.daily_number ||
-        patient?.dailyNumber ||
-        patient?.daily_number ||
-        "";
+    return patients.flatMap((patient) =>
+      patient.encounters.map((encounter) => {
+        const dailyNumber =
+          encounter?.dailyNumber ||
+          encounter?.daily_number ||
+          encounter?.intakeData?.dailyNumber ||
+          encounter?.intake_data?.dailyNumber ||
+          encounter?.intakeData?.daily_number ||
+          encounter?.intake_data?.daily_number ||
+          patient?.dailyNumber ||
+          patient?.daily_number ||
+          "";
 
-      return {
-        patient: {
-          ...patient,
-          dailyNumber: patient?.dailyNumber || dailyNumber,
-        },
-        encounter: {
-          ...encounter,
-          dailyNumber,
-        },
-      };
-    })
-  );
-}, [patients]);
+        return {
+          patient: {
+            ...patient,
+            dailyNumber: patient?.dailyNumber || dailyNumber,
+          },
+          encounter: {
+            ...encounter,
+            dailyNumber,
+          },
+        };
+      })
+    );
+  }, [patients]);
 
   const specialtyEncounterRows = useMemo(() => {
     const todayClinicDate = formatClinicDate();
@@ -3323,36 +3375,36 @@ const [soapDraft, setSoapDraft] = useState({
   }, [programSettings]);
 
   const registrationRows = useMemo(() => {
-  return allEncounterRows
-    .filter(({ encounter }) => {
-      if (!encounter) return false;
+    return allEncounterRows
+      .filter(({ encounter }) => {
+        if (!encounter) return false;
 
-      const isGeneralRegistrationEncounter =
-        encounter.visitType !== "specialty_only";
+        const isGeneralRegistrationEncounter =
+          encounter.visitType !== "specialty_only";
 
-      const isRegistrationStatus =
-        encounter.status === "started" ||
-        encounter.status === "undergrad_complete";
+        const isRegistrationStatus =
+          encounter.status === "started" ||
+          encounter.status === "undergrad_complete";
 
-      if (userRole === "undergraduate") {
-        return (
-          isGeneralRegistrationEncounter &&
-          encounter.status === "started"
-        );
-      }
+        if (userRole === "undergraduate") {
+          return (
+            isGeneralRegistrationEncounter &&
+            encounter.status === "started"
+          );
+        }
 
-      if (isLeadershipView) {
-        return (
-          isGeneralRegistrationEncounter &&
-          isRegistrationStatus &&
-          !encounter.leadershipIntakeComplete
-        );
-      }
+        if (isLeadershipView) {
+          return (
+            isGeneralRegistrationEncounter &&
+            isRegistrationStatus &&
+            !encounter.leadershipIntakeComplete
+          );
+        }
 
-      return false;
-    })
-    .sort(sortRowsByDailyNumberThenTime);
-}, [allEncounterRows, userRole, isLeadershipView]);
+        return false;
+      })
+      .sort(sortRowsByDailyNumberThenTime);
+  }, [allEncounterRows, userRole, isLeadershipView]);
 
   async function removeFromRegistration(patientId, encounterId) {
     const confirmed = window.confirm(
@@ -3558,136 +3610,136 @@ const [soapDraft, setSoapDraft] = useState({
     });
   }, [profiles, userSearch, showOnlyActiveToday]);
 
-async function handleUndergradStartEncounter(data) {
-  try {
-    let targetPatient = null;
+  async function handleUndergradStartEncounter(data) {
+    try {
+      let targetPatient = null;
 
-    if (data.matchedPatientId) {
-      const existingPatient = patients.find((p) => p.id === data.matchedPatientId);
+      if (data.matchedPatientId) {
+        const existingPatient = patients.find((p) => p.id === data.matchedPatientId);
 
-      if (!existingPatient) {
-        throw new Error("Matched patient was not found.");
+        if (!existingPatient) {
+          throw new Error("Matched patient was not found.");
+        }
+
+        const patientUpdates = {
+          preferredName: data.preferredName,
+          phone: data.phone,
+          sex: data.sex,
+          ethnicity: data.ethnicity,
+          address: data.addressLine1,
+          city: data.city,
+          state: data.state,
+          zipCode: data.zipCode,
+          emergencyContactName: data.emergencyContactName,
+          emergencyContactRelation: data.emergencyContactRelation,
+          emergencyContactPhone: data.emergencyContactPhone,
+          last4ssn: data.last4Ssn,
+          incomeRange: data.incomeRange,
+          spanishOnly: data.spanishOnly,
+          chronicConditions: data.chronicConditions,
+          chronicConditionsOther: data.chronicConditionsOther,
+        };
+
+        targetPatient = await updatePatientInSupabase(existingPatient.id, patientUpdates);
+      } else {
+        const patientToSave = {
+          ...data,
+          mrn: "",
+        };
+
+        targetPatient = await createPatientInSupabase(patientToSave);
       }
 
-      const patientUpdates = {
-        preferredName: data.preferredName,
-        phone: data.phone,
-        sex: data.sex,
-        ethnicity: data.ethnicity,
-        address: data.addressLine1,
-        city: data.city,
-        state: data.state,
-        zipCode: data.zipCode,
-        emergencyContactName: data.emergencyContactName,
-        emergencyContactRelation: data.emergencyContactRelation,
-        emergencyContactPhone: data.emergencyContactPhone,
-        last4ssn: data.last4Ssn,
-        incomeRange: data.incomeRange,
-        spanishOnly: data.spanishOnly,
-        chronicConditions: data.chronicConditions,
-        chronicConditionsOther: data.chronicConditionsOther,
+      const encounterBase = {
+        clinicDate: formatClinicDate(),
+        createdAt: new Date().toISOString(),
+        dailyNumber: data.dailyNumber || "",
+        newReturning: data.matchedPatientId ? "Returning" : (data.isReturning || "New"),
+        visitLocation: "In Clinic",
+        chiefComplaint: "",
+        notes: "",
+        transportation: "",
+        needsElevator: false,
+        spanishSpeaking: false,
+        mammogramStatus: "",
+        papStatus: "",
+        fluShot: "",
+        htn: false,
+        dm: false,
+        labsLast6Months: "",
+        nicotineUse: "",
+        nicotineDetails: "",
+        substanceUseConcern: "",
+        substanceUseTreatment: "",
+        substanceUseNotes: "",
+        dermatology: "N/A",
+        ophthalmology: "N/A",
+        optometry: "N/A",
+        diabeticEyeExamPastYear: "N/A",
+        physicalTherapy: "N/A",
+        mentalHealthCombined: "N/A",
+        counseling: "N/A",
+        anyMentalHealthPositive: false,
+        status: "started",
+        assignedStudent: "",
+        assignedUpperLevel: "",
+        roomNumber: "",
+        leadershipIntakeComplete: false,
       };
 
-      targetPatient = await updatePatientInSupabase(existingPatient.id, patientUpdates);
-    } else {
-      const patientToSave = {
-        ...data,
-        mrn: "",
-      };
+      let savedEncounter = null;
 
-      targetPatient = await createPatientInSupabase(patientToSave);
+      if (data.visitType === "both" && data.specialtyType) {
+        const generalEncounter = {
+          ...encounterBase,
+          visitType: "general",
+          specialtyType: "",
+        };
+
+        const specialtyEncounter = {
+          ...encounterBase,
+          visitType: "specialty_only",
+          specialtyType: data.specialtyType,
+          status: "ready",
+          leadershipIntakeComplete: true,
+        };
+
+        savedEncounter = await createEncounterInSupabase(targetPatient.id, generalEncounter);
+        await createEncounterInSupabase(targetPatient.id, specialtyEncounter);
+      } else {
+        const singleEncounter = {
+          ...encounterBase,
+          visitType: data.visitType || "general",
+          specialtyType: data.specialtyType || "",
+        };
+
+        savedEncounter = await createEncounterInSupabase(targetPatient.id, singleEncounter);
+      }
+
+      await refreshClinicData();
+
+      setSelectedPatientId(targetPatient.id);
+      setSelectedEncounterId(savedEncounter.id);
+
+      showToast({
+        title: "Encounter started",
+        message: "Patient was added successfully and you can start the next intake.",
+        type: "success",
+        duration: 3000,
+      });
+
+      return true;
+    } catch (error) {
+      console.error("Failed to save undergrad intake:", error);
+      showToast({
+        title: "Failed to save intake",
+        message: error.message,
+        type: "error",
+        duration: 5000,
+      });
+      return false;
     }
-
-    const encounterBase = {
-      clinicDate: formatClinicDate(),
-      createdAt: new Date().toISOString(),
-      dailyNumber: data.dailyNumber || "",
-      newReturning: data.matchedPatientId ? "Returning" : (data.isReturning || "New"),
-      visitLocation: "In Clinic",
-      chiefComplaint: "",
-      notes: "",
-      transportation: "",
-      needsElevator: false,
-      spanishSpeaking: false,
-      mammogramStatus: "",
-      papStatus: "",
-      fluShot: "",
-      htn: false,
-      dm: false,
-      labsLast6Months: "",
-      nicotineUse: "",
-      nicotineDetails: "",
-      substanceUseConcern: "",
-      substanceUseTreatment: "",
-      substanceUseNotes: "",
-      dermatology: "N/A",
-      ophthalmology: "N/A",
-      optometry: "N/A",
-      diabeticEyeExamPastYear: "N/A",
-      physicalTherapy: "N/A",
-      mentalHealthCombined: "N/A",
-      counseling: "N/A",
-      anyMentalHealthPositive: false,
-      status: "started",
-      assignedStudent: "",
-      assignedUpperLevel: "",
-      roomNumber: "",
-      leadershipIntakeComplete: false,
-    };
-
-    let savedEncounter = null;
-
-    if (data.visitType === "both" && data.specialtyType) {
-      const generalEncounter = {
-        ...encounterBase,
-        visitType: "general",
-        specialtyType: "",
-      };
-
-      const specialtyEncounter = {
-        ...encounterBase,
-        visitType: "specialty_only",
-        specialtyType: data.specialtyType,
-        status: "ready",
-        leadershipIntakeComplete: true,
-      };
-
-      savedEncounter = await createEncounterInSupabase(targetPatient.id, generalEncounter);
-      await createEncounterInSupabase(targetPatient.id, specialtyEncounter);
-    } else {
-      const singleEncounter = {
-        ...encounterBase,
-        visitType: data.visitType || "general",
-        specialtyType: data.specialtyType || "",
-      };
-
-      savedEncounter = await createEncounterInSupabase(targetPatient.id, singleEncounter);
-    }
-
-    await refreshClinicData();
-
-    setSelectedPatientId(targetPatient.id);
-    setSelectedEncounterId(savedEncounter.id);
-
-    showToast({
-      title: "Encounter started",
-      message: "Patient was added successfully and you can start the next intake.",
-      type: "success",
-      duration: 3000,
-    });
-
-    return true;
-  } catch (error) {
-    console.error("Failed to save undergrad intake:", error);
-    showToast({
-      title: "Failed to save intake",
-      message: error.message,
-      type: "error",
-      duration: 5000,
-    });
-    return false;
   }
-}
 
   function openUndergradRegistration(patientId, encounterId) {
     const patient = patients.find((p) => p.id === patientId);
@@ -3952,6 +4004,50 @@ async function handleUndergradStartEncounter(data) {
     authFullName,
     userRole,
   ]);
+
+  useEffect(() => {
+  if (userRole !== "undergraduate") return;
+
+  const medsReadyRows = waitingEncounterRows.filter(
+    ({ encounter }) => encounter?.pharmacyStatus === "meds_ready"
+  );
+
+  if (medsReadyRows.length === 0) {
+    if (lastPharmacyToastKey) {
+      setLastPharmacyToastKey("");
+      setPharmacyToast(null);
+    }
+    return;
+  }
+
+  const toastKey = medsReadyRows
+    .map(({ encounter }) => encounter.id)
+    .sort()
+    .join("|");
+
+  if (toastKey === lastPharmacyToastKey) return;
+
+  setLastPharmacyToastKey(toastKey);
+  setPharmacyToast({
+    key: toastKey,
+    count: medsReadyRows.length,
+  });
+
+  showToast({
+    title: "Pharmacy Pickup Needed",
+    message:
+      medsReadyRows.length === 1
+        ? "A patient has medications ready. Click to open Live Queue."
+        : `${medsReadyRows.length} patients have medications ready. Click to open Live Queue.`,
+    type: "success",
+    duration: 0,
+    actionLabel: "Open Live Queue",
+    onClick: () => {
+      setActiveView("queue");
+      setPharmacyToast(null);
+    },
+  });
+}, [waitingEncounterRows, userRole, lastPharmacyToastKey]);
 
   const assignedCount = filteredEncounterRows.filter(
     ({ encounter }) =>
@@ -4671,7 +4767,7 @@ async function handleUndergradStartEncounter(data) {
                       status: nextStatus,
                       leadershipIntakeComplete: true,
                       dailyNumber: intakeForm.dailyNumber,
-          newReturning: intakeForm.newReturning,
+                      newReturning: intakeForm.newReturning,
                       visitLocation: intakeForm.visitLocation,
                       chiefComplaint: intakeForm.chiefComplaint,
                       notes: intakeForm.notes,
@@ -5231,23 +5327,23 @@ async function handleUndergradStartEncounter(data) {
   }
 
   function updateSoapDraftField(field, value) {
-  setSoapDraft((prev) => {
-    if (field === "ophthalmologyNote") {
+    setSoapDraft((prev) => {
+      if (field === "ophthalmologyNote") {
+        return {
+          ...prev,
+          ophthalmologyNote: {
+            ...EMPTY_OPHTHO_NOTE,
+            ...(value || {}),
+          },
+        };
+      }
+
       return {
         ...prev,
-        ophthalmologyNote: {
-          ...EMPTY_OPHTHO_NOTE,
-          ...(value || {}),
-        },
+        [field]: value,
       };
-    }
-
-    return {
-      ...prev,
-      [field]: value,
-    };
-  });
-}
+    });
+  }
 
   async function saveInHouseLabs(nextLabs) {
     if (!selectedPatient || !selectedEncounter) return;
@@ -5292,6 +5388,56 @@ async function handleUndergradStartEncounter(data) {
         ),
       }))
     );
+  }
+
+  async function markMedicationsReady(encounterId) {
+    if (!session?.user?.id) return;
+
+    await updateEncounterInSupabase(encounterId, {
+      pharmacyStatus: "meds_ready",
+      pharmacyReadyAt: new Date().toISOString(),
+      pharmacyReadyBy: session.user.id,
+      pharmacyNotifiedAt: null,
+      pharmacyNotifiedBy: null,
+    });
+
+    refreshClinicData?.();
+  }
+
+  async function markPatientSentToPharmacy(encounterId) {
+    if (!session?.user?.id) return;
+
+    await updateEncounterInSupabase(encounterId, {
+      pharmacyStatus: "patient_sent",
+      pharmacyNotifiedAt: new Date().toISOString(),
+      pharmacyNotifiedBy: session.user.id,
+    });
+
+    refreshClinicData?.();
+  }
+
+  async function markMedicationsPickedUp(encounterId) {
+  if (!session?.user?.id) return;
+
+  await updateEncounterInSupabase(encounterId, {
+    pharmacyStatus: "picked_up",
+    pharmacyNotifiedAt: new Date().toISOString(),
+    pharmacyNotifiedBy: session.user.id,
+  });
+
+  refreshClinicData?.();
+}
+
+  async function clearPharmacyStatus(encounterId) {
+    await updateEncounterInSupabase(encounterId, {
+      pharmacyStatus: "",
+      pharmacyReadyAt: null,
+      pharmacyReadyBy: null,
+      pharmacyNotifiedAt: null,
+      pharmacyNotifiedBy: null,
+    });
+
+    refreshClinicData?.();
   }
 
   async function assignEncounterFromQueue(encounterId, updates) {
@@ -5363,7 +5509,7 @@ async function handleUndergradStartEncounter(data) {
       }
     }
 
-        try {
+    try {
       await applyEncounterTransition(encounterId, {
         assignedStudent: nextStudent,
         assignedUpperLevel: nextUpperLevel,
@@ -5439,11 +5585,11 @@ async function handleUndergradStartEncounter(data) {
       await applyEncounterTransition(selectedEncounter.id, {
         roomNumber: String(roomNumber),
         status: "in_visit",
-              assignedStudent: assignmentForm.studentName,
-      assignedUpperLevel: assignmentForm.upperLevelName,
-      skipUpperLevel: assignmentForm.upperLevelName ? false : selectedEncounter.skipUpperLevel,
-      skipUpperLevelBy: assignmentForm.upperLevelName ? null : selectedEncounter.skipUpperLevelBy,
-      skipUpperLevelAt: assignmentForm.upperLevelName ? null : selectedEncounter.skipUpperLevelAt,
+        assignedStudent: assignmentForm.studentName,
+        assignedUpperLevel: assignmentForm.upperLevelName,
+        skipUpperLevel: assignmentForm.upperLevelName ? false : selectedEncounter.skipUpperLevel,
+        skipUpperLevelBy: assignmentForm.upperLevelName ? null : selectedEncounter.skipUpperLevelBy,
+        skipUpperLevelAt: assignmentForm.upperLevelName ? null : selectedEncounter.skipUpperLevelAt,
       });
 
     } catch (error) {
@@ -5522,17 +5668,17 @@ async function handleUndergradStartEncounter(data) {
     lockLeadershipActions();
 
     const updates =
-  status === "ready"
-    ? {
-        status: "ready",
-        roomNumber: "",
-        assignedStudent: "",
-        assignedUpperLevel: "",
-        skipUpperLevel: false,
-        skipUpperLevelBy: null,
-        skipUpperLevelAt: null,
-      }
-    : { status };
+      status === "ready"
+        ? {
+          status: "ready",
+          roomNumber: "",
+          assignedStudent: "",
+          assignedUpperLevel: "",
+          skipUpperLevel: false,
+          skipUpperLevelBy: null,
+          skipUpperLevelAt: null,
+        }
+        : { status };
 
     try {
       await applyEncounterTransition(selectedEncounter.id, updates);
@@ -5547,26 +5693,26 @@ async function handleUndergradStartEncounter(data) {
     }
   }
   async function clearEncounterRoom() {
-  if (!canManageRooms) return;
-  if (leadershipActionLocked) return;
-  if (!selectedPatient || !selectedEncounter) return;
+    if (!canManageRooms) return;
+    if (leadershipActionLocked) return;
+    if (!selectedPatient || !selectedEncounter) return;
 
-  lockLeadershipActions();
+    lockLeadershipActions();
 
-  try {
-    await applyEncounterTransition(selectedEncounter.id, {
-      status: "done",
-    });
-  } catch (error) {
-    console.error("Failed to complete visit / free room:", error);
-    showToast({
-      title: "Failed to complete visit",
-      message: error.message,
-      type: "error",
-      duration: 5000,
-    });
+    try {
+      await applyEncounterTransition(selectedEncounter.id, {
+        status: "done",
+      });
+    } catch (error) {
+      console.error("Failed to complete visit / free room:", error);
+      showToast({
+        title: "Failed to complete visit",
+        message: error.message,
+        type: "error",
+        duration: 5000,
+      });
+    }
   }
-}
 
   function updatePatientField(field, value) {
     if (!selectedPatient) return;
@@ -6463,32 +6609,32 @@ async function handleUndergradStartEncounter(data) {
   }
 
   async function saveSoapNote(showConfirmation = true) {
-  if (!selectedPatient || !selectedEncounter || !session?.user?.id || !userRole) return;
+    if (!selectedPatient || !selectedEncounter || !session?.user?.id || !userRole) return;
 
-  const currentSoapStatus = selectedEncounter.soapStatus || "draft";
+    const currentSoapStatus = selectedEncounter.soapStatus || "draft";
 
-  const authorId = showConfirmation
-    ? session.user.id
-    : (selectedEncounter.soapAuthorId || session.user.id);
+    const authorId = showConfirmation
+      ? session.user.id
+      : (selectedEncounter.soapAuthorId || session.user.id);
 
-  const authorRole = showConfirmation
-    ? userRole
-    : (selectedEncounter.soapAuthorRole || userRole);
+    const authorRole = showConfirmation
+      ? userRole
+      : (selectedEncounter.soapAuthorRole || userRole);
 
-  const isOphthoEncounter =
-    selectedEncounter?.specialtyType === "ophthalmology";
+    const isOphthoEncounter =
+      selectedEncounter?.specialtyType === "ophthalmology";
 
-  const ophtho = {
-    ...EMPTY_OPHTHO_NOTE,
-    ...(soapDraft.ophthalmologyNote || {}),
-  };
+    const ophtho = {
+      ...EMPTY_OPHTHO_NOTE,
+      ...(soapDraft.ophthalmologyNote || {}),
+    };
 
-  const soapSubjectiveToSave = isOphthoEncounter
-    ? ophtho.hpi || ""
-    : soapDraft.soapSubjective || "";
+    const soapSubjectiveToSave = isOphthoEncounter
+      ? ophtho.hpi || ""
+      : soapDraft.soapSubjective || "";
 
-  const soapObjectiveToSave = isOphthoEncounter
-    ? [
+    const soapObjectiveToSave = isOphthoEncounter
+      ? [
         `Medical / Ocular History:\n${ophtho.ocularHistory || ""}`,
         `VA Distant:\nOD: ${ophtho.vaOd || ""}\nOS: ${ophtho.vaOs || ""}`,
         `PH:\nOD: ${ophtho.phOd || ""}\nOS: ${ophtho.phOs || ""}`,
@@ -6497,72 +6643,72 @@ async function handleUndergradStartEncounter(data) {
         `Slit Lamp:\nOD: ${ophtho.slitLampOd || ""}\nOS: ${ophtho.slitLampOs || ""}`,
         `Dilated Fundus Exam:\nOD: ${ophtho.fundusOd || ""}\nOS: ${ophtho.fundusOs || ""}`,
       ].join("\n\n")
-    : soapDraft.soapObjective || "";
+      : soapDraft.soapObjective || "";
 
-  const soapAssessmentToSave = isOphthoEncounter
-    ? ophtho.assessment || ""
-    : soapDraft.soapAssessment || "";
+    const soapAssessmentToSave = isOphthoEncounter
+      ? ophtho.assessment || ""
+      : soapDraft.soapAssessment || "";
 
-  const soapPlanToSave = isOphthoEncounter
-    ? ophtho.plan || ""
-    : soapDraft.soapPlan || "";
+    const soapPlanToSave = isOphthoEncounter
+      ? ophtho.plan || ""
+      : soapDraft.soapPlan || "";
 
-  try {
-    setSoapBusy(true);
+    try {
+      setSoapBusy(true);
 
-    if (showConfirmation) {
-      setSoapUiMessage("Saving...");
-    }
+      if (showConfirmation) {
+        setSoapUiMessage("Saving...");
+      }
 
-    await updateEncounterInSupabase(selectedEncounter.id, {
-      soapSubjective: soapSubjectiveToSave,
-      soapObjective: soapObjectiveToSave,
-      soapAssessment: soapAssessmentToSave,
-      soapPlan: soapPlanToSave,
-      notes: soapDraft.notes || "",
-      soapAuthorId: authorId,
-      soapAuthorRole: authorRole,
-      soapStatus: currentSoapStatus,
-      ophthalmologyNote: isOphthoEncounter ? ophtho : null,
-    });
+      await updateEncounterInSupabase(selectedEncounter.id, {
+        soapSubjective: soapSubjectiveToSave,
+        soapObjective: soapObjectiveToSave,
+        soapAssessment: soapAssessmentToSave,
+        soapPlan: soapPlanToSave,
+        notes: soapDraft.notes || "",
+        soapAuthorId: authorId,
+        soapAuthorRole: authorRole,
+        soapStatus: currentSoapStatus,
+        ophthalmologyNote: isOphthoEncounter ? ophtho : null,
+      });
 
-    setPatients((prev) =>
-      prev.map((patient) =>
-        patient.id === selectedPatient.id
-          ? {
+      setPatients((prev) =>
+        prev.map((patient) =>
+          patient.id === selectedPatient.id
+            ? {
               ...patient,
               encounters: patient.encounters.map((encounter) =>
                 encounter.id === selectedEncounter.id
                   ? {
-                      ...encounter,
-                      soapSubjective: soapSubjectiveToSave,
-                      soapObjective: soapObjectiveToSave,
-                      soapAssessment: soapAssessmentToSave,
-                      soapPlan: soapPlanToSave,
-                      notes: soapDraft.notes || "",
-                      soapAuthorId: authorId,
-                      soapAuthorRole: authorRole,
-                      soapStatus: currentSoapStatus,
-                      soapSavedAt: new Date().toLocaleString(),
-                      ophthalmologyNote: isOphthoEncounter ? ophtho : null,
-                    }
+                    ...encounter,
+                    soapSubjective: soapSubjectiveToSave,
+                    soapObjective: soapObjectiveToSave,
+                    soapAssessment: soapAssessmentToSave,
+                    soapPlan: soapPlanToSave,
+                    notes: soapDraft.notes || "",
+                    soapAuthorId: authorId,
+                    soapAuthorRole: authorRole,
+                    soapStatus: currentSoapStatus,
+                    soapSavedAt: new Date().toLocaleString(),
+                    ophthalmologyNote: isOphthoEncounter ? ophtho : null,
+                  }
                   : encounter
               ),
             }
-          : patient
-      )
-    );
+            : patient
+        )
+      );
 
-    if (showConfirmation) {
-      showSoapMessage("SOAP note saved.");
+      if (showConfirmation) {
+        showSoapMessage("SOAP note saved.");
+      }
+    } catch (error) {
+      console.error("Failed to save SOAP note:", error);
+      showSoapMessage(`Failed to save SOAP note: ${error.message}`);
+    } finally {
+      setSoapBusy(false);
     }
-  } catch (error) {
-    console.error("Failed to save SOAP note:", error);
-    showSoapMessage(`Failed to save SOAP note: ${error.message}`);
-  } finally {
-    setSoapBusy(false);
   }
-}
 
   async function submitSoapForUpperLevel() {
     if (!selectedPatient || !selectedEncounter || !session?.user?.id || !userRole) return;
@@ -6590,12 +6736,12 @@ async function handleUndergradStartEncounter(data) {
         soapAuthorRole: authorRole,
         soapStatus: "awaiting_upper",
         ophthalmologyNote:
-  selectedEncounter?.specialtyType === "ophthalmology"
-    ? {
-        ...EMPTY_OPHTHO_NOTE,
-        ...(soapDraft.ophthalmologyNote || {}),
-      }
-    : null,
+          selectedEncounter?.specialtyType === "ophthalmology"
+            ? {
+              ...EMPTY_OPHTHO_NOTE,
+              ...(soapDraft.ophthalmologyNote || {}),
+            }
+            : null,
       });
 
       setPatients((prev) =>
@@ -6662,12 +6808,12 @@ async function handleUndergradStartEncounter(data) {
         soapAuthorRole: authorRole,
         soapStatus: "awaiting_attending",
         ophthalmologyNote:
-  selectedEncounter?.specialtyType === "ophthalmology"
-    ? {
-        ...EMPTY_OPHTHO_NOTE,
-        ...(soapDraft.ophthalmologyNote || {}),
-      }
-    : null,
+          selectedEncounter?.specialtyType === "ophthalmology"
+            ? {
+              ...EMPTY_OPHTHO_NOTE,
+              ...(soapDraft.ophthalmologyNote || {}),
+            }
+            : null,
       });
 
       setPatients((prev) =>
@@ -6739,12 +6885,12 @@ async function handleUndergradStartEncounter(data) {
         upperLevelSignedAt: signedAt,
         soapStatus: "awaiting_attending",
         ophthalmologyNote:
-  selectedEncounter?.specialtyType === "ophthalmology"
-    ? {
-        ...EMPTY_OPHTHO_NOTE,
-        ...(soapDraft.ophthalmologyNote || {}),
-      }
-    : null,
+          selectedEncounter?.specialtyType === "ophthalmology"
+            ? {
+              ...EMPTY_OPHTHO_NOTE,
+              ...(soapDraft.ophthalmologyNote || {}),
+            }
+            : null,
       });
 
       setPatients((prev) =>
@@ -6787,99 +6933,99 @@ async function handleUndergradStartEncounter(data) {
     }
   }
 
- async function setSkipUpperLevelApproval(enabled) {
-  if (!selectedPatient || !selectedEncounter || !session?.user?.id) return;
-  if (userRole !== "leadership") return;
+  async function setSkipUpperLevelApproval(enabled) {
+    if (!selectedPatient || !selectedEncounter || !session?.user?.id) return;
+    if (userRole !== "leadership") return;
 
-  if (!!selectedEncounter?.skipUpperLevel === !!enabled) {
-    return;
-  }
+    if (!!selectedEncounter?.skipUpperLevel === !!enabled) {
+      return;
+    }
 
-  const hasSoapStarted =
-    !!(soapDraft.soapSubjective || "").trim() ||
-    !!(soapDraft.soapObjective || "").trim() ||
-    !!(soapDraft.soapAssessment || "").trim() ||
-    !!(soapDraft.soapPlan || "").trim() ||
-    !!(soapDraft.ophthalmologyNote?.hpi || "").trim() ||
-    !!(soapDraft.ophthalmologyNote?.ocularHistory || "").trim() ||
-    !!(soapDraft.ophthalmologyNote?.assessment || "").trim() ||
-    !!(soapDraft.ophthalmologyNote?.plan || "").trim();
+    const hasSoapStarted =
+      !!(soapDraft.soapSubjective || "").trim() ||
+      !!(soapDraft.soapObjective || "").trim() ||
+      !!(soapDraft.soapAssessment || "").trim() ||
+      !!(soapDraft.soapPlan || "").trim() ||
+      !!(soapDraft.ophthalmologyNote?.hpi || "").trim() ||
+      !!(soapDraft.ophthalmologyNote?.ocularHistory || "").trim() ||
+      !!(soapDraft.ophthalmologyNote?.assessment || "").trim() ||
+      !!(soapDraft.ophthalmologyNote?.plan || "").trim();
 
-  if (enabled && !hasSoapStarted) {
-    showToast({
-      title: "SOAP not started",
-      message: "Start the note before approving Skip Upper Level.",
-      type: "warning",
-    });
-    return;
-  }
+    if (enabled && !hasSoapStarted) {
+      showToast({
+        title: "SOAP not started",
+        message: "Start the note before approving Skip Upper Level.",
+        type: "warning",
+      });
+      return;
+    }
 
-  const fromSoapStatus = selectedEncounter?.soapStatus || "draft";
-  const toSoapStatus = enabled ? "awaiting_attending" : "draft";
+    const fromSoapStatus = selectedEncounter?.soapStatus || "draft";
+    const toSoapStatus = enabled ? "awaiting_attending" : "draft";
 
-  try {
-    const nowIso = new Date().toISOString();
+    try {
+      const nowIso = new Date().toISOString();
 
-    await updateEncounterInSupabase(selectedEncounter.id, {
-      skipUpperLevel: enabled,
-      skipUpperLevelBy: enabled ? session.user.id : null,
-      skipUpperLevelAt: enabled ? nowIso : null,
-      soapStatus: toSoapStatus,
-    });
+      await updateEncounterInSupabase(selectedEncounter.id, {
+        skipUpperLevel: enabled,
+        skipUpperLevelBy: enabled ? session.user.id : null,
+        skipUpperLevelAt: enabled ? nowIso : null,
+        soapStatus: toSoapStatus,
+      });
 
-    setPatients((prev) =>
-      prev.map((patient) =>
-        patient.id === selectedPatient.id
-          ? {
+      setPatients((prev) =>
+        prev.map((patient) =>
+          patient.id === selectedPatient.id
+            ? {
               ...patient,
               encounters: patient.encounters.map((encounter) =>
                 encounter.id === selectedEncounter.id
                   ? {
-                      ...encounter,
-                      skipUpperLevel: enabled,
-                      skipUpperLevelBy: enabled ? session.user.id : null,
-                      skipUpperLevelAt: enabled ? nowIso : null,
-                      soapStatus: toSoapStatus,
-                    }
+                    ...encounter,
+                    skipUpperLevel: enabled,
+                    skipUpperLevelBy: enabled ? session.user.id : null,
+                    skipUpperLevelAt: enabled ? nowIso : null,
+                    soapStatus: toSoapStatus,
+                  }
                   : encounter
               ),
             }
-          : patient
-      )
-    );
+            : patient
+        )
+      );
 
-    await refreshClinicData();
-    setSelectedPatientId(selectedPatient.id);
-    setSelectedEncounterId(selectedEncounter.id);
+      await refreshClinicData();
+      setSelectedPatientId(selectedPatient.id);
+      setSelectedEncounterId(selectedEncounter.id);
 
-    await logAuditEvent(
-      enabled ? "skip_upper_level_approved" : "skip_upper_level_removed",
-      {
-        fromSoapStatus,
-        toSoapStatus,
-        bypassedUpperLevel: enabled,
-      }
-    );
+      await logAuditEvent(
+        enabled ? "skip_upper_level_approved" : "skip_upper_level_removed",
+        {
+          fromSoapStatus,
+          toSoapStatus,
+          bypassedUpperLevel: enabled,
+        }
+      );
 
-    await loadAuditLog();
+      await loadAuditLog();
 
-    showToast({
-      title: enabled ? "Skip Upper Level approved" : "Skip Upper Level removed",
-      message: enabled
-        ? "This encounter can now bypass upper level and go directly to attending."
-        : "This encounter has been returned to the normal upper-level workflow.",
-      type: "success",
-    });
-  } catch (error) {
-    console.error("Failed to update skip upper level approval:", error);
-    showToast({
-      title: "Update failed",
-      message: error.message,
-      type: "error",
-      duration: 5000,
-    });
+      showToast({
+        title: enabled ? "Skip Upper Level approved" : "Skip Upper Level removed",
+        message: enabled
+          ? "This encounter can now bypass upper level and go directly to attending."
+          : "This encounter has been returned to the normal upper-level workflow.",
+        type: "success",
+      });
+    } catch (error) {
+      console.error("Failed to update skip upper level approval:", error);
+      showToast({
+        title: "Update failed",
+        message: error.message,
+        type: "error",
+        duration: 5000,
+      });
+    }
   }
-}
 
   async function signSoapAsAttending() {
     if (!selectedPatient || !selectedEncounter || !session?.user?.id || !userRole) return;
@@ -6914,12 +7060,12 @@ async function handleUndergradStartEncounter(data) {
         soapStatus: "signed",
         status: "done",
         ophthalmologyNote:
-  selectedEncounter?.specialtyType === "ophthalmology"
-    ? {
-        ...EMPTY_OPHTHO_NOTE,
-        ...(soapDraft.ophthalmologyNote || {}),
-      }
-    : null,
+          selectedEncounter?.specialtyType === "ophthalmology"
+            ? {
+              ...EMPTY_OPHTHO_NOTE,
+              ...(soapDraft.ophthalmologyNote || {}),
+            }
+            : null,
       });
 
       setPatients((prev) =>
@@ -7030,12 +7176,12 @@ async function handleUndergradStartEncounter(data) {
         soapStatus: "signed",
         status: "done",
         ophthalmologyNote:
-  selectedEncounter?.specialtyType === "ophthalmology"
-    ? {
-        ...EMPTY_OPHTHO_NOTE,
-        ...(soapDraft.ophthalmologyNote || {}),
-      }
-    : null,
+          selectedEncounter?.specialtyType === "ophthalmology"
+            ? {
+              ...EMPTY_OPHTHO_NOTE,
+              ...(soapDraft.ophthalmologyNote || {}),
+            }
+            : null,
       });
 
       setPatients((prev) =>
@@ -7894,9 +8040,9 @@ async function handleUndergradStartEncounter(data) {
               }}
               onExportDebug={handleExportLabDebug}
               onConfirmPatient={(packetId, patient) => {
-  if (!packetId || !patient) return;
-  handleConfirmLabImportPatient(packetId, patient);
-}}
+                if (!packetId || !patient) return;
+                handleConfirmLabImportPatient(packetId, patient);
+              }}
               onSkip={() => {
                 if (!labImportPacket?.packetId) return;
                 handleSkipLabImportPacket(labImportPacket.packetId);
@@ -7974,6 +8120,7 @@ async function handleUndergradStartEncounter(data) {
               getFullPatientName={getFullPatientName}
               formatDate={formatDate}
               newReturningBadge={newReturningBadge}
+              dualVisitBadge={dualVisitBadge}
               userRole={userRole}
               isLeadershipView={isLeadershipView}
               onRemoveFromRegistration={removeFromRegistration}
@@ -8002,13 +8149,18 @@ async function handleUndergradStartEncounter(data) {
               elevatorBadge={elevatorBadge}
               fluBadge={fluBadge}
               papBadge={papBadge}
+              dualVisitBadge={dualVisitBadge}
               formatWaitTime={formatWaitTime}
               studentNameOptions={studentNameOptions}
               upperLevelNameOptions={upperLevelNameOptions}
               activeStudents={activeStudents}
-activeUpperLevels={activeUpperLevels}
+              activeUpperLevels={activeUpperLevels}
               ROOM_OPTIONS={roomDropdownOptions}
               onAssignFromQueue={assignEncounterFromQueue}
+              onMarkMedicationsReady={markMedicationsReady}
+              onMarkPatientSentToPharmacy={markPatientSentToPharmacy}
+              onClearPharmacyStatus={clearPharmacyStatus}
+              onMarkMedicationsPickedUp={markMedicationsPickedUp}
               refillRequests={refillRequests}
               canRefill={canRefill}
               patients={patients}
@@ -8017,6 +8169,7 @@ activeUpperLevels={activeUpperLevels}
               profileNameMap={profileNameMap}
               onApproveRefillAsSignedInAttending={handleApproveRefillRequestAsSignedInAttending}
               onDeleteRefillRequest={handleDeleteRefillRequest}
+              
             />
           )}
 
@@ -8027,6 +8180,7 @@ activeUpperLevels={activeUpperLevels}
               getFullPatientName={getFullPatientName}
               formatDate={formatDate}
               isLeadershipView={isLeadershipView}
+              dualVisitBadge={dualVisitBadge}
             />
           )}
 
@@ -8113,6 +8267,7 @@ activeUpperLevels={activeUpperLevels}
               openPatientChart={openPatientChart}
               spanishBadge={spanishBadge}
               papBadge={papBadge}
+              dualVisitBadge={dualVisitBadge}
               diabetesBadge={diabetesBadge}
               elevatorBadge={elevatorBadge}
               fluBadge={fluBadge}

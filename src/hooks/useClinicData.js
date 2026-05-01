@@ -31,17 +31,17 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
       createdAt: encounter.created_at,
       newReturning: intake.newReturning ?? "Returning",
       dailyNumber:
-  intake.dailyNumber ??
-  intake.daily_number ??
-  intake.dailyCardNumber ??
-  intake.daily_card_number ??
-  intake.cardNumber ??
-  intake.card_number ??
-  intake.queueNumber ??
-  intake.queue_number ??
-  intake.patientNumber ??
-  intake.patient_number ??
-  "",
+        intake.dailyNumber ??
+        intake.daily_number ??
+        intake.dailyCardNumber ??
+        intake.daily_card_number ??
+        intake.cardNumber ??
+        intake.card_number ??
+        intake.queueNumber ??
+        intake.queue_number ??
+        intake.patientNumber ??
+        intake.patient_number ??
+        "",
       visitLocation: intake.visitLocation ?? "In Clinic",
       chiefComplaint: encounter.chief_complaint || "",
       transportation: intake.transportation ?? "",
@@ -84,7 +84,7 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
       soapObjective: encounter.objective || "",
       soapAssessment: encounter.assessment || "",
       soapPlan: encounter.plan || "",
-            ophthalmologyNote: encounter.ophthalmology_note || null,
+      ophthalmologyNote: encounter.ophthalmology_note || null,
       ophthalmology_note: encounter.ophthalmology_note || null,
       soapSavedAt: "",
       soapStatus: encounter.soap_status || "draft",
@@ -97,6 +97,14 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
       visitType,
       specialtyType,
       leadershipIntakeComplete: encounter.leadership_intake_complete ?? false,
+      pharmacyStatus: encounter.pharmacy_status || "",
+      skipUpperLevel: encounter.skip_upper_level ?? false,
+      skipUpperLevelBy: encounter.skip_upper_level_by || null,
+      skipUpperLevelAt: encounter.skip_upper_level_at || null,
+      pharmacyReadyAt: encounter.pharmacy_ready_at || null,
+      pharmacyReadyBy: encounter.pharmacy_ready_by || null,
+      pharmacyNotifiedAt: encounter.pharmacy_notified_at || null,
+      pharmacyNotifiedBy: encounter.pharmacy_notified_by || null,
     });
   });
 

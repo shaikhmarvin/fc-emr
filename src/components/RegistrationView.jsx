@@ -69,6 +69,7 @@ export default function RegistrationView({
   getFullPatientName,
   formatDate,
   newReturningBadge,
+  dualVisitBadge,
   userRole,
   isLeadershipView,
   onRemoveFromRegistration
@@ -131,6 +132,7 @@ export default function RegistrationView({
     </h2>
     {getRegistrationStatusBadge(encounter.status)}
     {newReturningBadge?.(encounter)}
+    {dualVisitBadge?.(encounter)}
     {getDailyCardNumber(patient, encounter) && (
       <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800">
         Daily #{getDailyCardNumber(patient, encounter)}

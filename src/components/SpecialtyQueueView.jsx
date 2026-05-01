@@ -82,6 +82,7 @@ function SpecialtyTable({
     openPatientChart,
     getFullPatientName,
     formatDate,
+    dualVisitBadge,
 }) {
     const filteredRows = useMemo(() => {
         return rows.filter((row) => matchesSearch(row, search, getFullPatientName));
@@ -129,11 +130,7 @@ function SpecialtyTable({
                                                 </span>
                                             )}
 
-                                            {isDualVisit(encounter) && (
-                                                <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
-                                                    Dual Visit
-                                                </span>
-                                            )}
+                                            {dualVisitBadge?.(encounter)}
                                         </div>
 
                                         <div className="mt-1 text-xs text-slate-500">
@@ -191,11 +188,7 @@ function SpecialtyTable({
                                                 </span>
                                             )}
 
-                                            {isDualVisit(encounter) && (
-                                                <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
-                                                    Dual Visit
-                                                </span>
-                                            )}
+                                            {dualVisitBadge?.(encounter)}
                                         </div>
                                         <div className="mt-1 text-xs text-slate-500">
                                             MRN: {patient.mrn || "—"}{getDailyCardNumber(patient, encounter) ? ` • Daily #${getDailyCardNumber(patient, encounter)}` : ""}
@@ -243,6 +236,7 @@ export default function SpecialtyQueueView({
     getFullPatientName,
     formatDate,
     isLeadershipView,
+    dualVisitBadge,
 }) {
 
     const [selectedSpecialty, setSelectedSpecialty] = useState("");
@@ -351,6 +345,7 @@ export default function SpecialtyQueueView({
                             openPatientChart={openPatientChart}
                             getFullPatientName={getFullPatientName}
                             formatDate={formatDate}
+                            dualVisitBadge={dualVisitBadge}
                         />
                     )}
 
@@ -362,6 +357,7 @@ export default function SpecialtyQueueView({
                             openPatientChart={openPatientChart}
                             getFullPatientName={getFullPatientName}
                             formatDate={formatDate}
+                            dualVisitBadge={dualVisitBadge}
                         />
                     )}
 
@@ -373,6 +369,7 @@ export default function SpecialtyQueueView({
                             openPatientChart={openPatientChart}
                             getFullPatientName={getFullPatientName}
                             formatDate={formatDate}
+                            dualVisitBadge={dualVisitBadge}
                         />
                     )}
 
@@ -384,6 +381,7 @@ export default function SpecialtyQueueView({
                             openPatientChart={openPatientChart}
                             getFullPatientName={getFullPatientName}
                             formatDate={formatDate}
+                            dualVisitBadge={dualVisitBadge}
                         />
                     )}
 
@@ -395,6 +393,7 @@ export default function SpecialtyQueueView({
                             openPatientChart={openPatientChart}
                             getFullPatientName={getFullPatientName}
                             formatDate={formatDate}
+                            dualVisitBadge={dualVisitBadge}
                         />
                     )}
                 </div>
@@ -409,6 +408,7 @@ export default function SpecialtyQueueView({
                         openPatientChart={openPatientChart}
                         getFullPatientName={getFullPatientName}
                         formatDate={formatDate}
+                        dualVisitBadge={dualVisitBadge}
                     />
 
                     <SpecialtyTable
@@ -418,6 +418,7 @@ export default function SpecialtyQueueView({
                         openPatientChart={openPatientChart}
                         getFullPatientName={getFullPatientName}
                         formatDate={formatDate}
+                        dualVisitBadge={dualVisitBadge}
                     />
 
                     <SpecialtyTable
@@ -427,6 +428,7 @@ export default function SpecialtyQueueView({
                         openPatientChart={openPatientChart}
                         getFullPatientName={getFullPatientName}
                         formatDate={formatDate}
+                        dualVisitBadge={dualVisitBadge}
                     />
 
 
@@ -437,6 +439,7 @@ export default function SpecialtyQueueView({
                         openPatientChart={openPatientChart}
                         getFullPatientName={getFullPatientName}
                         formatDate={formatDate}
+                        dualVisitBadge={dualVisitBadge}
                     />
 
                     <SpecialtyTable
@@ -446,6 +449,7 @@ export default function SpecialtyQueueView({
                         openPatientChart={openPatientChart}
                         getFullPatientName={getFullPatientName}
                         formatDate={formatDate}
+                        dualVisitBadge={dualVisitBadge}
                     />
                 </div>
             )}

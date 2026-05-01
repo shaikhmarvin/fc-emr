@@ -14,6 +14,7 @@ export default function QueueView({
   elevatorBadge,
   fluBadge,
   papBadge,
+  dualVisitBadge,
   formatWaitTime,
   studentNameOptions,
   upperLevelNameOptions,
@@ -21,6 +22,10 @@ export default function QueueView({
   activeUpperLevels,
   ROOM_OPTIONS,
   onAssignFromQueue,
+  onMarkMedicationsReady,
+  onMarkPatientSentToPharmacy,
+  onClearPharmacyStatus,
+  onMarkMedicationsPickedUp,
   refillRequests,
   canRefill,
   patients,
@@ -67,60 +72,91 @@ export default function QueueView({
       roomNumber: draft.roomNumber ?? encounter.roomNumber ?? "",
     });
   }
-  function dualVisitBadge(encounter) {
-    if (encounter.visitType === "both") {
+
+  function getPharmacyDisplayName(patient) {
+    const name =
+      getPatientBoardName?.(patient) ||
+      patient?.preferredName ||
+      patient?.name ||
+      "";
+
+    const parts = String(name).trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return "Patient";
+    if (parts.length === 1) return parts[0];
+
+    return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+  }
+
+  function getPharmacyDailyNumber(patient, encounter) {
+    return getDailyCardNumber(patient, encounter)
+      ? `#${getDailyCardNumber(patient, encounter)} — `
+      : "";
+  }
+
+  function pharmacyStatusBadge(encounter) {
+    if (encounter?.pharmacyStatus === "meds_ready") {
       return (
-        <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
-          Dual Visit
+        <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-800">
+          Meds Ready
         </span>
       );
     }
+
+    if (encounter?.pharmacyStatus === "patient_sent") {
+      return (
+        <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+          Sent to Pharmacy
+        </span>
+      );
+    }
+
     return null;
   }
+
 
   function normalizeSearchText(value) {
     return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
   }
 
   function getDailyCardNumber(patient, encounter) {
-  const intakeData = encounter?.intakeData || encounter?.intake_data || {};
+    const intakeData = encounter?.intakeData || encounter?.intake_data || {};
 
-  return (
-    encounter?.dailyNumber ??
-    encounter?.daily_number ??
-    intakeData?.dailyNumber ??
-    intakeData?.daily_number ??
-    intakeData?.cardNumber ??
-    intakeData?.card_number ??
-    intakeData?.queueNumber ??
-    intakeData?.queue_number ??
-    encounter?.cardNumber ??
-    encounter?.card_number ??
-    encounter?.queueNumber ??
-    encounter?.queue_number ??
-    patient?.dailyNumber ??
-    patient?.daily_number ??
-    patient?.cardNumber ??
-    patient?.card_number ??
-    patient?.queueNumber ??
-    patient?.queue_number ??
-    ""
-  );
-}
+    return (
+      encounter?.dailyNumber ??
+      encounter?.daily_number ??
+      intakeData?.dailyNumber ??
+      intakeData?.daily_number ??
+      intakeData?.cardNumber ??
+      intakeData?.card_number ??
+      intakeData?.queueNumber ??
+      intakeData?.queue_number ??
+      encounter?.cardNumber ??
+      encounter?.card_number ??
+      encounter?.queueNumber ??
+      encounter?.queue_number ??
+      patient?.dailyNumber ??
+      patient?.daily_number ??
+      patient?.cardNumber ??
+      patient?.card_number ??
+      patient?.queueNumber ??
+      patient?.queue_number ??
+      ""
+    );
+  }
 
-function getLeadershipQueueNotes(encounter) {
-  const intakeData = encounter?.intakeData || encounter?.intake_data || {};
+  function getLeadershipQueueNotes(encounter) {
+    const intakeData = encounter?.intakeData || encounter?.intake_data || {};
 
-  return (
-    encounter?.notes ||
-    encounter?.leadershipNotes ||
-    encounter?.leadership_notes ||
-    intakeData?.notes ||
-    intakeData?.leadershipNotes ||
-    intakeData?.leadership_notes ||
-    ""
-  );
-}
+    return (
+      encounter?.notes ||
+      encounter?.leadershipNotes ||
+      encounter?.leadership_notes ||
+      intakeData?.notes ||
+      intakeData?.leadershipNotes ||
+      intakeData?.leadership_notes ||
+      ""
+    );
+  }
 
   function rowMatchesQueueSearch(patient, encounter) {
     const query = normalizeSearchText(queueSearch);
@@ -302,81 +338,81 @@ function getLeadershipQueueNotes(encounter) {
   }
 
   function normalizeName(value) {
-  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-function getPersonDisplayName(person) {
-  if (!person) return "";
-
-  if (typeof person === "string") {
-    return profileNameMap?.[person] || person;
+    return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
   }
 
-  return (
-    person.fullName ||
-    person.full_name ||
-    person.displayName ||
-    person.display_name ||
-    person.name ||
-    profileNameMap?.[person.id] ||
-    profileNameMap?.[person.user_id] ||
-    person.email ||
-    ""
+  function getPersonDisplayName(person) {
+    if (!person) return "";
+
+    if (typeof person === "string") {
+      return profileNameMap?.[person] || person;
+    }
+
+    return (
+      person.fullName ||
+      person.full_name ||
+      person.displayName ||
+      person.display_name ||
+      person.name ||
+      profileNameMap?.[person.id] ||
+      profileNameMap?.[person.user_id] ||
+      person.email ||
+      ""
+    );
+  }
+
+  function activeNameSet(list) {
+    const set = new Set();
+
+    (list || []).forEach((person) => {
+      const displayName = getPersonDisplayName(person);
+      if (displayName) set.add(normalizeName(displayName));
+
+      if (person?.id && profileNameMap?.[person.id]) {
+        set.add(normalizeName(profileNameMap[person.id]));
+      }
+
+      if (person?.user_id && profileNameMap?.[person.user_id]) {
+        set.add(normalizeName(profileNameMap[person.user_id]));
+      }
+    });
+
+    return set;
+  }
+
+  const activeStudentNames = activeNameSet(activeStudents);
+  const activeUpperLevelNames = activeNameSet(activeUpperLevels);
+
+  function mergeActiveIntoOptions(options, activeList) {
+    const names = new Set((options || []).filter(Boolean));
+
+    (activeList || []).forEach((person) => {
+      const displayName = getPersonDisplayName(person);
+      if (displayName) names.add(displayName);
+    });
+
+    return [...names];
+  }
+
+  function sortActiveFirst(options, activeSet) {
+    return [...(options || [])].sort((a, b) => {
+      const aActive = activeSet.has(normalizeName(a));
+      const bActive = activeSet.has(normalizeName(b));
+
+      if (aActive !== bActive) return aActive ? -1 : 1;
+      return String(a).localeCompare(String(b));
+    });
+  }
+
+  const sortedStudentNameOptions = sortActiveFirst(
+    mergeActiveIntoOptions(studentNameOptions, activeStudents),
+    activeStudentNames
   );
-}
 
-function activeNameSet(list) {
-  const set = new Set();
-
-  (list || []).forEach((person) => {
-    const displayName = getPersonDisplayName(person);
-    if (displayName) set.add(normalizeName(displayName));
-
-    if (person?.id && profileNameMap?.[person.id]) {
-      set.add(normalizeName(profileNameMap[person.id]));
-    }
-
-    if (person?.user_id && profileNameMap?.[person.user_id]) {
-      set.add(normalizeName(profileNameMap[person.user_id]));
-    }
-  });
-
-  return set;
-}
-
-const activeStudentNames = activeNameSet(activeStudents);
-const activeUpperLevelNames = activeNameSet(activeUpperLevels);
-
-function mergeActiveIntoOptions(options, activeList) {
-  const names = new Set((options || []).filter(Boolean));
-
-  (activeList || []).forEach((person) => {
-    const displayName = getPersonDisplayName(person);
-    if (displayName) names.add(displayName);
-  });
-
-  return [...names];
-}
-
-function sortActiveFirst(options, activeSet) {
-  return [...(options || [])].sort((a, b) => {
-    const aActive = activeSet.has(normalizeName(a));
-    const bActive = activeSet.has(normalizeName(b));
-
-    if (aActive !== bActive) return aActive ? -1 : 1;
-    return String(a).localeCompare(String(b));
-  });
-}
-
-const sortedStudentNameOptions = sortActiveFirst(
-  mergeActiveIntoOptions(studentNameOptions, activeStudents),
-  activeStudentNames
-);
-
-const sortedUpperLevelNameOptions = sortActiveFirst(
-  mergeActiveIntoOptions(upperLevelNameOptions, activeUpperLevels),
-  activeUpperLevelNames
-);
+  const sortedUpperLevelNameOptions = sortActiveFirst(
+    mergeActiveIntoOptions(upperLevelNameOptions, activeUpperLevels),
+    activeUpperLevelNames
+  );
 
   const filteredWaitingEncounterRows = waitingEncounterRows.filter(
     ({ patient, encounter }) => {
@@ -385,6 +421,10 @@ const sortedUpperLevelNameOptions = sortActiveFirst(
 
       return rowMatchesQueueSearch(patient, encounter);
     }
+  );
+
+  const pharmacyReadyRows = (waitingEncounterRows || []).filter(
+    ({ encounter }) => encounter?.pharmacyStatus === "meds_ready"
   );
 
   const unassignedRows =
@@ -404,6 +444,46 @@ const sortedUpperLevelNameOptions = sortActiveFirst(
       : [];
   return (
     <div className="space-y-4 p-3 sm:p-4 lg:space-y-6 lg:p-6">
+      {userRole === "undergraduate" && pharmacyReadyRows.length > 0 && (
+        <section className="rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-4 shadow-sm">
+          <h2 className="text-lg font-bold text-emerald-900">
+            Pharmacy Pickup Needed
+          </h2>
+
+          <p className="mt-1 text-sm text-emerald-800">
+            Please find these patients and guide them to pharmacy.
+          </p>
+
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {pharmacyReadyRows.map(({ patient, encounter }) => (
+              <div
+                key={encounter.id}
+                className="flex items-center justify-between gap-3 rounded-xl bg-white p-3 shadow-sm"
+              >
+                <div>
+                  <div className="font-bold text-slate-900">
+                    {getPharmacyDailyNumber(patient, encounter)}
+                    {getPharmacyDisplayName(patient)}
+                  </div>
+
+                  <div className="text-xs text-slate-500">
+                    Medications ready for pickup
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => onMarkPatientSentToPharmacy?.(encounter.id)}
+                  className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                >
+                  Patient Sent
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <div className="rounded-2xl bg-white p-4 shadow sm:p-5">
         <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -593,11 +673,11 @@ const sortedUpperLevelNameOptions = sortActiveFirst(
                 {/* Top row */}
                 <div className="flex items-center justify-between">
                   <p className="font-semibold text-slate-800">
-  {getDailyCardNumber(patient, encounter)
-    ? `#${getDailyCardNumber(patient, encounter)} — `
-    : ""}
-  {getPatientBoardName(patient)} ({patient.age})
-</p>
+                    {getDailyCardNumber(patient, encounter)
+                      ? `#${getDailyCardNumber(patient, encounter)} — `
+                      : ""}
+                    {getPatientBoardName(patient)} ({patient.age})
+                  </p>
 
                   <span
                     className={`rounded-full border px-2 py-0.5 text-xs ${getStatusClasses(encounter.status)}`}
@@ -611,13 +691,13 @@ const sortedUpperLevelNameOptions = sortActiveFirst(
                   {encounter.chiefComplaint || "No chief complaint"}
                 </p>
                 {getLeadershipQueueNotes(encounter) && (
-  <div className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900">
-    <span className="font-semibold">Leadership note:</span>{" "}
-    <span className="line-clamp-2">
-      {getLeadershipQueueNotes(encounter)}
-    </span>
-  </div>
-)}
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900">
+                    <span className="font-semibold">Leadership note:</span>{" "}
+                    <span className="line-clamp-2">
+                      {getLeadershipQueueNotes(encounter)}
+                    </span>
+                  </div>
+                )}
 
                 {/* Secondary info */}
                 <div className="flex flex-wrap gap-x-3 text-xs text-slate-500">
@@ -633,7 +713,7 @@ const sortedUpperLevelNameOptions = sortActiveFirst(
 
                 {/* Badges */}
                 <div className="flex flex-wrap gap-2">
-                  {dualVisitBadge(encounter)}
+                  {dualVisitBadge?.(encounter)}
                   {newReturningBadge?.(encounter)}
                   {getDailyCardNumber(patient, encounter) && (
                     <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800">
@@ -649,154 +729,196 @@ const sortedUpperLevelNameOptions = sortActiveFirst(
                   {papBadge?.(encounter)}
                 </div>
 
+{userRole === "pharmacy" && !encounter?.pharmacyStatus && (
+  <button
+    type="button"
+    onClick={() => onMarkMedicationsReady?.(encounter.id)}
+    className="mt-2 min-h-[40px] rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+  >
+    Medications Ready
+  </button>
+)}
+
+{userRole === "pharmacy" && encounter?.pharmacyStatus === "meds_ready" && (
+  <div className="mt-2 flex gap-2">
+    <button
+      type="button"
+      onClick={() => onMarkMedicationsPickedUp?.(encounter.id)}
+      className="min-h-[40px] flex-1 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+    >
+      Medications Picked Up
+    </button>
+
+    <button
+      type="button"
+      onClick={() => onClearPharmacyStatus?.(encounter.id)}
+      className="min-h-[40px] rounded-lg bg-slate-500 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-600"
+    >
+      Undo "Medications Not Ready"
+    </button>
+  </div>
+)}
+
+{userRole === "pharmacy" &&
+  encounter?.pharmacyStatus === "patient_sent" && (
+    <button
+      type="button"
+      onClick={() => onMarkMedicationsPickedUp?.(encounter.id)}
+      className="mt-2 min-h-[40px] w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+    >
+      Medications Picked Up
+    </button>
+)}
+
+{userRole === "pharmacy" &&
+  encounter?.pharmacyStatus === "picked_up" && (
+    <div className="mt-2 rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
+      Medications Picked Up
+    </div>
+)}
+
                 {/* Leadership controls */}
                 {userRole === "leadership" && (
                   <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <div className="space-y-1">
-  <label className="text-xs font-medium text-slate-600">
-    Student
-  </label>
+                      <label className="text-xs font-medium text-slate-600">
+                        Student
+                      </label>
 
-  <div className="relative">
-    <input
-      className={`min-h-[40px] w-full rounded-lg px-3 py-2 text-sm ${
-  activeStudentNames.has(
-    normalizeName(getDraftValue(encounter, "assignedStudent"))
-  )
-    ? "border-green-500 bg-green-50 text-green-800 font-semibold"
-    : "border-slate-300"
-}`}
-      value={getDraftValue(encounter, "assignedStudent")}
-      onChange={(e) => {
-        updateDraft(encounter.id, "assignedStudent", e.target.value);
-        setOpenAssignmentMenu(`${encounter.id}-student`);
-      }}
-      onFocus={() => setOpenAssignmentMenu(`${encounter.id}-student`)}
-      onBlur={() => {
-        setTimeout(() => setOpenAssignmentMenu(null), 150);
-      }}
-      placeholder="Student name"
-    />
+                      <div className="relative">
+                        <input
+                          className={`min-h-[40px] w-full rounded-lg px-3 py-2 text-sm ${activeStudentNames.has(
+                            normalizeName(getDraftValue(encounter, "assignedStudent"))
+                          )
+                            ? "border-green-500 bg-green-50 text-green-800 font-semibold"
+                            : "border-slate-300"
+                            }`}
+                          value={getDraftValue(encounter, "assignedStudent")}
+                          onChange={(e) => {
+                            updateDraft(encounter.id, "assignedStudent", e.target.value);
+                            setOpenAssignmentMenu(`${encounter.id}-student`);
+                          }}
+                          onFocus={() => setOpenAssignmentMenu(`${encounter.id}-student`)}
+                          onBlur={() => {
+                            setTimeout(() => setOpenAssignmentMenu(null), 150);
+                          }}
+                          placeholder="Student name"
+                        />
 
-    {openAssignmentMenu === `${encounter.id}-student` && (
-      <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border bg-white shadow-lg">
-        {sortedStudentNameOptions.map((name) => {
-          const isActive = activeStudentNames.has(normalizeName(name));
-          const isSelected =
-            normalizeName(getDraftValue(encounter, "assignedStudent")) ===
-            normalizeName(name);
+                        {openAssignmentMenu === `${encounter.id}-student` && (
+                          <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border bg-white shadow-lg">
+                            {sortedStudentNameOptions.map((name) => {
+                              const isActive = activeStudentNames.has(normalizeName(name));
+                              const isSelected =
+                                normalizeName(getDraftValue(encounter, "assignedStudent")) ===
+                                normalizeName(name);
 
-          return (
-            <button
-              key={name}
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                updateDraft(encounter.id, "assignedStudent", name);
-                setOpenAssignmentMenu(null);
-              }}
-              className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 ${
-                isSelected ? "bg-blue-50 font-semibold text-blue-700" : "text-slate-700"
-              }`}
-            >
-              <span className="flex min-w-0 items-center gap-2">
-                <span
-                  className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                    isActive ? "bg-green-500" : "bg-slate-300"
-                  }`}
-                />
-                <span className="truncate">{name}</span>
-              </span>
+                              return (
+                                <button
+                                  key={name}
+                                  type="button"
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => {
+                                    updateDraft(encounter.id, "assignedStudent", name);
+                                    setOpenAssignmentMenu(null);
+                                  }}
+                                  className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 ${isSelected ? "bg-blue-50 font-semibold text-blue-700" : "text-slate-700"
+                                    }`}
+                                >
+                                  <span className="flex min-w-0 items-center gap-2">
+                                    <span
+                                      className={`h-2.5 w-2.5 shrink-0 rounded-full ${isActive ? "bg-green-500" : "bg-slate-300"
+                                        }`}
+                                    />
+                                    <span className="truncate">{name}</span>
+                                  </span>
 
-              {isActive && (
-                <span className="shrink-0 text-[11px] font-medium text-green-700">
-                  Active
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-    )}
-  </div>
+                                  {isActive && (
+                                    <span className="shrink-0 text-[11px] font-medium text-green-700">
+                                      Active
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
 
-  <p className="text-[11px] text-slate-500">
-    Active Today: {activeStudents?.length || 0}
-  </p>
-</div>
+                      <p className="text-[11px] text-slate-500">
+                        Active Today: {activeStudents?.length || 0}
+                      </p>
+                    </div>
 
                     <div className="space-y-1">
-  <label className="text-xs font-medium text-slate-600">
-    Upper Level
-  </label>
+                      <label className="text-xs font-medium text-slate-600">
+                        Upper Level
+                      </label>
 
-  <div className="relative">
-    <input
-      className={`min-h-[40px] w-full rounded-lg px-3 py-2 text-sm ${
-  activeUpperLevelNames.has(
-    normalizeName(getDraftValue(encounter, "assignedUpperLevel"))
-  )
-    ? "border-green-500 bg-green-50 text-green-800 font-semibold"
-    : "border-slate-300"
-}`}
-      value={getDraftValue(encounter, "assignedUpperLevel")}
-      onChange={(e) => {
-        updateDraft(encounter.id, "assignedUpperLevel", e.target.value);
-        setOpenAssignmentMenu(`${encounter.id}-upper`);
-      }}
-      onFocus={() => setOpenAssignmentMenu(`${encounter.id}-upper`)}
-      onBlur={() => {
-        setTimeout(() => setOpenAssignmentMenu(null), 150);
-      }}
-      placeholder="Upper level name"
-    />
+                      <div className="relative">
+                        <input
+                          className={`min-h-[40px] w-full rounded-lg px-3 py-2 text-sm ${activeUpperLevelNames.has(
+                            normalizeName(getDraftValue(encounter, "assignedUpperLevel"))
+                          )
+                            ? "border-green-500 bg-green-50 text-green-800 font-semibold"
+                            : "border-slate-300"
+                            }`}
+                          value={getDraftValue(encounter, "assignedUpperLevel")}
+                          onChange={(e) => {
+                            updateDraft(encounter.id, "assignedUpperLevel", e.target.value);
+                            setOpenAssignmentMenu(`${encounter.id}-upper`);
+                          }}
+                          onFocus={() => setOpenAssignmentMenu(`${encounter.id}-upper`)}
+                          onBlur={() => {
+                            setTimeout(() => setOpenAssignmentMenu(null), 150);
+                          }}
+                          placeholder="Upper level name"
+                        />
 
-    {openAssignmentMenu === `${encounter.id}-upper` && (
-      <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border bg-white shadow-lg">
-        {sortedUpperLevelNameOptions.map((name) => {
-          const isActive = activeUpperLevelNames.has(normalizeName(name));
-          const isSelected =
-            normalizeName(getDraftValue(encounter, "assignedUpperLevel")) ===
-            normalizeName(name);
+                        {openAssignmentMenu === `${encounter.id}-upper` && (
+                          <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border bg-white shadow-lg">
+                            {sortedUpperLevelNameOptions.map((name) => {
+                              const isActive = activeUpperLevelNames.has(normalizeName(name));
+                              const isSelected =
+                                normalizeName(getDraftValue(encounter, "assignedUpperLevel")) ===
+                                normalizeName(name);
 
-          return (
-            <button
-              key={name}
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                updateDraft(encounter.id, "assignedUpperLevel", name);
-                setOpenAssignmentMenu(null);
-              }}
-              className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 ${
-                isSelected ? "bg-blue-50 font-semibold text-blue-700" : "text-slate-700"
-              }`}
-            >
-              <span className="flex min-w-0 items-center gap-2">
-                <span
-                  className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                    isActive ? "bg-green-500" : "bg-slate-300"
-                  }`}
-                />
-                <span className="truncate">{name}</span>
-              </span>
+                              return (
+                                <button
+                                  key={name}
+                                  type="button"
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => {
+                                    updateDraft(encounter.id, "assignedUpperLevel", name);
+                                    setOpenAssignmentMenu(null);
+                                  }}
+                                  className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 ${isSelected ? "bg-blue-50 font-semibold text-blue-700" : "text-slate-700"
+                                    }`}
+                                >
+                                  <span className="flex min-w-0 items-center gap-2">
+                                    <span
+                                      className={`h-2.5 w-2.5 shrink-0 rounded-full ${isActive ? "bg-green-500" : "bg-slate-300"
+                                        }`}
+                                    />
+                                    <span className="truncate">{name}</span>
+                                  </span>
 
-              {isActive && (
-                <span className="shrink-0 text-[11px] font-medium text-green-700">
-                  Active
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-    )}
-  </div>
+                                  {isActive && (
+                                    <span className="shrink-0 text-[11px] font-medium text-green-700">
+                                      Active
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
 
-  <p className="text-[11px] text-slate-500">
-    Active Today: {activeUpperLevels?.length || 0}
-  </p>
-</div>
+                      <p className="text-[11px] text-slate-500">
+                        Active Today: {activeUpperLevels?.length || 0}
+                      </p>
+                    </div>
 
                     <select
                       className="min-h-[40px] w-full rounded-lg border px-3 py-2 text-sm"
@@ -813,6 +935,8 @@ const sortedUpperLevelNameOptions = sortActiveFirst(
                         </option>
                       ))}
                     </select>
+
+
 
                     <button
                       type="button"
@@ -850,11 +974,11 @@ const sortedUpperLevelNameOptions = sortActiveFirst(
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center justify-between">
                     <p className="font-semibold text-slate-800">
-  {getDailyCardNumber(patient, encounter)
-    ? `#${getDailyCardNumber(patient, encounter)} — `
-    : ""}
-  {getPatientBoardName(patient)} ({patient.age})
-</p>
+                      {getDailyCardNumber(patient, encounter)
+                        ? `#${getDailyCardNumber(patient, encounter)} — `
+                        : ""}
+                      {getPatientBoardName(patient)} ({patient.age})
+                    </p>
 
                     <span
                       className={`rounded-full border px-2 py-0.5 text-xs ${getStatusClasses(encounter.status)}`}
@@ -867,13 +991,13 @@ const sortedUpperLevelNameOptions = sortActiveFirst(
                     {encounter.chiefComplaint || "No chief complaint"}
                   </p>
                   {getLeadershipQueueNotes(encounter) && (
-  <div className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900">
-    <span className="font-semibold">Leadership note:</span>{" "}
-    <span className="line-clamp-2">
-      {getLeadershipQueueNotes(encounter)}
-    </span>
-  </div>
-)}
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900">
+                      <span className="font-semibold">Leadership note:</span>{" "}
+                      <span className="line-clamp-2">
+                        {getLeadershipQueueNotes(encounter)}
+                      </span>
+                    </div>
+                  )}
 
                   <div className="flex flex-wrap gap-x-3 text-xs text-slate-500">
                     <span>MRN: {patient.mrn || "—"}</span>
@@ -899,6 +1023,7 @@ const sortedUpperLevelNameOptions = sortActiveFirst(
                     {fluBadge?.(encounter)}
                     {elevatorBadge(encounter)}
                     {papBadge?.(encounter)}
+                    {pharmacyStatusBadge(encounter)}
                   </div>
                 </div>
               </div>

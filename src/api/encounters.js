@@ -264,6 +264,26 @@ export async function updateEncounterInSupabase(encounterId, updates) {
     payload.skip_upper_level_at = updates.skipUpperLevelAt;
   }
 
+  if (updates.pharmacyStatus !== undefined) {
+  payload.pharmacy_status = updates.pharmacyStatus;
+}
+
+if (updates.pharmacyReadyAt !== undefined) {
+  payload.pharmacy_ready_at = updates.pharmacyReadyAt;
+}
+
+if (updates.pharmacyReadyBy !== undefined) {
+  payload.pharmacy_ready_by = updates.pharmacyReadyBy;
+}
+
+if (updates.pharmacyNotifiedAt !== undefined) {
+  payload.pharmacy_notified_at = updates.pharmacyNotifiedAt;
+}
+
+if (updates.pharmacyNotifiedBy !== undefined) {
+  payload.pharmacy_notified_by = updates.pharmacyNotifiedBy;
+}
+
   if (updates.ophthalmologyNote !== undefined) {
     payload.ophthalmology_note = updates.ophthalmologyNote;
   }

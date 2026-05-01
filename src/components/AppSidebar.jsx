@@ -49,22 +49,31 @@ export default function AppSidebar({
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 transform overflow-y-auto border-r border-slate-200 bg-white transition-transform duration-300 xl:translate-x-0 ${
-  sidebarOpen ? "translate-x-0" : "-translate-x-full xl:translate-x-0"
-}`}
+        className={`fixed inset-y-0 left-0 z-50 w-64 transform overflow-y-auto border-r border-slate-200 bg-white transition-transform duration-300 xl:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full xl:translate-x-0"
+          }`}
       >
-      <div className="border-b border-slate-200 px-4 py-4">
-  <img
-    src={logo}
-    alt="Free Clinic"
-    className="h-10 w-auto max-w-[180px] object-contain object-left"
-  />
-</div>
+        <div className="border-b border-slate-200 px-4 py-4">
+          <img
+            src={logo}
+            alt="Free Clinic"
+            className="h-10 w-auto max-w-[180px] object-contain object-left"
+          />
+        </div>
 
         <nav className="space-y-4 p-4">
           {userRole === "pharmacy" ? (
             <div className="space-y-2">
+              <SectionLabel>Workflow</SectionLabel>
+
+              <button
+                onClick={() => handleViewChange("queue")}
+                className={getNavItemClass("queue")}
+              >
+                Live Queue
+              </button>
+
               <SectionLabel>Clinical</SectionLabel>
+
               <button
                 onClick={() => handleViewChange("formulary")}
                 className={getNavItemClass("formulary")}
@@ -78,17 +87,17 @@ export default function AppSidebar({
                 <SectionLabel>Workflow</SectionLabel>
 
                 {(isLeadershipView ||
-  userRole === "undergraduate" ||
-  userRole === "upper_level" ||
-  userRole === "attending" ||
-  canRefillAccess) && (
-                  <button
-                    onClick={() => handleViewChange("dashboard")}
-                    className={getNavItemClass("dashboard")}
-                  >
-                    Dashboard
-                  </button>
-                )}
+                  userRole === "undergraduate" ||
+                  userRole === "upper_level" ||
+                  userRole === "attending" ||
+                  canRefillAccess) && (
+                    <button
+                      onClick={() => handleViewChange("dashboard")}
+                      className={getNavItemClass("dashboard")}
+                    >
+                      Dashboard
+                    </button>
+                  )}
 
                 {userRole === "undergraduate" && (
                   <button
@@ -108,14 +117,13 @@ export default function AppSidebar({
                   </button>
                 )}
 
-                {userRole !== "undergraduate" && (
                   <button
                     onClick={() => handleViewChange("queue")}
                     className={getNavItemClass("queue")}
                   >
                     Live Queue
                   </button>
-                )}
+                
 
                 {userRole !== "undergraduate" && (
                   <button
