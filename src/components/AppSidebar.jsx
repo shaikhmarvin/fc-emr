@@ -121,7 +121,7 @@ export default function AppSidebar({
                     onClick={() => handleViewChange("queue")}
                     className={getNavItemClass("queue")}
                   >
-                    Live Queue
+                    General Clinic
                   </button>
                 
 
@@ -130,7 +130,7 @@ export default function AppSidebar({
                     onClick={() => handleViewChange("specialty-queue")}
                     className={getNavItemClass("specialty-queue")}
                   >
-                    Specialty Patients
+                    Specialty Clinic
                   </button>
                 )}
 
@@ -161,7 +161,7 @@ export default function AppSidebar({
                     onClick={() => handleViewChange("programs")}
                     className={getNavItemClass("programs")}
                   >
-                    Specialty Programs
+                    Specialty Programs Tracker
                   </button>
                 )}
 

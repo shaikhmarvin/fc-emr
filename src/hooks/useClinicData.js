@@ -24,6 +24,7 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
     const intake = encounter.intake_data || {};
     const visitType = intake.visitType || "general";
     const specialtyType = intake.specialtyType || "";
+    const dualVisit = intake.dualVisit ?? false;
 
     patient.encounters.push({
       id: encounter.id,
@@ -96,6 +97,7 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
       attendingSignedAt: encounter.attending_signed_at || null,
       visitType,
       specialtyType,
+      dualVisit,
       leadershipIntakeComplete: encounter.leadership_intake_complete ?? false,
       pharmacyStatus: encounter.pharmacy_status || "",
       skipUpperLevel: encounter.skip_upper_level ?? false,

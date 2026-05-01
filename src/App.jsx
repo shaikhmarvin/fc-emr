@@ -318,7 +318,13 @@ function dualVisitBadge(encounter) {
     intakeData?.specialty_type ||
     "";
 
-  if (visitType !== "both") return null;
+  const isDualVisit =
+  visitType === "both" ||
+  encounter?.dualVisit === true ||
+  intakeData?.dualVisit === true ||
+  (visitType === "general" && Boolean(specialtyType));
+
+if (!isDualVisit) return null;
 
   const specialtyMap = {
     dermatology: "Derm",
@@ -346,7 +352,33 @@ function dualVisitBadge(encounter) {
   );
 }
 
+function pharmacyStatusBadge(encounter) {
+  if (encounter?.pharmacyStatus === "meds_ready") {
+    return (
+      <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-800">
+        Meds Ready
+      </span>
+    );
+  }
 
+  if (encounter?.pharmacyStatus === "patient_sent") {
+    return (
+      <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+        Sent to Pharmacy
+      </span>
+    );
+  }
+
+  if (encounter?.pharmacyStatus === "picked_up") {
+    return (
+      <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800">
+        Meds Picked Up
+      </span>
+    );
+  }
+
+  return null;
+}
 
 async function runGoogleOCR(base64Images) {
   const { data, error } = await supabase.functions.invoke("google-ocr", {
@@ -3691,10 +3723,11 @@ const [lastPharmacyToastKey, setLastPharmacyToastKey] = useState("");
 
       if (data.visitType === "both" && data.specialtyType) {
         const generalEncounter = {
-          ...encounterBase,
-          visitType: "general",
-          specialtyType: "",
-        };
+  ...encounterBase,
+  visitType: "general",
+  specialtyType: data.specialtyType,
+  dualVisit: true,
+};
 
         const specialtyEncounter = {
           ...encounterBase,
@@ -8268,6 +8301,7 @@ const [lastPharmacyToastKey, setLastPharmacyToastKey] = useState("");
               spanishBadge={spanishBadge}
               papBadge={papBadge}
               dualVisitBadge={dualVisitBadge}
+              pharmacyStatusBadge={pharmacyStatusBadge}
               diabetesBadge={diabetesBadge}
               elevatorBadge={elevatorBadge}
               fluBadge={fluBadge}

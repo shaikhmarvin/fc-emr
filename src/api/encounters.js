@@ -129,6 +129,7 @@ function buildIntakeData(encounter) {
     anyMentalHealthPositive: encounter.anyMentalHealthPositive ?? false,
     visitType: encounter.visitType ?? "general",
     specialtyType: encounter.specialtyType ?? "",
+dualVisit: encounter.dualVisit ?? false,
   };
 }
 
@@ -316,6 +317,7 @@ if (updates.pharmacyNotifiedBy !== undefined) {
     "anyMentalHealthPositive",
     "visitType",
     "specialtyType",
+"dualVisit",
   ];
 
   const hasIntakeUpdates = intakeFields.some(
@@ -373,6 +375,7 @@ if (updates.pharmacyNotifiedBy !== undefined) {
       false,
     visitType: updates.visitType ?? currentIntake.visitType ?? "general",
     specialtyType: updates.specialtyType ?? currentIntake.specialtyType ?? "",
+dualVisit: updates.dualVisit ?? currentIntake.dualVisit ?? false,
   };
 }
   

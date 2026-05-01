@@ -21,6 +21,7 @@ export default function ChartView({
   priorityBadge,
   newReturningBadge,
   papBadge,
+  pharmacyStatusBadge,
   dualVisitBadge,
   diabetesBadge,
   elevatorBadge,
@@ -684,15 +685,16 @@ export default function ChartView({
   }
 
   function getVisitTypeLabel(visitType) {
-    switch (visitType) {
-      case "specialty_only":
-        return "Specialty Only";
-      case "both":
-        return "General + Specialty";
-      default:
-        return "General Clinic";
-    }
+  switch (visitType) {
+    case "specialty_only":
+    case "specialty":
+      return "Specialty";
+    case "both":
+      return "General + Specialty";
+    default:
+      return "General";
   }
+}
 
 
 
@@ -1268,19 +1270,17 @@ export default function ChartView({
         ) : null}
       </div>
 
-      {isSpecialtyVisit && (
-        <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-violet-800">
-              Specialty Visit
-            </span>
-          </div>
+      {specialtyBadgeText && (
+  <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+    <span className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+      Visit Type
+    </span>
 
-          <div className="mt-1 text-sm text-violet-700">
-            {specialtyBadgeText}
-          </div>
-        </div>
-      )}
+    <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
+      {specialtyBadgeText}
+    </span>
+  </div>
+)}
       <div className="grid grid-cols-1 gap-4">
 
         <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
@@ -1396,7 +1396,7 @@ export default function ChartView({
             {fluBadge?.(selectedEncounter)}
             {elevatorBadge?.(selectedEncounter)}
             {papBadge?.(selectedEncounter)}
-            {pharmacyStatusBadge?.(encounter)}
+            {pharmacyStatusBadge?.(selectedEncounter)}
           </div>
 
           <div

@@ -772,8 +772,18 @@ export default function QueueView({
 
 {userRole === "pharmacy" &&
   encounter?.pharmacyStatus === "picked_up" && (
-    <div className="mt-2 rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
-      Medications Picked Up
+    <div className="mt-2 flex gap-2">
+      <div className="min-h-[40px] flex-1 rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
+        Medications Picked Up
+      </div>
+
+      <button
+        type="button"
+        onClick={() => onMarkMedicationsReady?.(encounter.id)}
+        className="min-h-[40px] rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+      >
+        Meds Ready Again
+      </button>
     </div>
 )}
 

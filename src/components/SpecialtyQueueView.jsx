@@ -1,7 +1,41 @@
 import { useMemo, useState } from "react";
 
-function isDualVisit(encounter) {
-    return encounter.visitType === "both";
+function isDualVisit(patient, encounter) {
+    const intakeData = encounter?.intakeData || encounter?.intake_data || {};
+
+    const visitType =
+        encounter?.visitType ||
+        encounter?.visit_type ||
+        intakeData?.visitType ||
+        intakeData?.visit_type ||
+        "";
+
+    if (
+        visitType === "both" ||
+        encounter?.dualVisit === true ||
+        intakeData?.dualVisit === true
+    ) {
+        return true;
+    }
+
+    const encounterDate = encounter?.clinicDate || encounter?.clinic_date;
+
+    return (patient?.encounters || []).some((otherEncounter) => {
+        if (!otherEncounter || otherEncounter.id === encounter.id) return false;
+
+        const otherDate = otherEncounter?.clinicDate || otherEncounter?.clinic_date;
+        const otherVisitType =
+            otherEncounter?.visitType ||
+            otherEncounter?.visit_type ||
+            otherEncounter?.intakeData?.visitType ||
+            otherEncounter?.intake_data?.visitType ||
+            "";
+
+        return (
+            otherDate === encounterDate &&
+            (otherVisitType === "general" || otherVisitType === "both")
+        );
+    });
 }
 
 function getSpecialtyLabel(type) {
@@ -19,6 +53,14 @@ function getSpecialtyLabel(type) {
         default:
             return "Other";
     }
+}
+
+function dualSpecialtyBadge(encounter) {
+    return (
+        <span className="inline-flex items-center whitespace-nowrap rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+            General + {getSpecialtyLabel(encounter?.specialtyType)}
+        </span>
+    );
 }
 
 function getVisitTypeLabel(visitType) {
@@ -130,7 +172,6 @@ function SpecialtyTable({
                                                 </span>
                                             )}
 
-                                            {dualVisitBadge?.(encounter)}
                                         </div>
 
                                         <div className="mt-1 text-xs text-slate-500">
@@ -143,14 +184,13 @@ function SpecialtyTable({
                                     </div>
 
                                     <div>
-                                        <span
-                                            className={`inline-flex items-center whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${encounter.visitType === "specialty_only"
-                                                ? "bg-violet-100 text-violet-800"
-                                                : "bg-blue-100 text-blue-800"
-                                                }`}
-                                        >
-                                            {getVisitTypeLabel(encounter.visitType)}
-                                        </span>
+                                        {isDualVisit(patient, encounter) ? (
+    dualSpecialtyBadge(encounter)
+) : (
+    <span className="inline-flex items-center whitespace-nowrap rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-800">
+        Specialty Only
+    </span>
+)}
                                     </div>
 
                                     <div className="text-slate-700">
@@ -188,21 +228,19 @@ function SpecialtyTable({
                                                 </span>
                                             )}
 
-                                            {dualVisitBadge?.(encounter)}
                                         </div>
                                         <div className="mt-1 text-xs text-slate-500">
                                             MRN: {patient.mrn || "—"}{getDailyCardNumber(patient, encounter) ? ` • Daily #${getDailyCardNumber(patient, encounter)}` : ""}
                                         </div>
                                     </div>
 
-                                    <span
-                                        className={`inline-flex items-center whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${encounter.visitType === "specialty_only"
-                                            ? "bg-violet-100 text-violet-800"
-                                            : "bg-blue-100 text-blue-800"
-                                            }`}
-                                    >
-                                        {getVisitTypeLabel(encounter.visitType)}
-                                    </span>
+                                    {isDualVisit(patient, encounter) ? (
+    dualSpecialtyBadge(encounter)
+) : (
+    <span className="inline-flex items-center whitespace-nowrap rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-800">
+        Specialty Only
+    </span>
+)}
                                 </div>
 
                                 <div className="text-sm text-slate-600">
