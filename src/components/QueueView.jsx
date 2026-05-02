@@ -458,14 +458,40 @@ function getSelectedRoomQueueClass(encounter) {
     activeUpperLevelNames
   );
 
-  const filteredWaitingEncounterRows = waitingEncounterRows.filter(
-    ({ patient, encounter }) => {
-      if (encounter?.visitType === "specialty") return false;
-      if (encounter?.visit_type === "specialty") return false;
-
-      return rowMatchesQueueSearch(patient, encounter);
-    }
+  function isRefillOnlyEncounter(encounter) {
+  return (
+    encounter?.visitType === "refill_only" ||
+    encounter?.visit_type === "refill_only"
   );
+}
+
+function isSpecialtyOnlyEncounter(encounter) {
+  return (
+    encounter?.visitType === "specialty_only" ||
+    encounter?.visit_type === "specialty_only"
+  );
+}
+
+function isPharmacyWorkflowEncounter(encounter) {
+  return (
+    isRefillOnlyEncounter(encounter) ||
+    isSpecialtyOnlyEncounter(encounter)
+  );
+}
+
+const pharmacyRows = (waitingEncounterRows || []).filter(
+  ({ patient, encounter }) =>
+    String(encounter?.pharmacyStatus || "").toLowerCase() !== "picked_up" &&
+    rowMatchesQueueSearch(patient, encounter)
+);
+
+const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
+  ({ patient, encounter }) => {
+    if (isPharmacyWorkflowEncounter(encounter)) return false;
+
+    return rowMatchesQueueSearch(patient, encounter);
+  }
+);
 
   const pharmacyReadyRows = (waitingEncounterRows || []).filter(
     ({ encounter }) => encounter?.pharmacyStatus === "meds_ready"
@@ -486,8 +512,221 @@ function getSelectedRoomQueueClass(encounter) {
           encounter.assignedStudent || encounter.assignedUpperLevel
       )
       : [];
+  if (userRole === "pharmacy") {
+  return (
+    <div className="space-y-4 p-3 sm:p-4 lg:p-6">
+      <div className="rounded-2xl bg-white p-4 shadow sm:p-5">
+        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold">
+              Pharmacy Medication Queue
+            </h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Mark medications ready, sent, or picked up.
+            </p>
+          </div>
+
+          <input
+            className="w-full rounded-lg border p-3 lg:w-80"
+            placeholder="Search by name, DOB, or daily card #"
+            value={queueSearch}
+            onChange={(e) => setQueueSearch(e.target.value)}
+          />
+        </div>
+
+        {pharmacyRows.length === 0 ? (
+          <div className="px-5 py-6 text-slate-500">
+            No patients currently waiting for pharmacy.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {pharmacyRows.map(({ patient, encounter }) => (
+              <div
+                key={encounter.id}
+                onClick={(e) => {
+                  if (e.target.closest("button")) return;
+                  openPatientChart(patient.id, encounter.id);
+                }}
+                className="cursor-pointer rounded-xl border bg-white p-3 shadow-sm transition hover:bg-slate-50"
+              >
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-semibold text-slate-800">
+                      {getDailyCardNumber(patient, encounter)
+                        ? `#${getDailyCardNumber(patient, encounter)} — `
+                        : ""}
+                      {getFullQueuePatientName(patient)} ({patient.age || "—"})
+                    </p>
+
+                    {pharmacyStatusBadge(encounter)}
+                  </div>
+
+                  <p className="text-sm text-slate-600">
+                    {encounter.chiefComplaint || "No chief complaint"}
+                  </p>
+
+                  <div className="flex flex-wrap gap-x-3 text-xs text-slate-500">
+                    <span>DOB: {patient.dob || "—"}</span>
+                    <span>MRN: {patient.mrn || "—"}</span>
+                    <span>Wait: {formatWaitTime(encounter.createdAt)}</span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {isRefillOnlyEncounter(encounter) && (
+                      <span className="rounded-full bg-purple-100 px-2 py-1 text-xs font-semibold text-purple-800">
+                        Refill Only
+                      </span>
+                    )}
+
+                    {isSpecialtyOnlyEncounter(encounter) && (
+                      <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
+                        Specialty Only
+                      </span>
+                    )}
+
+                    {dualVisitBadge?.(encounter)}
+                    {newReturningBadge?.(encounter)}
+                    {spanishBadge?.(encounter)}
+                    {priorityBadge?.(encounter)}
+                  </div>
+
+                  {!encounter?.pharmacyStatus || encounter?.pharmacyStatus === "waiting" ? (
+                    <button
+                      type="button"
+                      onClick={() => onMarkMedicationsReady?.(encounter.id)}
+                      className="mt-2 min-h-[40px] rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+                    >
+                      Medications Ready
+                    </button>
+                  ) : null}
+
+                  {encounter?.pharmacyStatus === "meds_ready" && (
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onMarkMedicationsPickedUp?.(encounter.id)}
+                        className="min-h-[40px] flex-1 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                      >
+                        Medications Picked Up
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => onClearPharmacyStatus?.(encounter.id)}
+                        className="min-h-[40px] rounded-lg bg-slate-500 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-600"
+                      >
+                        Undo
+                      </button>
+                    </div>
+                  )}
+
+                  {encounter?.pharmacyStatus === "patient_sent" && (
+                    <button
+                      type="button"
+                      onClick={() => onMarkMedicationsPickedUp?.(encounter.id)}
+                      className="mt-2 min-h-[40px] w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                    >
+                      Medications Picked Up
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
   return (
     <div className="space-y-4 p-3 sm:p-4 lg:space-y-6 lg:p-6">
+      {userRole === "pharmacy" && pharmacyRows.length > 0 && (
+  <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+    <h2 className="text-lg font-bold text-emerald-900">
+      Pharmacy Medication Queue
+    </h2>
+
+    <p className="mt-1 text-sm text-emerald-800">
+      Refill-only and specialty patients needing medication pickup.
+    </p>
+
+    <div className="mt-3 space-y-3">
+      {pharmacyRows.map(({ patient, encounter }) => (
+        <div
+          key={encounter.id}
+          className="rounded-xl border border-emerald-100 bg-white p-3 shadow-sm"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="font-bold text-slate-900">
+                {getPharmacyDailyNumber(patient, encounter)}
+                {getFullQueuePatientName(patient)}
+              </div>
+
+              <div className="mt-1 text-xs text-slate-500">
+                DOB: {patient?.dob || "—"} • MRN: {patient?.mrn || "—"}
+              </div>
+
+              <div className="mt-2 flex flex-wrap gap-2">
+                {isRefillOnlyEncounter(encounter) && (
+                  <span className="rounded-full bg-purple-100 px-2 py-1 text-xs font-semibold text-purple-800">
+                    Refill Only
+                  </span>
+                )}
+
+                {isSpecialtyOnlyEncounter(encounter) && (
+  <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
+    Specialty
+  </span>
+)}
+
+                {encounter?.specialtyType && (
+                  <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+                    {encounter.specialtyType}
+                  </span>
+                )}
+
+                {pharmacyStatusBadge(encounter)}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {(!encounter?.pharmacyStatus || encounter?.pharmacyStatus === "waiting") && (
+                <button
+                  type="button"
+                  onClick={() => onMarkMedicationsReady?.(encounter.id)}
+                  className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+                >
+                  Meds Ready
+                </button>
+              )}
+
+              {encounter?.pharmacyStatus === "meds_ready" && (
+                <button
+                  type="button"
+                  onClick={() => onClearPharmacyStatus?.(encounter.id)}
+                  className="rounded-lg bg-slate-500 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-600"
+                >
+                  Undo
+                </button>
+              )}
+
+              {encounter?.pharmacyStatus === "patient_sent" && (
+                <button
+                  type="button"
+                  onClick={() => onMarkMedicationsPickedUp?.(encounter.id)}
+                  className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  Picked Up
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  </section>
+)}
       {userRole === "undergraduate" && pharmacyReadyRows.length > 0 && (
         <section className="rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-4 shadow-sm">
           <h2 className="text-lg font-bold text-emerald-900">
@@ -799,7 +1038,7 @@ function getSelectedRoomQueueClass(encounter) {
       onClick={() => onClearPharmacyStatus?.(encounter.id)}
       className="min-h-[40px] rounded-lg bg-slate-500 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-600"
     >
-      Undo "Medications Not Ready"
+      Undo Medication Status
     </button>
   </div>
 )}

@@ -63,6 +63,12 @@ function mapEncounterRow(row) {
 
     leadershipIntakeComplete: row.leadership_intake_complete ?? false,
 
+    pharmacyStatus: row.pharmacy_status || "",
+pharmacyReadyAt: row.pharmacy_ready_at || null,
+pharmacyReadyBy: row.pharmacy_ready_by || null,
+pharmacyNotifiedAt: row.pharmacy_notified_at || null,
+pharmacyNotifiedBy: row.pharmacy_notified_by || null,
+
     soapSubjective: row.hpi || "",
     soapObjective: row.objective || "",
     soapAssessment: row.assessment || "",
@@ -150,7 +156,12 @@ export async function createEncounterInSupabase(patientId, encounter) {
     assessment: encounter.soapAssessment || "",
     plan: encounter.soapPlan || "",
     soap_status: encounter.soapStatus || "draft",
-    ophthalmology_note: encounter.ophthalmologyNote || null,
+pharmacy_status: encounter.pharmacyStatus || "",
+pharmacy_ready_at: encounter.pharmacyReadyAt || null,
+pharmacy_ready_by: encounter.pharmacyReadyBy || null,
+pharmacy_notified_at: encounter.pharmacyNotifiedAt || null,
+pharmacy_notified_by: encounter.pharmacyNotifiedBy || null,
+ophthalmology_note: encounter.ophthalmologyNote || null,
   };
 
   const { data, error } = await supabase

@@ -817,10 +817,10 @@ export default function App() {
   }
 
   const EMPTY_UNDERGRAD_REGISTRATION_FORM = {
-      firstName: "",
-  lastName: "",
-  dob: "",
-  mrn: "",
+    firstName: "",
+    lastName: "",
+    dob: "",
+    mrn: "",
     addressLine1: "",
     city: "",
     state: "",
@@ -3787,41 +3787,52 @@ export default function App() {
 
       let savedEncounter = null;
 
-      if (data.visitType === "both" && data.specialtyType) {
-        const generalEncounter = {
-          ...encounterBase,
-          visitType: "general",
-          specialtyType: data.specialtyType,
-          dualVisit: true,
-        };
+      if (data.visitType === "both") {
+  const generalEncounter = {
+    ...encounterBase,
+    visitType: "general",
+    specialtyType: "",
+    status: "started",
+    leadershipIntakeComplete: false,
+    pharmacyStatus: "",
+  };
 
-        const specialtyEncounter = {
-          ...encounterBase,
-          visitType: "specialty_only",
-          specialtyType: data.specialtyType,
-          status: "ready",
-          leadershipIntakeComplete: true,
-        };
+  const specialtyEncounter = {
+    ...encounterBase,
+    visitType: "specialty_only",
+    specialtyType: data.specialtyType || "",
+    chiefComplaint: data.specialtyType
+      ? `${data.specialtyType} Specialty Visit`
+      : "Specialty Visit",
+    status: "undergrad_complete",
+    leadershipIntakeComplete: true,
+    pharmacyStatus: "waiting",
+  };
 
-        savedEncounter = await createEncounterInSupabase(targetPatient.id, generalEncounter);
-        await createEncounterInSupabase(targetPatient.id, specialtyEncounter);
-      } else {
-        const isRefillOnly = data.visitType === "refill_only";
+  savedEncounter = await createEncounterInSupabase(targetPatient.id, generalEncounter);
+  await createEncounterInSupabase(targetPatient.id, specialtyEncounter);
+} else {
+  const isRefillOnly = data.visitType === "refill_only";
+  const isSpecialtyOnly = data.visitType === "specialty_only";
 
-const singleEncounter = {
-  ...encounterBase,
-  visitType: data.visitType || "general",
-  specialtyType: isRefillOnly ? "" : data.specialtyType || "",
-  chiefComplaint: isRefillOnly
-    ? "Refills Only"
-    : encounterBase.chiefComplaint || data.chiefComplaint || "",
-  status: isRefillOnly ? "undergrad_complete" : "started",
-  leadershipIntakeComplete: isRefillOnly ? true : false,
-  pharmacyStatus: isRefillOnly ? "waiting" : "",
-};
+  const singleEncounter = {
+    ...encounterBase,
+    visitType: data.visitType || "general",
+    specialtyType: isRefillOnly ? "" : data.specialtyType || "",
+    chiefComplaint: isRefillOnly
+      ? "Refills Only"
+      : isSpecialtyOnly
+        ? data.specialtyType
+          ? `${data.specialtyType} Specialty Visit`
+          : "Specialty Visit"
+        : encounterBase.chiefComplaint || data.chiefComplaint || "",
+    status: isRefillOnly || isSpecialtyOnly ? "undergrad_complete" : "started",
+    leadershipIntakeComplete: isRefillOnly || isSpecialtyOnly,
+    pharmacyStatus: isRefillOnly || isSpecialtyOnly ? "waiting" : "",
+  };
 
-        savedEncounter = await createEncounterInSupabase(targetPatient.id, singleEncounter);
-      }
+  savedEncounter = await createEncounterInSupabase(targetPatient.id, singleEncounter);
+}
 
       await refreshClinicData();
 
@@ -3858,10 +3869,10 @@ const singleEncounter = {
     setRegistrationEncounterId(encounterId);
 
     setUndergradRegistrationForm({
-        firstName: patient.firstName || "",
-  lastName: patient.lastName || "",
-  dob: patient.dob || "",
-  mrn: patient.mrn || "",
+      firstName: patient.firstName || "",
+      lastName: patient.lastName || "",
+      dob: patient.dob || "",
+      mrn: patient.mrn || "",
       addressLine1: patient.address || "",
       city: patient.city || "",
       state: patient.state || "",
@@ -3886,7 +3897,7 @@ const singleEncounter = {
     if (!patient || !encounter) return;
 
     const patientUpdates = {
-        mrn: undergradRegistrationForm.mrn,
+      mrn: undergradRegistrationForm.mrn,
       last4ssn: undergradRegistrationForm.last4Ssn,
       address: undergradRegistrationForm.addressLine1,
       city: undergradRegistrationForm.city,
@@ -4044,19 +4055,30 @@ const singleEncounter = {
   );
 
   const waitingEncounterRows = useMemo(() => {
-    const todayClinicDate = formatClinicDate();
+  const todayClinicDate = formatClinicDate();
 
-    const activeRows = filteredEncounterRows.filter(
-      ({ encounter }) =>
-        normalizeClinicDate(encounter.clinicDate) === todayClinicDate &&
-        (
-          encounter.status === "ready" ||
-          encounter.status === "roomed" ||
-          encounter.status === "in_visit"
-        ) &&
-        encounter.status !== "done" &&
-        encounter.soapStatus !== "signed"
+  const activeRows = filteredEncounterRows.filter(({ encounter }) => {
+    const isToday =
+      normalizeClinicDate(encounter.clinicDate) === todayClinicDate;
+
+    const isPharmacyWorkflow =
+      encounter.visitType === "refill_only" ||
+      encounter.visitType === "specialty_only";
+
+    if (!isToday) return false;
+    if (encounter.status === "done") return false;
+    if (encounter.soapStatus === "signed") return false;
+
+    if (isPharmacyWorkflow) {
+      return encounter.pharmacyStatus !== "picked_up";
+    }
+
+    return (
+      encounter.status === "ready" ||
+      encounter.status === "roomed" ||
+      encounter.status === "in_visit"
     );
+  });
 
     const currentUserName = (
       profileNameMap[session?.user?.id] ||
@@ -4086,9 +4108,16 @@ const singleEncounter = {
       );
     } else {
       // leadership/general queue should only show general encounters
-      rows = activeRows.filter(
-        ({ encounter }) => encounter.visitType !== "specialty_only"
-      );
+      if (userRole === "pharmacy" || userRole === "undergraduate") {
+  rows = activeRows;
+} else {
+  // leadership/general queue should only show general assignable encounters
+  rows = activeRows.filter(
+    ({ encounter }) =>
+      encounter.visitType !== "specialty_only" &&
+      encounter.visitType !== "refill_only"
+  );
+}
 
       rows = [...rows].sort((a, b) => {
         const aUnassigned =
@@ -5798,40 +5827,40 @@ const singleEncounter = {
     }));
   }
   async function deletePatientCompletely(patientId) {
-  const confirmed = window.confirm(
-    "Delete this patient completely? This cannot be undone."
-  );
-  if (!confirmed) return;
-
-  try {
-    await deletePapEntriesForPatient(patientId);
-    await deleteProgramEntriesForPatient(patientId);
-    await deleteRefillRequestsForPatient(patientId);
-    await deletePatientInSupabase(patientId);
-
-    setPapEntries((prev) =>
-      prev.filter((entry) => String(entry.patientId) !== String(patientId))
+    const confirmed = window.confirm(
+      "Delete this patient completely? This cannot be undone."
     );
+    if (!confirmed) return;
 
-    setProgramEntries((prev) =>
-      prev.filter((entry) => String(entry.patientId) !== String(patientId))
-    );
+    try {
+      await deletePapEntriesForPatient(patientId);
+      await deleteProgramEntriesForPatient(patientId);
+      await deleteRefillRequestsForPatient(patientId);
+      await deletePatientInSupabase(patientId);
 
-    setRefillRequests((prev) =>
-      prev.filter((req) => String(req.patient_id) !== String(patientId))
-    );
+      setPapEntries((prev) =>
+        prev.filter((entry) => String(entry.patientId) !== String(patientId))
+      );
 
-    setPatients((prev) => prev.filter((p) => p.id !== patientId));
+      setProgramEntries((prev) =>
+        prev.filter((entry) => String(entry.patientId) !== String(patientId))
+      );
 
-    if (String(selectedPatientId) === String(patientId)) {
-      setSelectedPatientId(null);
-      setSelectedEncounterId(null);
+      setRefillRequests((prev) =>
+        prev.filter((req) => String(req.patient_id) !== String(patientId))
+      );
+
+      setPatients((prev) => prev.filter((p) => p.id !== patientId));
+
+      if (String(selectedPatientId) === String(patientId)) {
+        setSelectedPatientId(null);
+        setSelectedEncounterId(null);
+      }
+    } catch (error) {
+      console.error("Delete failed:", error);
+      alert(error.message);
     }
-  } catch (error) {
-    console.error("Delete failed:", error);
-    alert(error.message);
   }
-}
 
   async function updateEncounterStatus(status) {
     if (!canManageRooms) return;
