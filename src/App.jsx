@@ -817,6 +817,10 @@ export default function App() {
   }
 
   const EMPTY_UNDERGRAD_REGISTRATION_FORM = {
+      firstName: "",
+  lastName: "",
+  dob: "",
+  mrn: "",
     addressLine1: "",
     city: "",
     state: "",
@@ -3846,6 +3850,10 @@ export default function App() {
     setRegistrationEncounterId(encounterId);
 
     setUndergradRegistrationForm({
+        firstName: patient.firstName || "",
+  lastName: patient.lastName || "",
+  dob: patient.dob || "",
+  mrn: patient.mrn || "",
       addressLine1: patient.address || "",
       city: patient.city || "",
       state: patient.state || "",
@@ -3870,6 +3878,7 @@ export default function App() {
     if (!patient || !encounter) return;
 
     const patientUpdates = {
+        mrn: undergradRegistrationForm.mrn,
       last4ssn: undergradRegistrationForm.last4Ssn,
       address: undergradRegistrationForm.addressLine1,
       city: undergradRegistrationForm.city,

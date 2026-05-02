@@ -88,9 +88,41 @@ export default function UndergradRegistrationModal({
     });
   }
 
+  const fullName =
+  form.name ||
+  form.patientName ||
+  `${form.firstName || ""} ${form.lastName || ""}`.trim();
+
+const nameParts = fullName.trim().split(/\s+/);
+
+const displayFirstName =
+  form.firstName ||
+  form.first_name ||
+  nameParts[0] ||
+  "";
+
+const displayLastName =
+  form.lastName ||
+  form.last_name ||
+  nameParts.slice(1).join(" ") ||
+  "";
+
+const displayDob =
+  form.dob ||
+  form.dateOfBirth ||
+  form.date_of_birth ||
+  "";
+
+const displayMrn =
+  form.mrn ||
+  form.MRN ||
+  form.patientMrn ||
+  form.patient_mrn ||
+  "";
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-start justify-center bg-black/40 p-4 pt-20 sm:p-6 sm:pt-24">
-      <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4 sm:p-6">
+  <div className="flex max-h-[95vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b px-6 py-4">
           <div>
             <h3 className="text-xl font-semibold">Complete Undergrad Intake</h3>
@@ -107,21 +139,78 @@ export default function UndergradRegistrationModal({
           </button>
         </div>
 
-        <div className="p-6 space-y-6">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              Street Address
-            </label>
-            <input
-              autoComplete="new-password"
-              name="clinic-field-a1"
-              id="clinic-field-a1"
-              inputMode="text"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              value={form.addressLine1}
-              onChange={(e) => handleChange("addressLine1", e.target.value)}
-            />
-          </div>
+        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5 space-y-6">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+  <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+    Patient Information
+  </h4>
+
+  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div>
+      <label className="mb-1 block text-sm font-medium text-slate-700">
+        First Name
+      </label>
+      <input
+        className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm"
+        value={displayFirstName}
+        readOnly
+      />
+    </div>
+
+    <div>
+      <label className="mb-1 block text-sm font-medium text-slate-700">
+        Last Name
+      </label>
+      <input
+        className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm"
+        value={displayLastName}
+        readOnly
+      />
+    </div>
+
+    <div>
+      <label className="mb-1 block text-sm font-medium text-slate-700">
+        DOB
+      </label>
+      <input
+        className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm"
+        value={displayDob}
+        readOnly
+      />
+    </div>
+
+    <div>
+      <label className="mb-1 block text-sm font-medium text-slate-700">
+        MRN
+      </label>
+      <input
+        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+        value={displayMrn}
+        onChange={(e) => handleChange("mrn", e.target.value)}
+        placeholder="Auto-filled if existing"
+      />
+    </div>
+  </div>
+</div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+  <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+    Address Information
+  </h4>
+
+  <label className="mb-1 block text-sm font-medium text-slate-700">
+    Street Address
+  </label>
+
+  <input
+    autoComplete="new-password"
+    name="clinic-field-a1"
+    id="clinic-field-a1"
+    inputMode="text"
+    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+    value={form.addressLine1}
+    onChange={(e) => handleChange("addressLine1", e.target.value)}
+  />
+</div>
 
           <div className="grid gap-4 md:grid-cols-3">
             <div>
@@ -349,7 +438,7 @@ export default function UndergradRegistrationModal({
         <div className="flex justify-end border-t px-6 py-4">
           <button
             onClick={onSubmit}
-            className="rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800"
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
           >
             Save Undergrad Registration
           </button>
