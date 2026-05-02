@@ -419,6 +419,7 @@ export default function UndergradIntakeView({
                   <option value="general">General Clinic</option>
                   <option value="specialty_only">Specialty Clinic Only</option>
                   <option value="both">General + Specialty Clinic</option>
+                  <option value="refill_only">Refills Only</option>
                 </select>
               </div>
 

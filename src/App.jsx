@@ -3806,11 +3806,19 @@ export default function App() {
         savedEncounter = await createEncounterInSupabase(targetPatient.id, generalEncounter);
         await createEncounterInSupabase(targetPatient.id, specialtyEncounter);
       } else {
-        const singleEncounter = {
-          ...encounterBase,
-          visitType: data.visitType || "general",
-          specialtyType: data.specialtyType || "",
-        };
+        const isRefillOnly = data.visitType === "refill_only";
+
+const singleEncounter = {
+  ...encounterBase,
+  visitType: data.visitType || "general",
+  specialtyType: isRefillOnly ? "" : data.specialtyType || "",
+  chiefComplaint: isRefillOnly
+    ? "Refills Only"
+    : encounterBase.chiefComplaint || data.chiefComplaint || "",
+  status: isRefillOnly ? "undergrad_complete" : "started",
+  leadershipIntakeComplete: isRefillOnly ? true : false,
+  pharmacyStatus: isRefillOnly ? "waiting" : "",
+};
 
         savedEncounter = await createEncounterInSupabase(targetPatient.id, singleEncounter);
       }

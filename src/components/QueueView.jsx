@@ -87,6 +87,21 @@ export default function QueueView({
     return `${parts[0]} ${parts[parts.length - 1][0]}.`;
   }
 
+  function getFullQueuePatientName(patient) {
+  const first = patient?.firstName?.trim() || "";
+  const last = patient?.lastName?.trim() || "";
+
+  if (!first && !last) {
+    return (
+      patient?.preferredName ||
+      patient?.name ||
+      "Patient"
+    );
+  }
+
+  return `${first} ${last}`.trim();
+}
+
   function getPharmacyDailyNumber(patient, encounter) {
     return getDailyCardNumber(patient, encounter)
       ? `#${getDailyCardNumber(patient, encounter)} — `
@@ -492,7 +507,7 @@ function getSelectedRoomQueueClass(encounter) {
                 <div>
                   <div className="font-bold text-slate-900">
                     {getPharmacyDailyNumber(patient, encounter)}
-                    {getPharmacyDisplayName(patient)}
+                    {getFullQueuePatientName(patient)}
                   </div>
 
                   <div className="text-xs text-slate-500">
@@ -705,7 +720,7 @@ function getSelectedRoomQueueClass(encounter) {
                     {getDailyCardNumber(patient, encounter)
                       ? `#${getDailyCardNumber(patient, encounter)} — `
                       : ""}
-                    {getPatientBoardName(patient)} ({patient.age})
+                    {getFullQueuePatientName(patient)} ({patient.age})
                   </p>
 
                   <span
@@ -730,9 +745,10 @@ function getSelectedRoomQueueClass(encounter) {
 
                 {/* Secondary info */}
                 <div className="flex flex-wrap gap-x-3 text-xs text-slate-500">
-                  <span>MRN: {patient.mrn || "—"}</span>
-                  <span>Wait: {formatWaitTime(encounter.createdAt)}</span>
-                </div>
+  <span>DOB: {patient.dob || "—"}</span>
+  <span>MRN: {patient.mrn || "—"}</span>
+  <span>Wait: {formatWaitTime(encounter.createdAt)}</span>
+</div>
 
                 {/* Assignment info */}
                 <p className="text-xs text-slate-500">
@@ -1026,7 +1042,7 @@ function getSelectedRoomQueueClass(encounter) {
                       {getDailyCardNumber(patient, encounter)
                         ? `#${getDailyCardNumber(patient, encounter)} — `
                         : ""}
-                      {getPatientBoardName(patient)} ({patient.age})
+                      {getFullQueuePatientName(patient)} ({patient.age})
                     </p>
 
                     <span
@@ -1049,9 +1065,10 @@ function getSelectedRoomQueueClass(encounter) {
                   )}
 
                   <div className="flex flex-wrap gap-x-3 text-xs text-slate-500">
-                    <span>MRN: {patient.mrn || "—"}</span>
-                    <span>Wait: {formatWaitTime(encounter.createdAt)}</span>
-                  </div>
+  <span>DOB: {patient.dob || "—"}</span>
+  <span>MRN: {patient.mrn || "—"}</span>
+  <span>Wait: {formatWaitTime(encounter.createdAt)}</span>
+</div>
 
                   <p className="text-xs text-slate-500">
                     Student: {encounter.assignedStudent || "—"} • Upper: {encounter.assignedUpperLevel || "—"}
