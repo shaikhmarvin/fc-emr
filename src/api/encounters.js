@@ -31,6 +31,13 @@ function mapEncounterRow(row) {
     status: mapDbStatusToUi(row.status),
     roomNumber: row.room || "",
     notes: row.notes || "",
+    undergradCompletedAt: row.undergrad_completed_at || null,
+    readyAt: row.ready_at || null,
+    roomedAt: row.roomed_at || null,
+    assignedAt: row.assigned_at || null,
+    doneAt: row.done_at || null,
+    cancelledAt: row.cancelled_at || null,
+    pharmacyPickedUpAt: row.pharmacy_picked_up_at || null,
 
     dailyNumber: intake.dailyNumber ?? "",
     newReturning: intake.newReturning ?? "Returning",
@@ -64,17 +71,17 @@ function mapEncounterRow(row) {
     leadershipIntakeComplete: row.leadership_intake_complete ?? false,
 
     pharmacyStatus: row.pharmacy_status || "",
-pharmacyReadyAt: row.pharmacy_ready_at || null,
-pharmacyReadyBy: row.pharmacy_ready_by || null,
-pharmacyNotifiedAt: row.pharmacy_notified_at || null,
-pharmacyNotifiedBy: row.pharmacy_notified_by || null,
+    pharmacyReadyAt: row.pharmacy_ready_at || null,
+    pharmacyReadyBy: row.pharmacy_ready_by || null,
+    pharmacyNotifiedAt: row.pharmacy_notified_at || null,
+    pharmacyNotifiedBy: row.pharmacy_notified_by || null,
 
     soapSubjective: row.hpi || "",
     soapObjective: row.objective || "",
     soapAssessment: row.assessment || "",
     soapPlan: row.plan || "",
 
-        soapStatus: row.soap_status || "draft",
+    soapStatus: row.soap_status || "draft",
     soapAuthorId: row.soap_author_id || null,
     soapAuthorRole: row.soap_author_role || "",
     upperLevelSignedBy: row.upper_level_signed_by || null,
@@ -137,7 +144,7 @@ function buildIntakeData(encounter) {
     anyMentalHealthPositive: encounter.anyMentalHealthPositive ?? false,
     visitType: encounter.visitType ?? "general",
     specialtyType: encounter.specialtyType ?? "",
-dualVisit: encounter.dualVisit ?? false,
+    dualVisit: encounter.dualVisit ?? false,
   };
 }
 
@@ -156,12 +163,13 @@ export async function createEncounterInSupabase(patientId, encounter) {
     assessment: encounter.soapAssessment || "",
     plan: encounter.soapPlan || "",
     soap_status: encounter.soapStatus || "draft",
-pharmacy_status: encounter.pharmacyStatus || "",
-pharmacy_ready_at: encounter.pharmacyReadyAt || null,
-pharmacy_ready_by: encounter.pharmacyReadyBy || null,
-pharmacy_notified_at: encounter.pharmacyNotifiedAt || null,
-pharmacy_notified_by: encounter.pharmacyNotifiedBy || null,
-ophthalmology_note: encounter.ophthalmologyNote || null,
+    pharmacy_status: encounter.pharmacyStatus || "",
+    pharmacy_ready_at: encounter.pharmacyReadyAt || null,
+    pharmacy_ready_by: encounter.pharmacyReadyBy || null,
+    pharmacy_notified_at: encounter.pharmacyNotifiedAt || null,
+    pharmacy_notified_by: encounter.pharmacyNotifiedBy || null,
+    pharmacy_picked_up_at: encounter.pharmacyPickedUpAt || null,
+    ophthalmology_note: encounter.ophthalmologyNote || null,
   };
 
   const { data, error } = await supabase
@@ -218,7 +226,7 @@ export async function updateEncounterInSupabase(encounterId, updates) {
     payload.in_house_labs = updates.inHouseLabs;
   }
 
-    if (updates.importedSendOutLabs !== undefined) {
+  if (updates.importedSendOutLabs !== undefined) {
     payload.imported_send_out_labs = updates.importedSendOutLabs;
   }
 
@@ -227,11 +235,38 @@ export async function updateEncounterInSupabase(encounterId, updates) {
   }
 
   if (updates.status !== undefined) {
-    payload.status = mapUiStatusToDb(updates.status);
+    const nextStatus = mapUiStatusToDb(updates.status);
+    payload.status = nextStatus;
+
+    const now = new Date().toISOString();
+
+    if (nextStatus === "undergrad_complete") {
+      payload.undergrad_completed_at = updates.undergradCompletedAt ?? now;
+    }
+
+    if (nextStatus === "ready") {
+      payload.ready_at = updates.readyAt ?? now;
+    }
+
+    if (nextStatus === "roomed") {
+      payload.roomed_at = updates.roomedAt ?? now;
+    }
+
+    if (nextStatus === "done") {
+      payload.done_at = updates.doneAt ?? now;
+    }
+
+    if (nextStatus === "cancelled") {
+      payload.cancelled_at = updates.cancelledAt ?? now;
+    }
   }
 
   if (updates.assignedStudent !== undefined) {
     payload.assigned_student = updates.assignedStudent;
+
+    if (updates.assignedStudent && !updates.assignedAt) {
+      payload.assigned_at = new Date().toISOString();
+    }
   }
 
   if (updates.assignedUpperLevel !== undefined) {
@@ -262,7 +297,7 @@ export async function updateEncounterInSupabase(encounterId, updates) {
     payload.attending_signed_by = updates.attendingSignedBy;
   }
 
-    if (updates.attendingSignedAt !== undefined) {
+  if (updates.attendingSignedAt !== undefined) {
     payload.attending_signed_at = updates.attendingSignedAt;
   }
 
@@ -279,24 +314,39 @@ export async function updateEncounterInSupabase(encounterId, updates) {
   }
 
   if (updates.pharmacyStatus !== undefined) {
-  payload.pharmacy_status = updates.pharmacyStatus;
-}
+    payload.pharmacy_status = updates.pharmacyStatus;
 
-if (updates.pharmacyReadyAt !== undefined) {
-  payload.pharmacy_ready_at = updates.pharmacyReadyAt;
-}
+    if (
+      updates.pharmacyStatus === "picked_up" &&
+      updates.pharmacyPickedUpAt === undefined
+    ) {
+      payload.pharmacy_picked_up_at = new Date().toISOString();
+    }
+  }
 
-if (updates.pharmacyReadyBy !== undefined) {
-  payload.pharmacy_ready_by = updates.pharmacyReadyBy;
-}
+  if (updates.pharmacyReadyAt !== undefined) {
+    payload.pharmacy_ready_at = updates.pharmacyReadyAt;
+  }
 
-if (updates.pharmacyNotifiedAt !== undefined) {
-  payload.pharmacy_notified_at = updates.pharmacyNotifiedAt;
-}
+  if (updates.pharmacyReadyBy !== undefined) {
+    payload.pharmacy_ready_by = updates.pharmacyReadyBy;
+  }
 
-if (updates.pharmacyNotifiedBy !== undefined) {
-  payload.pharmacy_notified_by = updates.pharmacyNotifiedBy;
-}
+  if (updates.pharmacyNotifiedAt !== undefined) {
+    payload.pharmacy_notified_at = updates.pharmacyNotifiedAt;
+  }
+
+  if (updates.pharmacyNotifiedBy !== undefined) {
+    payload.pharmacy_notified_by = updates.pharmacyNotifiedBy;
+  }
+
+  if (updates.pharmacyPickedUpAt !== undefined) {
+    payload.pharmacy_picked_up_at = updates.pharmacyPickedUpAt;
+  }
+
+  if (updates.assignedAt !== undefined) {
+    payload.assigned_at = updates.assignedAt;
+  }
 
   if (updates.ophthalmologyNote !== undefined) {
     payload.ophthalmology_note = updates.ophthalmologyNote;
@@ -331,7 +381,7 @@ if (updates.pharmacyNotifiedBy !== undefined) {
     "anyMentalHealthPositive",
     "visitType",
     "specialtyType",
-"dualVisit",
+    "dualVisit",
   ];
 
   const hasIntakeUpdates = intakeFields.some(
@@ -339,61 +389,61 @@ if (updates.pharmacyNotifiedBy !== undefined) {
   );
 
   if (hasIntakeUpdates) {
-  const { data: existingEncounter, error: existingError } = await supabase
-    .from("encounters")
-    .select("intake_data")
-    .eq("id", encounterId)
-    .maybeSingle();
+    const { data: existingEncounter, error: existingError } = await supabase
+      .from("encounters")
+      .select("intake_data")
+      .eq("id", encounterId)
+      .maybeSingle();
 
-  if (existingError) throw existingError;
+    if (existingError) throw existingError;
 
-  const currentIntake = existingEncounter?.intake_data || {};
+    const currentIntake = existingEncounter?.intake_data || {};
 
-  payload.intake_data = {
-    ...currentIntake,
-    dailyNumber: updates.dailyNumber ?? currentIntake.dailyNumber ?? "",
-    newReturning: updates.newReturning ?? currentIntake.newReturning ?? "Returning",
-    visitLocation: updates.visitLocation ?? currentIntake.visitLocation ?? "In Clinic",
-    transportation: updates.transportation ?? currentIntake.transportation ?? "",
-    needsElevator: updates.needsElevator ?? currentIntake.needsElevator ?? false,
-    spanishSpeaking: updates.spanishSpeaking ?? currentIntake.spanishSpeaking ?? false,
-    mammogramStatus: updates.mammogramStatus ?? currentIntake.mammogramStatus ?? "",
-    papStatus: updates.papStatus ?? currentIntake.papStatus ?? "",
-    fluShot: updates.fluShot ?? currentIntake.fluShot ?? "",
-    colonoscopyStatus: updates.colonoscopyStatus ?? currentIntake.colonoscopyStatus ?? "",
-    htn: updates.htn ?? currentIntake.htn ?? false,
-    dm: updates.dm ?? currentIntake.dm ?? false,
-    labsLast6Months: updates.labsLast6Months ?? currentIntake.labsLast6Months ?? "",
-    nicotineUse: updates.nicotineUse ?? currentIntake.nicotineUse ?? "",
-    nicotineDetails: updates.nicotineDetails ?? currentIntake.nicotineDetails ?? "",
-    substanceUseConcern:
-      updates.substanceUseConcern ?? currentIntake.substanceUseConcern ?? "",
-    substanceUseTreatment:
-      updates.substanceUseTreatment ?? currentIntake.substanceUseTreatment ?? "",
-    substanceUseNotes:
-      updates.substanceUseNotes ?? currentIntake.substanceUseNotes ?? "",
-    dermatology: updates.dermatology ?? currentIntake.dermatology ?? "N/A",
-    ophthalmology: updates.ophthalmology ?? currentIntake.ophthalmology ?? "N/A",
-    optometry: updates.optometry ?? currentIntake.optometry ?? "N/A",
-    diabeticEyeExamPastYear:
-      updates.diabeticEyeExamPastYear ??
-      currentIntake.diabeticEyeExamPastYear ??
-      "N/A",
-    physicalTherapy:
-      updates.physicalTherapy ?? currentIntake.physicalTherapy ?? "N/A",
-    mentalHealthCombined:
-      updates.mentalHealthCombined ?? currentIntake.mentalHealthCombined ?? "N/A",
-    counseling: updates.counseling ?? currentIntake.counseling ?? "N/A",
-    anyMentalHealthPositive:
-      updates.anyMentalHealthPositive ??
-      currentIntake.anyMentalHealthPositive ??
-      false,
-    visitType: updates.visitType ?? currentIntake.visitType ?? "general",
-    specialtyType: updates.specialtyType ?? currentIntake.specialtyType ?? "",
-dualVisit: updates.dualVisit ?? currentIntake.dualVisit ?? false,
-  };
-}
-  
+    payload.intake_data = {
+      ...currentIntake,
+      dailyNumber: updates.dailyNumber ?? currentIntake.dailyNumber ?? "",
+      newReturning: updates.newReturning ?? currentIntake.newReturning ?? "Returning",
+      visitLocation: updates.visitLocation ?? currentIntake.visitLocation ?? "In Clinic",
+      transportation: updates.transportation ?? currentIntake.transportation ?? "",
+      needsElevator: updates.needsElevator ?? currentIntake.needsElevator ?? false,
+      spanishSpeaking: updates.spanishSpeaking ?? currentIntake.spanishSpeaking ?? false,
+      mammogramStatus: updates.mammogramStatus ?? currentIntake.mammogramStatus ?? "",
+      papStatus: updates.papStatus ?? currentIntake.papStatus ?? "",
+      fluShot: updates.fluShot ?? currentIntake.fluShot ?? "",
+      colonoscopyStatus: updates.colonoscopyStatus ?? currentIntake.colonoscopyStatus ?? "",
+      htn: updates.htn ?? currentIntake.htn ?? false,
+      dm: updates.dm ?? currentIntake.dm ?? false,
+      labsLast6Months: updates.labsLast6Months ?? currentIntake.labsLast6Months ?? "",
+      nicotineUse: updates.nicotineUse ?? currentIntake.nicotineUse ?? "",
+      nicotineDetails: updates.nicotineDetails ?? currentIntake.nicotineDetails ?? "",
+      substanceUseConcern:
+        updates.substanceUseConcern ?? currentIntake.substanceUseConcern ?? "",
+      substanceUseTreatment:
+        updates.substanceUseTreatment ?? currentIntake.substanceUseTreatment ?? "",
+      substanceUseNotes:
+        updates.substanceUseNotes ?? currentIntake.substanceUseNotes ?? "",
+      dermatology: updates.dermatology ?? currentIntake.dermatology ?? "N/A",
+      ophthalmology: updates.ophthalmology ?? currentIntake.ophthalmology ?? "N/A",
+      optometry: updates.optometry ?? currentIntake.optometry ?? "N/A",
+      diabeticEyeExamPastYear:
+        updates.diabeticEyeExamPastYear ??
+        currentIntake.diabeticEyeExamPastYear ??
+        "N/A",
+      physicalTherapy:
+        updates.physicalTherapy ?? currentIntake.physicalTherapy ?? "N/A",
+      mentalHealthCombined:
+        updates.mentalHealthCombined ?? currentIntake.mentalHealthCombined ?? "N/A",
+      counseling: updates.counseling ?? currentIntake.counseling ?? "N/A",
+      anyMentalHealthPositive:
+        updates.anyMentalHealthPositive ??
+        currentIntake.anyMentalHealthPositive ??
+        false,
+      visitType: updates.visitType ?? currentIntake.visitType ?? "general",
+      specialtyType: updates.specialtyType ?? currentIntake.specialtyType ?? "",
+      dualVisit: updates.dualVisit ?? currentIntake.dualVisit ?? false,
+    };
+  }
+
   if (Object.keys(payload).length === 0) {
     throw new Error("No encounter fields were provided for update.");
   }
@@ -487,11 +537,11 @@ export async function createMedicationInSupabase(patientId, medication, encounte
         ? null
         : Number(medication.refillCount),
     instructions: medication.instructions || "",
-medication_started_at:
-  medication.medicationStartedAt ||
-  medication.startedDate ||
-  null,
-is_active: medication.isActive ?? true,
+    medication_started_at:
+      medication.medicationStartedAt ||
+      medication.startedDate ||
+      null,
+    is_active: medication.isActive ?? true,
   };
 
   const { data, error } = await supabase
@@ -524,19 +574,19 @@ export async function updateMedicationInSupabase(medicationId, updates) {
   }
   if (updates.instructions !== undefined) payload.instructions = updates.instructions;
 
-if (
-  updates.medicationStartedAt !== undefined ||
-  updates.startedDate !== undefined ||
-  updates.medication_started_at !== undefined
-) {
-  payload.medication_started_at =
-    updates.medicationStartedAt ||
-    updates.startedDate ||
-    updates.medication_started_at ||
-    null;
-}
+  if (
+    updates.medicationStartedAt !== undefined ||
+    updates.startedDate !== undefined ||
+    updates.medication_started_at !== undefined
+  ) {
+    payload.medication_started_at =
+      updates.medicationStartedAt ||
+      updates.startedDate ||
+      updates.medication_started_at ||
+      null;
+  }
 
-if (updates.isActive !== undefined) payload.is_active = updates.isActive;
+  if (updates.isActive !== undefined) payload.is_active = updates.isActive;
   if (updates.lastUpdatedEncounterId !== undefined) {
     payload.last_updated_encounter_id = updates.lastUpdatedEncounterId;
   }

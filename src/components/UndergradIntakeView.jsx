@@ -251,7 +251,15 @@ export default function UndergradIntakeView({
   }, [matchPatientId, autoFilledMatchPatientId, patients]);
 
   async function handleSubmit() {
-    if (matchedPatientFired) {
+  if (
+    (form.visitType === "both" || form.visitType === "specialty_only") &&
+    !form.specialtyType
+  ) {
+    alert("Please select a specialty before starting the encounter.");
+    return;
+  }
+
+  if (matchedPatientFired) {
       const firedDateLabel = matchedPatient?.firedAt
         ? new Date(matchedPatient.firedAt).toLocaleDateString()
         : "an unknown date";
@@ -414,7 +422,18 @@ export default function UndergradIntakeView({
                 <select
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   value={form.visitType || "general"}
-                  onChange={(e) => handleChange("visitType", e.target.value)}
+                  onChange={(e) => {
+  const nextVisitType = e.target.value;
+
+  handleChange("visitType", nextVisitType);
+
+  if (
+    nextVisitType !== "both" &&
+    nextVisitType !== "specialty_only"
+  ) {
+    handleChange("specialtyType", "");
+  }
+}}
                 >
                   <option value="general">General Clinic</option>
                   <option value="specialty_only">Specialty Clinic Only</option>
@@ -423,7 +442,7 @@ export default function UndergradIntakeView({
                 </select>
               </div>
 
-              {form.visitType !== "general" && (
+              {(form.visitType === "both" || form.visitType === "specialty_only") && (
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">
                     Specialty Type

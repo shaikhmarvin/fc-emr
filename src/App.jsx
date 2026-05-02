@@ -3422,27 +3422,31 @@ export default function App() {
   }, [patients]);
 
   const specialtyEncounterRows = useMemo(() => {
-    const todayClinicDate = formatClinicDate();
+  const todayClinicDate = formatClinicDate();
 
-    return allEncounterRows
-      .filter(
-        ({ encounter }) =>
-          encounter.visitType === "specialty_only" &&
-          normalizeClinicDate(encounter.clinicDate) === todayClinicDate &&
-          (
-            encounter.status === "ready" ||
-            encounter.status === "roomed" ||
-            encounter.status === "in_visit"
-          ) &&
-          encounter.status !== "done" &&
-          encounter.soapStatus !== "signed"
-      )
-      .sort((a, b) => {
-        const aTime = new Date(a.encounter.createdAt || 0).getTime();
-        const bTime = new Date(b.encounter.createdAt || 0).getTime();
-        return aTime - bTime;
-      });
-  }, [allEncounterRows]);
+  return allEncounterRows
+    .filter(({ encounter }) => {
+      if (!encounter) return false;
+      if (encounter.visitType !== "specialty_only") return false;
+      if (normalizeClinicDate(encounter.clinicDate) !== todayClinicDate) return false;
+      if (!encounter.specialtyType) return false;
+      if (encounter.status === "done") return false;
+      if (encounter.status === "cancelled") return false;
+      if (encounter.soapStatus === "signed") return false;
+
+      return (
+        encounter.status === "undergrad_complete" ||
+        encounter.status === "ready" ||
+        encounter.status === "roomed" ||
+        encounter.status === "in_visit"
+      );
+    })
+    .sort((a, b) => {
+      const aTime = new Date(a.encounter.createdAt || 0).getTime();
+      const bTime = new Date(b.encounter.createdAt || 0).getTime();
+      return aTime - bTime;
+    });
+}, [allEncounterRows]);
 
   const specialtyRoomRulesForBoard = useMemo(() => {
     const today = formatClinicDate();
@@ -3608,6 +3612,14 @@ export default function App() {
 
   const autoRefillPatientCount = useMemo(() => {
     const patientIds = new Set();
+    patients.forEach((patient) => {
+  patient.encounters.forEach((encounter) => {
+    if (encounter.clinicDate !== selectedClinicDate) return;
+    if (encounter.visitType !== "refill_only") return;
+
+    patientIds.add(String(patient.id));
+  });
+});
 
     refillRequests.forEach((request) => {
       const status = String(request.status || "").toLowerCase();
@@ -3630,7 +3642,7 @@ export default function App() {
     });
 
     return patientIds.size;
-  }, [refillRequests, profileById, selectedClinicDate]);
+}, [patients, refillRequests, profileById, selectedClinicDate]);
 
   const specialtyCounts = useMemo(() => {
     const counts = {
@@ -4500,13 +4512,17 @@ export default function App() {
   }, [activeTodayProfiles]);
 
   useEffect(() => {
-    setClinicSummary((prev) => ({
-      ...prev,
-      attendingNames: prev.attendingNames || joinActiveNames(activeAttendings),
-      ms34Names: prev.ms34Names || joinActiveNames(activeUpperLevels),
-      ms12Names: prev.ms12Names || joinActiveNames(activeStudents),
-    }));
-  }, [activeAttendings, activeUpperLevels, activeStudents]);
+  const ms12StudentsOnly = (activeStudents || []).filter(
+    (profile) => profile.role === "student"
+  );
+
+  setClinicSummary((prev) => ({
+    ...prev,
+    attendingNames: prev.attendingNames || joinActiveNames(activeAttendings),
+    ms34Names: prev.ms34Names || joinActiveNames(activeUpperLevels),
+    ms12Names: prev.ms12Names || joinActiveNames(ms12StudentsOnly),
+  }));
+}, [activeAttendings, activeUpperLevels, activeStudents]);
 
   const canAccessSpecialtyQueue =
     userRole === "leadership" ||
