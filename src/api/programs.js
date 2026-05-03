@@ -17,6 +17,7 @@ function mapProgramRow(row) {
     schedulePosition: row.schedule_position ?? null,
     appointmentSlot: row.appointment_slot || "",
     notes: row.notes || "",
+    lastContactAttemptAt: row.last_contact_attempt_at || "",
     createdAt: row.created_at || "",
   };
 }
@@ -52,6 +53,7 @@ export async function createProgramEntryInSupabase(entry) {
         : entry.schedulePosition,
     appointment_slot: entry.appointmentSlot || "",
     notes: entry.notes || "",
+    last_contact_attempt_at: entry.lastContactAttemptAt || null,
     created_at: entry.createdAt || new Date().toISOString(),
   };
 
@@ -76,22 +78,37 @@ export async function updateProgramEntryInSupabase(entryId, updates) {
   if ("phone" in updates) payload.phone = updates.phone || "";
   if ("programType" in updates) payload.program_type = updates.programType || "";
   if ("reason" in updates) payload.reason = updates.reason || "";
+
   if ("assignedCoordinator" in updates) {
     payload.assigned_coordinator = updates.assignedCoordinator || "";
   }
+
   if ("status" in updates) payload.status = updates.status || "";
-  if ("specialtyDate" in updates) payload.specialty_date = updates.specialtyDate || "";
-  if ("scheduleType" in updates) payload.schedule_group = updates.scheduleType || "";
+  if ("specialtyDate" in updates) {
+    payload.specialty_date = updates.specialtyDate || "";
+  }
+
+  if ("scheduleType" in updates) {
+    payload.schedule_group = updates.scheduleType || "";
+  }
+
   if ("schedulePosition" in updates) {
     payload.schedule_position =
-      updates.schedulePosition === null || updates.schedulePosition === undefined
+      updates.schedulePosition === null ||
+      updates.schedulePosition === undefined
         ? null
         : updates.schedulePosition;
   }
+
   if ("appointmentSlot" in updates) {
     payload.appointment_slot = updates.appointmentSlot || "";
   }
+
   if ("notes" in updates) payload.notes = updates.notes || "";
+
+  if ("lastContactAttemptAt" in updates) {
+    payload.last_contact_attempt_at = updates.lastContactAttemptAt || null;
+  }
 
   const { data, error } = await supabase
     .from("program_entries")

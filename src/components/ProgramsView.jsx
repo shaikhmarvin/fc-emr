@@ -172,6 +172,18 @@ export default function ProgramsView({
     });
   }
 
+  function handleProgramStatusChange(entry, newStatus) {
+    updateProgramEntry(entry.id, "status", newStatus);
+
+    if (newStatus === "Attempted Contact" || newStatus === "Unable to Reach") {
+      updateProgramEntry(
+        entry.id,
+        "lastContactAttemptAt",
+        new Date().toISOString()
+      );
+    }
+  }
+
   const filteredPatientOptions = useMemo(() => {
     return patients
       .filter((patient) => {
@@ -296,6 +308,7 @@ export default function ProgramsView({
       schedulePosition: null,
       appointmentSlot: "",
       notes: newEntry.notes,
+      lastContactAttemptAt: "",
       createdAt: new Date().toISOString(),
     };
 
@@ -310,7 +323,7 @@ export default function ProgramsView({
       phone: "",
       programType: "Physical Therapy",
       reason: "",
-        status: "New Referral",
+      status: "New Referral",
       notes: "",
       specialtyDate: "",
       scheduleType: "",
@@ -465,16 +478,25 @@ export default function ProgramsView({
     updateProgramEntry(entry.id, "schedulePosition", null);
     updateProgramEntry(entry.id, "appointmentSlot", "");
     if (entry.status === "Scheduled" || entry.status === "Backup") {
-      updateProgramEntry(entry.id, "status", "Attempted Contact");
+      handleProgramStatusChange(entry, "Attempted Contact");
     }
   }
 
-  function formatDisplayDate(date) {
-    if (!date) return "—";
-    const [year, month, day] = String(date).split("-");
-    if (!year || !month || !day) return date;
-    return `${month}/${day}/${year}`;
-  }
+  function formatDisplayDate(dateString) {
+  if (!dateString) return "—";
+
+  const date = new Date(dateString);
+
+  if (Number.isNaN(date.getTime())) return "—";
+
+  return date.toLocaleString("en-US", {
+  month: "2-digit",
+  day: "2-digit",
+  year: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
+}
 
   function renderTracker() {
     return (
@@ -795,6 +817,14 @@ export default function ProgramsView({
                         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                           <ReadOnlyField label="MRN" value={entry.mrn || "—"} />
                           <ReadOnlyField label="DOB" value={entry.dob || "—"} />
+                          <ReadOnlyField
+                            label="Last Contact Attempt"
+                            value={
+                              entry.lastContactAttemptAt
+                                ? formatDisplayDate(entry.lastContactAttemptAt)
+                                : "—"
+                            }
+                          />
 
 
                           <Field label="Scheduled Visit Date">
@@ -818,7 +848,7 @@ export default function ProgramsView({
                                 className="rounded-lg border border-slate-300 px-2 py-1 text-xs"
                                 value={entry.status}
                                 onChange={(e) =>
-                                  updateProgramEntry(entry.id, "status", e.target.value)
+                                  handleProgramStatusChange(entry, e.target.value)
                                 }
                               >
                                 {getStatusOptions(entry.programType).map((status) => (
@@ -1012,14 +1042,21 @@ if (isGenericTracker) {
                       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                         <ReadOnlyField label="MRN" value={entry.mrn || "—"} />
                         <ReadOnlyField label="DOB" value={entry.dob || "—"} />
-
+                        <ReadOnlyField
+                          label="Last Contact Attempt"
+                          value={
+                            entry.lastContactAttemptAt
+                              ? formatDisplayDate(entry.lastContactAttemptAt)
+                              : "—"
+                          }
+                        />
 
                         <Field label="Status">
                           <select
                             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                             value={entry.status}
                             onChange={(e) =>
-                              updateProgramEntry(entry.id, "status", e.target.value)
+                              handleProgramStatusChange(entry, e.target.value)
                             }
                           >
                             {getStatusOptions(programType).map((status) => (
@@ -1371,6 +1408,14 @@ if (isGenericTracker) {
                         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                           <ReadOnlyField label="MRN" value={entry.mrn || "—"} />
                           <ReadOnlyField label="DOB" value={entry.dob || "—"} />
+                          <ReadOnlyField
+                            label="Last Contact Attempt"
+                            value={
+                              entry.lastContactAttemptAt
+                                ? formatDisplayDate(entry.lastContactAttemptAt)
+                                : "—"
+                            }
+                          />
 
 
                           <div>
@@ -1383,7 +1428,7 @@ if (isGenericTracker) {
                                 className="rounded-lg border border-slate-300 px-2 py-1 text-xs"
                                 value={entry.status}
                                 onChange={(e) =>
-                                  updateProgramEntry(entry.id, "status", e.target.value)
+                                  handleProgramStatusChange(entry, e.target.value)
                                 }
                               >
                                 {getStatusOptions(programType).map((status) => (

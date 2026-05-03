@@ -965,6 +965,22 @@ export default function App() {
   }, [session, papLoaded]);
 
   useEffect(() => {
+    if (!session || programsLoaded) return;
+
+    async function loadProgramEntries() {
+      try {
+        const rows = await fetchProgramEntries();
+        setProgramEntries(rows);
+        setProgramsLoaded(true);
+      } catch (error) {
+        console.error("Failed to load program entries:", error);
+      }
+    }
+
+    loadProgramEntries();
+  }, [session, programsLoaded]);
+
+  useEffect(() => {
     if (!session) return;
 
     async function loadProgramSettingsForBoard() {
@@ -3031,6 +3047,7 @@ export default function App() {
             schedulePosition: row.schedule_position ?? null,
             appointmentSlot: row.appointment_slot || "",
             notes: row.notes || "",
+            lastContactAttemptAt: row.last_contact_attempt_at || "",
             createdAt: row.created_at || "",
           };
 
