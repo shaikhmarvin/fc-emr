@@ -22,6 +22,7 @@ function formatPhoneNumber(value) {
   return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
 
+
 const STATES = [
   "Alabama",
   "Alaska",
@@ -397,11 +398,18 @@ export default function UndergradIntakeView({
                   DOB
                 </label>
                 <input
-                  type="date"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  value={form.dob}
-                  onChange={(e) => handleChange("dob", e.target.value)}
-                />
+  type="date"
+  min="1900-01-01"
+  max={new Date().toISOString().split("T")[0]}
+  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+  value={form.dob}
+  onChange={(e) => handleChange("dob", e.target.value)}
+  onInput={(e) => {
+    if (e.target.value.length > 10) {
+      e.target.value = e.target.value.slice(0, 10);
+    }
+  }}
+/>
               </div>
 
               <div>

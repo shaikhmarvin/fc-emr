@@ -5061,7 +5061,7 @@ export default function App() {
         setAutoFilledMatchPatientId(null);
         setIsEditingIntake(false);
         setEditingPatientId(null);
-        setActiveView("queue");
+        setActiveView("registration");
         return;
       } catch (error) {
         console.error("Failed to update intake in Supabase:", error);
