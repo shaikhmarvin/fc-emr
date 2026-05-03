@@ -1013,17 +1013,17 @@ export default function App() {
     }
   }
 
-  async function updateProgramEntryFields(entryId, updates) {
+  async function updateProgramEntry(entryId, field, value) {
     const previousEntries = [...programEntries];
 
     setProgramEntries((prev) =>
       prev.map((entry) =>
-        entry.id === entryId ? { ...entry, ...updates } : entry
+        entry.id === entryId ? { ...entry, [field]: value } : entry
       )
     );
 
     try {
-      const saved = await updateProgramEntryInSupabase(entryId, updates);
+      const saved = await updateProgramEntryInSupabase(entryId, { [field]: value });
 
       setProgramEntries((prev) =>
         prev.map((entry) => (entry.id === entryId ? saved : entry))
@@ -1033,10 +1033,6 @@ export default function App() {
       alert(`Failed to update program entry: ${error.message}`);
       setProgramEntries(previousEntries);
     }
-  }
-
-  async function updateProgramEntry(entryId, field, value) {
-    return updateProgramEntryFields(entryId, { [field]: value });
   }
 
   async function removeProgramEntry(entryId) {
@@ -3584,15 +3580,47 @@ export default function App() {
     visiblePatientIds.has(patient.id)
   );
 
-  const newPatientCount = visibleEncounterRows.filter(
+  const summaryPatientRows = useMemo(() => {
+    const priorityForVisitType = (visitType) => {
+      if (visitType === "general") return 1;
+      if (visitType === "both") return 2;
+      if (visitType === "specialty_only") return 3;
+      if (visitType === "refill_only") return 4;
+      return 5;
+    };
+
+    const rowMap = new Map();
+
+    visibleEncounterRows.forEach((row) => {
+      const patientKey = String(row.patient?.id || row.encounter?.patientId || "");
+      if (!patientKey) return;
+
+      const existing = rowMap.get(patientKey);
+      if (!existing) {
+        rowMap.set(patientKey, row);
+        return;
+      }
+
+      const existingPriority = priorityForVisitType(existing.encounter?.visitType);
+      const nextPriority = priorityForVisitType(row.encounter?.visitType);
+
+      if (nextPriority < existingPriority) {
+        rowMap.set(patientKey, row);
+      }
+    });
+
+    return Array.from(rowMap.values());
+  }, [visibleEncounterRows]);
+
+  const newPatientCount = summaryPatientRows.filter(
     ({ encounter }) => encounter.newReturning === "New"
   ).length;
 
-  const returningPatientCount = visibleEncounterRows.filter(
+  const returningPatientCount = summaryPatientRows.filter(
     ({ encounter }) => encounter.newReturning === "Returning"
   ).length;
 
-  const totalPatientCount = visibleEncounterRows.length;
+  const totalPatientCount = summaryPatientRows.length;
 
   const autoLwobsCount = visibleEncounterRows.filter(
     ({ encounter }) => String(encounter.status || "").toLowerCase() === "cancelled"
@@ -4774,7 +4802,6 @@ export default function App() {
         schedulePosition: null,
         appointmentSlot: "",
         notes: "",
-        lastContactAttemptAt: "",
         createdAt,
       });
     }
@@ -7565,7 +7592,7 @@ export default function App() {
   async function exportClinicSummaryToWord() {
     const clinicDateLabel = selectedClinicDate || formatClinicDate();
 
-    const rowsForDate = visibleEncounterRows.filter(
+    const rowsForDate = summaryPatientRows.filter(
       ({ encounter }) =>
         !selectedClinicDate ||
         normalizeClinicDate(encounter.clinicDate) === selectedClinicDate
@@ -7609,6 +7636,13 @@ export default function App() {
         ],
       });
     }
+
+    function blankStaffSideCell() {
+  return new TableCell({
+    columnSpan: 2,
+    children: [new Paragraph({ text: "" })],
+  });
+}
     function formatDobForSummary(dob) {
       if (!dob) return "";
 
@@ -7619,6 +7653,10 @@ export default function App() {
       }
 
       return String(dob).replaceAll("/", "-");
+    }
+
+    function formatClinicSummaryDateForWord(dateValue) {
+      return formatDobForSummary(dateValue || formatClinicDate());
     }
 
     function patientTableRows(items) {
@@ -7695,7 +7733,7 @@ export default function App() {
             bodyCell("MS3 / MS4"),
             bodyCell(clinicSummary.ms34Names || ""),
             bodyCell("Refill"),
-            bodyCell(clinicSummary.refillCount || "", AlignmentType.CENTER),
+            bodyCell(clinicSummary.refillCount ?? 0, AlignmentType.CENTER),
           ],
         }),
         new TableRow({
@@ -7708,74 +7746,65 @@ export default function App() {
         }),
         new TableRow({
           children: [
-            bodyCell(""),
-            bodyCell(""),
+            blankStaffSideCell(),
             bodyCell("Labs"),
-            bodyCell(clinicSummary.labsCount || "", AlignmentType.CENTER),
+            bodyCell(clinicSummary.labsCount ?? 0, AlignmentType.CENTER),
           ],
         }),
         new TableRow({
           children: [
-            bodyCell(""),
-            bodyCell(""),
+            blankStaffSideCell(),
             bodyCell("Mental Health"),
-            bodyCell(clinicSummary.mentalHealthCount || "", AlignmentType.CENTER),
+            bodyCell(clinicSummary.mentalHealthCount ?? 0, AlignmentType.CENTER),
           ],
         }),
         new TableRow({
           children: [
-            bodyCell(""),
-            bodyCell(""),
+            blankStaffSideCell(),
             bodyCell("Addiction Medicine"),
-            bodyCell(clinicSummary.addictionMedicineCount || "", AlignmentType.CENTER),
+            bodyCell(clinicSummary.addictionMedicineCount ?? 0, AlignmentType.CENTER),
           ],
         }),
         new TableRow({
           children: [
-            bodyCell(""),
-            bodyCell(""),
+            blankStaffSideCell(),
             bodyCell("Physical Therapy"),
-            bodyCell(clinicSummary.ptCount || "", AlignmentType.CENTER),
+            bodyCell(clinicSummary.ptCount ?? 0, AlignmentType.CENTER),
           ],
         }),
         new TableRow({
           children: [
-            bodyCell(""),
-            bodyCell(""),
+            blankStaffSideCell(),
             bodyCell("Dermatology"),
-            bodyCell(clinicSummary.dermatologyCount || "", AlignmentType.CENTER),
+            bodyCell(clinicSummary.dermatologyCount ?? 0, AlignmentType.CENTER),
           ],
         }),
         new TableRow({
           children: [
-            bodyCell(""),
-            bodyCell(""),
+            blankStaffSideCell(),
             bodyCell("Ophthalmology"),
-            bodyCell(clinicSummary.ophthalmologyCount || "", AlignmentType.CENTER),
+            bodyCell(clinicSummary.ophthalmologyCount ?? 0, AlignmentType.CENTER),
           ],
         }),
         new TableRow({
           children: [
-            bodyCell(""),
-            bodyCell(""),
+            blankStaffSideCell(),
             bodyCell("Social Work"),
-            bodyCell(clinicSummary.socialWorkCount || "", AlignmentType.CENTER),
+            bodyCell(clinicSummary.socialWorkCount ?? 0, AlignmentType.CENTER),
           ],
         }),
         new TableRow({
           children: [
-            bodyCell(""),
-            bodyCell(""),
+            blankStaffSideCell(),
             bodyCell("Zoom"),
-            bodyCell(clinicSummary.zoomCount || "", AlignmentType.CENTER),
+            bodyCell(clinicSummary.zoomCount ?? 0, AlignmentType.CENTER),
           ],
         }),
         new TableRow({
           children: [
-            bodyCell(""),
-            bodyCell(""),
+            blankStaffSideCell(),
             bodyCell("Phone"),
-            bodyCell(clinicSummary.phoneCount || "", AlignmentType.CENTER),
+            bodyCell(clinicSummary.phoneCount ?? 0, AlignmentType.CENTER),
           ],
         }),
       ],
@@ -7790,7 +7819,7 @@ export default function App() {
             new Paragraph({
               children: [
                 new TextRun({
-                  text: "Patients Seen: ",
+                  text: `Patients Seen: ${formatClinicSummaryDateForWord(clinicDateLabel)}`,
                   bold: true,
                   underline: {},
                 }),
@@ -7830,16 +7859,6 @@ export default function App() {
             new Paragraph({ text: "" }),
 
             summaryTable,
-
-            new Paragraph({ text: "" }),
-
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: "(#) = number of patients seen for clinic AND specialty",
-                }),
-              ],
-            }),
           ],
         },
       ],
@@ -8656,7 +8675,6 @@ export default function App() {
               programEntries={programEntries}
               addProgramEntry={addProgramEntry}
               updateProgramEntry={updateProgramEntry}
-              updateProgramEntryFields={updateProgramEntryFields}
               removeProgramEntry={removeProgramEntry}
               patients={patients}
               selectedClinicDate={selectedClinicDate}
