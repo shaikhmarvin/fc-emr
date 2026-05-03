@@ -35,9 +35,10 @@ function mapEncounterRow(row) {
     readyAt: row.ready_at || null,
     roomedAt: row.roomed_at || null,
     assignedAt: row.assigned_at || null,
-studentAssignedAt: row.student_assigned_at || null,
-upperLevelAssignedAt: row.upper_level_assigned_at || null,
+    studentAssignedAt: row.student_assigned_at || null,
+    upperLevelAssignedAt: row.upper_level_assigned_at || null,
     doneAt: row.done_at || null,
+    visitCompletedAt: row.visit_completed_at || null,
     cancelledAt: row.cancelled_at || null,
     pharmacyPickedUpAt: row.pharmacy_picked_up_at || null,
 
@@ -266,42 +267,42 @@ export async function updateEncounterInSupabase(encounterId, updates) {
   }
 
   if (updates.assignedStudent !== undefined) {
-  payload.assigned_student = updates.assignedStudent;
+    payload.assigned_student = updates.assignedStudent;
 
-  if (
-    updates.assignedStudent &&
-    !updates.assignedAt &&
-    !updates.studentAssignedAt
-  ) {
-    payload.assigned_at = new Date().toISOString();
+    if (
+      updates.assignedStudent &&
+      !updates.assignedAt &&
+      !updates.studentAssignedAt
+    ) {
+      payload.assigned_at = new Date().toISOString();
+    }
   }
-}
 
   if (updates.assignedUpperLevel !== undefined) {
     payload.assigned_upper_level = updates.assignedUpperLevel;
   }
 
   if (updates.soapStatus !== undefined) {
-  payload.soap_status = updates.soapStatus;
+    payload.soap_status = updates.soapStatus;
 
-  const now = new Date().toISOString();
+    const now = new Date().toISOString();
 
-  if (
-    updates.soapStatus === "draft" &&
-    updates.soapStartedAt === undefined
-  ) {
-    payload.soap_started_at = now;
+    if (
+      updates.soapStatus === "draft" &&
+      updates.soapStartedAt === undefined
+    ) {
+      payload.soap_started_at = now;
+    }
+
+    if (
+      ["awaiting_upper", "awaiting_attending", "signed"].includes(
+        updates.soapStatus
+      ) &&
+      updates.soapCompletedAt === undefined
+    ) {
+      payload.soap_completed_at = now;
+    }
   }
-
-  if (
-    ["awaiting_upper", "awaiting_attending", "signed"].includes(
-      updates.soapStatus
-    ) &&
-    updates.soapCompletedAt === undefined
-  ) {
-    payload.soap_completed_at = now;
-  }
-}
 
   if (updates.soapAuthorId !== undefined) {
     payload.soap_author_id = updates.soapAuthorId;
@@ -371,20 +372,20 @@ export async function updateEncounterInSupabase(encounterId, updates) {
   }
 
   if (updates.assignedAt !== undefined) {
-  payload.assigned_at = updates.assignedAt;
-}
+    payload.assigned_at = updates.assignedAt;
+  }
 
-if (updates.studentAssignedAt !== undefined) {
-  payload.student_assigned_at = updates.studentAssignedAt;
-}
+  if (updates.studentAssignedAt !== undefined) {
+    payload.student_assigned_at = updates.studentAssignedAt;
+  }
 
-if (updates.upperLevelAssignedAt !== undefined) {
-  payload.upper_level_assigned_at = updates.upperLevelAssignedAt;
-}
+  if (updates.upperLevelAssignedAt !== undefined) {
+    payload.upper_level_assigned_at = updates.upperLevelAssignedAt;
+  }
 
-if (updates.visitCompletedAt !== undefined) {
-  payload.visit_completed_at = updates.visitCompletedAt;
-}
+  if (updates.visitCompletedAt !== undefined) {
+    payload.visit_completed_at = updates.visitCompletedAt;
+  }
 
   if (updates.ophthalmologyNote !== undefined) {
     payload.ophthalmology_note = updates.ophthalmologyNote;

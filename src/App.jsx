@@ -5939,8 +5939,8 @@ await applyEncounterTransition(selectedEncounter.id, {
       await deletePapEntriesForPatient(patientId);
       await deleteProgramEntriesForPatient(
   patientId,
-  patientToDelete.name,
-  patientToDelete.dob
+  patientToDelete ? getFullPatientName(patientToDelete) : "",
+  patientToDelete?.dob || ""
 );
       await deleteRefillRequestsForPatient(patientId);
       await deletePatientInSupabase(patientId);

@@ -30,6 +30,16 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
       id: encounter.id,
       clinicDate: encounter.clinic_date,
       createdAt: encounter.created_at,
+      undergradCompletedAt: encounter.undergrad_completed_at || null,
+readyAt: encounter.ready_at || null,
+roomedAt: encounter.roomed_at || null,
+assignedAt: encounter.assigned_at || null,
+studentAssignedAt: encounter.student_assigned_at || null,
+upperLevelAssignedAt: encounter.upper_level_assigned_at || null,
+doneAt: encounter.done_at || null,
+cancelledAt: encounter.cancelled_at || null,
+pharmacyPickedUpAt: encounter.pharmacy_picked_up_at || null,
+visitCompletedAt: encounter.visit_completed_at || null,
       newReturning: intake.newReturning ?? "Returning",
       dailyNumber:
         intake.dailyNumber ??
