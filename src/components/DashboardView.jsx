@@ -222,21 +222,21 @@ export default function DashboardView({
     "undergradCompletedAt"
   );
 
-  const avgUndergradToAssigned = getAverageFor(
+  const avgUndergradToStudentAssigned = getAverageFor(
     analyticsRows,
     "undergradCompletedAt",
-    "assignedAt"
+    "studentAssignedAt"
   );
 
-  const avgAssignedToRoomed = getAverageFor(
+  const avgStudentToUpperAssigned = getAverageFor(
     analyticsRows,
-    "assignedAt",
-    "roomedAt"
+    "studentAssignedAt",
+    "upperLevelAssignedAt"
   );
 
-  const avgRoomedToDone = getAverageFor(
+  const avgStudentAssignedToDone = getAverageFor(
     analyticsRows,
-    "roomedAt",
+    "studentAssignedAt",
     "doneAt"
   );
 
@@ -253,7 +253,8 @@ export default function DashboardView({
   );
 
   const firstPatientStartedAt = getFirstTime(analyticsRows, "createdAt");
-  const lastPatientAssignedAt = getLastTime(analyticsRows, "assignedAt");
+  const lastPatientAssignedAt = getLastTime(analyticsRows, "studentAssignedAt");
+  const lastUpperLevelAssignedAt = getLastTime(analyticsRows, "upperLevelAssignedAt");
   const lastVisitCompletedAt = getLastTime(analyticsRows, "doneAt");
   const lastPharmacyPickupAt = getLastTime(analyticsRows, "pharmacyPickedUpAt");
   return (
@@ -313,8 +314,8 @@ export default function DashboardView({
 
                 <span
                   className={`rounded-full px-3 py-1 text-sm font-semibold ${clinicFlowComplete
-                      ? "bg-emerald-100 text-emerald-700"
-                      : "bg-amber-100 text-amber-700"
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-amber-100 text-amber-700"
                     }`}
                 >
                   {clinicFlowComplete ? "Complete" : "Still Active"}
@@ -333,16 +334,16 @@ export default function DashboardView({
                   value={formatMinutes(avgCreatedToUndergrad)}
                 />
                 <AnalyticsMetric
-                  label="Undergrad Complete → Assigned"
-                  value={formatMinutes(avgUndergradToAssigned)}
+                  label="Undergrad Complete → Student Assigned"
+                  value={formatMinutes(avgUndergradToStudentAssigned)}
                 />
                 <AnalyticsMetric
-                  label="Assigned → Roomed"
-                  value={formatMinutes(avgAssignedToRoomed)}
+                  label="Student Assigned → Upper Level Assigned"
+                  value={formatMinutes(avgStudentToUpperAssigned)}
                 />
                 <AnalyticsMetric
-                  label="Roomed → Done"
-                  value={formatMinutes(avgRoomedToDone)}
+                  label="Student Assigned → Done"
+                  value={formatMinutes(avgStudentAssignedToDone)}
                 />
                 <AnalyticsMetric
                   label="Total Visit Time"
@@ -367,8 +368,12 @@ export default function DashboardView({
                   value={formatTime(firstPatientStartedAt)}
                 />
                 <AnalyticsMetric
-                  label="Last Patient Assigned"
+                  label="Last Student Assigned"
                   value={formatTime(lastPatientAssignedAt)}
+                />
+                <AnalyticsMetric
+                  label="Last Upper Level Assigned"
+                  value={formatTime(lastUpperLevelAssignedAt)}
                 />
                 <AnalyticsMetric
                   label="Last Visit Completed"
@@ -383,8 +388,8 @@ export default function DashboardView({
 
             <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
               These numbers are calculated from existing encounter timestamps:
-              created, undergrad complete, assigned, roomed, done, pharmacy ready,
-              and pharmacy pickup.
+              created, undergrad complete, student assigned, upper level assigned, done,
+              pharmacy ready, and pharmacy pickup.
             </div>
           </div>
         </div>
@@ -396,8 +401,8 @@ export default function DashboardView({
               <button
                 onClick={() => setSelectedClinicDate("")}
                 className={`w-full rounded-lg border px-4 py-2 text-sm sm:w-auto ${selectedClinicDate === ""
-                    ? "border-blue-600 bg-blue-600 text-white"
-                    : "border-gray-300 bg-white text-gray-700"
+                  ? "border-blue-600 bg-blue-600 text-white"
+                  : "border-gray-300 bg-white text-gray-700"
                   }`}
               >
                 All Dates
@@ -427,29 +432,29 @@ export default function DashboardView({
         </div>
 
         <div className="flex flex-col gap-2 rounded-xl bg-white p-3 shadow sm:flex-row sm:items-center">
-  {isLeadershipView && (
-  <button
-    type="button"
-    onClick={() => setShowAnalytics(true)}
-    className="w-full rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 sm:w-auto"
-  >
-    📊 Analytics
-  </button>
-)}
+          {isLeadershipView && (
+            <button
+              type="button"
+              onClick={() => setShowAnalytics(true)}
+              className="w-full rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 sm:w-auto"
+            >
+              📊 Analytics
+            </button>
+          )}
 
-  <button
-    type="button"
-    onClick={handleExportSignedRecords}
-    disabled={exportingRecords}
-    className="inline-flex w-full items-center justify-center whitespace-nowrap rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-  >
-    {exportingRecords
-      ? "Exporting..."
-      : selectedClinicDate
-        ? "Export Records for Selected Date"
-        : "Export Signed Records"}
-  </button>
-</div>
+          <button
+            type="button"
+            onClick={handleExportSignedRecords}
+            disabled={exportingRecords}
+            className="inline-flex w-full items-center justify-center whitespace-nowrap rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+          >
+            {exportingRecords
+              ? "Exporting..."
+              : selectedClinicDate
+                ? "Export Records for Selected Date"
+                : "Export Signed Records"}
+          </button>
+        </div>
       </div>
 
       <div className="rounded-2xl bg-white p-4 shadow sm:p-5">

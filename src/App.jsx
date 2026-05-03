@@ -5751,15 +5751,32 @@ export default function App() {
     }
 
     try {
-      await applyEncounterTransition(encounterId, {
-        assignedStudent: nextStudent,
-        assignedUpperLevel: nextUpperLevel,
-        roomNumber: String(numericRoom),
-        status: "in_visit",
-        skipUpperLevel: nextUpperLevel ? false : encounter.skipUpperLevel,
-        skipUpperLevelBy: nextUpperLevel ? null : encounter.skipUpperLevelBy,
-        skipUpperLevelAt: nextUpperLevel ? null : encounter.skipUpperLevelAt,
-      });
+      const studentChanged =
+  String(nextStudent || "").trim() !== String(encounter.assignedStudent || "").trim();
+
+const upperLevelChanged =
+  String(nextUpperLevel || "").trim() !== String(encounter.assignedUpperLevel || "").trim();
+
+await applyEncounterTransition(encounterId, {
+  assignedStudent: nextStudent,
+  assignedUpperLevel: nextUpperLevel,
+  roomNumber: String(numericRoom),
+  status: "in_visit",
+
+  studentAssignedAt:
+    nextStudent && (!encounter.studentAssignedAt || studentChanged)
+      ? new Date().toISOString()
+      : encounter.studentAssignedAt || null,
+
+  upperLevelAssignedAt:
+    nextUpperLevel && (!encounter.upperLevelAssignedAt || upperLevelChanged)
+      ? new Date().toISOString()
+      : encounter.upperLevelAssignedAt || null,
+
+  skipUpperLevel: nextUpperLevel ? false : encounter.skipUpperLevel,
+  skipUpperLevelBy: nextUpperLevel ? null : encounter.skipUpperLevelBy,
+  skipUpperLevelAt: nextUpperLevel ? null : encounter.skipUpperLevelAt,
+});
 
     } catch (error) {
       console.error("Failed to assign encounter from queue:", error);
@@ -5806,10 +5823,16 @@ export default function App() {
       return;
     }
 
-    const conflict = getRoomConflictDetails(roomNumber, selectedEncounter.id, {
-      assignedStudent: assignmentForm.studentName,
-      assignedUpperLevel: assignmentForm.upperLevelName,
-    });
+    const nextAssignedStudent =
+  assignmentForm.studentName || selectedEncounter.assignedStudent || "";
+
+const nextAssignedUpperLevel =
+  assignmentForm.upperLevelName || selectedEncounter.assignedUpperLevel || "";
+
+const conflict = getRoomConflictDetails(roomNumber, selectedEncounter.id, {
+  assignedStudent: nextAssignedStudent,
+  assignedUpperLevel: nextAssignedUpperLevel,
+});
 
     if (conflict.hasConflict) {
       const confirmed = window.confirm(
@@ -5823,15 +5846,32 @@ export default function App() {
     lockLeadershipActions();
 
     try {
-      await applyEncounterTransition(selectedEncounter.id, {
-        roomNumber: String(roomNumber),
-        status: "in_visit",
-        assignedStudent: assignmentForm.studentName,
-        assignedUpperLevel: assignmentForm.upperLevelName,
-        skipUpperLevel: assignmentForm.upperLevelName ? false : selectedEncounter.skipUpperLevel,
-        skipUpperLevelBy: assignmentForm.upperLevelName ? null : selectedEncounter.skipUpperLevelBy,
-        skipUpperLevelAt: assignmentForm.upperLevelName ? null : selectedEncounter.skipUpperLevelAt,
-      });
+      const studentChanged =
+  String(nextAssignedStudent || "").trim() !== String(selectedEncounter.assignedStudent || "").trim();
+
+const upperLevelChanged =
+  String(nextAssignedUpperLevel || "").trim() !== String(selectedEncounter.assignedUpperLevel || "").trim();
+
+await applyEncounterTransition(selectedEncounter.id, {
+  roomNumber: String(roomNumber),
+  status: "in_visit",
+  assignedStudent: nextAssignedStudent,
+  assignedUpperLevel: nextAssignedUpperLevel,
+
+  studentAssignedAt:
+    nextAssignedStudent && (!selectedEncounter.studentAssignedAt || studentChanged)
+      ? new Date().toISOString()
+      : selectedEncounter.studentAssignedAt || null,
+
+  upperLevelAssignedAt:
+    nextAssignedUpperLevel && (!selectedEncounter.upperLevelAssignedAt || upperLevelChanged)
+      ? new Date().toISOString()
+      : selectedEncounter.upperLevelAssignedAt || null,
+
+  skipUpperLevel: nextAssignedUpperLevel ? false : selectedEncounter.skipUpperLevel,
+  skipUpperLevelBy: nextAssignedUpperLevel ? null : selectedEncounter.skipUpperLevelBy,
+  skipUpperLevelAt: nextAssignedUpperLevel ? null : selectedEncounter.skipUpperLevelAt,
+});
 
     } catch (error) {
       console.error("Failed to assign encounter:", error);
@@ -5886,14 +5926,22 @@ export default function App() {
     }));
   }
   async function deletePatientCompletely(patientId) {
-    const confirmed = window.confirm(
-      "Delete this patient completely? This cannot be undone."
-    );
-    if (!confirmed) return;
+  const patientToDelete = patients.find(
+    (patient) => String(patient.id) === String(patientId)
+  );
+
+  const confirmed = window.confirm(
+    "Delete this patient completely? This cannot be undone."
+  );
+  if (!confirmed) return;
 
     try {
       await deletePapEntriesForPatient(patientId);
-      await deleteProgramEntriesForPatient(patientId);
+      await deleteProgramEntriesForPatient(
+  patientId,
+  patientToDelete.name,
+  patientToDelete.dob
+);
       await deleteRefillRequestsForPatient(patientId);
       await deletePatientInSupabase(patientId);
 
@@ -5929,17 +5977,19 @@ export default function App() {
     lockLeadershipActions();
 
     const updates =
-      status === "ready"
-        ? {
-          status: "ready",
-          roomNumber: "",
-          assignedStudent: "",
-          assignedUpperLevel: "",
-          skipUpperLevel: false,
-          skipUpperLevelBy: null,
-          skipUpperLevelAt: null,
-        }
-        : { status };
+  status === "ready"
+    ? {
+        status: "ready",
+        roomNumber: "",
+        assignedStudent: "",
+        assignedUpperLevel: "",
+        studentAssignedAt: null,
+        upperLevelAssignedAt: null,
+        skipUpperLevel: false,
+        skipUpperLevelBy: null,
+        skipUpperLevelAt: null,
+      }
+    : { status };
 
     try {
       await applyEncounterTransition(selectedEncounter.id, updates);
@@ -5962,8 +6012,10 @@ export default function App() {
 
     try {
       await applyEncounterTransition(selectedEncounter.id, {
-        status: "done",
-      });
+  status: "done",
+  visitCompletedAt:
+    selectedEncounter.visitCompletedAt || new Date().toISOString(),
+});
     } catch (error) {
       console.error("Failed to complete visit / free room:", error);
       showToast({

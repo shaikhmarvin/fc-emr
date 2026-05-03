@@ -131,11 +131,26 @@ export async function deleteProgramEntryInSupabase(entryId) {
   if (error) throw error;
 }
 
-export async function deleteProgramEntriesForPatient(patientId) {
-  const { error } = await supabase
+export async function deleteProgramEntriesForPatient(
+  patientId,
+  patientName = "",
+  patientDob = ""
+) {
+  let query = supabase
     .from("program_entries")
     .delete()
     .eq("patient_id", patientId);
+
+  if (patientName && patientDob) {
+    query = supabase
+      .from("program_entries")
+      .delete()
+      .or(
+        `patient_id.eq.${patientId},and(patient_name.eq.${patientName},dob.eq.${patientDob})`
+      );
+  }
+
+  const { error } = await query;
 
   if (error) throw error;
 }
