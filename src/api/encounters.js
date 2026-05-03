@@ -82,6 +82,8 @@ function mapEncounterRow(row) {
     soapPlan: row.plan || "",
 
     soapStatus: row.soap_status || "draft",
+    soapStartedAt: row.soap_started_at || null,
+    soapCompletedAt: row.soap_completed_at || null,
     soapAuthorId: row.soap_author_id || null,
     soapAuthorRole: row.soap_author_role || "",
     upperLevelSignedBy: row.upper_level_signed_by || null,
@@ -274,8 +276,26 @@ export async function updateEncounterInSupabase(encounterId, updates) {
   }
 
   if (updates.soapStatus !== undefined) {
-    payload.soap_status = updates.soapStatus;
+  payload.soap_status = updates.soapStatus;
+
+  const now = new Date().toISOString();
+
+  if (
+    updates.soapStatus === "draft" &&
+    updates.soapStartedAt === undefined
+  ) {
+    payload.soap_started_at = now;
   }
+
+  if (
+    ["awaiting_upper", "awaiting_attending", "signed"].includes(
+      updates.soapStatus
+    ) &&
+    updates.soapCompletedAt === undefined
+  ) {
+    payload.soap_completed_at = now;
+  }
+}
 
   if (updates.soapAuthorId !== undefined) {
     payload.soap_author_id = updates.soapAuthorId;
