@@ -98,6 +98,7 @@ import {
   AlignmentType,
 } from "docx";
 import { saveAs } from "file-saver";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import {
   ROOM_OPTIONS,
   EMPTY_FORM,
@@ -8743,6 +8744,7 @@ export default function App() {
           setShowPatientInfoEditModal(false);
         }}
       />
+      <SpeedInsights />
     </div>
   );
 }
