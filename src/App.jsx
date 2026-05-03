@@ -1013,17 +1013,17 @@ export default function App() {
     }
   }
 
-  async function updateProgramEntry(entryId, field, value) {
+  async function updateProgramEntryFields(entryId, updates) {
     const previousEntries = [...programEntries];
 
     setProgramEntries((prev) =>
       prev.map((entry) =>
-        entry.id === entryId ? { ...entry, [field]: value } : entry
+        entry.id === entryId ? { ...entry, ...updates } : entry
       )
     );
 
     try {
-      const saved = await updateProgramEntryInSupabase(entryId, { [field]: value });
+      const saved = await updateProgramEntryInSupabase(entryId, updates);
 
       setProgramEntries((prev) =>
         prev.map((entry) => (entry.id === entryId ? saved : entry))
@@ -1033,6 +1033,10 @@ export default function App() {
       alert(`Failed to update program entry: ${error.message}`);
       setProgramEntries(previousEntries);
     }
+  }
+
+  async function updateProgramEntry(entryId, field, value) {
+    return updateProgramEntryFields(entryId, { [field]: value });
   }
 
   async function removeProgramEntry(entryId) {
@@ -4770,6 +4774,7 @@ export default function App() {
         schedulePosition: null,
         appointmentSlot: "",
         notes: "",
+        lastContactAttemptAt: "",
         createdAt,
       });
     }
@@ -8651,6 +8656,7 @@ export default function App() {
               programEntries={programEntries}
               addProgramEntry={addProgramEntry}
               updateProgramEntry={updateProgramEntry}
+              updateProgramEntryFields={updateProgramEntryFields}
               removeProgramEntry={removeProgramEntry}
               patients={patients}
               selectedClinicDate={selectedClinicDate}

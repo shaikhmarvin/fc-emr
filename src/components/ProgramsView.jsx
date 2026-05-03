@@ -63,6 +63,7 @@ export default function ProgramsView({
   programEntries,
   addProgramEntry,
   updateProgramEntry,
+  updateProgramEntryFields,
   removeProgramEntry,
   patients,
   selectedClinicDate,
@@ -173,14 +174,21 @@ export default function ProgramsView({
   }
 
   function handleProgramStatusChange(entry, newStatus) {
-    updateProgramEntry(entry.id, "status", newStatus);
+    const updates = { status: newStatus };
 
     if (newStatus === "Attempted Contact" || newStatus === "Unable to Reach") {
-      updateProgramEntry(
-        entry.id,
-        "lastContactAttemptAt",
-        new Date().toISOString()
-      );
+      updates.lastContactAttemptAt = new Date().toISOString();
+    }
+
+    if (updateProgramEntryFields) {
+      updateProgramEntryFields(entry.id, updates);
+      return;
+    }
+
+    updateProgramEntry(entry.id, "status", newStatus);
+
+    if (updates.lastContactAttemptAt) {
+      updateProgramEntry(entry.id, "lastContactAttemptAt", updates.lastContactAttemptAt);
     }
   }
 
@@ -474,29 +482,55 @@ export default function ProgramsView({
   }
 
   function handleUnassign(entry) {
+    const updates = {
+      scheduleType: "",
+      schedulePosition: null,
+      appointmentSlot: "",
+      specialtyDate: "",
+    };
+
+    if (entry.status === "Scheduled" || entry.status === "Backup") {
+      updates.status = "Attempted Contact";
+      updates.lastContactAttemptAt = new Date().toISOString();
+    }
+
+    if (updateProgramEntryFields) {
+      updateProgramEntryFields(entry.id, updates);
+      return;
+    }
+
     updateProgramEntry(entry.id, "scheduleType", "");
     updateProgramEntry(entry.id, "schedulePosition", null);
     updateProgramEntry(entry.id, "appointmentSlot", "");
-    if (entry.status === "Scheduled" || entry.status === "Backup") {
-      handleProgramStatusChange(entry, "Attempted Contact");
+    updateProgramEntry(entry.id, "specialtyDate", "");
+
+    if (updates.status) {
+      handleProgramStatusChange(entry, updates.status);
     }
   }
 
   function formatDisplayDate(dateString) {
-  if (!dateString) return "—";
+    if (!dateString) return "—";
 
-  const date = new Date(dateString);
+    const value = String(dateString);
 
-  if (Number.isNaN(date.getTime())) return "—";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      const [year, month, day] = value.split("-");
+      return `${month}/${day}/${year}`;
+    }
 
-  return date.toLocaleString("en-US", {
-  month: "2-digit",
-  day: "2-digit",
-  year: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-});
-}
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) return "—";
+
+    return date.toLocaleString("en-US", {
+      month: "2-digit",
+      day: "2-digit",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
 
   function renderTracker() {
     return (
