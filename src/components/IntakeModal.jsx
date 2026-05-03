@@ -102,6 +102,10 @@ const showFluShotScreening = isResourceAvailable("flu_shot");
 const showCounselingService = isResourceAvailable("counseling");
 const showColonoscopyScreening = isResourceAvailable("colonoscopy");
 
+function isCompletedProgramEntry(entry) {
+  return String(entry?.status || "").trim().toLowerCase() === "completed";
+}
+
 function getOpenProgramEntry(programType) {
   const intakeFullName = `${intakeForm.firstName || ""} ${intakeForm.lastName || ""}`
     .trim()
@@ -131,8 +135,7 @@ function getOpenProgramEntry(programType) {
 
     return (
       entry.programType === programType &&
-      entry.status !== "Completed" &&
-      entry.status !== "Declined" &&
+      !isCompletedProgramEntry(entry) &&
       (samePatientById || samePatientByMrn || samePatientByNameDob)
     );
   });

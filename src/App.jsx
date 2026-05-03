@@ -3973,6 +3973,7 @@ export default function App() {
     setSelectedEncounterId(encounterId);
 
     setIntakeForm({
+      patientId: patient.id,
       firstName: patient.firstName || "",
       lastName: patient.lastName || "",
       preferredName: patient.preferredName || "",
@@ -4665,6 +4666,7 @@ export default function App() {
     if (!selectedPatient || !selectedEncounter) return;
 
     setIntakeForm({
+      patientId: selectedPatient.id,
       firstName: selectedPatient.firstName || "",
       lastName: selectedPatient.lastName || "",
       preferredName: selectedPatient.preferredName || "",
@@ -4818,23 +4820,15 @@ export default function App() {
 
     if (entries.length === 0) return;
 
-    const hasOpenReferral = (patientId, programType) => {
-      return programEntries.some(
-        (entry) =>
-          String(entry.patientId) === String(patientId) &&
-          entry.programType === programType &&
-          entry.status !== "Completed" &&
-          entry.status !== "Declined"
-      );
-    };
+    const isCompletedProgramEntry = (entry) =>
+      String(entry?.status || "").trim().toLowerCase() === "completed";
 
     for (const entry of entries) {
       const existingEntry = programEntries.find(
         (existing) =>
           String(existing.patientId) === String(entry.patientId) &&
           existing.programType === entry.programType &&
-          existing.status !== "Completed" &&
-          existing.status !== "Declined"
+          !isCompletedProgramEntry(existing)
       );
 
       if (existingEntry) {

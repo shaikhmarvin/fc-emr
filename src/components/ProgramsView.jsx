@@ -66,7 +66,6 @@ export default function ProgramsView({
   removeProgramEntry,
   patients,
   selectedClinicDate,
-  leadershipOptions = [],
 }) {
   const [activeTab, setActiveTab] = useState("Tracker");
 
@@ -106,10 +105,9 @@ export default function ProgramsView({
     phone: "",
     programType: "Physical Therapy",
     reason: "",
-    assignedCoordinator: "",
     status: "New Referral",
     notes: "",
-    specialtyDate: selectedClinicDate || "",
+    specialtyDate: "",
     scheduleType: "",
     schedulePosition: null,
     appointmentSlot: "",
@@ -267,7 +265,6 @@ export default function ProgramsView({
       mrn: patient.mrn || "",
       dob: patient.dob || "",
       phone: patient.phone || "",
-      specialtyDate: nextProgramDates[prev.programType] || prev.specialtyDate || "",
     }));
 
     setPatientSearch({ name: "", mrn: "", dob: "" });
@@ -278,10 +275,9 @@ export default function ProgramsView({
       !newEntry.patientId ||
       !newEntry.patientName ||
       !newEntry.programType ||
-      !newEntry.reason.trim() ||
-      !newEntry.assignedCoordinator.trim()
+      !newEntry.reason.trim()
     ) {
-      alert("Please fill out patient, program, reason, and coordinator.");
+      alert("Please fill out patient, program, and reason.");
       return;
     }
 
@@ -294,7 +290,6 @@ export default function ProgramsView({
       phone: newEntry.phone,
       programType: newEntry.programType,
       reason: newEntry.reason,
-      assignedCoordinator: newEntry.assignedCoordinator,
       status: newEntry.status,
       specialtyDate: newEntry.specialtyDate,
       scheduleType: "",
@@ -315,10 +310,9 @@ export default function ProgramsView({
       phone: "",
       programType: "Physical Therapy",
       reason: "",
-      assignedCoordinator: "",
-      status: "New Referral",
+        status: "New Referral",
       notes: "",
-      specialtyDate: nextProgramDates["Physical Therapy"] || "",
+      specialtyDate: "",
       scheduleType: "",
       schedulePosition: null,
       appointmentSlot: "",
@@ -621,9 +615,7 @@ export default function ProgramsView({
                             status: statusOptions.includes(prev.status)
                               ? prev.status
                               : statusOptions[0],
-                            specialtyDate: isGenericTrackingProgram(nextType)
-                              ? ""
-                              : nextProgramDates[nextType] || prev.specialtyDate,
+                            specialtyDate: isGenericTrackingProgram(nextType) ? "" : prev.specialtyDate,
                           };
                         })
                       }
@@ -636,25 +628,6 @@ export default function ProgramsView({
                     </select>
                   </Field>
 
-                  <Field label="Coordinator">
-                    <select
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                      value={newEntry.assignedCoordinator}
-                      onChange={(e) =>
-                        setNewEntry((prev) => ({
-                          ...prev,
-                          assignedCoordinator: e.target.value,
-                        }))
-                      }
-                    >
-                      <option value="">Select coordinator</option>
-                      {leadershipOptions.map((name) => (
-                        <option key={name} value={name}>
-                          {name}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
 
                   <Field label="Status">
                     <select
@@ -672,7 +645,7 @@ export default function ProgramsView({
                     </select>
                   </Field>
 
-                  <Field label="Specialty Date">
+                  <Field label="Scheduled Visit Date">
                     <input
                       type="date"
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -810,7 +783,7 @@ export default function ProgramsView({
                         </div>
 
                         <ReadOnlyField
-                          label="Specialty Date"
+                          label="Scheduled Visit Date"
                           value={formatDisplayDate(entry.specialtyDate)}
                         />
                       </div>
@@ -823,28 +796,8 @@ export default function ProgramsView({
                           <ReadOnlyField label="MRN" value={entry.mrn || "—"} />
                           <ReadOnlyField label="DOB" value={entry.dob || "—"} />
 
-                          <Field label="Coordinator">
-                            <select
-                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                              value={entry.assignedCoordinator || ""}
-                              onChange={(e) =>
-                                updateProgramEntry(
-                                  entry.id,
-                                  "assignedCoordinator",
-                                  e.target.value
-                                )
-                              }
-                            >
-                              <option value="">Select coordinator</option>
-                              {leadershipOptions.map((name) => (
-                                <option key={name} value={name}>
-                                  {name}
-                                </option>
-                              ))}
-                            </select>
-                          </Field>
 
-                          <Field label="Specialty Date">
+                          <Field label="Scheduled Visit Date">
                             <input
                               type="date"
                               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -942,20 +895,23 @@ export default function ProgramsView({
     };
 
     const entries = (specialtyEntries[programType] || []).filter((entry) => {
-  const matchesDate =
-    isGenericTracker || !specialtyDate || entry.specialtyDate === specialtyDate;
+      const matchesDate =
+        isGenericTracker ||
+        !specialtyDate ||
+        !entry.specialtyDate ||
+        entry.specialtyDate === specialtyDate;
 
-  const patientText = (entry.patientName || "").toLowerCase();
+      const patientText = (entry.patientName || "").toLowerCase();
 
-  const matchesPatient =
-    !currentFilters.patient ||
-    patientText.includes(currentFilters.patient.toLowerCase());
+      const matchesPatient =
+        !currentFilters.patient ||
+        patientText.includes(currentFilters.patient.toLowerCase());
 
-  const matchesDob =
-    !currentFilters.dob || entry.dob === currentFilters.dob;
+      const matchesDob =
+        !currentFilters.dob || entry.dob === currentFilters.dob;
 
-  return matchesDate && matchesPatient && matchesDob;
-});
+      return matchesDate && matchesPatient && matchesDob;
+    });
 
 if (isGenericTracker) {
   return (
@@ -1057,26 +1013,6 @@ if (isGenericTracker) {
                         <ReadOnlyField label="MRN" value={entry.mrn || "—"} />
                         <ReadOnlyField label="DOB" value={entry.dob || "—"} />
 
-                        <Field label="Coordinator">
-                          <select
-                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                            value={entry.assignedCoordinator || ""}
-                            onChange={(e) =>
-                              updateProgramEntry(
-                                entry.id,
-                                "assignedCoordinator",
-                                e.target.value
-                              )
-                            }
-                          >
-                            <option value="">Select coordinator</option>
-                            {leadershipOptions.map((name) => (
-                              <option key={name} value={name}>
-                                {name}
-                              </option>
-                            ))}
-                          </select>
-                        </Field>
 
                         <Field label="Status">
                           <select
@@ -1145,15 +1081,19 @@ if (isGenericTracker) {
       (entry) => !entry.scheduleType && entry.status !== "Completed" && entry.status !== "Declined"
     );
 
-    const primaryEntries = entries.filter((entry) => entry.scheduleType === "primary");
-    const backupEntries = entries.filter((entry) => entry.scheduleType === "backup");
+    const primaryEntries = entries.filter(
+      (entry) => entry.scheduleType === "primary" && entry.specialtyDate === specialtyDate
+    );
+    const backupEntries = entries.filter(
+      (entry) => entry.scheduleType === "backup" && entry.specialtyDate === specialtyDate
+    );
 
     return (
       <div className="space-y-6">
         <Card>
           <div className="space-y-4">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <Field label={`Next ${programType} Date`}>
+              <Field label={`Next ${programType} Clinic Date`}>
                 <input
                   type="date"
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -1432,26 +1372,6 @@ if (isGenericTracker) {
                           <ReadOnlyField label="MRN" value={entry.mrn || "—"} />
                           <ReadOnlyField label="DOB" value={entry.dob || "—"} />
 
-                          <Field label="Coordinator">
-                            <select
-                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                              value={entry.assignedCoordinator || ""}
-                              onChange={(e) =>
-                                updateProgramEntry(
-                                  entry.id,
-                                  "assignedCoordinator",
-                                  e.target.value
-                                )
-                              }
-                            >
-                              <option value="">Select coordinator</option>
-                              {leadershipOptions.map((name) => (
-                                <option key={name} value={name}>
-                                  {name}
-                                </option>
-                              ))}
-                            </select>
-                          </Field>
 
                           <div>
                             <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -1546,7 +1466,7 @@ if (isGenericTracker) {
           </h3>
 
           {!specialtyDate ? (
-            <p className="text-sm text-slate-500">Set a specialty date first.</p>
+            <p className="text-sm text-slate-500">Set the next specialty clinic date first.</p>
           ) : config.schedulingType === "timed" ? (
             <div className="space-y-6">
               <div>
@@ -1682,7 +1602,7 @@ if (isGenericTracker) {
 function getStatusStyles(status) {
   switch (status) {
     case "New Referral":
-      return "bg-slate-100 text-slate-700";
+      return "bg-purple-100 text-purple-700";
     case "Attempted Contact":
       return "bg-blue-100 text-blue-700";
     case "Scheduled":
@@ -1694,7 +1614,7 @@ function getStatusStyles(status) {
     case "Declined":
       return "bg-red-100 text-red-700";
     case "Completed":
-      return "bg-slate-200 text-slate-800";
+      return "bg-slate-900 text-white";
     default:
       return "bg-slate-100 text-slate-700";
   }
@@ -1703,7 +1623,7 @@ function getStatusStyles(status) {
 function getStatusBorderColor(status) {
   switch (status) {
     case "New Referral":
-      return "border-l-slate-400";
+      return "border-l-purple-400";
     case "Attempted Contact":
       return "border-l-blue-400";
     case "Scheduled":
@@ -1715,7 +1635,7 @@ function getStatusBorderColor(status) {
     case "Declined":
       return "border-l-red-500";
     case "Completed":
-      return "border-l-slate-500";
+      return "border-l-slate-900";
     default:
       return "border-l-slate-300";
   }
