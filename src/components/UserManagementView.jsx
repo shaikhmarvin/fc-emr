@@ -192,6 +192,7 @@ export default function UserManagementView({
                             profile.role !== "leadership" &&
                             profile.role !== "attending" &&
                             profile.role !== "pharmacy" &&
+                                profile.role !== "lab" &&
                             profile.role !== "undergraduate" ? (
                             <div className="mt-1 text-xs text-red-500">
                               Missing classification
@@ -212,7 +213,8 @@ export default function UserManagementView({
                                 profile.classification &&
                                 profile.role !== "leadership" &&
                                 profile.role !== "attending" &&
-                                profile.role !== "pharmacy"
+                                profile.role !== "pharmacy" &&
+                                profile.role !== "lab"
                               ) ||
                               (isCurrentUser && profile.role === "leadership")
                             }
@@ -223,6 +225,7 @@ export default function UserManagementView({
                             <option value="leadership">leadership</option>
                             <option value="undergraduate">undergraduate</option>
                             <option value="pharmacy">pharmacy</option>
+                            <option value="lab">lab</option>
                           </select>
                         </td>
 

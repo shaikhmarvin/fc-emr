@@ -75,6 +75,7 @@ function getPrimarySlot(groups) {
 
 export default function RoomBoard({
   ROOM_OPTIONS,
+  canOpenCharts = true,
   roomMap,
   allEncounterRows,
   assignedCount,
@@ -116,85 +117,94 @@ export default function RoomBoard({
           Tonight’s Specialties: {tonightSpecialtyNames.join(", ")}
         </div>
       )}
+      {isLeadershipView && (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="rounded-2xl bg-white p-3 shadow">
+            <p className="text-sm text-slate-500">Available Rooms</p>
+            <p className="mt-1 text-2xl font-bold">
+              {
+                ROOM_OPTIONS.filter((room) => {
+                  const groups = getRoomEncounterGroups(allEncounterRows, room.number);
+                  return !groups.some(
+                    (group) => group.primary?.encounter?.status !== "done"
+                  );
+                }).length
+              }
+            </p>
+          </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <div className="rounded-2xl bg-white p-3 shadow">
-          <p className="text-sm text-slate-500">Available Rooms</p>
-          <p className="mt-1 text-2xl font-bold">
-            {
-              ROOM_OPTIONS.filter((room) => {
-                const groups = getRoomEncounterGroups(allEncounterRows, room.number);
-                return !groups.some(
-                  (group) => group.primary?.encounter?.status !== "done"
-                );
-              }).length
-            }
-          </p>
+          {isLeadershipView && (
+            <div className="rounded-2xl bg-white p-3 shadow">
+              <p className="text-sm text-slate-500">Awaiting Assignment</p>
+              <p className="mt-1 text-2xl font-bold">
+                {(allEncounterRows || []).filter(
+                  ({ encounter }) =>
+                    (encounter.status === "started" ||
+                      encounter.status === "undergrad_complete" ||
+                      encounter.status === "ready") &&
+                    encounter.soapStatus !== "signed"
+                ).length}
+              </p>
+            </div>
+          )}
+          {isLeadershipView && (
+            <div className="rounded-2xl bg-white p-3 shadow">
+              <p className="text-sm text-slate-500">Assigned</p>
+              <p className="mt-1 text-2xl font-bold">{assignedCount}</p>
+            </div>
+          )}
+          {isLeadershipView && (
+            <div className="rounded-2xl bg-white p-3 shadow">
+              <p className="text-sm text-slate-500">In Visit</p>
+              <p className="mt-1 text-2xl font-bold">{inVisitCount}</p>
+            </div>
+          )}
+
         </div>
+        )}
 
+
+      {isLeadershipView && (
         <div className="rounded-2xl bg-white p-3 shadow">
-          <p className="text-sm text-slate-500">Awaiting Assignment</p>
-          <p className="mt-1 text-2xl font-bold">
-            {(allEncounterRows || []).filter(
-              ({ encounter }) =>
-                (encounter.status === "started" ||
-                  encounter.status === "undergrad_complete" ||
-                  encounter.status === "ready") &&
-                encounter.soapStatus !== "signed"
-            ).length}
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-white p-3 shadow">
-          <p className="text-sm text-slate-500">Assigned</p>
-          <p className="mt-1 text-2xl font-bold">{assignedCount}</p>
-        </div>
-
-        <div className="rounded-2xl bg-white p-3 shadow">
-          <p className="text-sm text-slate-500">In Visit</p>
-          <p className="mt-1 text-2xl font-bold">{inVisitCount}</p>
-        </div>
-      </div>
-
-      <div className="rounded-2xl bg-white p-3 shadow">
-        <div className="grid grid-cols-1 gap-2 lg:grid-cols-3">
-          {[
-            { key: "attendings", label: "Attendings here today", placeholder: "Dr. Prabhu, Dr. Bennett" },
-            { key: "residents", label: "Residents here today", placeholder: "Resident names" },
-            { key: "upperLevels", label: "Upper Levels here today", placeholder: "MS3/MS4 names" },
-          ].map((field) => (
-            <label key={field.key} className="block">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                {field.label}
-              </span>
-              <input
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                value={todayStaffRoster?.[field.key] || ""}
-                onChange={(e) =>
-                  onTodayStaffRosterChange?.((prev) => ({
-                    ...(prev || {}),
-                    [field.key]: e.target.value,
-                  }))
-                }
-                onBlur={async (e) => {
-                  const nextRoster = {
-                    ...(todayStaffRoster || {}),
-                    [field.key]: e.target.value,
-                  };
-
-                  onTodayStaffRosterChange?.(nextRoster);
-
-                  try {
-                    await onTodayStaffRosterSave?.(nextRoster);
-                  } catch (error) {
-                    console.error("Failed to save today staff roster:", error);
+          <div className="grid grid-cols-1 gap-2 lg:grid-cols-3">
+            {[
+              { key: "attendings", label: "Attendings here today", placeholder: "Dr. Prabhu, Dr. Bennett" },
+              { key: "residents", label: "Residents here today", placeholder: "Resident names" },
+              { key: "upperLevels", label: "Upper Levels here today", placeholder: "MS3/MS4 names" },
+            ].map((field) => (
+              <label key={field.key} className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {field.label}
+                </span>
+                <input
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={todayStaffRoster?.[field.key] || ""}
+                  onChange={(e) =>
+                    onTodayStaffRosterChange?.((prev) => ({
+                      ...(prev || {}),
+                      [field.key]: e.target.value,
+                    }))
                   }
-                }}
-              />
-            </label>
-          ))}
+                  onBlur={async (e) => {
+                    const nextRoster = {
+                      ...(todayStaffRoster || {}),
+                      [field.key]: e.target.value,
+                    };
+
+                    onTodayStaffRosterChange?.(nextRoster);
+
+                    try {
+                      await onTodayStaffRosterSave?.(nextRoster);
+                    } catch (error) {
+                      console.error("Failed to save today staff roster:", error);
+                    }
+                  }}
+                />
+              </label>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       <div>
         <p className="text-sm text-slate-500">
@@ -250,7 +260,7 @@ export default function RoomBoard({
             <button
               key={room.number}
               type="button"
-              disabled={isLeadershipView ? false : !occupied}
+              disabled={isLeadershipView ? false : !occupied || !canOpenCharts}
               onClick={() => {
                 if (selectedEncounter?.soapStatus === "signed") return;
 
@@ -272,19 +282,19 @@ export default function RoomBoard({
                   return;
                 }
 
-                if (occupied && primaryPatient && primaryEncounter) {
+                if (canOpenCharts && occupied && primaryPatient && primaryEncounter) {
                   openPatientChart(primaryPatient.id, primaryEncounter.id);
                 }
               }}
               className={`min-h-[220px] rounded-2xl border p-3 text-left shadow transition ${hasRoomHistory
-                  ? primaryEncounter.status === "done"
-                    ? "border-slate-300 bg-slate-100 opacity-70"
-                    : primaryEncounter.status === "in_visit"
-                      ? "border-blue-200 bg-blue-50"
-                      : "border-yellow-200 bg-yellow-50"
-                  : reservedSpecialty
-                    ? "border-violet-300 bg-violet-50 hover:bg-violet-100"
-                    : "border-slate-200 bg-white hover:bg-slate-50"
+                ? primaryEncounter.status === "done"
+                  ? "border-slate-300 bg-slate-100 opacity-70"
+                  : primaryEncounter.status === "in_visit"
+                    ? "border-blue-200 bg-blue-50"
+                    : "border-yellow-200 bg-yellow-50"
+                : reservedSpecialty
+                  ? "border-violet-300 bg-violet-50 hover:bg-violet-100"
+                  : "border-slate-200 bg-white hover:bg-slate-50"
                 }`}
             >
               <div className="mb-2 flex items-start justify-between gap-2">
@@ -301,8 +311,8 @@ export default function RoomBoard({
 
                 <span
                   className={`rounded-full px-2 py-1 text-xs font-medium ${occupied
-                      ? "bg-slate-200 text-slate-700"
-                      : "bg-emerald-100 text-emerald-700"
+                    ? "bg-slate-200 text-slate-700"
+                    : "bg-emerald-100 text-emerald-700"
                     }`}
                 >
                   {occupied ? "Occupied" : "Available"}
@@ -376,6 +386,7 @@ export default function RoomBoard({
                           className="rounded-lg border border-slate-300 bg-slate-200/70 px-2.5 py-2 text-xs text-slate-700"
                           onClick={(e) => {
                             e.stopPropagation();
+                            if (!canOpenCharts) return;
                             openPatientChart(patient.id, encounter.id);
                           }}
                         >

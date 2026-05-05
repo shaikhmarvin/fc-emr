@@ -41,6 +41,11 @@ function mapEncounterRow(row) {
     visitCompletedAt: row.visit_completed_at || null,
     cancelledAt: row.cancelled_at || null,
     pharmacyPickedUpAt: row.pharmacy_picked_up_at || null,
+    labType: row.lab_type || "",
+    labStatus: row.lab_status || "none",
+    labCollectedAt: row.lab_collected_at || null,
+    labUnableAt: row.lab_unable_at || null,
+    labNote: row.lab_note || "",
 
     dailyNumber: intake.dailyNumber ?? "",
     newReturning: intake.newReturning ?? "Returning",
@@ -174,6 +179,11 @@ export async function createEncounterInSupabase(patientId, encounter) {
     pharmacy_notified_at: encounter.pharmacyNotifiedAt || null,
     pharmacy_notified_by: encounter.pharmacyNotifiedBy || null,
     pharmacy_picked_up_at: encounter.pharmacyPickedUpAt || null,
+    lab_type: encounter.labType || "",
+    lab_status: encounter.labStatus || "none",
+    lab_collected_at: encounter.labCollectedAt || null,
+    lab_unable_at: encounter.labUnableAt || null,
+    lab_note: encounter.labNote || "",
     ophthalmology_note: encounter.ophthalmologyNote || null,
   };
 
@@ -369,6 +379,26 @@ export async function updateEncounterInSupabase(encounterId, updates) {
 
   if (updates.pharmacyPickedUpAt !== undefined) {
     payload.pharmacy_picked_up_at = updates.pharmacyPickedUpAt;
+  }
+
+  if (updates.labType !== undefined) {
+    payload.lab_type = updates.labType || "";
+  }
+
+  if (updates.labStatus !== undefined) {
+    payload.lab_status = updates.labStatus || "none";
+  }
+
+  if (updates.labCollectedAt !== undefined) {
+    payload.lab_collected_at = updates.labCollectedAt;
+  }
+
+  if (updates.labUnableAt !== undefined) {
+    payload.lab_unable_at = updates.labUnableAt;
+  }
+
+  if (updates.labNote !== undefined) {
+    payload.lab_note = updates.labNote || "";
   }
 
   if (updates.assignedAt !== undefined) {

@@ -1,6 +1,5 @@
 
-import { useEffect, useMemo, useState } from "react";
-import { findPotentialDuplicatePatient } from "../utils";
+import { useMemo, useState } from "react";
 
 const ETHNICITY_OPTIONS = [
   "Hispanic or Latino",
@@ -20,6 +19,166 @@ function formatPhoneNumber(value) {
   if (digits.length <= 3) return digits;
   if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
   return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+function normalizeNamePart(value = "") {
+  return String(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
+    .trim();
+}
+
+function normalizeDateString(value = "") {
+  return String(value).replace(/\D/g, "").slice(0, 8);
+}
+
+function onlyDigits(value = "") {
+  return String(value).replace(/\D/g, "");
+}
+
+function levenshteinDistance(a = "", b = "") {
+  const left = normalizeNamePart(a);
+  const right = normalizeNamePart(b);
+
+  if (!left) return right.length;
+  if (!right) return left.length;
+
+  const dp = Array.from({ length: left.length + 1 }, () =>
+    Array(right.length + 1).fill(0)
+  );
+
+  for (let i = 0; i <= left.length; i += 1) dp[i][0] = i;
+  for (let j = 0; j <= right.length; j += 1) dp[0][j] = j;
+
+  for (let i = 1; i <= left.length; i += 1) {
+    for (let j = 1; j <= right.length; j += 1) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost
+      );
+    }
+  }
+
+  return dp[left.length][right.length];
+}
+
+function namesAreSimilar(inputName = "", patientName = "") {
+  const input = normalizeNamePart(inputName);
+  const patient = normalizeNamePart(patientName);
+
+  if (!input || !patient) return false;
+  if (input === patient) return true;
+  if (input.length >= 3 && patient.startsWith(input)) return true;
+  if (patient.length >= 3 && input.startsWith(patient)) return true;
+
+  const maxLength = Math.max(input.length, patient.length);
+  const allowedDistance = maxLength <= 5 ? 1 : 2;
+  return levenshteinDistance(input, patient) <= allowedDistance;
+}
+
+function datesDifferByOneDigit(left = "", right = "") {
+  const a = normalizeDateString(left);
+  const b = normalizeDateString(right);
+
+  if (!a || !b || a.length !== b.length) return false;
+
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) diff += 1;
+    if (diff > 1) return false;
+  }
+
+  return diff === 1;
+}
+
+function getPatientFullName(patient) {
+  return [patient?.firstName, patient?.lastName].filter(Boolean).join(" ").trim() || "Unnamed patient";
+}
+
+function formatDisplayDate(value) {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString();
+}
+
+function getLastSeenLabel(patient) {
+  const encounters = Array.isArray(patient?.encounters) ? patient.encounters : [];
+  const latest = encounters
+    .map((encounter) => encounter.createdAt || encounter.clinicDate)
+    .filter(Boolean)
+    .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0];
+
+  return latest ? formatDisplayDate(latest) : "No prior visits listed";
+}
+
+function getMatchLevel(score) {
+  if (score >= 10) return { label: "High match", className: "bg-emerald-100 text-emerald-800 border-emerald-200" };
+  if (score >= 7) return { label: "Possible match", className: "bg-amber-100 text-amber-800 border-amber-200" };
+  return { label: "Low match", className: "bg-slate-100 text-slate-700 border-slate-200" };
+}
+
+function buildPatientMatchCandidates(patients = [], form = {}) {
+  const firstName = form.firstName || "";
+  const lastName = form.lastName || "";
+  const dob = form.dob || "";
+  const phoneDigits = onlyDigits(form.phone);
+
+  const hasEnoughSearchInfo =
+    (normalizeNamePart(firstName).length >= 2 && normalizeNamePart(lastName).length >= 2) ||
+    (!!dob && (normalizeNamePart(firstName).length >= 2 || normalizeNamePart(lastName).length >= 2)) ||
+    phoneDigits.length >= 7;
+
+  if (!hasEnoughSearchInfo) return [];
+
+  return (patients || [])
+    .map((patient) => {
+      const firstSimilar = namesAreSimilar(firstName, patient.firstName || "");
+      const lastSimilar = namesAreSimilar(lastName, patient.lastName || "");
+      const dobExact = !!dob && normalizeDateString(dob) === normalizeDateString(patient.dob || "");
+      const dobClose = !!dob && !dobExact && datesDifferByOneDigit(dob, patient.dob || "");
+      const phoneExact =
+        phoneDigits.length >= 7 &&
+        onlyDigits(patient.phone || "").slice(-7) === phoneDigits.slice(-7);
+
+      let score = 0;
+      if (firstSimilar) score += 3;
+      if (lastSimilar) score += 4;
+      if (dobExact) score += 5;
+      else if (dobClose) score += 3;
+      if (phoneExact) score += 3;
+
+      const hasIdentityAnchor = dobExact || dobClose || phoneExact;
+      const hasNameAnchor = firstSimilar || lastSimilar;
+
+      if (!hasNameAnchor && !phoneExact) return null;
+      if (!hasIdentityAnchor && !(firstSimilar && lastSimilar)) return null;
+      if (score < 4) return null;
+
+      return {
+        patient,
+        score,
+        firstSimilar,
+        lastSimilar,
+        dobExact,
+        dobClose,
+        phoneExact,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      const bDate = new Date(
+        (b.patient.encounters || [])[0]?.createdAt || (b.patient.encounters || [])[0]?.clinicDate || 0
+      ).getTime();
+      const aDate = new Date(
+        (a.patient.encounters || [])[0]?.createdAt || (a.patient.encounters || [])[0]?.clinicDate || 0
+      ).getTime();
+      return bDate - aDate;
+    })
+    .slice(0, 6);
 }
 
 
@@ -134,9 +293,12 @@ export default function UndergradIntakeView({
 }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [matchPatientId, setMatchPatientId] = useState(null);
-  const [autoFilledMatchPatientId, setAutoFilledMatchPatientId] = useState(null);
 
   function handleChange(key, value) {
+    if (["firstName", "lastName", "dob", "phone"].includes(key) && matchPatientId) {
+      setMatchPatientId(null);
+    }
+
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
@@ -183,73 +345,49 @@ export default function UndergradIntakeView({
     [patients, matchPatientId]
   );
   const matchedPatientFired = !!matchedPatient?.fired;
+  const matchCandidates = useMemo(() => {
+    if (matchPatientId) return [];
+    return buildPatientMatchCandidates(patients || [], form);
+  }, [patients, form, matchPatientId]);
 
-  useEffect(() => {
-    if (!form.firstName || !form.lastName || !form.dob) {
-      setMatchPatientId(null);
-      return;
-    }
+  function handleSelectMatch(patient) {
+    if (!patient) return;
 
-    const possibleMatch = findPotentialDuplicatePatient(
-      patients || [],
-      form.firstName,
-      form.lastName,
-      form.dob,
-      form.last4Ssn,
-      null
-    );
-
-    setMatchPatientId(possibleMatch ? possibleMatch.id : null);
-  }, [form.firstName, form.lastName, form.dob, form.last4Ssn, patients]);
-
-  useEffect(() => {
-    if (!matchPatientId) return;
-
+    setMatchPatientId(patient.id);
     setForm((prev) => ({
       ...prev,
+      firstName: patient.firstName || "",
+      preferredName: patient.preferredName || "",
+      lastName: patient.lastName || "",
+      dob: patient.dob || "",
+      mrn: patient.mrn || "",
+      phone: patient.phone || "",
       isReturning: "Returning",
+      sex: patient.sex || "",
+      ethnicity: patient.ethnicity || "",
+      addressLine1: patient.address || "",
+      city: patient.city || "",
+      state: patient.state || "",
+      zipCode: patient.zipCode || "",
+      emergencyContactName: patient.emergencyContactName || "",
+      emergencyContactRelation: patient.emergencyContactRelation || "",
+      emergencyContactPhone: patient.emergencyContactPhone || "",
+      last4Ssn: patient.last4ssn || "",
+      incomeRange: patient.incomeRange || "",
+      spanishOnly: patient.spanishOnly || "",
+      chronicConditions: patient.chronicConditions || [],
+      chronicConditionsOther: patient.chronicConditionsOther || "",
     }));
-  }, [matchPatientId]);
+  }
 
-  useEffect(() => {
-    if (!matchPatientId) return;
-    if (autoFilledMatchPatientId === matchPatientId) return;
-
-    const matchedPatient = (patients || []).find((p) => p.id === matchPatientId);
-    if (!matchedPatient) return;
-
-    setAutoFilledMatchPatientId(matchPatientId);
-
+  function handleClearMatch() {
+    setMatchPatientId(null);
     setForm((prev) => ({
       ...prev,
-      firstName: prev.firstName || matchedPatient.firstName || "",
-      preferredName: prev.preferredName || matchedPatient.preferredName || "",
-      lastName: prev.lastName || matchedPatient.lastName || "",
-      dob: prev.dob || matchedPatient.dob || "",
-      mrn: prev.mrn || matchedPatient.mrn || "",
-      phone: prev.phone || matchedPatient.phone || "",
-      sex: prev.sex || matchedPatient.sex || "",
-      ethnicity: prev.ethnicity || matchedPatient.ethnicity || "",
-      addressLine1: prev.addressLine1 || matchedPatient.address || "",
-      city: prev.city || matchedPatient.city || "",
-      state: prev.state || matchedPatient.state || "",
-      zipCode: prev.zipCode || matchedPatient.zipCode || "",
-      emergencyContactName:
-        prev.emergencyContactName || matchedPatient.emergencyContactName || "",
-      emergencyContactRelation:
-        prev.emergencyContactRelation || matchedPatient.emergencyContactRelation || "",
-      emergencyContactPhone:
-        prev.emergencyContactPhone || matchedPatient.emergencyContactPhone || "",
-      last4Ssn: prev.last4Ssn || matchedPatient.last4ssn || "",
-      incomeRange: prev.incomeRange || matchedPatient.incomeRange || "",
-      spanishOnly: prev.spanishOnly || matchedPatient.spanishOnly || "",
-      chronicConditions: prev.chronicConditions?.length
-        ? prev.chronicConditions
-        : matchedPatient.chronicConditions || [],
-      chronicConditionsOther:
-        prev.chronicConditionsOther || matchedPatient.chronicConditionsOther || "",
+      mrn: "",
+      isReturning: "",
     }));
-  }, [matchPatientId, autoFilledMatchPatientId, patients]);
+  }
 
   async function handleSubmit() {
   if (
@@ -294,7 +432,6 @@ export default function UndergradIntakeView({
 
     setForm(EMPTY_FORM);
     setMatchPatientId(null);
-    setAutoFilledMatchPatientId(null);
   }
 
   return (
@@ -314,10 +451,93 @@ export default function UndergradIntakeView({
 )}
         </div>
 
-        {matchPatientId && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            Possible duplicate found. Existing patient data has been filled in where available.
-            Submitting will create a new encounter on the matched patient instead of creating a duplicate chart.
+        {matchedPatient && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-semibold">Matched to existing patient: {getPatientFullName(matchedPatient)}</p>
+                <p className="mt-1 text-xs text-emerald-800">
+                  This encounter will attach to the existing chart. Full name and DOB were filled from the saved patient record.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleClearMatch}
+                className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+              >
+                Clear match / create new
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!matchedPatient && matchCandidates.length > 0 && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+            <div className="mb-3">
+              <h2 className="text-base font-bold text-amber-950">Possible existing patients</h2>
+              <p className="mt-1 text-xs text-amber-800">
+                Select a card only if this is the same patient. Selecting a match will replace typed demographics with the saved chart information.
+              </p>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              {matchCandidates.map(({ patient, score }) => {
+                const level = getMatchLevel(score);
+
+                return (
+                  <div
+                    key={patient.id}
+                    className="rounded-xl border border-amber-200 bg-white p-4 shadow-sm"
+                  >
+                    <div className="mb-3 flex flex-wrap items-center gap-2">
+                      <span className={`rounded-full border px-2.5 py-1 text-xs font-bold uppercase tracking-wide ${level.className}`}>
+                        {level.label}
+                      </span>
+                      <span className="text-xs font-medium text-slate-500">
+                        Last seen: {getLastSeenLabel(patient)}
+                      </span>
+                      {patient.fired && (
+                        <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-rose-700">
+                          Fired
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="space-y-1 text-sm text-slate-700">
+                      <p className="text-lg font-extrabold text-slate-950">{getPatientFullName(patient)}</p>
+                      {patient.preferredName && (
+                        <p>
+                          <span className="font-medium text-slate-500">Preferred:</span> {patient.preferredName}
+                        </p>
+                      )}
+                      <p>
+                        <span className="font-bold text-slate-950">DOB:</span>{" "}
+                        <span className="font-bold text-slate-950">{formatDisplayDate(patient.dob)}</span>
+                      </p>
+                      <p>
+                        <span className="font-medium text-slate-500">Phone:</span> {patient.phone || "—"}
+                      </p>
+                      <div className="grid gap-1 sm:grid-cols-2">
+                        <p>
+                          <span className="font-medium text-slate-500">Sex:</span> {patient.sex || "—"}
+                        </p>
+                        <p>
+                          <span className="font-medium text-slate-500">Ethnicity:</span> {patient.ethnicity || "—"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSelectMatch(patient)}
+                      className="mt-4 w-full rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
+                    >
+                      Use This Patient
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -365,8 +585,9 @@ export default function UndergradIntakeView({
                   First Name
                 </label>
                 <input
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className={`w-full rounded-lg border px-3 py-2 text-sm ${matchedPatient ? "border-slate-200 bg-slate-50 text-slate-600" : "border-slate-300"}`}
                   value={form.firstName}
+                  readOnly={!!matchedPatient}
                   onChange={(e) => handleChange("firstName", e.target.value)}
                 />
               </div>
@@ -375,8 +596,9 @@ export default function UndergradIntakeView({
                   Last Name
                 </label>
                 <input
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className={`w-full rounded-lg border px-3 py-2 text-sm ${matchedPatient ? "border-slate-200 bg-slate-50 text-slate-600" : "border-slate-300"}`}
                   value={form.lastName}
+                  readOnly={!!matchedPatient}
                   onChange={(e) => handleChange("lastName", e.target.value)}
                 />
               </div>
@@ -401,8 +623,9 @@ export default function UndergradIntakeView({
   type="date"
   min="1900-01-01"
   max={new Date().toISOString().split("T")[0]}
-  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+  className={`w-full rounded-lg border px-3 py-2 text-sm ${matchedPatient ? "border-slate-200 bg-slate-50 text-slate-600" : "border-slate-300"}`}
   value={form.dob}
+  readOnly={!!matchedPatient}
   onChange={(e) => handleChange("dob", e.target.value)}
   onInput={(e) => {
     if (e.target.value.length > 10) {
@@ -552,7 +775,6 @@ export default function UndergradIntakeView({
               onClick={() => {
                 setForm(EMPTY_FORM);
                 setMatchPatientId(null);
-                setAutoFilledMatchPatientId(null);
               }}
               className="rounded-lg bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-300"
             >

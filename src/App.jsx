@@ -13,6 +13,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 window.testLabParser = parseLabsFromText;
 import LabImportView from "./components/LabImportView";
+import LabQueueView from "./components/LabQueueView";
 import {
   createEncounterInSupabase,
   updateEncounterInSupabase,
@@ -37,7 +38,7 @@ import {
   updateClinicResourceSetting,
 } from "./api/clinicResourceSettings";
 import ToastStack from "./components/ToastStack";
-import { canStartIntake, canManageRoomBoard, canEditFormulary, canPrescribe, canChart, } from "./utils/permissions";
+import { canStartIntake, canManageRoomBoard, canEditFormulary, canPrescribe, canChart, canUseLabQueue, } from "./utils/permissions";
 import { fetchProfiles, updateProfileRole, updateProfileDetails } from "./api/profiles";
 import { createAuditLog, fetchAuditLogForEncounter } from "./api/audit";
 import { sendPasswordReset } from "./api/auth";
@@ -857,6 +858,11 @@ export default function App() {
       return;
     }
 
+    if (userRole === "lab") {
+      setActiveView("lab-queue");
+      return;
+    }
+
     if (
       userRole === "student" ||
       userRole === "upper_level" ||
@@ -869,6 +875,7 @@ export default function App() {
     setActiveView("dashboard");
   }, [userRole]);
 
+  const canLabQueueAccess = canUseLabQueue(userRole);
   const canRefill = canRefillAccess || userRole === "attending" || userRole === "leadership";
   const canAccessDashboard =
     userRole === "leadership" ||
@@ -4208,6 +4215,28 @@ export default function App() {
     userRole,
   ]);
 
+  const labEncounterRows = useMemo(() => {
+    const todayClinicDate = formatClinicDate();
+
+    return allEncounterRows
+      .filter(({ encounter }) => {
+        if (!encounter) return false;
+        if (normalizeClinicDate(encounter.clinicDate) !== todayClinicDate) return false;
+        if (encounter.status === "cancelled") return false;
+        if (encounter.status === "done") return false;
+        if (encounter.soapStatus === "signed") return false;
+
+        return (
+          encounter.status === "started" ||
+          encounter.status === "undergrad_complete" ||
+          encounter.status === "ready" ||
+          encounter.status === "roomed" ||
+          encounter.status === "in_visit"
+        );
+      })
+      .sort(sortRowsByDailyNumberThenTime);
+  }, [allEncounterRows]);
+
   useEffect(() => {
     if (userRole !== "undergraduate") return;
 
@@ -5677,6 +5706,27 @@ export default function App() {
       pharmacyNotifiedAt: null,
       pharmacyNotifiedBy: null,
     });
+
+    refreshClinicData?.();
+  }
+
+  async function updateLabTracking(encounterId, updates) {
+    const nextUpdates = {
+      ...updates,
+    };
+
+    await updateEncounterInSupabase(encounterId, nextUpdates);
+
+    setPatients((prev) =>
+      prev.map((patient) => ({
+        ...patient,
+        encounters: patient.encounters.map((encounter) =>
+          encounter.id === encounterId
+            ? { ...encounter, ...nextUpdates }
+            : encounter
+        ),
+      }))
+    );
 
     refreshClinicData?.();
   }
@@ -8114,6 +8164,7 @@ await applyEncounterTransition(selectedEncounter.id, {
                     <option value="leadership">Leadership</option>
                     <option value="undergraduate">Undergraduate</option>
                     <option value="pharmacy">Pharmacy</option>
+                    <option value="lab">Lab</option>
                   </select>
 
                   {authRole === "student" || authRole === "upper_level" ? (
@@ -8220,6 +8271,7 @@ await applyEncounterTransition(selectedEncounter.id, {
     return (
       <BoardDisplay
         ROOM_OPTIONS={ROOM_OPTIONS}
+        canOpenCharts={userRole !== "lab"}
         roomMap={roomMap}
         getPatientBoardName={getPatientBoardName}
         getStudentBoardName={getStudentBoardName}
@@ -8236,6 +8288,7 @@ await applyEncounterTransition(selectedEncounter.id, {
         todayStaffRoster={todayStaffRoster}
         tonightSpecialtyNames={tonightSpecialtyNames}
         tonightReservedRooms={tonightReservedRooms}
+        
       />
     );
   }
@@ -8257,6 +8310,7 @@ await applyEncounterTransition(selectedEncounter.id, {
         isLeadershipView={isLeadershipView}
         userRole={userRole}
         canRefillAccess={canRefillAccess}
+        canLabQueueAccess={canLabQueueAccess}
       />
 
       <div className="min-w-0 flex-1 bg-slate-100 xl:ml-64 xl:flex xl:flex-col">
@@ -8486,6 +8540,16 @@ await applyEncounterTransition(selectedEncounter.id, {
             />
           )}
 
+
+          {activeView === "lab-queue" && canLabQueueAccess && (
+            <LabQueueView
+              labEncounterRows={labEncounterRows}
+              openPatientChart={openPatientChart}
+              getFullPatientName={getFullPatientName}
+              onUpdateLabTracking={updateLabTracking}
+            />
+          )}
+
           {activeView === "queue" && (
             <QueueView
               userRole={userRole}
@@ -8539,6 +8603,7 @@ await applyEncounterTransition(selectedEncounter.id, {
           {activeView === "board" && (
             <RoomBoard
               ROOM_OPTIONS={ROOM_OPTIONS}
+              canOpenCharts={userRole !== "lab"}
               roomMap={roomMap}
               allEncounterRows={allEncounterRows}
               assignedCount={assignedCount}

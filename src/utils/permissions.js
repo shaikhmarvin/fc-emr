@@ -10,6 +10,10 @@ export function canEditFormulary(role) {
   return role === "leadership" || role === "pharmacy";
 }
 
+export function canUseLabQueue(role) {
+  return role === "leadership" || role === "lab";
+}
+
 export function canPrescribe(role) {
   return (
     role === "student" ||

@@ -4,9 +4,16 @@ import { getRoleFromClassification } from "../utils/permissions";
 
 export async function signUp(email, password, profileData) {
   const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-  });
+  email,
+  password,
+  options: {
+    data: {
+      full_name: profileData.full_name || "",
+      role: profileData.role || "student",
+      classification: profileData.classification || null,
+    },
+  },
+});
 
   if (error) throw error;
 
