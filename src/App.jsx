@@ -28,8 +28,8 @@ import {
   deleteRefillRequestsForPatient,
 } from "./api/encounters";
 import {
-  fetchTodayStaffRoster,
-  saveTodayStaffRoster,
+  fetchStaffRoster,
+  saveStaffRoster,
 } from "./api/clinicStaffRoster";
 import { useAuthSession } from "./hooks/useAuthSession";
 import { useClinicData } from "./hooks/useClinicData";
@@ -1348,48 +1348,7 @@ export default function App() {
     userRole,
   });
 
-  useEffect(() => {
-    if (!session) return;
-
-    let cancelled = false;
-
-    async function loadRoster() {
-      const roster = await fetchTodayStaffRoster();
-      if (!cancelled) {
-        setTodayStaffRoster(roster);
-      }
-    }
-
-    loadRoster();
-
-    const channel = supabase
-      .channel("clinic_staff_roster_today")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "clinic_staff_roster",
-        },
-        () => {
-          loadRoster();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      cancelled = true;
-      supabase.removeChannel(channel);
-    };
-  }, [session]);
-
-  async function handleSaveTodayStaffRoster() {
-    try {
-      await saveTodayStaffRoster(todayStaffRoster);
-    } catch (error) {
-      showToast?.("Unable to save staff roster.", "error");
-    }
-  }
+  
 
   async function saveClinicResourceSetting(resourceKey, updates) {
     const previousSettings = [...clinicResourceSettings];
@@ -3328,8 +3287,11 @@ export default function App() {
 
 
   const [selectedClinicDate, setSelectedClinicDate] = useState(
-    getLocalDateInputValue()
-  );
+  getLocalDateInputValue()
+);
+
+const [roomBoardDate, setRoomBoardDate] = useState(getLocalDateInputValue());
+const [specialtyQueueDate, setSpecialtyQueueDate] = useState(getLocalDateInputValue());
   const [, setNow] = useState(Date.now());
   const selectedPatient = patients.find((p) => p.id === selectedPatientId) || null;
   const selectedEncounter =
@@ -3446,13 +3408,13 @@ export default function App() {
   }, [patients]);
 
   const specialtyEncounterRows = useMemo(() => {
-  const todayClinicDate = formatClinicDate();
+  const clinicDateForSpecialtyQueue = specialtyQueueDate || formatClinicDate();
 
   return allEncounterRows
     .filter(({ encounter }) => {
       if (!encounter) return false;
       if (encounter.visitType !== "specialty_only") return false;
-      if (normalizeClinicDate(encounter.clinicDate) !== todayClinicDate) return false;
+      if (normalizeClinicDate(encounter.clinicDate) !== clinicDateForSpecialtyQueue) return false;
       if (!encounter.specialtyType) return false;
       if (encounter.status === "done") return false;
       if (encounter.status === "cancelled") return false;
@@ -3470,7 +3432,7 @@ export default function App() {
       const bTime = new Date(b.encounter.createdAt || 0).getTime();
       return aTime - bTime;
     });
-}, [allEncounterRows]);
+}, [allEncounterRows, specialtyQueueDate]);
 
   const specialtyRoomRulesForBoard = useMemo(() => {
     const today = formatClinicDate();
@@ -3573,6 +3535,66 @@ export default function App() {
         normalizeClinicDate(encounter.clinicDate) === selectedClinicDate
     );
   }, [allEncounterRows, selectedClinicDate]);
+
+  const boardClinicDate = roomBoardDate || formatClinicDate();
+
+const boardEncounterRows = useMemo(() => {
+  return allEncounterRows.filter(
+    ({ encounter }) =>
+      normalizeClinicDate(encounter.clinicDate) === boardClinicDate
+  );
+}, [allEncounterRows, boardClinicDate]);
+
+useEffect(() => {
+  if (!session || !boardClinicDate) return;
+
+  let cancelled = false;
+
+  setTodayStaffRoster({
+    attendings: "",
+    residents: "",
+    upperLevels: "",
+  });
+
+  async function loadRoster() {
+    const roster = await fetchStaffRoster(boardClinicDate);
+    if (!cancelled) {
+      setTodayStaffRoster(roster);
+    }
+  }
+
+  loadRoster();
+
+  const channel = supabase
+    .channel(`clinic_staff_roster_${boardClinicDate}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "clinic_staff_roster",
+        filter: `clinic_date=eq.${boardClinicDate}`,
+      },
+      () => {
+        loadRoster();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    cancelled = true;
+    supabase.removeChannel(channel);
+  };
+}, [session, boardClinicDate]);
+
+async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
+  try {
+    await saveStaffRoster(boardClinicDate, nextRoster);
+  } catch (error) {
+    console.error("Failed to save staff roster:", error);
+    showToast?.("Unable to save staff roster.", "error");
+  }
+}
 
 
   const filteredPatients = patients.filter((patient) =>
@@ -4281,13 +4303,13 @@ export default function App() {
     });
   }, [waitingEncounterRows, userRole, lastPharmacyToastKey]);
 
-  const assignedCount = filteredEncounterRows.filter(
+  const assignedCount = boardEncounterRows.filter(
     ({ encounter }) =>
       (encounter.status === "roomed" || encounter.status === "in_visit") &&
       encounter.soapStatus !== "signed"
   ).length;
 
-  const inVisitCount = filteredEncounterRows.filter(
+  const inVisitCount = boardEncounterRows.filter(
     ({ encounter }) =>
       encounter.status === "in_visit" &&
       encounter.soapStatus !== "signed"
@@ -4370,7 +4392,7 @@ export default function App() {
       map[room.number] = null;
     });
 
-    visibleEncounterRows.forEach(({ patient, encounter }) => {
+    boardEncounterRows.forEach(({ patient, encounter }) => {
       if (
         encounter.roomNumber &&
         encounter.status !== "done" &&
@@ -4381,7 +4403,7 @@ export default function App() {
     });
 
     return map;
-  }, [visibleEncounterRows]);
+  }, [boardEncounterRows]);
 
   const roomDropdownOptions = useMemo(() => {
     return ROOM_OPTIONS.map((room) => {
@@ -8284,8 +8306,9 @@ await applyEncounterTransition(selectedEncounter.id, {
         fluBadge={fluBadge}
         papBadge={papBadge}
         getStatusClasses={getStatusClasses}
-        allEncounterRows={allEncounterRows}
+        allEncounterRows={boardEncounterRows}
         todayStaffRoster={todayStaffRoster}
+        selectedClinicDate={boardClinicDate}
         tonightSpecialtyNames={tonightSpecialtyNames}
         tonightReservedRooms={tonightReservedRooms}
         
@@ -8422,7 +8445,7 @@ await applyEncounterTransition(selectedEncounter.id, {
               setSelectedClinicDate={setSelectedClinicDate}
               filteredVisiblePatients={filteredVisiblePatients}
               visibleEncounterRows={visibleEncounterRows}
-              allEncounterRows={allEncounterRows}
+              allEncounterRows={boardEncounterRows}
               searchForm={searchForm}
               setSearchForm={setSearchForm}
               patientRecordsTitle={patientRecordsTitle}
@@ -8597,15 +8620,19 @@ await applyEncounterTransition(selectedEncounter.id, {
               formatDate={formatDate}
               isLeadershipView={isLeadershipView}
               dualVisitBadge={dualVisitBadge}
+              selectedClinicDate={specialtyQueueDate}
+setSelectedClinicDate={setSpecialtyQueueDate}
             />
           )}
 
           {activeView === "board" && (
             <RoomBoard
               ROOM_OPTIONS={ROOM_OPTIONS}
+              selectedClinicDate={boardClinicDate}
+setSelectedClinicDate={setRoomBoardDate}
               canOpenCharts={userRole !== "lab"}
               roomMap={roomMap}
-              allEncounterRows={allEncounterRows}
+              allEncounterRows={boardEncounterRows}
               assignedCount={assignedCount}
               inVisitCount={inVisitCount}
               getPatientBoardName={getPatientBoardName}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getStatusLabel } from "../utils";
 import { getClinicAlert } from "../utils/clinicAlerts";
-import { fetchTodayStaffRoster } from "../api/clinicStaffRoster";
+import { fetchStaffRoster } from "../api/clinicStaffRoster";
 import { supabase } from "../lib/supabase";
 
 const CLINIC_URL = "https://fc-emr.vercel.app/"; // CHANGE THIS
@@ -55,6 +55,7 @@ export default function BoardDisplay({
   papBadge,
   getStatusClasses,
   todayStaffRoster,
+  selectedClinicDate,
   tonightReservedRooms = [],
 }) {
   const [now, setNow] = useState(new Date());
@@ -74,10 +75,18 @@ export default function BoardDisplay({
   }, []);
 
   useEffect(() => {
+    if (!selectedClinicDate) return;
+
     let cancelled = false;
 
+    setDisplayRoster({
+      attendings: "",
+      residents: "",
+      upperLevels: "",
+    });
+
     async function loadRoster() {
-      const roster = await fetchTodayStaffRoster();
+      const roster = await fetchStaffRoster(selectedClinicDate);
       if (!cancelled) {
         setDisplayRoster(roster);
       }
@@ -86,13 +95,14 @@ export default function BoardDisplay({
     loadRoster();
 
     const channel = supabase
-      .channel("board_display_staff_roster")
+      .channel(`board_display_staff_roster_${selectedClinicDate}`)
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "clinic_staff_roster",
+          filter: `clinic_date=eq.${selectedClinicDate}`,
         },
         loadRoster
       )
@@ -102,7 +112,7 @@ export default function BoardDisplay({
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [selectedClinicDate]);
 
   const roster =
     todayStaffRoster?.attendings ||

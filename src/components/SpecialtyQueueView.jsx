@@ -270,16 +270,21 @@ function SpecialtyTable({
 
 export default function SpecialtyQueueView({
     specialtyEncounterRows,
+    selectedClinicDate,
+setSelectedClinicDate,
     openPatientChart,
     getFullPatientName,
     formatDate,
     isLeadershipView,
     dualVisitBadge,
+    
 }) {
 
     const [selectedSpecialty, setSelectedSpecialty] = useState("");
 
     const [search, setSearch] = useState("");
+    const today = new Date().toISOString().slice(0, 10);
+const effectiveClinicDate = selectedClinicDate || today;
 
     const ptRows = specialtyEncounterRows.filter(
         ({ encounter }) => encounter.specialtyType === "pt"
@@ -318,18 +323,32 @@ export default function SpecialtyQueueView({
                         </p>
                     </div>
 
-                    <div className="w-full lg:max-w-md">
-                        <label className="mb-1 block text-sm font-medium text-slate-700">
-                            Search patients
-                        </label>
-                        <input
-                            type="text"
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            placeholder="Search name, DOB, daily #, MRN, phone, specialty, complaint"
-                            className="min-h-[44px] w-full rounded-lg border border-slate-300 px-3 py-2 text-sm sm:text-base"
-                        />
-                    </div>
+                    <div className="grid w-full gap-3 lg:max-w-2xl lg:grid-cols-[180px_1fr]">
+    <div>
+        <label className="mb-1 block text-sm font-medium text-slate-700">
+            Clinic Date
+        </label>
+        <input
+            type="date"
+            value={effectiveClinicDate}
+            onChange={(e) => setSelectedClinicDate?.(e.target.value)}
+            className="min-h-[44px] w-full rounded-lg border border-slate-300 px-3 py-2 text-sm sm:text-base"
+        />
+    </div>
+
+    <div>
+        <label className="mb-1 block text-sm font-medium text-slate-700">
+            Search patients
+        </label>
+        <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search name, DOB, daily #, MRN, phone, specialty, complaint"
+            className="min-h-[44px] w-full rounded-lg border border-slate-300 px-3 py-2 text-sm sm:text-base"
+        />
+    </div>
+</div>
                 </div>
 
                 <div className="mt-4 flex flex-wrap gap-2">

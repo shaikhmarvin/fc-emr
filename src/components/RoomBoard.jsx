@@ -75,6 +75,8 @@ function getPrimarySlot(groups) {
 
 export default function RoomBoard({
   ROOM_OPTIONS,
+  selectedClinicDate,
+  setSelectedClinicDate,
   canOpenCharts = true,
   roomMap,
   allEncounterRows,
@@ -118,50 +120,63 @@ export default function RoomBoard({
         </div>
       )}
       {isLeadershipView && (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <div className="rounded-2xl bg-white p-3 shadow">
-            <p className="text-sm text-slate-500">Available Rooms</p>
-            <p className="mt-1 text-2xl font-bold">
-              {
-                ROOM_OPTIONS.filter((room) => {
-                  const groups = getRoomEncounterGroups(allEncounterRows, room.number);
-                  return !groups.some(
-                    (group) => group.primary?.encounter?.status !== "done"
-                  );
-                }).length
-              }
-            </p>
-          </div>
+  <div className="rounded-2xl bg-white p-3 shadow">
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Room Board Date
+        </p>
+        <input
+          type="date"
+          value={selectedClinicDate || ""}
+          onChange={(e) => setSelectedClinicDate?.(e.target.value)}
+          className="mt-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-800"
+        />
+      </div>
 
-          {isLeadershipView && (
-            <div className="rounded-2xl bg-white p-3 shadow">
-              <p className="text-sm text-slate-500">Awaiting Assignment</p>
-              <p className="mt-1 text-2xl font-bold">
-                {(allEncounterRows || []).filter(
-                  ({ encounter }) =>
-                    (encounter.status === "started" ||
-                      encounter.status === "undergrad_complete" ||
-                      encounter.status === "ready") &&
-                    encounter.soapStatus !== "signed"
-                ).length}
-              </p>
-            </div>
-          )}
-          {isLeadershipView && (
-            <div className="rounded-2xl bg-white p-3 shadow">
-              <p className="text-sm text-slate-500">Assigned</p>
-              <p className="mt-1 text-2xl font-bold">{assignedCount}</p>
-            </div>
-          )}
-          {isLeadershipView && (
-            <div className="rounded-2xl bg-white p-3 shadow">
-              <p className="text-sm text-slate-500">In Visit</p>
-              <p className="mt-1 text-2xl font-bold">{inVisitCount}</p>
-            </div>
-          )}
-
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:min-w-[520px]">
+        <div className="rounded-xl bg-slate-50 px-3 py-2">
+          <p className="text-[11px] font-medium text-slate-500">Available</p>
+          <p className="text-xl font-bold text-slate-900">
+            {
+              ROOM_OPTIONS.filter((room) => {
+                const groups = getRoomEncounterGroups(allEncounterRows, room.number);
+                return !groups.some(
+                  (group) => group.primary?.encounter?.status !== "done"
+                );
+              }).length
+            }
+          </p>
         </div>
-        )}
+
+        <div className="rounded-xl bg-slate-50 px-3 py-2">
+          <p className="text-[11px] font-medium text-slate-500">Waiting</p>
+          <p className="text-xl font-bold text-slate-900">
+            {(allEncounterRows || []).filter(
+  ({ encounter }) =>
+    (encounter.status === "started" ||
+      encounter.status === "undergrad_complete" ||
+      encounter.status === "ready") &&
+    encounter.visitType !== "specialty_only" &&
+    encounter.visitType !== "refill_only" &&
+    encounter.soapStatus !== "signed"
+).length}
+          </p>
+        </div>
+
+        <div className="rounded-xl bg-slate-50 px-3 py-2">
+          <p className="text-[11px] font-medium text-slate-500">Assigned</p>
+          <p className="text-xl font-bold text-slate-900">{assignedCount}</p>
+        </div>
+
+        <div className="rounded-xl bg-slate-50 px-3 py-2">
+          <p className="text-[11px] font-medium text-slate-500">In Visit</p>
+          <p className="text-xl font-bold text-slate-900">{inVisitCount}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
 
       {isLeadershipView && (

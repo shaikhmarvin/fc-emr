@@ -1,11 +1,7 @@
 import { supabase } from "../lib/supabase";
 
-function todayClinicDate() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-export async function fetchTodayStaffRoster() {
-  const clinicDate = todayClinicDate();
+export async function fetchStaffRoster(clinicDate) {
+  if (!clinicDate) return { attendings: "", residents: "", upperLevels: "" };
 
   const { data, error } = await supabase
     .from("clinic_staff_roster")
@@ -25,16 +21,21 @@ export async function fetchTodayStaffRoster() {
   };
 }
 
-export async function saveTodayStaffRoster(roster) {
-  const clinicDate = todayClinicDate();
+export async function saveStaffRoster(clinicDate, roster) {
+  if (!clinicDate) return;
 
-  const { error } = await supabase.from("clinic_staff_roster").upsert({
-    clinic_date: clinicDate,
-    attendings: roster?.attendings || "",
-    residents: roster?.residents || "",
-    upper_levels: roster?.upperLevels || "",
-    updated_at: new Date().toISOString(),
-  });
+  const { error } = await supabase
+  .from("clinic_staff_roster")
+  .upsert(
+    {
+      clinic_date: clinicDate,
+      attendings: roster?.attendings || "",
+      residents: roster?.residents || "",
+      upper_levels: roster?.upperLevels || "",
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "clinic_date" }
+  );
 
   if (error) {
     console.error("Error saving staff roster:", error);
