@@ -5378,13 +5378,16 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
   }
 
   function openPatientEditModal() {
-    if (!dashboardSelectedPatient) {
-      alert("Select a patient first from the dashboard.");
-      return;
-    }
+  const patientForEdit = dashboardSelectedPatient || selectedPatient;
 
-    setShowPatientInfoEditModal(true);
+  if (!patientForEdit) {
+    alert("Select a patient first.");
+    return;
   }
+
+  setDashboardSelectedPatientId(patientForEdit.id);
+  setShowPatientInfoEditModal(true);
+}
 
   async function saveDashboardPatientEdits(patientId, updates) {
     const trimmedMrn = (updates.mrn || "").trim();
@@ -5441,6 +5444,7 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
     }
 
     setSelectedPatientId(patientId);
+    setDashboardSelectedPatientId(patientId);
     setSelectedEncounterId(encounter?.id || null);
 
     setAssignmentForm({
@@ -8913,7 +8917,7 @@ setSelectedClinicDate={setRoomBoardDate}
 
       <PatientInfoEditModal
         show={showPatientInfoEditModal}
-        patient={dashboardSelectedPatient}
+  patient={dashboardSelectedPatient || selectedPatient}
         canEditUndergradFields={userRole === "undergraduate" || isLeadershipView}
         canEditAllPatientFields={isLeadershipView}
         onClose={() => setShowPatientInfoEditModal(false)}

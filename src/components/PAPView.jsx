@@ -311,7 +311,7 @@ function savePapDraftValue(entry, field) {
   return (
     <div className="space-y-6 p-3 sm:p-4 lg:p-6">
       <Card>
-        <h2 className="text-xl font-semibold text-slate-900">PAP Tracker</h2>
+        <h2 className="text-xl font-semibold text-slate-900">Patient Assistance Program Tracker</h2>
         <p className="mt-1 text-sm text-slate-600">
           Track patient assistance applications, approvals, refill timing, and follow-ups.
         </p>

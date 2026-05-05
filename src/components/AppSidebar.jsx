@@ -184,14 +184,14 @@ export default function AppSidebar({
                   </button>
                 )}
 
-                {canLabQueueAccess && (
-                  <button
-                    onClick={() => handleViewChange("lab-queue")}
-                    className={getNavItemClass("lab-queue")}
-                  >
-                    Lab Queue
-                  </button>
-                )}
+                {userRole === "lab" && (
+  <button
+    onClick={() => handleViewChange("lab-queue")}
+    className={getNavItemClass("lab-queue")}
+  >
+    Lab Queue
+  </button>
+)}
 
                 {isLeadershipView && (
                   <button
