@@ -2506,7 +2506,16 @@ export default function App() {
 
   if (packetDeleteError) throw packetDeleteError;
 
-  if (!batchId) return;
+  if (!batchId) {
+    setLabImportPackets((prev) => prev.filter((packet) => packet.packetId !== packetId));
+
+    if (selectedLabImportPacketId === packetId) {
+      setSelectedLabImportPacketId(null);
+      setLabImportPacket(null);
+    }
+
+    return;
+  }
 
   const { data: remainingPackets, error: remainingError } = await supabase
     .from("lab_import_packets")
@@ -2528,7 +2537,10 @@ export default function App() {
     setLabImportPackets([]);
     setLabImportPacket(null);
     setSelectedLabImportPacketId(null);
+    return;
   }
+
+  await loadSharedLabImportBatch(batchId);
 }
 
   async function handleLiveUpdateLabPacketLabs(packetId, reviewedLabs) {
