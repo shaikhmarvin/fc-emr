@@ -53,36 +53,39 @@ export default function AppHeader({
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 
           <div className="flex items-center gap-3">
-  <div className="text-sm">
-    <p className="font-medium text-slate-800">
-      {user?.user_metadata?.full_name || "User"}
-    </p>
-    <p className="text-xs text-slate-500 capitalize">
-      {userRole?.replace("_", " ")}
-    </p>
-  </div>
+            <div className="text-sm">
+              <p className="font-medium text-slate-800">
+                {user?.user_metadata?.full_name || "User"}
+              </p>
+              <p className="text-xs text-slate-500 capitalize">
+                {userRole?.replace("_", " ")}
+              </p>
+            </div>
 
-  <button
-    onClick={handleResetSession}
-    className="rounded-lg bg-yellow-500 px-3 py-2 text-xs text-white hover:bg-yellow-600"
-  >
-    Refresh Session
-  </button>
-</div>
+            <button
+              onClick={() => {
+                if (!window.confirm("You will be signed out and need to log back in. Continue?")) return;
+                handleResetSession();
+              }}
+              className="rounded-lg bg-red-500 px-3 py-2 text-xs text-white hover:bg-red-600"
+            >
+              Sign Out
+            </button>
+          </div>
 
-<div className="flex items-center gap-2">
-  {userRole === "leadership" && (
-    <button
-      onClick={() => {
-        const url = `${window.location.origin}${window.location.pathname}?display=board`;
-        window.open(url, "_blank", "width=1600,height=900");
-      }}
-      className="rounded-lg bg-slate-700 px-4 py-2 text-white hover:bg-slate-800"
-    >
-      Open Display Board
-    </button>
-  )}
-</div>
+          <div className="flex items-center gap-2">
+            {userRole === "leadership" && (
+              <button
+                onClick={() => {
+                  const url = `${window.location.origin}${window.location.pathname}?display=board`;
+                  window.open(url, "_blank", "width=1600,height=900");
+                }}
+                className="rounded-lg bg-slate-700 px-4 py-2 text-white hover:bg-slate-800"
+              >
+                Open Display Board
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
