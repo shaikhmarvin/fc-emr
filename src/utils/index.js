@@ -162,13 +162,22 @@ export function normalizeHeight(value) {
 export function formatDate(dateString) {
   if (!dateString) return "—";
 
-  const parts = dateString.split("-");
-  if (parts.length === 3) {
-    const [year, month, day] = parts;
-    return `${month}/${day}/${year}`;
+  const raw = String(dateString);
+
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    const [, year, month, day] = match;
+    return `${month}-${day}-${year}`;
   }
 
-  return dateString;
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw;
+
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  const year = parsed.getFullYear();
+
+  return `${month}-${day}-${year}`;
 }
 
 export function formatClinicDate(date = new Date()) {

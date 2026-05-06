@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getStatusLabel } from "../utils";
+import { formatDate, getStatusLabel } from "../utils";
 import { getClinicAlert } from "../utils/clinicAlerts";
 import { fetchStaffRoster } from "../api/clinicStaffRoster";
 import { supabase } from "../lib/supabase";
@@ -224,7 +224,7 @@ export default function BoardDisplay({
 
           {/* Time */}
           <div className="text-right text-sm text-slate-300">
-            {now.toLocaleDateString()}
+            {formatDate(now)}
             <br />
             {now.toLocaleTimeString()}
           </div>

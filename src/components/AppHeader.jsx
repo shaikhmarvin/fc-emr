@@ -1,3 +1,5 @@
+import { formatDate } from "../utils";
+
 export default function AppHeader({
   activeView,
   selectedPatient,
@@ -38,7 +40,7 @@ export default function AppHeader({
               </h2>
 
               <p className="text-sm text-slate-500">
-                {new Date().toLocaleDateString()}
+                {formatDate(new Date())}
               </p>
 
               {activeView === "chart" && selectedPatient && (

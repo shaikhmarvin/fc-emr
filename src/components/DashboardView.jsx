@@ -3,6 +3,7 @@ import PatientSearch from "./PatientSearch";
 import PatientTable from "./PatientTable";
 import { downloadSignedEncountersZip } from "../utils/pdfGenerator";
 import logo from "../assets/free-clinic-logo.png";
+import { formatDate } from "../utils";
 
 export default function DashboardView({
   isLeadershipView,
@@ -270,7 +271,7 @@ export default function DashboardView({
                 </h2>
                 <p className="text-sm text-slate-500">
                   {selectedClinicDate
-                    ? `Clinic date: ${selectedClinicDate}`
+                    ? `Clinic date: ${formatDate(selectedClinicDate)}`
                     : "All clinic dates"}
                 </p>
               </div>
@@ -427,7 +428,7 @@ export default function DashboardView({
           <p className="text-sm text-slate-500">
             Showing:{" "}
             {selectedClinicDate
-              ? `Clinic Date (${selectedClinicDate})`
+              ? `Clinic Date (${formatDate(selectedClinicDate)})`
               : "All Encounters"}
           </p>
         </div>
@@ -477,7 +478,7 @@ export default function DashboardView({
             </div>
 
             <p className="mt-1 text-sm text-slate-500">
-              {selectedClinicDate ? selectedClinicDate : "All selected clinic dates"}
+              {selectedClinicDate ? formatDate(selectedClinicDate) : "All selected clinic dates"}
             </p>
           </div>
 
