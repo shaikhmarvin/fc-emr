@@ -124,7 +124,11 @@ function pill(label, kind) {
   );
 }
 
-export default function LabReviewPanel({ labs = [], onChangeLabs = null }) {
+export default function LabReviewPanel({
+  labs = [],
+  onChangeLabs = null,
+  onAuditEvent = null,
+}) {
   const [openGroups, setOpenGroups] = useState(() => {
     const initial = {};
     labs.forEach((lab) => {
@@ -150,10 +154,28 @@ export default function LabReviewPanel({ labs = [], onChangeLabs = null }) {
   }
 
   function updateLab(index, patch) {
-    applyLabs((prev) =>
-      prev.map((lab, i) => (i === index ? { ...lab, ...patch } : lab))
-    );
-  }
+  applyLabs((prev) =>
+    prev.map((lab, i) => {
+      if (i !== index) return lab;
+
+      return {
+        ...lab,
+        ...patch,
+        _qaAction: lab._qaAction === "added" ? "added" : "edited",
+        _qaOriginal: lab._qaOriginal || {
+          key: lab.key || "",
+          displayName: lab.displayName || "",
+          value: unwrapLabValue(lab.value),
+          unit: lab.unit || "",
+          rawLine: lab.rawLine || "",
+          autoFilled: !!lab.autoFilled,
+          missing: !!lab.missing,
+          confidence: lab.confidence || "",
+        },
+      };
+    })
+  );
+}
 
   function updateLabValue(index, newValue) {
     updateLab(index, { value: normalizeValueForStorage(newValue) });
@@ -180,6 +202,8 @@ export default function LabReviewPanel({ labs = [], onChangeLabs = null }) {
         expectedRangeText: "",
         custom: true,
         confidence: "manual",
+        _qaAction: "added",
+        _qaOriginal: null,
       },
     ]);
 
@@ -190,8 +214,17 @@ export default function LabReviewPanel({ labs = [], onChangeLabs = null }) {
   }
 
   function deleteLab(index) {
-    applyLabs((prev) => prev.filter((_, i) => i !== index));
+  const deletedLab = labs[index];
+
+  if (onAuditEvent && deletedLab) {
+    onAuditEvent({
+      action: "deleted",
+      lab: deletedLab,
+    });
   }
+
+  applyLabs((prev) => prev.filter((_, i) => i !== index));
+}
 
   return (
     <div className="space-y-4">

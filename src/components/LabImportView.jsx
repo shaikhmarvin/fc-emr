@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import LabReviewPanel from "./LabReviewPanel";
 import { fetchEncountersByPatient } from "../api/encounters";
+import { supabase } from "../lib/supabase";
 
 function toneForPacket(packet) {
   if (!packet) return "border-slate-200 bg-white";
@@ -52,6 +53,34 @@ function formatDisplayDate(value) {
   return String(value);
 }
 
+function QaTopList({ title, items = {} }) {
+  const sorted = Object.entries(items)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8);
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      <h3 className="mb-3 text-sm font-semibold text-slate-900">{title}</h3>
+
+      {sorted.length === 0 ? (
+        <p className="text-sm text-slate-500">No data yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {sorted.map(([name, count]) => (
+            <div
+              key={name}
+              className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-sm"
+            >
+              <span className="truncate text-slate-700">{name || "Unknown"}</span>
+              <span className="font-semibold text-slate-900">{count}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SummaryChip({ children, tone = "slate" }) {
   const tones = {
     slate: "bg-slate-100 text-slate-700",
@@ -79,8 +108,8 @@ function PacketQueueCard({ packet, isActive, onClick, index }) {
     <button
       onClick={onClick}
       className={`w-full rounded-2xl border p-4 text-left transition ${isActive
-          ? "border-blue-600 bg-blue-50 shadow-sm"
-          : `${tone} hover:shadow-sm`
+        ? "border-blue-600 bg-blue-50 shadow-sm"
+        : `${tone} hover:shadow-sm`
         }`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -217,15 +246,15 @@ function MatchPanel({
 
                 {onConfirmPatient ? (
                   <button
-  type="button"
-  onClick={(e) => {
-    e.stopPropagation();
-    onConfirmPatient(packetId, patient);
-  }}
-  className="mt-3 rounded-lg bg-amber-600 px-3 py-2 text-xs font-medium text-white hover:bg-amber-700"
->
-  Confirm This Patient
-</button>
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onConfirmPatient(packetId, patient);
+                    }}
+                    className="mt-3 rounded-lg bg-amber-600 px-3 py-2 text-xs font-medium text-white hover:bg-amber-700"
+                  >
+                    Confirm This Patient
+                  </button>
                 ) : null}
               </div>
             ))
@@ -276,15 +305,22 @@ export default function LabImportView({
   onSkip = null,
   onExportDebug,
   onChangeLabs = null,
+onAfterSaveCleanup = null,
 }) {
   const [reviewedLabsByPacketId, setReviewedLabsByPacketId] = useState({});
   const [saving, setSaving] = useState(false);
   const [encounters, setEncounters] = useState([]);
   const [selectedEncounterId, setSelectedEncounterId] = useState(null);
+  const [deletedAuditByPacketId, setDeletedAuditByPacketId] = useState({});
   const lastIncomingLabsJsonRef = useRef({});
   const lastPushedLabsJsonRef = useRef({});
+  const DEV_PROFILE_ID = "33647838-c015-40a4-9c0a-4ccd9e584b87";
+  const [currentUserId, setCurrentUserId] = useState(null);
+  const [showQaModal, setShowQaModal] = useState(false);
+  const [qaStats, setQaStats] = useState(null);
+  const [qaLoading, setQaLoading] = useState(false);
 
-  
+
 
   const sortedPackets = useMemo(() => {
     return [...packets].sort((a, b) => {
@@ -309,55 +345,67 @@ export default function LabImportView({
   }, [packets]);
 
   const selectedPacket = useMemo(() => {
-  return sortedPackets.find(p => p.packetId === selectedPacketId) || null;
-}, [sortedPackets, selectedPacketId]);
-
-const reviewedLabs = useMemo(() => {
-  if (!selectedPacket?.packetId) return [];
-  return reviewedLabsByPacketId[selectedPacket.packetId] || selectedPacket.labs || [];
-}, [selectedPacket?.packetId, selectedPacket?.labs, reviewedLabsByPacketId]);
+    return sortedPackets.find(p => p.packetId === selectedPacketId) || null;
+  }, [sortedPackets, selectedPacketId]);
 
   useEffect(() => {
-  if (!selectedPacket?.packetId) return;
+    async function loadCurrentUser() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-  const incomingLabs = selectedPacket.labs || [];
-  const incomingJson = JSON.stringify(incomingLabs);
-
-  lastIncomingLabsJsonRef.current[selectedPacket.packetId] = incomingJson;
-
-  setReviewedLabsByPacketId((prev) => {
-    const currentJson = JSON.stringify(prev[selectedPacket.packetId] || []);
-
-    if (currentJson === incomingJson) {
-      return prev;
+      setCurrentUserId(user?.id || null);
     }
 
-    return {
-      ...prev,
-      [selectedPacket.packetId]: incomingLabs,
-    };
-  });
-}, [selectedPacket?.packetId, selectedPacket?.labs]);
+    loadCurrentUser();
+  }, []);
+
+  const reviewedLabs = useMemo(() => {
+    if (!selectedPacket?.packetId) return [];
+    return reviewedLabsByPacketId[selectedPacket.packetId] || selectedPacket.labs || [];
+  }, [selectedPacket?.packetId, selectedPacket?.labs, reviewedLabsByPacketId]);
 
   useEffect(() => {
-  if (!selectedPacket?.packetId) return;
-  if (!onChangeLabs) return;
+    if (!selectedPacket?.packetId) return;
 
-  const packetId = selectedPacket.packetId;
-  const reviewedJson = JSON.stringify(reviewedLabs || []);
-  const incomingJson = lastIncomingLabsJsonRef.current[packetId] || "";
-  const lastPushedJson = lastPushedLabsJsonRef.current[packetId] || "";
+    const incomingLabs = attachAuditBaseline(selectedPacket.labs || []);
+    const incomingJson = JSON.stringify(incomingLabs);
 
-  if (reviewedJson === incomingJson) return;
-  if (reviewedJson === lastPushedJson) return;
+    lastIncomingLabsJsonRef.current[selectedPacket.packetId] = incomingJson;
 
-  const timeout = window.setTimeout(() => {
-    lastPushedLabsJsonRef.current[packetId] = reviewedJson;
-    onChangeLabs(packetId, reviewedLabs);
-  }, 500);
+    setReviewedLabsByPacketId((prev) => {
+      const currentJson = JSON.stringify(prev[selectedPacket.packetId] || []);
 
-  return () => window.clearTimeout(timeout);
-}, [selectedPacket?.packetId, reviewedLabs, onChangeLabs]);
+      if (currentJson === incomingJson) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        [selectedPacket.packetId]: incomingLabs,
+      };
+    });
+  }, [selectedPacket?.packetId, selectedPacket?.labs]);
+
+  useEffect(() => {
+    if (!selectedPacket?.packetId) return;
+    if (!onChangeLabs) return;
+
+    const packetId = selectedPacket.packetId;
+    const reviewedJson = JSON.stringify(reviewedLabs || []);
+    const incomingJson = lastIncomingLabsJsonRef.current[packetId] || "";
+    const lastPushedJson = lastPushedLabsJsonRef.current[packetId] || "";
+
+    if (reviewedJson === incomingJson) return;
+    if (reviewedJson === lastPushedJson) return;
+
+    const timeout = window.setTimeout(() => {
+      lastPushedLabsJsonRef.current[packetId] = reviewedJson;
+      onChangeLabs(packetId, reviewedLabs);
+    }, 500);
+
+    return () => window.clearTimeout(timeout);
+  }, [selectedPacket?.packetId, reviewedLabs, onChangeLabs]);
 
 
   function normalizeEncounterDate(value) {
@@ -370,44 +418,44 @@ const reviewedLabs = useMemo(() => {
   }
 
   useEffect(() => {
-  async function loadEncounters() {
-    if (!selectedPacket?.confirmedPatient?.id) {
-      setEncounters([]);
-      setSelectedEncounterId(null);
-      return;
-    }
-
-    try {
-      const data = await fetchEncountersByPatient(selectedPacket.confirmedPatient.id);
-      setEncounters(data || []);
-
-      const normalizedCollectedDate = normalizeEncounterDate(selectedPacket.collectedDate);
-
-      const exactDateMatch =
-        (data || []).find(
-          (enc) => normalizeEncounterDate(enc.clinic_date) === normalizedCollectedDate
-        ) || null;
-
-      if (exactDateMatch) {
-        setSelectedEncounterId(exactDateMatch.id);
+    async function loadEncounters() {
+      if (!selectedPacket?.confirmedPatient?.id) {
+        setEncounters([]);
+        setSelectedEncounterId(null);
         return;
       }
 
-      if (data && data.length > 0) {
-        setSelectedEncounterId(data[0].id);
-        return;
+      try {
+        const data = await fetchEncountersByPatient(selectedPacket.confirmedPatient.id);
+        setEncounters(data || []);
+
+        const normalizedCollectedDate = normalizeEncounterDate(selectedPacket.collectedDate);
+
+        const exactDateMatch =
+          (data || []).find(
+            (enc) => normalizeEncounterDate(enc.clinic_date) === normalizedCollectedDate
+          ) || null;
+
+        if (exactDateMatch) {
+          setSelectedEncounterId(exactDateMatch.id);
+          return;
+        }
+
+        if (data && data.length > 0) {
+          setSelectedEncounterId(data[0].id);
+          return;
+        }
+
+        setSelectedEncounterId(null);
+      } catch (error) {
+        console.error("Failed to load encounters for confirmed patient:", error);
+        setEncounters([]);
+        setSelectedEncounterId(null);
       }
-
-      setSelectedEncounterId(null);
-    } catch (error) {
-      console.error("Failed to load encounters for confirmed patient:", error);
-      setEncounters([]);
-      setSelectedEncounterId(null);
     }
-  }
 
-  loadEncounters();
-}, [selectedPacket?.confirmedPatient?.id, selectedPacket?.collectedDate, selectedPacket?.packetId]);
+    loadEncounters();
+  }, [selectedPacket?.confirmedPatient?.id, selectedPacket?.collectedDate, selectedPacket?.packetId]);
 
   if (!selectedPacket) {
     return (
@@ -423,21 +471,226 @@ const reviewedLabs = useMemo(() => {
   }
 
   const {
-  extractedPatientName,
-  extractedDob,
-  collectedDate,
-  matchStatus,
-  matchedPatient,
-  possibleMatches = [],
-  unresolvedReason,
-  confirmedPatient = null,
-  packetType = "unknown",
-  reviewStatus = "unsaved",
-} = selectedPacket;
+    extractedPatientName,
+    extractedDob,
+    collectedDate,
+    matchStatus,
+    matchedPatient,
+    possibleMatches = [],
+    unresolvedReason,
+    confirmedPatient = null,
+    packetType = "unknown",
+    reviewStatus = "unsaved",
+  } = selectedPacket;
 
   const suspiciousCount = reviewedLabs.filter((lab) => !!lab?.suspicious).length;
   const duplicateCount = reviewedLabs.filter((lab) => !!lab?.duplicateType).length;
   const missingCount = reviewedLabs.filter((lab) => !!lab?.missing || !!lab?.autoFilled).length;
+
+  function unwrapLabAuditValue(value) {
+    if (value === null || value === undefined) return null;
+    if (typeof value === "object") return value.value ?? null;
+    return value;
+  }
+
+  function attachAuditBaseline(labs = []) {
+    return (labs || []).map((lab) => ({
+      ...lab,
+      _qaAction: lab?._qaAction || "accepted",
+      _qaOriginal: lab?._qaOriginal || {
+        key: lab.key || "",
+        displayName: lab.displayName || "",
+        value: unwrapLabAuditValue(lab.value),
+        unit: lab.unit || "",
+        rawLine: lab.rawLine || "",
+        autoFilled: !!lab.autoFilled,
+        missing: !!lab.missing,
+        confidence: lab.confidence || "",
+      },
+    }));
+  }
+
+  function getAuditAction(lab) {
+    if (lab._qaAction === "added") return "added";
+    if (lab._qaAction === "edited") return "edited";
+    if (lab.autoFilled || lab.missing) return "auto_filled_missing";
+    return "accepted";
+  }
+
+  function handleLabAuditEvent(event) {
+    if (!selectedPacket?.packetId || !event) return;
+
+    if (event.action === "deleted") {
+      setDeletedAuditByPacketId((prev) => ({
+        ...prev,
+        [selectedPacket.packetId]: [
+          ...(prev[selectedPacket.packetId] || []),
+          event,
+        ],
+      }));
+    }
+  }
+
+  async function saveLabAuditRows() {
+    if (!selectedPacket?.packetId) return;
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    const reviewedBy = user?.id || null;
+    const patientId = selectedPacket?.confirmedPatient?.id || null;
+    const deletedItems = deletedAuditByPacketId[selectedPacket.packetId] || [];
+
+    const activeRows = reviewedLabs.map((lab) => {
+      const original = lab._qaOriginal || {};
+      const finalValue = unwrapLabAuditValue(lab.value);
+
+      return {
+        packet_id: selectedPacket.packetId,
+        encounter_id: selectedEncounterId || null,
+        patient_id: patientId,
+        analyte_key: lab.key || original.key || "",
+        action: getAuditAction(lab),
+
+        original_name: original.displayName || lab.displayName || "",
+        original_value:
+          original.value === null || original.value === undefined
+            ? null
+            : String(original.value),
+        original_unit: original.unit || "",
+        original_raw_line: original.rawLine || lab.rawLine || "",
+
+        final_name: lab.displayName || "",
+        final_value:
+          finalValue === null || finalValue === undefined
+            ? null
+            : String(finalValue),
+        final_unit: lab.unit || "",
+
+        confidence: lab.confidence || "",
+        auto_filled: !!lab.autoFilled,
+        missing: !!lab.missing,
+        reviewed_by: reviewedBy,
+      };
+    });
+
+    const deletedRows = deletedItems.map((item) => {
+      const lab = item.lab || item;
+      const original = lab._qaOriginal || {};
+      const value = unwrapLabAuditValue(lab.value);
+
+      return {
+        packet_id: selectedPacket.packetId,
+        encounter_id: selectedEncounterId || null,
+        patient_id: patientId,
+        analyte_key: lab.key || original.key || "",
+        action: "deleted",
+
+        original_name: original.displayName || lab.displayName || "",
+        original_value:
+          original.value === null || original.value === undefined
+            ? value === null || value === undefined
+              ? null
+              : String(value)
+            : String(original.value),
+        original_unit: original.unit || lab.unit || "",
+        original_raw_line: original.rawLine || lab.rawLine || "",
+
+        final_name: null,
+        final_value: null,
+        final_unit: null,
+
+        confidence: lab.confidence || "",
+        auto_filled: !!lab.autoFilled,
+        missing: !!lab.missing,
+        reviewed_by: reviewedBy,
+      };
+    });
+
+    const rows = [...activeRows, ...deletedRows];
+
+    if (rows.length === 0) return;
+
+    const { error } = await supabase.from("lab_import_audit_items").insert(rows);
+
+    if (error) {
+      console.error("Failed to save lab import audit rows:", error);
+    }
+  }
+
+  async function loadQaStats() {
+    setQaLoading(true);
+
+    const { data, error } = await supabase
+      .from("lab_import_audit_items")
+      .select("action, analyte_key, original_name, final_name, created_at")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Failed to load lab QA stats:", error);
+      setQaStats(null);
+      setQaLoading(false);
+      return;
+    }
+
+    const rows = data || [];
+    const recentRows = rows.slice(0, 100);
+    const olderRows = rows.slice(100, 200);
+
+    function summarize(list) {
+      const out = {
+        total: list.length,
+        accepted: 0,
+        edited: 0,
+        added: 0,
+        deleted: 0,
+        autoFilledMissing: 0,
+        topEdited: {},
+        topAdded: {},
+        topDeleted: {},
+      };
+
+      list.forEach((row) => {
+        if (row.action === "accepted") out.accepted += 1;
+        if (row.action === "edited") {
+          out.edited += 1;
+          const key = row.analyte_key || row.final_name || "Unknown";
+          out.topEdited[key] = (out.topEdited[key] || 0) + 1;
+        }
+        if (row.action === "added") {
+          out.added += 1;
+          const key = row.final_name || row.analyte_key || "Unknown";
+          out.topAdded[key] = (out.topAdded[key] || 0) + 1;
+        }
+        if (row.action === "deleted") {
+          out.deleted += 1;
+          const key = row.original_name || row.analyte_key || "Unknown";
+          out.topDeleted[key] = (out.topDeleted[key] || 0) + 1;
+        }
+        if (row.action === "auto_filled_missing") {
+          out.autoFilledMissing += 1;
+        }
+      });
+
+      out.acceptRate = out.total
+        ? Math.round((out.accepted / out.total) * 100)
+        : 0;
+      out.correctionRate = out.total
+        ? Math.round(((out.edited + out.added + out.deleted) / out.total) * 100)
+        : 0;
+
+      return out;
+    }
+
+    setQaStats({
+      overall: summarize(rows),
+      recent: summarize(recentRows),
+      older: summarize(olderRows),
+    });
+
+    setQaLoading(false);
+  }
 
   async function handleSaveLabs() {
     if (!onSave) return;
@@ -445,36 +698,41 @@ const reviewedLabs = useMemo(() => {
     try {
       setSaving(true);
       await onSave(reviewedLabs, selectedEncounterId);
+await saveLabAuditRows();
+
+if (onAfterSaveCleanup) {
+  await onAfterSaveCleanup(selectedPacket.packetId, selectedPacket.batchId);
+}
     } finally {
       setSaving(false);
     }
   }
 
   function updateReviewedLabs(nextLabsOrUpdater) {
-  if (!selectedPacket?.packetId) return;
+    if (!selectedPacket?.packetId) return;
 
-  const nextLabs =
-    typeof nextLabsOrUpdater === "function"
-      ? nextLabsOrUpdater(reviewedLabs)
-      : nextLabsOrUpdater;
+    const nextLabs =
+      typeof nextLabsOrUpdater === "function"
+        ? nextLabsOrUpdater(reviewedLabs)
+        : nextLabsOrUpdater;
 
-  setReviewedLabsByPacketId((prev) => ({
-    ...prev,
-    [selectedPacket.packetId]: nextLabs,
-  }));
-}
-
+    setReviewedLabsByPacketId((prev) => ({
+      ...prev,
+      [selectedPacket.packetId]: nextLabs,
+    }));
+  }
+  const canSeeLabQa = currentUserId === DEV_PROFILE_ID;
   let saveDisabledReason = "";
 
-if (reviewedLabs.length === 0) {
-  saveDisabledReason = "No labs to save.";
-} else if (reviewStatus === "skipped") {
-  saveDisabledReason = "This packet has been skipped.";
-} else if (!confirmedPatient) {
-  saveDisabledReason = "Confirm a patient before saving.";
-} else if (!selectedEncounterId) {
-  saveDisabledReason = "Select an encounter before saving.";
-}
+  if (reviewedLabs.length === 0) {
+    saveDisabledReason = "No labs to save.";
+  } else if (reviewStatus === "skipped") {
+    saveDisabledReason = "This packet has been skipped.";
+  } else if (!confirmedPatient) {
+    saveDisabledReason = "Confirm a patient before saving.";
+  } else if (!selectedEncounterId) {
+    saveDisabledReason = "Select an encounter before saving.";
+  }
 
   return (
     <div className="min-h-full bg-slate-50 p-4 sm:p-6">
@@ -497,6 +755,19 @@ if (reviewedLabs.length === 0) {
           </button>
         ) : null}
 
+        {canSeeLabQa ? (
+          <button
+            type="button"
+            onClick={() => {
+              setShowQaModal(true);
+              loadQaStats();
+            }}
+            className="rounded-xl border border-purple-200 bg-purple-50 px-4 py-2 text-sm font-medium text-purple-700 hover:bg-purple-100"
+          >
+            Lab QA
+          </button>
+        ) : null}
+
         {onSkip ? (
           <button
             onClick={onSkip}
@@ -507,34 +778,34 @@ if (reviewedLabs.length === 0) {
         ) : null}
 
         {onSave ? (
-  <div className="flex flex-col gap-1">
-    <button
-      onClick={handleSaveLabs}
-      disabled={
-        saving ||
-        reviewedLabs.length === 0 ||
-        reviewStatus === "skipped" ||
-        !confirmedPatient ||
-        !selectedEncounterId
-      }
-      className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-    >
-      {saving ? "Saving..." : "Save Imported Labs"}
-    </button>
+          <div className="flex flex-col gap-1">
+            <button
+              onClick={handleSaveLabs}
+              disabled={
+                saving ||
+                reviewedLabs.length === 0 ||
+                reviewStatus === "skipped" ||
+                !confirmedPatient ||
+                !selectedEncounterId
+              }
+              className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {saving ? "Saving..." : "Save Imported Labs"}
+            </button>
 
-    {!saving && saveDisabledReason && (
-      <p className="text-xs font-medium text-amber-700">
-        {saveDisabledReason}
-      </p>
-    )}
+            {!saving && saveDisabledReason && (
+              <p className="text-xs font-medium text-amber-700">
+                {saveDisabledReason}
+              </p>
+            )}
 
-    {!saving && !saveDisabledReason && (
-      <p className="text-xs font-medium text-emerald-700">
-        Ready to save.
-      </p>
-    )}
-  </div>
-) : null}
+            {!saving && !saveDisabledReason && (
+              <p className="text-xs font-medium text-emerald-700">
+                Ready to save.
+              </p>
+            )}
+          </div>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[320px_minmax(0,1fr)_340px]">
@@ -564,9 +835,9 @@ if (reviewedLabs.length === 0) {
                   index={index}
                   isActive={p.packetId === selectedPacketId}
                   onClick={() => {
-  console.log("SELECT PACKET", p.packetId, p.extractedPatientName);
-  onSelectPacket?.(p.packetId);
-}}
+                    console.log("SELECT PACKET", p.packetId, p.extractedPatientName);
+                    onSelectPacket?.(p.packetId);
+                  }}
                 />
               ))}
             </div>
@@ -586,13 +857,13 @@ if (reviewedLabs.length === 0) {
               <div className="mt-3 flex flex-wrap gap-2">
                 <SummaryChip>{(selectedPacket.labs || []).length} labs</SummaryChip>
 
-{selectedPacket.matchStatus === "unresolved" ? (
-  <SummaryChip tone="red">patient unresolved</SummaryChip>
-) : null}
+                {selectedPacket.matchStatus === "unresolved" ? (
+                  <SummaryChip tone="red">patient unresolved</SummaryChip>
+                ) : null}
 
-{selectedPacket.matchStatus === "possible_match" ? (
-  <SummaryChip tone="amber">match review</SummaryChip>
-) : null}
+                {selectedPacket.matchStatus === "possible_match" ? (
+                  <SummaryChip tone="amber">match review</SummaryChip>
+                ) : null}
 
                 {suspiciousCount > 0 ? (
                   <SummaryChip tone="amber">{suspiciousCount} suspicious</SummaryChip>
@@ -663,20 +934,21 @@ if (reviewedLabs.length === 0) {
             <LabReviewPanel
               labs={reviewedLabs}
               onChangeLabs={updateReviewedLabs}
+              onAuditEvent={handleLabAuditEvent}
             />
           </div>
         </div>
 
         <div className="space-y-4">
           <MatchPanel
-  packet={selectedPacket}
-  packetId={selectedPacket?.packetId}
-  confirmedPatient={confirmedPatient}
-  matchedPatient={matchedPatient}
-  possibleMatches={possibleMatches}
-  unresolvedReason={unresolvedReason}
-  onConfirmPatient={onConfirmPatient}
-/>
+            packet={selectedPacket}
+            packetId={selectedPacket?.packetId}
+            confirmedPatient={confirmedPatient}
+            matchedPatient={matchedPatient}
+            possibleMatches={possibleMatches}
+            unresolvedReason={unresolvedReason}
+            onConfirmPatient={onConfirmPatient}
+          />
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-900">Encounter Match</h3>
@@ -743,6 +1015,78 @@ if (reviewedLabs.length === 0) {
           </div>
         </div>
       </div>
+
+      {showQaModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Lab Parser QA</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Use this after parser/catalog fixes to compare the most recent audit rows with the previous batch.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowQaModal(false)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Close
+              </button>
+            </div>
+
+            {qaLoading ? (
+              <p className="text-sm text-slate-500">Loading QA stats...</p>
+            ) : qaStats ? (
+              <div className="space-y-5">
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="text-xs text-slate-500">Total Audit Rows</div>
+                    <div className="text-xl font-semibold text-slate-900">{qaStats.overall.total}</div>
+                  </div>
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                    <div className="text-xs text-emerald-700">Accepted</div>
+                    <div className="text-xl font-semibold text-emerald-800">{qaStats.overall.accepted}</div>
+                  </div>
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+                    <div className="text-xs text-blue-700">Accept Rate</div>
+                    <div className="text-xl font-semibold text-blue-800">{qaStats.overall.acceptRate}%</div>
+                  </div>
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <div className="text-xs text-amber-700">Correction Rate</div>
+                    <div className="text-xl font-semibold text-amber-800">{qaStats.overall.correctionRate}%</div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <h3 className="mb-3 text-sm font-semibold text-slate-900">Improvement Check</h3>
+                  <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
+                    <div className="rounded-xl bg-slate-50 p-3">
+                      <div className="font-medium text-slate-900">Recent 100 rows</div>
+                      <div className="mt-1 text-slate-700">Accept rate: {qaStats.recent.acceptRate}%</div>
+                      <div className="text-slate-700">Correction rate: {qaStats.recent.correctionRate}%</div>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 p-3">
+                      <div className="font-medium text-slate-900">Previous 100 rows</div>
+                      <div className="mt-1 text-slate-700">Accept rate: {qaStats.older.acceptRate}%</div>
+                      <div className="text-slate-700">Correction rate: {qaStats.older.correctionRate}%</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <QaTopList title="Most Edited Labs" items={qaStats.overall.topEdited} />
+                  <QaTopList title="Most Missed / Added Labs" items={qaStats.overall.topAdded} />
+                  <QaTopList title="Most Deleted False Positives" items={qaStats.overall.topDeleted} />
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500">No QA data found yet.</p>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

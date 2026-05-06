@@ -6,6 +6,7 @@ import logo from "../assets/free-clinic-logo.png";
 
 export default function DashboardView({
   isLeadershipView,
+  canViewAnalytics,
   canEditMrn,
   canEditUndergradFields,
   canEditAllPatientFields,
@@ -259,7 +260,7 @@ export default function DashboardView({
   const lastPharmacyPickupAt = getLastTime(analyticsRows, "pharmacyPickedUpAt");
   return (
     <div className="space-y-4 p-3 sm:p-4 lg:space-y-6 lg:p-6">
-      {isLeadershipView && showAnalytics && (
+      {canViewAnalytics && showAnalytics && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3">
           <div className="max-h-[88vh] w-full max-w-6xl overflow-y-auto rounded-2xl bg-white p-4 shadow-xl sm:p-6">
             <div className="mb-4 flex items-start justify-between gap-3">
@@ -432,29 +433,31 @@ export default function DashboardView({
         </div>
 
         <div className="flex flex-col gap-2 rounded-xl bg-white p-3 shadow sm:flex-row sm:items-center">
-          {isLeadershipView && (
-            <button
-              type="button"
-              onClick={() => setShowAnalytics(true)}
-              className="w-full rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 sm:w-auto"
-            >
-              📊 Analytics
-            </button>
-          )}
+  {canViewAnalytics && (
+    <button
+      type="button"
+      onClick={() => setShowAnalytics(true)}
+      className="w-full rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 sm:w-auto"
+    >
+      📊 Analytics
+    </button>
+  )}
 
-          <button
-            type="button"
-            onClick={handleExportSignedRecords}
-            disabled={exportingRecords}
-            className="inline-flex w-full items-center justify-center whitespace-nowrap rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-          >
-            {exportingRecords
-              ? "Exporting..."
-              : selectedClinicDate
-                ? "Export Records for Selected Date"
-                : "Export Signed Records"}
-          </button>
-        </div>
+  {isLeadershipView && (
+    <button
+      type="button"
+      onClick={handleExportSignedRecords}
+      disabled={exportingRecords}
+      className="inline-flex w-full items-center justify-center whitespace-nowrap rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+    >
+      {exportingRecords
+        ? "Exporting..."
+        : selectedClinicDate
+          ? "Export Records for Selected Date"
+          : "Export Signed Records"}
+    </button>
+  )}
+</div>
       </div>
 
       <div className="rounded-2xl bg-white p-4 shadow sm:p-5">

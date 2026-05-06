@@ -2496,6 +2496,41 @@ export default function App() {
     if (error) throw error;
   }
 
+  async function cleanupSavedLabImportPacket(packetId, batchId) {
+  if (!packetId) return;
+
+  const { error: packetDeleteError } = await supabase
+    .from("lab_import_packets")
+    .delete()
+    .eq("id", packetId);
+
+  if (packetDeleteError) throw packetDeleteError;
+
+  if (!batchId) return;
+
+  const { data: remainingPackets, error: remainingError } = await supabase
+    .from("lab_import_packets")
+    .select("id")
+    .eq("batch_id", batchId)
+    .limit(1);
+
+  if (remainingError) throw remainingError;
+
+  if ((remainingPackets || []).length === 0) {
+    const { error: batchDeleteError } = await supabase
+      .from("lab_import_batches")
+      .delete()
+      .eq("id", batchId);
+
+    if (batchDeleteError) throw batchDeleteError;
+
+    setActiveLabImportBatchId(null);
+    setLabImportPackets([]);
+    setLabImportPacket(null);
+    setSelectedLabImportPacketId(null);
+  }
+}
+
   async function handleLiveUpdateLabPacketLabs(packetId, reviewedLabs) {
     if (!packetId) return;
 
@@ -8437,6 +8472,9 @@ await applyEncounterTransition(selectedEncounter.id, {
           {activeView === "dashboard" && (
             <DashboardView
               isLeadershipView={isLeadershipView}
+              canViewAnalytics={
+    isLeadershipView || userRole === "undergraduate" || userRole === "attending"
+  }
               canEditMrn={userRole === "undergraduate" || isLeadershipView}
               canEditUndergradFields={userRole === "undergraduate" || isLeadershipView}
               canEditAllPatientFields={isLeadershipView}
@@ -8465,6 +8503,7 @@ await applyEncounterTransition(selectedEncounter.id, {
               selectedPacketId={selectedLabImportPacketId}
               onSelectPacket={handleSelectLabImportPacket}
               onChangeLabs={handleLiveUpdateLabPacketLabs}
+              onAfterSaveCleanup={cleanupSavedLabImportPacket}
               onBack={() => {
                 setActiveView("dashboard");
               }}
@@ -8568,7 +8607,7 @@ await applyEncounterTransition(selectedEncounter.id, {
           )}
 
 
-          {activeView === "lab-queue" && canLabQueueAccess && (
+          {activeView === "lab-queue" && userRole === "lab" && (
             <LabQueueView
               labEncounterRows={labEncounterRows}
               openPatientChart={openPatientChart}
