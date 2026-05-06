@@ -183,6 +183,19 @@ export default function DashboardView({
     return new Date(Math.max(...times)).toISOString();
   }
 
+  function getLastLabUpdate(rows) {
+  const times = rows
+    .flatMap(({ encounter }) => [
+      toTime(encounter?.labCollectedAt),
+      toTime(encounter?.labUnableAt),
+    ])
+    .filter(Boolean);
+
+  if (times.length === 0) return null;
+
+  return new Date(Math.max(...times)).toISOString();
+}
+
   function AnalyticsMetric({ label, value, subtext }) {
     return (
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -202,63 +215,66 @@ export default function DashboardView({
   );
 
   const activeRows = analyticsRows.filter(
-    ({ encounter }) =>
-      encounter?.status !== "done" && encounter?.status !== "cancelled"
-  );
+  ({ encounter }) =>
+    encounter?.status !== "done" && encounter?.status !== "cancelled"
+);
 
-  const cancelledRows = analyticsRows.filter(
-    ({ encounter }) => encounter?.status === "cancelled"
-  );
+const clinicFlowComplete = activeRows.length === 0;
+
+const cancelledRows = analyticsRows.filter(
+  ({ encounter }) => encounter?.status === "cancelled"
+);
 
   const pharmacyRows = analyticsRows.filter(
     ({ encounter }) => encounter?.pharmacyReadyAt || encounter?.pharmacyPickedUpAt
   );
 
-  const clinicFlowComplete =
-    analyticsRows.length > 0 &&
-    activeRows.length === 0;
+  const avgUndergradIntakeToUndergradComplete = getAverageFor(
+  analyticsRows,
+  "createdAt",
+  "undergradCompletedAt"
+);
 
-  const avgCreatedToUndergrad = getAverageFor(
-    analyticsRows,
-    "createdAt",
-    "undergradCompletedAt"
-  );
+const avgUndergradIntakeToLeadershipComplete = getAverageFor(
+  analyticsRows,
+  "createdAt",
+  "leadershipIntakeCompletedAt"
+);
 
-  const avgUndergradToStudentAssigned = getAverageFor(
-    analyticsRows,
-    "undergradCompletedAt",
-    "studentAssignedAt"
-  );
+const avgLeadershipCompleteToStudentAssigned = getAverageFor(
+  analyticsRows,
+  "leadershipIntakeCompletedAt",
+  "studentAssignedAt"
+);
 
-  const avgStudentToUpperAssigned = getAverageFor(
-    analyticsRows,
-    "studentAssignedAt",
-    "upperLevelAssignedAt"
-  );
+const avgAssignedToUpperLevelAssigned = getAverageFor(
+  analyticsRows,
+  "studentAssignedAt",
+  "upperLevelAssignedAt"
+);
 
-  const avgStudentAssignedToDone = getAverageFor(
-    analyticsRows,
-    "studentAssignedAt",
-    "doneAt"
-  );
+const avgStudentAssignedToDone = getAverageFor(
+  analyticsRows,
+  "studentAssignedAt",
+  "doneAt"
+);
 
-  const avgCreatedToDone = getAverageFor(
-    analyticsRows,
-    "createdAt",
-    "doneAt"
-  );
+const avgTotalVisitTime = getAverageFor(
+  analyticsRows,
+  "createdAt",
+  "doneAt"
+);
 
-  const avgPharmacyReadyToPickup = getAverageFor(
-    pharmacyRows,
-    "pharmacyReadyAt",
-    "pharmacyPickedUpAt"
-  );
+const avgPharmacyReadyToPickup = getAverageFor(
+  pharmacyRows,
+  "pharmacyReadyAt",
+  "pharmacyPickedUpAt"
+);
 
-  const firstPatientStartedAt = getFirstTime(analyticsRows, "createdAt");
-  const lastPatientAssignedAt = getLastTime(analyticsRows, "studentAssignedAt");
-  const lastUpperLevelAssignedAt = getLastTime(analyticsRows, "upperLevelAssignedAt");
-  const lastVisitCompletedAt = getLastTime(analyticsRows, "doneAt");
-  const lastPharmacyPickupAt = getLastTime(analyticsRows, "pharmacyPickedUpAt");
+const firstPatientStartedAt = getFirstTime(analyticsRows, "createdAt");
+const lastVisitCompletedAt = getLastTime(analyticsRows, "doneAt");
+const lastPharmacyPickupAt = getLastTime(analyticsRows, "pharmacyPickedUpAt");
+const lastLabUpdateAt = getLastLabUpdate(analyticsRows);
   return (
     <div className="space-y-4 p-3 sm:p-4 lg:space-y-6 lg:p-6">
       {canViewAnalytics && showAnalytics && (
@@ -331,32 +347,36 @@ export default function DashboardView({
               </h3>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <AnalyticsMetric
-                  label="Registration → Undergrad Complete"
-                  value={formatMinutes(avgCreatedToUndergrad)}
-                />
-                <AnalyticsMetric
-                  label="Undergrad Complete → Student Assigned"
-                  value={formatMinutes(avgUndergradToStudentAssigned)}
-                />
-                <AnalyticsMetric
-                  label="Student Assigned → Upper Level Assigned"
-                  value={formatMinutes(avgStudentToUpperAssigned)}
-                />
-                <AnalyticsMetric
-                  label="Student Assigned → Done"
-                  value={formatMinutes(avgStudentAssignedToDone)}
-                />
-                <AnalyticsMetric
-                  label="Total Visit Time"
-                  value={formatMinutes(avgCreatedToDone)}
-                  subtext="Created → Done"
-                />
-                <AnalyticsMetric
-                  label="Pharmacy Ready → Picked Up"
-                  value={formatMinutes(avgPharmacyReadyToPickup)}
-                />
-              </div>
+  <AnalyticsMetric
+    label="Undergrad Intake Complete → Undergrad Complete"
+    value={formatMinutes(avgUndergradIntakeToUndergradComplete)}
+  />
+  <AnalyticsMetric
+    label="Undergrad Intake Complete → Leadership Complete"
+    value={formatMinutes(avgUndergradIntakeToLeadershipComplete)}
+  />
+  <AnalyticsMetric
+  label="Leadership Complete → Student Assigned"
+  value={formatMinutes(avgLeadershipCompleteToStudentAssigned)}
+/>
+  <AnalyticsMetric
+    label="Assigned → Upper-Level Assigned"
+    value={formatMinutes(avgAssignedToUpperLevelAssigned)}
+  />
+  <AnalyticsMetric
+    label="Student Assigned → Done"
+    value={formatMinutes(avgStudentAssignedToDone)}
+  />
+  <AnalyticsMetric
+    label="Total Visit Time"
+    value={formatMinutes(avgTotalVisitTime)}
+    subtext="Started → Done"
+  />
+  <AnalyticsMetric
+    label="Pharmacy Ready → Picked Up"
+    value={formatMinutes(avgPharmacyReadyToPickup)}
+  />
+</div>
             </div>
 
             <div className="mt-4">
@@ -365,33 +385,29 @@ export default function DashboardView({
               </h3>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <AnalyticsMetric
-                  label="First Patient Started"
-                  value={formatTime(firstPatientStartedAt)}
-                />
-                <AnalyticsMetric
-                  label="Last Student Assigned"
-                  value={formatTime(lastPatientAssignedAt)}
-                />
-                <AnalyticsMetric
-                  label="Last Upper Level Assigned"
-                  value={formatTime(lastUpperLevelAssignedAt)}
-                />
-                <AnalyticsMetric
-                  label="Last Visit Completed"
-                  value={formatTime(lastVisitCompletedAt)}
-                />
-                <AnalyticsMetric
-                  label="Last Pharmacy Pickup"
-                  value={formatTime(lastPharmacyPickupAt)}
-                />
-              </div>
+  <AnalyticsMetric
+    label="First Patient Started"
+    value={formatTime(firstPatientStartedAt)}
+  />
+  <AnalyticsMetric
+    label="Last Visit Complete"
+    value={formatTime(lastVisitCompletedAt)}
+  />
+  <AnalyticsMetric
+    label="Last Pharmacy Pickup"
+    value={formatTime(lastPharmacyPickupAt)}
+  />
+  <AnalyticsMetric
+    label="Last Lab Update"
+    value={formatTime(lastLabUpdateAt)}
+  />
+</div>
             </div>
 
             <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
-              These numbers are calculated from existing encounter timestamps:
-              created, undergrad complete, student assigned, upper level assigned, done,
-              pharmacy ready, and pharmacy pickup.
+              These numbers are calculated from encounter timestamps:
+started, undergrad complete, leadership complete, student assigned,
+upper-level assigned, done, pharmacy ready, pharmacy pickup, and lab update.
             </div>
           </div>
         </div>

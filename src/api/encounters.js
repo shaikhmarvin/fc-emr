@@ -32,6 +32,8 @@ function mapEncounterRow(row) {
     roomNumber: row.room || "",
     notes: row.notes || "",
     undergradCompletedAt: row.undergrad_completed_at || null,
+    leadershipIntakeCompletedAt:
+  row.leadership_intake_completed_at || null,
     readyAt: row.ready_at || null,
     roomedAt: row.roomed_at || null,
     assignedAt: row.assigned_at || null,
@@ -230,8 +232,16 @@ export async function updateEncounterInSupabase(encounterId, updates) {
   }
 
   if (updates.leadershipIntakeComplete !== undefined) {
-    payload.leadership_intake_complete = updates.leadershipIntakeComplete;
+  payload.leadership_intake_complete = updates.leadershipIntakeComplete;
+
+  if (
+    updates.leadershipIntakeComplete === true &&
+    updates.leadershipIntakeCompletedAt === undefined
+  ) {
+    payload.leadership_intake_completed_at =
+      new Date().toISOString();
   }
+}
 
   if (updates.vitalsHistory !== undefined) {
     payload.vitals = updates.vitalsHistory;
