@@ -3422,8 +3422,8 @@ const [specialtyQueueDate, setSpecialtyQueueDate] = useState(getLocalDateInputVa
   }, [selectedPatient]);
 
   const patientRecordsTitle = selectedClinicDate
-    ? `Patient Records — ${selectedClinicDate}`
-    : "Patient Records — All Encounters";
+  ? `Patient Records — ${formatDate(selectedClinicDate)}`
+  : "Patient Records — All Encounters";
 
 
   const allEncounterRows = useMemo(() => {
