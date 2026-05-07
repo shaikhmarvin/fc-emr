@@ -67,8 +67,23 @@ export default function ProgramsView({
   removeProgramEntry,
   patients,
   selectedClinicDate,
+  isLeadershipView,
+  specialtyAccess,
 }) {
   const [activeTab, setActiveTab] = useState("Tracker");
+
+  const normalizedSpecialtyAccess = useMemo(() => {
+    return Array.isArray(specialtyAccess) ? specialtyAccess : [];
+  }, [specialtyAccess]);
+
+  const accessibleProgramTypes = useMemo(() => {
+    return isLeadershipView
+      ? PROGRAM_TYPES
+      : PROGRAM_TYPES.filter((type) => normalizedSpecialtyAccess.includes(type));
+  }, [isLeadershipView, normalizedSpecialtyAccess]);
+
+  const canEditProgramSettings = isLeadershipView;
+  const canAddAnyProgramEntry = isLeadershipView;
 
   const [nextProgramDates, setNextProgramDates] = useState({});
 
@@ -228,6 +243,13 @@ export default function ProgramsView({
     loadProgramSettings();
   }, []);
 
+  useEffect(() => {
+    if (isLeadershipView) return;
+    if (activeTab === "Tracker" || !accessibleProgramTypes.includes(activeTab)) {
+      setActiveTab(accessibleProgramTypes[0] || "Tracker");
+    }
+  }, [activeTab, accessibleProgramTypes, isLeadershipView]);
+
   async function loadProgramSettings() {
     const data = await fetchProgramSettings();
     const rows = data || [];
@@ -263,19 +285,22 @@ export default function ProgramsView({
         const matchesProgram =
           !filters.programType || entry.programType === filters.programType;
 
-        return matchesPatient && matchesDob && matchesProgram;
+        const hasProgramAccess =
+          isLeadershipView || accessibleProgramTypes.includes(entry.programType);
+
+        return hasProgramAccess && matchesPatient && matchesDob && matchesProgram;
       })
       .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-  }, [programEntries, filters]);
+  }, [programEntries, filters, accessibleProgramTypes, isLeadershipView]);
 
   const specialtyEntries = useMemo(() => {
-    return PROGRAM_TYPES.reduce((acc, type) => {
+    return accessibleProgramTypes.reduce((acc, type) => {
       acc[type] = programEntries
         .filter((entry) => entry.programType === type)
         .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
       return acc;
     }, {});
-  }, [programEntries]);
+  }, [programEntries, accessibleProgramTypes]);
 
   function handleSelectPatient(patient) {
     setNewEntry((prev) => ({
@@ -291,6 +316,8 @@ export default function ProgramsView({
   }
 
   function handleAddEntry() {
+    if (!canAddAnyProgramEntry) return;
+
     if (
       !newEntry.patientId ||
       !newEntry.patientName ||
@@ -535,6 +562,7 @@ export default function ProgramsView({
   function renderTracker() {
     return (
       <div className="space-y-6">
+        {canAddAnyProgramEntry && (
         <Card>
           <div className="flex items-center justify-between">
             <div>
@@ -676,7 +704,7 @@ export default function ProgramsView({
                         })
                       }
                     >
-                      {PROGRAM_TYPES.map((type) => (
+                      {accessibleProgramTypes.map((type) => (
                         <option key={type} value={type}>
                           {type}
                         </option>
@@ -748,6 +776,7 @@ export default function ProgramsView({
             </div>
           )}
         </Card>
+        )}
 
         <Card>
           <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-4">
@@ -781,7 +810,7 @@ export default function ProgramsView({
                 }
               >
                 <option value="">All programs</option>
-                {PROGRAM_TYPES.map((type) => (
+                {accessibleProgramTypes.map((type) => (
                   <option key={type} value={type}>
                     {type}
                   </option>
@@ -1161,6 +1190,7 @@ if (isGenericTracker) {
 
     return (
       <div className="space-y-6">
+        {canEditProgramSettings && (
         <Card>
           <div className="space-y-4">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -1344,6 +1374,7 @@ if (isGenericTracker) {
             </div>
           </div>
         </Card>
+        )}
 
         <Card>
           <h3 className="mb-4 text-lg font-semibold text-slate-900">
@@ -1656,7 +1687,7 @@ if (isGenericTracker) {
       </Card>
 
       <div className="flex flex-wrap gap-2">
-        {["Tracker", ...PROGRAM_TYPES].map((tab) => {
+        {[(isLeadershipView ? "Tracker" : null), ...accessibleProgramTypes].filter(Boolean).map((tab) => {
           const isActive = activeTab === tab;
           return (
             <button
@@ -1673,7 +1704,17 @@ if (isGenericTracker) {
         })}
       </div>
 
-      {activeTab === "Tracker" ? renderTracker() : renderSpecialtyTab(activeTab)}
+      {accessibleProgramTypes.length === 0 ? (
+        <Card>
+          <p className="text-sm text-slate-600">
+            No specialty tracker access has been assigned to this account.
+          </p>
+        </Card>
+      ) : activeTab === "Tracker" && isLeadershipView ? (
+        renderTracker()
+      ) : (
+        renderSpecialtyTab(activeTab === "Tracker" ? accessibleProgramTypes[0] : activeTab)
+      )}
     </div>
   );
 }
@@ -1749,11 +1790,14 @@ function Field({ label, children, className = "" }) {
 
 function ReadOnlyField({ label, value }) {
   return (
-    <div>
+    <div onClick={(e) => e.stopPropagation()}>
       <label className="mb-1 block text-sm font-medium text-slate-700">
         {label}
       </label>
-      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800">
+      <div
+        className="select-text rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         {value}
       </div>
     </div>
@@ -1768,7 +1812,13 @@ function SchedulerRow({ label, entry, onUnassign }) {
         <div className="text-sm text-slate-600 flex items-center gap-2">
           {entry ? (
             <>
-              <span>{entry.patientName} • {entry.phone || "No phone"}</span>
+              <span
+                className="select-text"
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                {entry.patientName} • {entry.phone || "No phone"}
+              </span>
               <StatusBadge status={entry.status} />
             </>
           ) : (

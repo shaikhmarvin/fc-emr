@@ -34,11 +34,14 @@ export default function QueueView({
   onApproveRefillAsSignedInAttending,
   profileNameMap,
   onDeleteRefillRequest,
+  programEntries,
+  specialtyAccess,
 }) {
 
   const [queueAssignmentDrafts, setQueueAssignmentDrafts] = useState({});
   const [queueSearch, setQueueSearch] = useState("");
 const [prioritizeRefillOnly, setPrioritizeRefillOnly] = useState(false);
+  const [ophthoPriorityView, setOphthoPriorityView] = useState(false);
   const [openAssignmentMenu, setOpenAssignmentMenu] = useState(null);
   const [showRefillApproveModal, setShowRefillApproveModal] = useState(false);
   const [selectedRefillRequest, setSelectedRefillRequest] = useState(null);
@@ -102,6 +105,60 @@ const [prioritizeRefillOnly, setPrioritizeRefillOnly] = useState(false);
 
   return `${first} ${last}`.trim();
 }
+
+
+  const normalizedSpecialtyAccess = Array.isArray(specialtyAccess)
+    ? specialtyAccess
+    : [];
+  const canUseOphthoQueueTools = normalizedSpecialtyAccess.includes("Ophthalmology");
+  const canUseSocialWorkQueueTools = userRole === "social_work";
+  const canUseWholeClinicQueueTools = canUseOphthoQueueTools || canUseSocialWorkQueueTools;
+  const canUsePharmacyQueue =
+    userRole === "pharmacy" ||
+    userRole === "undergraduate" ||
+    (canRefill && userRole !== "leadership" && userRole !== "attending");
+
+  function getEncounterIntakeFlag(encounter, field) {
+    const intakeData = encounter?.intakeData || encounter?.intake_data || {};
+    const value = encounter?.[field] ?? intakeData?.[field];
+    return value === true || value === "true" || value === "Yes";
+  }
+
+  function isPatientOnOphthoList(patient, encounter) {
+    return (programEntries || []).some((entry) => {
+      if (entry.programType !== "Ophthalmology") return false;
+      if (["Completed", "Declined"].includes(entry.status)) return false;
+
+      const samePatientId =
+        entry.patientId && patient?.id && String(entry.patientId) === String(patient.id);
+      const samePatientDemographics =
+        entry.patientName &&
+        patient &&
+        normalizeName(entry.patientName) === normalizeName(getFullQueuePatientName(patient)) &&
+        (!entry.dob || !patient.dob || entry.dob === patient.dob);
+
+      return samePatientId || samePatientDemographics;
+    });
+  }
+
+  function getOphthoPriorityScore(row) {
+    const { patient, encounter } = row;
+    let score = 0;
+
+    if (isPatientOnOphthoList(patient, encounter)) score += 100;
+    if (getEncounterIntakeFlag(encounter, "dm")) score += 50;
+    if (getEncounterIntakeFlag(encounter, "htn")) score += 25;
+
+    return score;
+  }
+
+  function isGeneralVisitComplete(encounter) {
+    return (
+      encounter?.status === "done" ||
+      encounter?.soapStatus === "signed" ||
+      Boolean(encounter?.visitCompletedAt || encounter?.visit_completed_at || encounter?.doneAt || encounter?.done_at)
+    );
+  }
 
   function getPharmacyDailyNumber(patient, encounter) {
     return getDailyCardNumber(patient, encounter)
@@ -178,12 +235,22 @@ const [prioritizeRefillOnly, setPrioritizeRefillOnly] = useState(false);
     const query = normalizeSearchText(queueSearch);
     if (!query) return true;
 
-    const name = normalizeSearchText(getPatientBoardName(patient));
+    const boardName = normalizeSearchText(getPatientBoardName(patient));
+    const fullName = normalizeSearchText(getFullQueuePatientName(patient));
+    const firstName = normalizeSearchText(patient?.firstName || patient?.first_name);
+    const lastName = normalizeSearchText(patient?.lastName || patient?.last_name);
+    const preferredName = normalizeSearchText(patient?.preferredName || patient?.preferred_name);
+    const mrn = normalizeSearchText(patient?.mrn);
     const dob = normalizeSearchText(patient?.dob);
     const dailyCardNumber = normalizeSearchText(getDailyCardNumber(patient, encounter));
 
     return (
-      name.includes(query) ||
+      boardName.includes(query) ||
+      fullName.includes(query) ||
+      firstName.includes(query) ||
+      lastName.includes(query) ||
+      preferredName.includes(query) ||
+      mrn.includes(query) ||
       dob.includes(query) ||
       dailyCardNumber.includes(query)
     );
@@ -481,9 +548,7 @@ function isPharmacyWorkflowEncounter(encounter) {
 }
 
 const pharmacyRows = (waitingEncounterRows || []).filter(
-  ({ patient, encounter }) =>
-    String(encounter?.pharmacyStatus || "").toLowerCase() !== "picked_up" &&
-    rowMatchesQueueSearch(patient, encounter)
+  ({ patient, encounter }) => rowMatchesQueueSearch(patient, encounter)
 );
 
 const sortedPharmacyRows = [...pharmacyRows].sort((a, b) => {
@@ -501,7 +566,8 @@ const sortedPharmacyRows = [...pharmacyRows].sort((a, b) => {
 
 const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
   ({ patient, encounter }) => {
-    if (isPharmacyWorkflowEncounter(encounter)) return false;
+    if (isRefillOnlyEncounter(encounter)) return false;
+    if (isSpecialtyOnlyEncounter(encounter) && !canUseWholeClinicQueueTools) return false;
 
     return rowMatchesQueueSearch(patient, encounter);
   }
@@ -511,29 +577,38 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
     ({ encounter }) => encounter?.pharmacyStatus === "meds_ready"
   );
 
+  const sortedFilteredWaitingEncounterRows = [...filteredWaitingEncounterRows].sort((a, b) => {
+    if (canUseOphthoQueueTools && ophthoPriorityView) {
+      const scoreDiff = getOphthoPriorityScore(b) - getOphthoPriorityScore(a);
+      if (scoreDiff !== 0) return scoreDiff;
+    }
+
+    return new Date(a.encounter?.createdAt || 0) - new Date(b.encounter?.createdAt || 0);
+  });
+
   const unassignedRows =
     userRole === "leadership"
-      ? filteredWaitingEncounterRows.filter(
+      ? sortedFilteredWaitingEncounterRows.filter(
         ({ encounter }) =>
           !encounter.assignedStudent && !encounter.assignedUpperLevel
       )
-      : filteredWaitingEncounterRows;
+      : sortedFilteredWaitingEncounterRows;
 
   const assignedRows =
     userRole === "leadership"
-      ? filteredWaitingEncounterRows.filter(
+      ? sortedFilteredWaitingEncounterRows.filter(
         ({ encounter }) =>
           encounter.assignedStudent || encounter.assignedUpperLevel
       )
       : [];
-  if (userRole === "pharmacy") {
+  if (canUsePharmacyQueue) {
   return (
     <div className="space-y-4 p-3 sm:p-4 lg:p-6">
       <div className="rounded-2xl bg-white p-4 shadow sm:p-5">
         <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h3 className="text-lg font-semibold">
-              Pharmacy Medication Queue
+              {userRole === "undergraduate" ? "Undergrad Pharmacy Queue" : canRefill && userRole !== "pharmacy" ? "Refill / Pharmacy Queue" : "Pharmacy Medication Queue"}
             </h3>
             <p className="mt-1 text-sm text-slate-500">
               Mark medications ready, sent, or picked up.
@@ -584,7 +659,14 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                       {getFullQueuePatientName(patient)} ({patient.age || "—"})
                     </p>
 
-                    {pharmacyStatusBadge(encounter)}
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-xs ${getStatusClasses(encounter.status)}`}
+                      >
+                        {getStatusLabel(encounter.status, encounter.soapStatus)}
+                      </span>
+                      {pharmacyStatusBadge(encounter)}
+                    </div>
                   </div>
 
                   <p className="text-sm text-slate-600">
@@ -612,8 +694,13 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
 
                     {dualVisitBadge?.(encounter)}
                     {newReturningBadge?.(encounter)}
-                    {spanishBadge?.(encounter)}
                     {priorityBadge?.(encounter)}
+                    {spanishBadge?.(encounter)}
+                    {htnBadge?.(encounter)}
+                    {diabetesBadge?.(encounter)}
+                    {fluBadge?.(encounter)}
+                    {elevatorBadge?.(encounter)}
+                    {papBadge?.(encounter)}
                   </div>
 
                   {!encounter?.pharmacyStatus || encounter?.pharmacyStatus === "waiting" ? (
@@ -712,27 +799,49 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
             <h3 className="text-lg font-semibold">
               {userRole === "attending"
                 ? "Awaiting Signature"
-                : userRole === "student" || userRole === "upper_level"
-                  ? "My Queue"
-                  : "Waiting Queue"}
+                : canUseOphthoQueueTools
+                  ? "Ophtho Queue"
+                  : canUseSocialWorkQueueTools
+                    ? "Social Work Queue"
+                    : userRole === "student" || userRole === "upper_level"
+                    ? "My Queue"
+                    : "Waiting Queue"}
             </h3>
             <p className="mt-1 text-sm text-slate-500">
               {userRole === "attending"
                 ? "Patients awaiting attending signature."
-                : userRole === "student"
-                  ? "Patients assigned to you that are still waiting."
-                  : userRole === "upper_level"
+                : canUseOphthoQueueTools
+                  ? "All clinic patients for today except refill-only, including completed general visits. Use the checkbox to prioritize DM / HTN / Ophtho list."
+                  : canUseSocialWorkQueueTools
+                    ? "All clinic patients for today except refill-only, including completed and in-visit patients."
+                    : userRole === "student"
                     ? "Patients assigned to you that are still waiting."
-                    : "Bus/Public Transport patients are automatically shown first."}
+                    : userRole === "upper_level"
+                      ? "Patients assigned to you that are still waiting."
+                      : "Bus/Public Transport patients are automatically shown first."}
             </p>
           </div>
 
-          <input
-            className="w-full rounded-lg border p-3 lg:w-80"
-            placeholder="Search by name, DOB, or daily card #"
-            value={queueSearch}
-            onChange={(e) => setQueueSearch(e.target.value)}
-          />
+          <div className="flex w-full flex-col gap-2 lg:w-80">
+            <input
+              className="w-full rounded-lg border p-3"
+              placeholder="Search by name, DOB, or daily card #"
+              value={queueSearch}
+              onChange={(e) => setQueueSearch(e.target.value)}
+            />
+
+            {canUseOphthoQueueTools && (
+              <label className="flex items-center gap-2 rounded-lg border border-orange-100 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-800">
+                <input
+                  type="checkbox"
+                  checked={ophthoPriorityView}
+                  onChange={(e) => setOphthoPriorityView(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                Prioritize DM / HTN / Ophtho list
+              </label>
+            )}
+          </div>
         </div>
 
         {canRefill && pendingRefills.length > 0 && (
@@ -881,7 +990,7 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
             Awaiting Assignment
           </div>
         )}
-        {(userRole === "leadership" ? unassignedRows : waitingEncounterRows).map(
+        {(userRole === "leadership" ? unassignedRows : sortedFilteredWaitingEncounterRows).map(
           ({ patient, encounter }) => (
             <div
               key={encounter.id}
@@ -947,12 +1056,22 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                   {spanishBadge(encounter)}
                   {htnBadge?.(encounter)}
                   {diabetesBadge?.(encounter)}
+                  {isPatientOnOphthoList(patient, encounter) && (
+                    <span className="rounded-full bg-orange-100 px-2 py-1 text-xs font-semibold text-orange-800">
+                      Ophtho List
+                    </span>
+                  )}
+                  {canUseWholeClinicQueueTools && isGeneralVisitComplete(encounter) && (
+                    <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-800">
+                      General Visit Complete
+                    </span>
+                  )}
                   {fluBadge?.(encounter)}
                   {elevatorBadge(encounter)}
                   {papBadge?.(encounter)}
                 </div>
 
-{userRole === "pharmacy" && !encounter?.pharmacyStatus && (
+{canUsePharmacyQueue && !encounter?.pharmacyStatus && (
   <button
     type="button"
     onClick={() => onMarkMedicationsReady?.(encounter.id)}
@@ -962,7 +1081,7 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
   </button>
 )}
 
-{userRole === "pharmacy" && encounter?.pharmacyStatus === "meds_ready" && (
+{canUsePharmacyQueue && encounter?.pharmacyStatus === "meds_ready" && (
   <div className="mt-2 flex gap-2">
     <button
       type="button"
@@ -982,7 +1101,7 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
   </div>
 )}
 
-{userRole === "pharmacy" &&
+{canUsePharmacyQueue &&
   encounter?.pharmacyStatus === "patient_sent" && (
     <button
       type="button"
@@ -993,7 +1112,7 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
     </button>
 )}
 
-{userRole === "pharmacy" &&
+{canUsePharmacyQueue &&
   encounter?.pharmacyStatus === "picked_up" && (
     <div className="mt-2 flex gap-2">
       <div className="min-h-[40px] flex-1 rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
@@ -1194,7 +1313,7 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
             </div>
           ))}
 
-        {waitingEncounterRows.length === 0 && (
+        {sortedFilteredWaitingEncounterRows.length === 0 && (
           <div className="px-5 py-6 text-slate-500">
             No patients currently waiting.
           </div>
@@ -1264,10 +1383,22 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                     {spanishBadge(encounter)}
                     {htnBadge?.(encounter)}
                     {diabetesBadge?.(encounter)}
+                    {isPatientOnOphthoList(patient, encounter) && (
+                      <span className="rounded-full bg-orange-100 px-2 py-1 text-xs font-semibold text-orange-800">
+                        Ophtho List
+                      </span>
+                    )}
                     {fluBadge?.(encounter)}
                     {elevatorBadge(encounter)}
                     {papBadge?.(encounter)}
-                    {pharmacyStatusBadge(encounter)}
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-xs ${getStatusClasses(encounter.status)}`}
+                      >
+                        {getStatusLabel(encounter.status, encounter.soapStatus)}
+                      </span>
+                      {pharmacyStatusBadge(encounter)}
+                    </div>
                   </div>
                 </div>
               </div>

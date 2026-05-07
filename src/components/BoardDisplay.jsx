@@ -131,12 +131,10 @@ export default function BoardDisplay({
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-slate-900 p-3 text-white">
-      <div className="relative mb-2 flex min-h-[150px] items-start justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Free Clinic Room Board</h1>
-          <p className="text-sm text-slate-300">Live Display</p>
-
-
+      <div className="mb-2 grid shrink-0 grid-cols-[minmax(210px,0.8fr)_minmax(360px,1.6fr)_minmax(260px,0.9fr)] items-start gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold leading-tight xl:text-3xl">Free Clinic Room Board</h1>
+          <p className="text-xs text-slate-300 xl:text-sm">Live Display</p>
 
           {(() => {
             const alert = getClinicAlert(now);
@@ -151,7 +149,7 @@ export default function BoardDisplay({
 
             return (
               <div
-                className={`mt-1 rounded-lg border px-3 py-1 text-xs font-semibold ${colorMap[alert.level]}`}
+                className={`mt-1 rounded-lg border px-2 py-1 text-[11px] font-semibold leading-tight xl:text-xs ${colorMap[alert.level]}`}
               >
                 {alert.message}
               </div>
@@ -159,9 +157,9 @@ export default function BoardDisplay({
           })()}
         </div>
 
-        <div className="absolute left-1/2 top-1/2 w-full max-w-5xl -translate-x-1/2 -translate-y-1/2 px-4">
+        <div className="min-w-0">
           {(roster.attendings || roster.residents || roster.upperLevels) && (
-            <div className="mt-2 grid max-w-5xl grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-1.5 xl:gap-2">
               {[
                 { label: "Attendings", value: roster.attendings },
                 { label: "Residents / Fellows", value: roster.residents },
@@ -172,25 +170,34 @@ export default function BoardDisplay({
                   .map((name) => name.trim())
                   .filter(Boolean);
 
+                const maxNames = section.label === "MS III / IV" ? 12 : 8;
+
                 return (
                   <div
                     key={section.label}
-                    className="rounded-xl border border-slate-500 bg-slate-800/90 px-3 py-2 shadow"
+                    className="min-w-0 rounded-xl border border-slate-500 bg-slate-800/90 px-2 py-1.5 shadow xl:px-3 xl:py-2"
                   >
-                    <div className="mb-1 border-b border-slate-500 pb-1 text-center text-sm font-extrabold text-white">
+                    <div className="mb-1 border-b border-slate-500 pb-0.5 text-center text-[11px] font-extrabold leading-tight text-white xl:text-xs">
                       {section.label}
                     </div>
 
-                    <div className="grid grid-cols-1 gap-0.5">
-                      {names.slice(0, section.label === "MS III / IV" ? 8 : 5).map((name, idx) => (
+                    <div className="grid grid-cols-1 gap-x-2 gap-y-0.5 sm:[grid-template-columns:repeat(auto-fit,minmax(90px,1fr))]">
+                      {names.slice(0, maxNames).map((name, idx) => (
                         <div
                           key={`${section.label}-${idx}`}
-                          className="truncate text-base font-bold leading-tight text-white"
+                          className="min-w-0 truncate text-[11px] font-bold leading-tight text-white xl:text-xs 2xl:text-sm"
+                          title={name}
                         >
                           {idx + 1}. {name}
                         </div>
                       ))}
                     </div>
+
+                    {names.length > maxNames && (
+                      <div className="mt-0.5 text-[10px] font-semibold text-slate-300">
+                        +{names.length - maxNames} more
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -198,32 +205,32 @@ export default function BoardDisplay({
           )}
         </div>
 
-        <div className="flex items-start gap-4">
+        <div className="flex min-w-0 items-start justify-end gap-2 xl:gap-3">
           {/* Info Panel */}
-          <div className="rounded-xl bg-slate-800/85 px-4 py-3 text-slate-100 shadow">
-            <p className="mb-1 text-xl font-bold text-white">Connect Here</p>
+          <div className="min-w-0 rounded-xl bg-slate-800/85 px-3 py-2 text-slate-100 shadow xl:px-4 xl:py-3">
+            <p className="mb-0.5 text-base font-bold text-white xl:mb-1 xl:text-lg">Connect Here</p>
 
-            <p className="text-sm leading-6">
+            <p className="text-xs leading-5 xl:text-sm">
               <span className="font-semibold">Site:</span>{" "}
               <span className="break-all">{CLINIC_URL}</span>
             </p>
 
-            <p className="text-sm leading-6">
+            <p className="text-xs leading-5 xl:text-sm">
               <span className="font-semibold">WiFi:</span> {WIFI_NAME}
             </p>
 
-            <p className="text-sm leading-6">
+            <p className="text-xs leading-5 xl:text-sm">
               <span className="font-semibold">Password:</span> {WIFI_PASSWORD}
             </p>
           </div>
 
           {/* QR Code */}
-          <div className="rounded-xl bg-white p-2 shadow">
-            <img src={QR_SRC} alt="QR Code" className="h-24 w-24" />
+          <div className="hidden rounded-xl bg-white p-1.5 shadow lg:block xl:p-2">
+            <img src={QR_SRC} alt="QR Code" className="h-20 w-20 xl:h-24 xl:w-24" />
           </div>
 
           {/* Time */}
-          <div className="text-right text-sm text-slate-300">
+          <div className="shrink-0 text-right text-xs text-slate-300 xl:text-sm">
             {formatDate(now)}
             <br />
             {now.toLocaleTimeString()}

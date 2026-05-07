@@ -853,7 +853,7 @@ export default function App() {
       return;
     }
 
-    if (userRole === "pharmacy") {
+    if (userRole === "pharmacy" || userRole === "social_work") {
       setActiveView("queue");
       return;
     }
@@ -3818,6 +3818,22 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
 
 
 
+  const currentUserProfile = useMemo(() => {
+    return profiles.find((profile) => profile.id === session?.user?.id) || null;
+  }, [profiles, session?.user?.id]);
+
+  const currentSpecialtyAccess = useMemo(() => {
+    const value = currentUserProfile?.specialty_access;
+    if (Array.isArray(value)) return value;
+    if (typeof value === "string" && value.trim()) return [value.trim()];
+    return [];
+  }, [currentUserProfile]);
+
+  const canUseOphthoQueueTools = currentSpecialtyAccess.includes("Ophthalmology");
+  const canUseWholeClinicQueueTools = canUseOphthoQueueTools || userRole === "social_work";
+
+  const canAccessPrograms = isLeadershipView || currentSpecialtyAccess.length > 0;
+
   const filteredProfiles = useMemo(() => {
     let nextProfiles = profiles;
 
@@ -3835,12 +3851,16 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
       const role = (profile.role || "").toLowerCase();
       const classification = (profile.classification || "").toLowerCase();
       const email = (profile.email || "").toLowerCase();
+      const specialtyAccess = Array.isArray(profile.specialty_access)
+        ? profile.specialty_access.join(" ").toLowerCase()
+        : String(profile.specialty_access || "").toLowerCase();
 
       return (
         fullName.includes(query) ||
         role.includes(query) ||
         classification.includes(query) ||
-        email.includes(query)
+        email.includes(query) ||
+        specialtyAccess.includes(query)
       );
     });
   }, [profiles, userSearch, showOnlyActiveToday]);
@@ -4195,7 +4215,7 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
   const waitingEncounterRows = useMemo(() => {
   const todayClinicDate = formatClinicDate();
 
-  const activeRows = filteredEncounterRows.filter(({ encounter }) => {
+  const activeRows = visibleEncounterRows.filter(({ encounter }) => {
     const isToday =
       normalizeClinicDate(encounter.clinicDate) === todayClinicDate;
 
@@ -4204,17 +4224,31 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
       encounter.visitType === "specialty_only";
 
     if (!isToday) return false;
-    if (encounter.status === "done") return false;
-    if (encounter.soapStatus === "signed") return false;
+    if (encounter.status === "cancelled") return false;
+
+    if (canUseWholeClinicQueueTools) {
+      if (encounter.visitType === "refill_only") return false;
+
+      return (
+        encounter.status === "ready" ||
+        encounter.status === "roomed" ||
+        encounter.status === "in_visit" ||
+        encounter.status === "done" ||
+        encounter.soapStatus === "signed" ||
+        isPharmacyWorkflow
+      );
+    }
 
     if (isPharmacyWorkflow) {
-      return encounter.pharmacyStatus !== "picked_up";
+      return true;
     }
 
     return (
       encounter.status === "ready" ||
       encounter.status === "roomed" ||
-      encounter.status === "in_visit"
+      encounter.status === "in_visit" ||
+      encounter.status === "done" ||
+      encounter.soapStatus === "signed"
     );
   });
 
@@ -4227,11 +4261,23 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
     let rows = activeRows;
 
     if (userRole === "student") {
-      rows = activeRows.filter(({ encounter }) =>
-        (encounter.assignedStudent || "")
-          .trim()
-          .toLowerCase()
-          .includes(currentUserName.toLowerCase())
+      if (canRefillAccess) {
+        rows = activeRows;
+      } else if (canUseOphthoQueueTools) {
+        rows = activeRows.filter(
+          ({ encounter }) => encounter.visitType !== "refill_only"
+        );
+      } else {
+        rows = activeRows.filter(({ encounter }) =>
+          (encounter.assignedStudent || "")
+            .trim()
+            .toLowerCase()
+            .includes(currentUserName.toLowerCase())
+        );
+      }
+    } else if (userRole === "social_work") {
+      rows = activeRows.filter(
+        ({ encounter }) => encounter.visitType !== "refill_only"
       );
     } else if (userRole === "upper_level") {
       rows = activeRows.filter(({ encounter }) =>
@@ -4246,9 +4292,14 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
       );
     } else {
       // leadership/general queue should only show general encounters
-      if (userRole === "pharmacy" || userRole === "undergraduate") {
-  rows = activeRows;
-} else {
+      if (
+        userRole === "pharmacy" ||
+        userRole === "undergraduate" ||
+        userRole === "social_work" ||
+        canRefillAccess
+      ) {
+        rows = activeRows;
+      } else {
   // leadership/general queue should only show general assignable encounters
   rows = activeRows.filter(
     ({ encounter }) =>
@@ -4277,11 +4328,14 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
 
     return [...rows].sort(sortRowsByDailyNumberThenTime);
   }, [
-    filteredEncounterRows,
+    visibleEncounterRows,
     profileNameMap,
     session?.user?.id,
     authFullName,
     userRole,
+    canUseOphthoQueueTools,
+    canUseWholeClinicQueueTools,
+    canRefillAccess,
   ]);
 
   const labEncounterRows = useMemo(() => {
@@ -4676,7 +4730,8 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
     userRole === "leadership" ||
     userRole === "student" ||
     userRole === "upper_level" ||
-    userRole === "attending";
+    userRole === "attending" ||
+    currentSpecialtyAccess.length > 0;
 
   async function handleChangeProfileRole(
     profileId,
@@ -8238,6 +8293,7 @@ await applyEncounterTransition(selectedEncounter.id, {
                     <option value="undergraduate">Undergraduate</option>
                     <option value="pharmacy">Pharmacy</option>
                     <option value="lab">Lab</option>
+                    <option value="social_work">Social Work</option>
                   </select>
 
                   {authRole === "student" || authRole === "upper_level" ? (
@@ -8385,6 +8441,7 @@ await applyEncounterTransition(selectedEncounter.id, {
         userRole={userRole}
         canRefillAccess={canRefillAccess}
         canLabQueueAccess={canLabQueueAccess}
+        canProgramsAccess={canAccessPrograms}
       />
 
       <div className="min-w-0 flex-1 bg-slate-100 xl:ml-64 xl:flex xl:flex-col">
@@ -8663,6 +8720,8 @@ await applyEncounterTransition(selectedEncounter.id, {
               profileNameMap={profileNameMap}
               onApproveRefillAsSignedInAttending={handleApproveRefillRequestAsSignedInAttending}
               onDeleteRefillRequest={handleDeleteRefillRequest}
+              programEntries={programEntries}
+              specialtyAccess={currentSpecialtyAccess}
 
             />
           )}
@@ -8869,7 +8928,7 @@ setSelectedClinicDate={setRoomBoardDate}
             />
           )}
 
-          {activeView === "programs" && isLeadershipView && (
+          {activeView === "programs" && canAccessPrograms && (
             <ProgramsView
               programEntries={programEntries}
               addProgramEntry={addProgramEntry}
@@ -8877,6 +8936,8 @@ setSelectedClinicDate={setRoomBoardDate}
               removeProgramEntry={removeProgramEntry}
               patients={patients}
               selectedClinicDate={selectedClinicDate}
+              isLeadershipView={isLeadershipView}
+              specialtyAccess={currentSpecialtyAccess}
               leadershipOptions={profiles
                 .filter((profile) => profile.role === "leadership")
                 .map((profile) => (profile.full_name || "").trim())

@@ -293,6 +293,7 @@ export default function UndergradIntakeView({
 }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [matchPatientId, setMatchPatientId] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   function handleChange(key, value) {
     if (["firstName", "lastName", "dob", "phone"].includes(key) && matchPatientId) {
@@ -390,6 +391,8 @@ export default function UndergradIntakeView({
   }
 
   async function handleSubmit() {
+    if (isSubmitting) return;
+
   if (
     (form.visitType === "both" || form.visitType === "specialty_only") &&
     !form.specialtyType
@@ -426,12 +429,18 @@ export default function UndergradIntakeView({
       intakeStatus: "started",
     };
 
-    const didSave = await onSave(payload);
+    setIsSubmitting(true);
 
-    if (!didSave) return;
+    try {
+      const didSave = await onSave(payload);
 
-    setForm(EMPTY_FORM);
-    setMatchPatientId(null);
+      if (!didSave) return;
+
+      setForm(EMPTY_FORM);
+      setMatchPatientId(null);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -773,19 +782,22 @@ export default function UndergradIntakeView({
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
             <button
               onClick={() => {
+                if (isSubmitting) return;
                 setForm(EMPTY_FORM);
                 setMatchPatientId(null);
               }}
-              className="rounded-lg bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-300"
+              disabled={isSubmitting}
+              className="rounded-lg bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Clear Form
             </button>
 
             <button
               onClick={handleSubmit}
-              className="rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800"
+              disabled={isSubmitting}
+              className="rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Start Encounter
+              {isSubmitting ? "Starting..." : "Start Encounter"}
             </button>
           </div>
         </div>

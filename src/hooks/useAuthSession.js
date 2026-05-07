@@ -27,7 +27,7 @@ export function useAuthSession() {
   async function fetchProfileWithRetry(userId, attempt = 1) {
     const { data: profile, error } = await supabase
       .from("profiles")
-      .select("id, full_name, role, classification, approval_status, signature_pin_set, can_refill")
+      .select("id, full_name, role, classification, approval_status, signature_pin_set, can_refill, specialty_access")
       .eq("id", userId)
       .maybeSingle();
 

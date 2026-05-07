@@ -1,4 +1,17 @@
 import { getRoleFromClassification } from "../utils/permissions";
+
+const SPECIALTY_ACCESS_OPTIONS = [
+  "Ophthalmology",
+  "Mental Health",
+  "Addiction Medicine",
+];
+
+function normalizeSpecialtyAccess(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string" && value.trim()) return [value.trim()];
+  return [];
+}
+
 export default function UserManagementView({
   profiles,
   loadingProfiles,
@@ -83,6 +96,7 @@ export default function UserManagementView({
                     <th className="px-3 py-3 font-semibold text-slate-700">Classification</th>
                     <th className="px-3 py-3 font-semibold text-slate-700">Role</th>
                     <th className="px-3 py-3 font-semibold text-slate-700">Refill Access</th>
+                    <th className="px-3 py-3 font-semibold text-slate-700">Specialty Access</th>
                     <th className="px-3 py-3 font-semibold text-slate-700">Approval</th>
                     <th className="px-3 py-3 font-semibold text-slate-700">Last Seen</th>
                     <th className="px-3 py-3 font-semibold text-slate-700">Action</th>
@@ -179,6 +193,7 @@ export default function UserManagementView({
                               profile.role === "leadership" ||
                               profile.role === "attending" ||
                               profile.role === "pharmacy" ||
+                              profile.role === "social_work" ||
                               profile.role === "undergraduate"
                             }
                           >
@@ -192,6 +207,7 @@ export default function UserManagementView({
                             profile.role !== "leadership" &&
                             profile.role !== "attending" &&
                             profile.role !== "pharmacy" &&
+                            profile.role !== "social_work" &&
                                 profile.role !== "lab" &&
                             profile.role !== "undergraduate" ? (
                             <div className="mt-1 text-xs text-red-500">
@@ -214,6 +230,7 @@ export default function UserManagementView({
                                 profile.role !== "leadership" &&
                                 profile.role !== "attending" &&
                                 profile.role !== "pharmacy" &&
+                                profile.role !== "social_work" &&
                                 profile.role !== "lab"
                               ) ||
                               (isCurrentUser && profile.role === "leadership")
@@ -226,6 +243,7 @@ export default function UserManagementView({
                             <option value="undergraduate">undergraduate</option>
                             <option value="pharmacy">pharmacy</option>
                             <option value="lab">lab</option>
+                            <option value="social_work">social_work</option>
                           </select>
                         </td>
 
@@ -243,6 +261,35 @@ export default function UserManagementView({
     Refill Access
   </label>
 </td>
+
+                        <td className="px-3 py-3">
+                          <div className="space-y-2">
+                            {SPECIALTY_ACCESS_OPTIONS.map((specialty) => {
+                              const currentAccess = normalizeSpecialtyAccess(profile.specialty_access);
+                              const checked = currentAccess.includes(specialty);
+
+                              return (
+                                <label key={specialty} className="flex items-center gap-2 text-sm text-slate-700">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    disabled={savingProfileId === profile.id}
+                                    onChange={(e) => {
+                                      const nextAccess = e.target.checked
+                                        ? [...new Set([...currentAccess, specialty])]
+                                        : currentAccess.filter((item) => item !== specialty);
+
+                                      onChangeRole(profile.id, profile.role, profile.classification, {
+                                        specialty_access: nextAccess,
+                                      });
+                                    }}
+                                  />
+                                  {specialty}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </td>
 
                         <td className="px-3 py-3">
                           {profile.approval_status === "approved" ? (

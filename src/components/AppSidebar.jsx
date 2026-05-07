@@ -15,6 +15,7 @@ export default function AppSidebar({
   userRole,
   canRefillAccess,
   canLabQueueAccess,
+  canProgramsAccess,
 }) {
   function handleViewChange(view) {
     setActiveView(view);
@@ -80,7 +81,18 @@ export default function AppSidebar({
       Room Board
     </button>
   </div>
-) : userRole === "pharmacy" ? (
+) : userRole === "social_work" ? (
+            <div className="space-y-2">
+              <SectionLabel>Workflow</SectionLabel>
+
+              <button
+                onClick={() => handleViewChange("queue")}
+                className={getNavItemClass("queue")}
+              >
+                Social Work Queue
+              </button>
+            </div>
+          ) : userRole === "pharmacy" ? (
             <div className="space-y-2">
               <SectionLabel>Workflow</SectionLabel>
 
@@ -175,7 +187,7 @@ export default function AppSidebar({
                   </button>
                 )}
 
-                {isLeadershipView && (
+                {canProgramsAccess && (
                   <button
                     onClick={() => handleViewChange("programs")}
                     className={getNavItemClass("programs")}
