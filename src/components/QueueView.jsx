@@ -36,11 +36,13 @@ export default function QueueView({
   onDeleteRefillRequest,
   programEntries,
   specialtyAccess,
+  papEntries,
 }) {
 
   const [queueAssignmentDrafts, setQueueAssignmentDrafts] = useState({});
   const [queueSearch, setQueueSearch] = useState("");
 const [prioritizeRefillOnly, setPrioritizeRefillOnly] = useState(false);
+  const [pharmacyStatusFilter, setPharmacyStatusFilter] = useState("all");
   const [ophthoPriorityView, setOphthoPriorityView] = useState(false);
   const [openAssignmentMenu, setOpenAssignmentMenu] = useState(null);
   const [showRefillApproveModal, setShowRefillApproveModal] = useState(false);
@@ -183,6 +185,14 @@ const [prioritizeRefillOnly, setPrioritizeRefillOnly] = useState(false);
       );
     }
 
+    if (encounter?.pharmacyStatus === "picked_up") {
+      return (
+        <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800">
+          Medications Picked Up
+        </span>
+      );
+    }
+
     return null;
   }
 
@@ -229,6 +239,33 @@ const [prioritizeRefillOnly, setPrioritizeRefillOnly] = useState(false);
       intakeData?.leadership_notes ||
       ""
     );
+  }
+
+  function getRefillMedicationRequest(encounter) {
+    const intakeData = encounter?.intakeData || encounter?.intake_data || {};
+    return (
+      encounter?.refillMedicationRequest ||
+      encounter?.refill_medication_request ||
+      intakeData?.refillMedicationRequest ||
+      intakeData?.refill_medication_request ||
+      ""
+    );
+  }
+
+  function isPatientOnActivePap(patient) {
+    return (papEntries || []).some((entry) => {
+      const status = String(entry?.status || "").toLowerCase();
+      if (!["pending application", "pending poi"].includes(status)) return false;
+
+      const sameId = entry?.patientId && patient?.id && String(entry.patientId) === String(patient.id);
+      const sameMrn = entry?.mrn && patient?.mrn && String(entry.mrn) === String(patient.mrn);
+      const sameNameDob =
+        entry?.patientName &&
+        normalizeName(entry.patientName) === normalizeName(getFullQueuePatientName(patient)) &&
+        (!entry?.dob || !patient?.dob || entry.dob === patient.dob);
+
+      return sameId || sameMrn || sameNameDob;
+    });
   }
 
   function rowMatchesQueueSearch(patient, encounter) {
@@ -547,11 +584,29 @@ function isPharmacyWorkflowEncounter(encounter) {
   );
 }
 
+function getPharmacyStatusRank(encounter) {
+  if (encounter?.pharmacyStatus === "meds_ready") return 0;
+  if (encounter?.pharmacyStatus === "picked_up") return 3;
+  if (encounter?.pharmacyStatus === "patient_sent") return 2;
+  return 1;
+}
+
+function rowMatchesPharmacyStatusFilter(encounter) {
+  if (pharmacyStatusFilter === "ready") return encounter?.pharmacyStatus === "meds_ready";
+  if (pharmacyStatusFilter === "picked_up") return encounter?.pharmacyStatus === "picked_up";
+  return true;
+}
+
 const pharmacyRows = (waitingEncounterRows || []).filter(
-  ({ patient, encounter }) => rowMatchesQueueSearch(patient, encounter)
+  ({ patient, encounter }) =>
+    rowMatchesQueueSearch(patient, encounter) &&
+    rowMatchesPharmacyStatusFilter(encounter)
 );
 
 const sortedPharmacyRows = [...pharmacyRows].sort((a, b) => {
+  const statusDiff = getPharmacyStatusRank(a.encounter) - getPharmacyStatusRank(b.encounter);
+  if (statusDiff !== 0) return statusDiff;
+
   if (prioritizeRefillOnly) {
     const aRefillOnly = isRefillOnlyEncounter(a.encounter);
     const bRefillOnly = isRefillOnlyEncounter(b.encounter);
@@ -577,11 +632,22 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
     ({ encounter }) => encounter?.pharmacyStatus === "meds_ready"
   );
 
+  function getVisitSortRank(encounter) {
+    const unassigned = !encounter?.assignedStudent && !encounter?.assignedUpperLevel;
+    if (unassigned && !isGeneralVisitComplete(encounter)) return 0;
+    if (encounter?.status === "in_visit" || encounter?.status === "roomed") return 1;
+    if (isGeneralVisitComplete(encounter)) return 3;
+    return 2;
+  }
+
   const sortedFilteredWaitingEncounterRows = [...filteredWaitingEncounterRows].sort((a, b) => {
     if (canUseOphthoQueueTools && ophthoPriorityView) {
       const scoreDiff = getOphthoPriorityScore(b) - getOphthoPriorityScore(a);
       if (scoreDiff !== 0) return scoreDiff;
     }
+
+    const rankDiff = getVisitSortRank(a.encounter) - getVisitSortRank(b.encounter);
+    if (rankDiff !== 0) return rankDiff;
 
     return new Date(a.encounter?.createdAt || 0) - new Date(b.encounter?.createdAt || 0);
   });
@@ -632,6 +698,16 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
     />
     Prioritize refill-only
   </label>
+
+  <select
+    className="w-full rounded-lg border border-slate-300 bg-white p-3 text-sm"
+    value={pharmacyStatusFilter}
+    onChange={(e) => setPharmacyStatusFilter(e.target.value)}
+  >
+    <option value="all">All medication statuses</option>
+    <option value="ready">Medications Ready</option>
+    <option value="picked_up">Medications Picked Up</option>
+  </select>
 </div>
         </div>
 
@@ -673,6 +749,13 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                     {encounter.chiefComplaint || "No chief complaint"}
                   </p>
 
+                  {isRefillOnlyEncounter(encounter) && getRefillMedicationRequest(encounter) && (
+                    <div className="rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-sm text-purple-900">
+                      <span className="font-semibold">Refill request:</span>{" "}
+                      {getRefillMedicationRequest(encounter)}
+                    </div>
+                  )}
+
                   <div className="flex flex-wrap gap-x-3 text-xs text-slate-500">
                     <span>DOB: {formatDate(patient.dob)}</span>
                     <span>MRN: {patient.mrn || "—"}</span>
@@ -704,13 +787,23 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                   </div>
 
                   {!encounter?.pharmacyStatus || encounter?.pharmacyStatus === "waiting" ? (
-                    <button
-                      type="button"
-                      onClick={() => onMarkMedicationsReady?.(encounter.id)}
-                      className="mt-2 min-h-[40px] rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
-                    >
-                      Medications Ready
-                    </button>
+                    <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                      <button
+                        type="button"
+                        onClick={() => onMarkMedicationsReady?.(encounter.id)}
+                        className="min-h-[40px] flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+                      >
+                        Medications Ready
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => onMarkMedicationsPickedUp?.(encounter.id)}
+                        className="min-h-[40px] flex-1 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                      >
+                        Medications Picked Up
+                      </button>
+                    </div>
                   ) : null}
 
                   {encounter?.pharmacyStatus === "meds_ready" && (
@@ -1061,9 +1154,14 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                       Ophtho List
                     </span>
                   )}
+                  {canUseSocialWorkQueueTools && isPatientOnActivePap(patient) && (
+                    <span className="rounded-full bg-orange-500 px-2 py-1 text-xs font-bold text-white shadow-sm">
+                      Patient Assistance Program
+                    </span>
+                  )}
                   {canUseWholeClinicQueueTools && isGeneralVisitComplete(encounter) && (
                     <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-800">
-                      General Visit Complete
+                      Completed Visit
                     </span>
                   )}
                   {fluBadge?.(encounter)}

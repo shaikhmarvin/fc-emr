@@ -130,7 +130,7 @@ export default function AppSidebar({
                     </button>
                   )}
 
-                {userRole === "undergraduate" && (
+                {(userRole === "undergraduate" || isLeadershipView) && (
                   <button
                     onClick={() => handleViewChange("undergrad-intake")}
                     className={getNavItemClass("undergrad-intake")}

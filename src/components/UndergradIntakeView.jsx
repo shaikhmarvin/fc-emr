@@ -284,6 +284,7 @@ const EMPTY_FORM = {
   chronicConditionsOther: "",
   visitType: "general",
   specialtyType: "",
+  refillMedicationRequest: "",
 };
 
 export default function UndergradIntakeView({
@@ -673,6 +674,10 @@ export default function UndergradIntakeView({
   ) {
     handleChange("specialtyType", "");
   }
+
+  if (nextVisitType !== "refill_only") {
+    handleChange("refillMedicationRequest", "");
+  }
 }}
                 >
                   <option value="general">General Clinic</option>
@@ -699,6 +704,23 @@ export default function UndergradIntakeView({
                     <option value="mental_health">Mental Health</option>
                     <option value="addiction">Addiction Medicine</option>
                   </select>
+                </div>
+              )}
+
+              {form.visitType === "refill_only" && (
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Do you know what medications you need refilled?
+                  </label>
+                  <textarea
+                    className="min-h-[88px] w-full rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400"
+                    value={form.refillMedicationRequest || ""}
+                    onChange={(e) => handleChange("refillMedicationRequest", e.target.value)}
+                    placeholder="Example: Metformin, lisinopril, insulin, unsure, etc."
+                  />
+                  <p className="mt-1 text-xs text-purple-700">
+                    This answer will show in the pharmacy / refill queue after the encounter starts.
+                  </p>
                 </div>
               )}
 

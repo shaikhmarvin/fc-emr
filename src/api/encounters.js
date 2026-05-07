@@ -77,6 +77,7 @@ function mapEncounterRow(row) {
     anyMentalHealthPositive: intake.anyMentalHealthPositive ?? false,
     visitType: intake.visitType ?? "general",
     specialtyType: intake.specialtyType ?? "",
+    refillMedicationRequest: intake.refillMedicationRequest ?? "",
 
     leadershipIntakeComplete: row.leadership_intake_complete ?? false,
 
@@ -156,6 +157,7 @@ function buildIntakeData(encounter) {
     anyMentalHealthPositive: encounter.anyMentalHealthPositive ?? false,
     visitType: encounter.visitType ?? "general",
     specialtyType: encounter.specialtyType ?? "",
+    refillMedicationRequest: encounter.refillMedicationRequest ?? "",
     dualVisit: encounter.dualVisit ?? false,
   };
 }
@@ -460,6 +462,7 @@ export async function updateEncounterInSupabase(encounterId, updates) {
     "anyMentalHealthPositive",
     "visitType",
     "specialtyType",
+    "refillMedicationRequest",
     "dualVisit",
   ];
 
@@ -519,6 +522,8 @@ export async function updateEncounterInSupabase(encounterId, updates) {
         false,
       visitType: updates.visitType ?? currentIntake.visitType ?? "general",
       specialtyType: updates.specialtyType ?? currentIntake.specialtyType ?? "",
+      refillMedicationRequest:
+        updates.refillMedicationRequest ?? currentIntake.refillMedicationRequest ?? "",
       dualVisit: updates.dualVisit ?? currentIntake.dualVisit ?? false,
     };
   }

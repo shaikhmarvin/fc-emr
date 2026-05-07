@@ -543,20 +543,27 @@ export default function ProgramsView({
 
     if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
       const [year, month, day] = value.split("-");
-      return `${month}/${day}/${year}`;
+      return `${month}-${day}-${year}`;
     }
 
     const date = new Date(value);
 
     if (Number.isNaN(date.getTime())) return "—";
 
-    return date.toLocaleString("en-US", {
+    const datePart = date.toLocaleDateString("en-US", {
       month: "2-digit",
       day: "2-digit",
       year: "numeric",
+    }).replaceAll("/", "-");
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return datePart;
+
+    const timePart = date.toLocaleTimeString("en-US", {
       hour: "numeric",
       minute: "2-digit",
     });
+
+    return `${datePart} ${timePart}`;
   }
 
   function renderTracker() {
@@ -637,7 +644,7 @@ export default function ProgramsView({
                           {patient.firstName} {patient.lastName}
                         </div>
                         <div className="text-xs text-slate-500">
-                          MRN: {patient.mrn || "—"} | DOB: {patient.dob || "—"} | Phone:{" "}
+                          MRN: {patient.mrn || "—"} | DOB: {formatDisplayDate(patient.dob)} | Phone:{" "}
                           {patient.phone || "—"}
                         </div>
                       </button>
@@ -879,7 +886,7 @@ export default function ProgramsView({
                       <>
                         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                           <ReadOnlyField label="MRN" value={entry.mrn || "—"} />
-                          <ReadOnlyField label="DOB" value={entry.dob || "—"} />
+                          <ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} />
                           <ReadOnlyField
                             label="Last Contact Attempt"
                             value={
@@ -1104,7 +1111,7 @@ if (isGenericTracker) {
                     <>
                       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                         <ReadOnlyField label="MRN" value={entry.mrn || "—"} />
-                        <ReadOnlyField label="DOB" value={entry.dob || "—"} />
+                        <ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} />
                         <ReadOnlyField
                           label="Last Contact Attempt"
                           value={
@@ -1472,7 +1479,7 @@ if (isGenericTracker) {
                       <>
                         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                           <ReadOnlyField label="MRN" value={entry.mrn || "—"} />
-                          <ReadOnlyField label="DOB" value={entry.dob || "—"} />
+                          <ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} />
                           <ReadOnlyField
                             label="Last Contact Attempt"
                             value={
@@ -1789,16 +1796,38 @@ function Field({ label, children, className = "" }) {
 }
 
 function ReadOnlyField({ label, value }) {
+  const displayValue = value || "—";
+
+  async function copyValue(event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    try {
+      await navigator.clipboard.writeText(String(displayValue));
+    } catch (error) {
+      console.error("Failed to copy field:", error);
+    }
+  }
+
   return (
     <div onClick={(e) => e.stopPropagation()}>
       <label className="mb-1 block text-sm font-medium text-slate-700">
         {label}
       </label>
-      <div
-        className="select-text rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800"
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        {value}
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800">
+          <span className="truncate">{displayValue}</span>
+        </div>
+
+        <button
+          type="button"
+          onClick={copyValue}
+          className="shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+          title={`Copy ${label}`}
+          aria-label={`Copy ${label}`}
+        >
+          ⧉
+        </button>
       </div>
     </div>
   );

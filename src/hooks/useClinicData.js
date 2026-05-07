@@ -115,6 +115,12 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
       visitType,
       specialtyType,
       dualVisit,
+      refillMedicationRequest:
+        intake.refillMedicationRequest ??
+        intake.refill_medication_request ??
+        intake.refillRequest ??
+        intake.refill_request ??
+        "",
       leadershipIntakeComplete: encounter.leadership_intake_complete ?? false,
       pharmacyStatus: encounter.pharmacy_status || "",
       skipUpperLevel: encounter.skip_upper_level ?? false,

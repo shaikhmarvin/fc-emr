@@ -26,6 +26,13 @@ const EMPTY_FORM = {
   fired: false,
   firedReason: "",
   firedAt: "",
+  encounterDailyNumber: "",
+  encounterNewReturning: "",
+  encounterVisitType: "general",
+  encounterSpecialtyType: "",
+  encounterRefillMedicationRequest: "",
+  encounterChiefComplaint: "",
+  encounterNotes: "",
 };
 
 const CHRONIC_CONDITION_OPTIONS = [
@@ -52,11 +59,24 @@ function FieldInput({ className = "", ...props }) {
   );
 }
 
+function FieldSelect({ className = "", children, ...props }) {
+  return (
+    <select
+      {...props}
+      className={`w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 ${className}`.trim()}
+    >
+      {children}
+    </select>
+  );
+}
+
 export default function PatientInfoEditModal({
   show,
   patient,
+  selectedEncounter,
   canEditUndergradFields,
   canEditAllPatientFields,
+  canEditEncounterFields,
   onClose,
   onSave,
 }) {
@@ -91,14 +111,22 @@ export default function PatientInfoEditModal({
       fired: patient.fired || false,
       firedReason: patient.firedReason || "",
       firedAt: patient.firedAt || "",
+      encounterDailyNumber: selectedEncounter?.dailyNumber || "",
+      encounterNewReturning: selectedEncounter?.newReturning || "",
+      encounterVisitType: selectedEncounter?.visitType || "general",
+      encounterSpecialtyType: selectedEncounter?.specialtyType || "",
+      encounterRefillMedicationRequest: selectedEncounter?.refillMedicationRequest || "",
+      encounterChiefComplaint: selectedEncounter?.chiefComplaint || "",
+      encounterNotes: selectedEncounter?.notes || "",
     });
-  }, [show, patient?.id]);
+  }, [show, patient?.id, selectedEncounter?.id]);
 
   const visibleFields = useMemo(() => {
     if (canEditAllPatientFields) {
       return {
         demographic: true,
         registration: true,
+        encounter: true,
       };
     }
 
@@ -106,6 +134,7 @@ export default function PatientInfoEditModal({
       return {
         demographic: true,
         registration: true,
+        encounter: !!canEditEncounterFields,
       };
     }
 
@@ -113,7 +142,7 @@ export default function PatientInfoEditModal({
       demographic: false,
       registration: false,
     };
-  }, [canEditAllPatientFields, canEditUndergradFields]);
+  }, [canEditAllPatientFields, canEditUndergradFields, canEditEncounterFields]);
 
   if (!show || !patient) return null;
 
@@ -136,7 +165,7 @@ export default function PatientInfoEditModal({
   function handleSubmit(e) {
     e.preventDefault();
 
-    const payload = {
+    const patientPayload = {
       firstName: form.firstName,
       lastName: form.lastName,
       preferredName: form.preferredName,
@@ -164,7 +193,24 @@ export default function PatientInfoEditModal({
       firedAt: form.fired ? (form.firedAt || new Date().toISOString().slice(0, 10)) : null,
     };
 
-    onSave(patient.id, payload);
+    const nextVisitType = form.encounterVisitType || "general";
+    const encounterPayload = visibleFields.encounter && selectedEncounter?.id
+      ? {
+          dailyNumber: form.encounterDailyNumber,
+          newReturning: form.encounterNewReturning,
+          visitType: nextVisitType,
+          specialtyType:
+            nextVisitType === "both" || nextVisitType === "specialty_only"
+              ? form.encounterSpecialtyType
+              : "",
+          refillMedicationRequest:
+            nextVisitType === "refill_only" ? form.encounterRefillMedicationRequest : "",
+          chiefComplaint: form.encounterChiefComplaint,
+          notes: form.encounterNotes,
+        }
+      : null;
+
+    onSave(patient.id, patientPayload, selectedEncounter?.id || null, encounterPayload);
   }
 
   return (
@@ -422,6 +468,118 @@ export default function PatientInfoEditModal({
                     onChange={(e) =>
                       updateField("chronicConditionsOther", e.target.value)
                     }
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {visibleFields.encounter && selectedEncounter?.id && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-4">
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Encounter-Specific Info
+                </h3>
+                <p className="mt-1 text-xs text-slate-600">
+                  These fields only update the currently selected encounter, not the patient's entire chart history.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <FieldLabel>Daily Card #</FieldLabel>
+                  <FieldInput
+                    placeholder="Enter daily number"
+                    value={form.encounterDailyNumber}
+                    onChange={(e) => updateField("encounterDailyNumber", e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>New / Returning</FieldLabel>
+                  <FieldSelect
+                    value={form.encounterNewReturning || ""}
+                    onChange={(e) => updateField("encounterNewReturning", e.target.value)}
+                  >
+                    <option value="">Select</option>
+                    <option value="New">New</option>
+                    <option value="Returning">Returning</option>
+                  </FieldSelect>
+                </div>
+
+                <div>
+                  <FieldLabel>Visit Type</FieldLabel>
+                  <FieldSelect
+                    value={form.encounterVisitType || "general"}
+                    onChange={(e) => {
+                      const nextVisitType = e.target.value;
+                      setForm((prev) => ({
+                        ...prev,
+                        encounterVisitType: nextVisitType,
+                        encounterSpecialtyType:
+                          nextVisitType === "both" || nextVisitType === "specialty_only"
+                            ? prev.encounterSpecialtyType
+                            : "",
+                        encounterRefillMedicationRequest:
+                          nextVisitType === "refill_only"
+                            ? prev.encounterRefillMedicationRequest
+                            : "",
+                      }));
+                    }}
+                  >
+                    <option value="general">General Clinic</option>
+                    <option value="specialty_only">Specialty Clinic Only</option>
+                    <option value="both">General + Specialty Clinic</option>
+                    <option value="refill_only">Refills Only</option>
+                  </FieldSelect>
+                </div>
+
+                {(form.encounterVisitType === "both" || form.encounterVisitType === "specialty_only") && (
+                  <div>
+                    <FieldLabel>Specialty Type</FieldLabel>
+                    <FieldSelect
+                      value={form.encounterSpecialtyType || ""}
+                      onChange={(e) => updateField("encounterSpecialtyType", e.target.value)}
+                    >
+                      <option value="">Select Specialty</option>
+                      <option value="pt">Physical Therapy</option>
+                      <option value="dermatology">Dermatology</option>
+                      <option value="ophthalmology">Ophthalmology</option>
+                      <option value="mental_health">Mental Health</option>
+                      <option value="addiction">Addiction Medicine</option>
+                    </FieldSelect>
+                  </div>
+                )}
+
+                {form.encounterVisitType === "refill_only" && (
+                  <div className="md:col-span-2">
+                    <FieldLabel>Refill Request</FieldLabel>
+                    <textarea
+                      className="min-h-[88px] w-full rounded-lg border border-purple-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                      placeholder="Example: Metformin, lisinopril, insulin, unsure, etc."
+                      value={form.encounterRefillMedicationRequest}
+                      onChange={(e) => updateField("encounterRefillMedicationRequest", e.target.value)}
+                    />
+                  </div>
+                )}
+
+                <div className="md:col-span-2">
+                  <FieldLabel>Chief Complaint</FieldLabel>
+                  <FieldInput
+                    placeholder="Enter chief complaint"
+                    value={form.encounterChiefComplaint}
+                    onChange={(e) => updateField("encounterChiefComplaint", e.target.value)}
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <FieldLabel>Encounter Notes</FieldLabel>
+                  <textarea
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    rows={3}
+                    placeholder="Update encounter-specific notes"
+                    value={form.encounterNotes}
+                    onChange={(e) => updateField("encounterNotes", e.target.value)}
                   />
                 </div>
               </div>

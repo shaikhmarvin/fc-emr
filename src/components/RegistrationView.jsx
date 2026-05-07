@@ -316,12 +316,12 @@ export default function RegistrationView({
 </div>
 
                 <div className="flex flex-col gap-2 sm:flex-row">
-  {userRole === "undergraduate" && (
+  {(userRole === "undergraduate" || isLeadershipView) && (
     <button
       onClick={() => openUndergradRegistration(patient.id, encounter.id)}
       className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
     >
-      Complete Undergrad Intake
+      {userRole === "undergraduate" ? "Complete / Edit Undergrad Intake" : "Edit Undergrad Intake"}
     </button>
   )}
 

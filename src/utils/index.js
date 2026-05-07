@@ -106,7 +106,7 @@ export function getStatusLabel(status, soapStatus) {
     case "in_visit":
       return "In Visit";
     case "done":
-      return "Completed";
+      return "Completed Visit";
     case "cancelled":
       return "Cancelled";
     default:

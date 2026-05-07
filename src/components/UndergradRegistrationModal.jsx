@@ -49,6 +49,7 @@ export default function UndergradRegistrationModal({
   setForm,
   onClose,
   onSubmit,
+  tonightSpecialtyNames = [],
 }) {
   if (!show) return null;
 
@@ -127,7 +128,7 @@ const displayMrn =
           <div>
             <h3 className="text-xl font-semibold">Complete Undergrad Intake</h3>
             <p className="text-sm text-slate-500">
-              Finish the registration side of the undergraduate intake.
+              Edit registration details and front-desk encounter fields.
             </p>
           </div>
 
@@ -192,6 +193,93 @@ const displayMrn =
     </div>
   </div>
 </div>
+          <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 shadow-sm">
+            <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-blue-700">
+              Encounter Details
+            </h4>
+            <p className="mb-4 text-xs text-blue-700">
+              Use this if the daily card number or visit type was entered incorrectly at the front desk.
+            </p>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Daily Card #
+                </label>
+                <input
+                  inputMode="numeric"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+                  value={form.dailyNumber || ""}
+                  onChange={(e) => handleChange("dailyNumber", e.target.value.replace(/\D/g, ""))}
+                  placeholder="Example: 7"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Visit Type
+                </label>
+                <select
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+                  value={form.visitType || "general"}
+                  onChange={(e) => {
+                    const nextVisitType = e.target.value;
+                    handleChange("visitType", nextVisitType);
+                    if (nextVisitType !== "both" && nextVisitType !== "specialty_only") {
+                      handleChange("specialtyType", "");
+                    }
+                    if (nextVisitType !== "refill_only") {
+                      handleChange("refillMedicationRequest", "");
+                    }
+                  }}
+                >
+                  <option value="general">General Clinic</option>
+                  <option value="specialty_only">Specialty Clinic Only</option>
+                  <option value="both">General + Specialty Clinic</option>
+                  <option value="refill_only">Refills Only</option>
+                </select>
+              </div>
+
+              {(form.visitType === "both" || form.visitType === "specialty_only") && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Specialty Type
+                  </label>
+                  <select
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+                    value={form.specialtyType || ""}
+                    onChange={(e) => handleChange("specialtyType", e.target.value)}
+                  >
+                    <option value="">Select Specialty</option>
+                    <option value="pt">Physical Therapy</option>
+                    <option value="dermatology">Dermatology</option>
+                    <option value="ophthalmology">Ophthalmology</option>
+                    <option value="mental_health">Mental Health</option>
+                    <option value="addiction">Addiction Medicine</option>
+                  </select>
+                  {tonightSpecialtyNames.length > 0 && (
+                    <p className="mt-1 text-xs text-blue-700">
+                      Tonight: {tonightSpecialtyNames.join(", ")}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {form.visitType === "refill_only" && (
+                <div className="md:col-span-2 xl:col-span-2">
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Do you know what medications you need refilled?
+                  </label>
+                  <textarea
+                    className="min-h-[80px] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+                    value={form.refillMedicationRequest || ""}
+                    onChange={(e) => handleChange("refillMedicationRequest", e.target.value)}
+                    placeholder="Example: Metformin, lisinopril, insulin, unsure, etc."
+                  />
+                </div>
+              )}
+            </div>
+          </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
   <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
     Address Information
@@ -440,7 +528,7 @@ const displayMrn =
             onClick={onSubmit}
             className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
           >
-            Save Undergrad Registration
+            Save Undergrad Intake
           </button>
         </div>
       </div>

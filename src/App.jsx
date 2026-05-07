@@ -834,6 +834,10 @@ export default function App() {
     spanishOnly: "",
     chronicConditions: [],
     chronicConditionsOther: "",
+    dailyNumber: "",
+    visitType: "general",
+    specialtyType: "",
+    refillMedicationRequest: "",
   };
 
   const [showUndergradRegistrationModal, setShowUndergradRegistrationModal] = useState(false);
@@ -3668,6 +3672,8 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
     const rowMap = new Map();
 
     visibleEncounterRows.forEach((row) => {
+      if (row.encounter?.visitType === "refill_only") return;
+
       const patientKey = String(row.patient?.id || row.encounter?.patientId || "");
       if (!patientKey) return;
 
@@ -3940,6 +3946,7 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
         assignedUpperLevel: "",
         roomNumber: "",
         leadershipIntakeComplete: false,
+        refillMedicationRequest: data.refillMedicationRequest || "",
       };
 
       let savedEncounter = null;
@@ -4042,6 +4049,10 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
       spanishOnly: patient.spanishOnly || "",
       chronicConditions: patient.chronicConditions || [],
       chronicConditionsOther: patient.chronicConditionsOther || "",
+      dailyNumber: encounter.dailyNumber || "",
+      visitType: encounter.visitType || "general",
+      specialtyType: encounter.specialtyType || "",
+      refillMedicationRequest: encounter.refillMedicationRequest || "",
     });
 
     setShowUndergradRegistrationModal(true);
@@ -4074,8 +4085,23 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
 
       const nextStatus = encounter.leadershipIntakeComplete ? "ready" : "undergrad_complete";
 
+      const nextVisitType = undergradRegistrationForm.visitType || encounter.visitType || "general";
+      const nextSpecialtyType =
+        nextVisitType === "both" || nextVisitType === "specialty_only"
+          ? undergradRegistrationForm.specialtyType || ""
+          : "";
+      const nextRefillMedicationRequest =
+        nextVisitType === "refill_only"
+          ? undergradRegistrationForm.refillMedicationRequest || ""
+          : "";
+
       await updateEncounterInSupabase(registrationEncounterId, {
         status: nextStatus,
+        dailyNumber: undergradRegistrationForm.dailyNumber || "",
+        visitType: nextVisitType,
+        specialtyType: nextSpecialtyType,
+        refillMedicationRequest: nextRefillMedicationRequest,
+        dualVisit: nextVisitType === "both",
       });
 
       setPatients((prev) =>
@@ -4086,7 +4112,14 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
               ...patientUpdates,
               encounters: p.encounters.map((e) =>
                 e.id === registrationEncounterId
-                  ? { ...e, status: nextStatus }
+                  ? {
+                      ...e,
+                      status: nextStatus,
+                      dailyNumber: undergradRegistrationForm.dailyNumber || "",
+                      visitType: nextVisitType,
+                      specialtyType: nextSpecialtyType,
+                      refillMedicationRequest: nextRefillMedicationRequest,
+                    }
                   : e
               ),
             }
@@ -4363,9 +4396,16 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
   useEffect(() => {
     if (userRole !== "undergraduate") return;
 
-    const medsReadyRows = waitingEncounterRows.filter(
-      ({ encounter }) => encounter?.pharmacyStatus === "meds_ready"
-    );
+    const medsReadyRows = waitingEncounterRows.filter(({ encounter }) => {
+      if (encounter?.pharmacyStatus !== "meds_ready") return false;
+
+      const readyBy = encounter?.pharmacyReadyBy || encounter?.pharmacy_ready_by;
+      const readyByProfile = (profiles || []).find(
+        (profile) => String(profile.id) === String(readyBy)
+      );
+
+      return readyByProfile?.role === "pharmacy";
+    });
 
     if (medsReadyRows.length === 0) {
       if (lastPharmacyToastKey) {
@@ -4402,7 +4442,7 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
         setPharmacyToast(null);
       },
     });
-  }, [waitingEncounterRows, userRole, lastPharmacyToastKey]);
+  }, [waitingEncounterRows, userRole, lastPharmacyToastKey, profiles]);
 
   const assignedCount = boardEncounterRows.filter(
     ({ encounter }) =>
@@ -5491,7 +5531,7 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
   setShowPatientInfoEditModal(true);
 }
 
-  async function saveDashboardPatientEdits(patientId, updates) {
+  async function saveDashboardPatientEdits(patientId, updates, encounterId = null, encounterUpdates = null) {
     const trimmedMrn = (updates.mrn || "").trim();
 
     if (trimmedMrn && mrnExists(patients, trimmedMrn, patientId)) {
@@ -5505,6 +5545,12 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
         mrn: trimmedMrn,
       });
 
+      let savedEncounter = null;
+
+      if (encounterId && encounterUpdates) {
+        savedEncounter = await updateEncounterInSupabase(encounterId, encounterUpdates);
+      }
+
       setPatients((prev) =>
         prev.map((patient) =>
           patient.id === patientId
@@ -5513,6 +5559,15 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
               ...savedPatient,
               ...updates,
               mrn: trimmedMrn,
+              encounters: patient.encounters.map((encounter) =>
+                encounter.id === encounterId
+                  ? {
+                    ...encounter,
+                    ...(savedEncounter || {}),
+                    ...(encounterUpdates || {}),
+                  }
+                  : encounter
+              ),
             }
             : patient
         )
@@ -8667,7 +8722,7 @@ await applyEncounterTransition(selectedEncounter.id, {
             />
           )}
 
-          {activeView === "undergrad-intake" && userRole === "undergraduate" && (
+          {activeView === "undergrad-intake" && (userRole === "undergraduate" || isLeadershipView) && (
             <UndergradIntakeView
               onSave={handleUndergradStartEncounter}
               patients={patients}
@@ -8722,6 +8777,7 @@ await applyEncounterTransition(selectedEncounter.id, {
               onDeleteRefillRequest={handleDeleteRefillRequest}
               programEntries={programEntries}
               specialtyAccess={currentSpecialtyAccess}
+              papEntries={papEntries}
 
             />
           )}
@@ -9025,16 +9081,19 @@ setSelectedClinicDate={setRoomBoardDate}
           setUndergradRegistrationForm(EMPTY_UNDERGRAD_REGISTRATION_FORM);
         }}
         onSubmit={saveUndergradRegistration}
+        tonightSpecialtyNames={tonightSpecialtyNames}
       />
 
       <PatientInfoEditModal
         show={showPatientInfoEditModal}
-  patient={dashboardSelectedPatient || selectedPatient}
+        patient={dashboardSelectedPatient || selectedPatient}
+        selectedEncounter={selectedEncounter}
         canEditUndergradFields={userRole === "undergraduate" || isLeadershipView}
         canEditAllPatientFields={isLeadershipView}
+        canEditEncounterFields={userRole === "undergraduate" || isLeadershipView}
         onClose={() => setShowPatientInfoEditModal(false)}
-        onSave={async (patientId, updates) => {
-          await saveDashboardPatientEdits(patientId, updates);
+        onSave={async (patientId, updates, encounterId, encounterUpdates) => {
+          await saveDashboardPatientEdits(patientId, updates, encounterId, encounterUpdates);
           setShowPatientInfoEditModal(false);
         }}
       />
