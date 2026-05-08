@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./lib/supabase";
 import { createPatientInSupabase, updatePatientInSupabase } from "./api/patients";
 import {
@@ -1228,6 +1228,8 @@ export default function App() {
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showIntakeModal, setShowIntakeModal] = useState(false);
+  const [isSubmittingIntake, setIsSubmittingIntake] = useState(false);
+  const isSubmittingIntakeRef = useRef(false);
   const [labImportRawText, setLabImportRawText] = useState("");
   const [labImportPacket, setLabImportPacket] = useState(null);
   const [labImportPackets, setLabImportPackets] = useState([]);
@@ -3283,17 +3285,38 @@ const [labQueueDate, setLabQueueDate] = useState(getLocalDateInputValue());
           encounter.status === "started" ||
           encounter.status === "undergrad_complete";
 
+        const isActiveRegistrationEncounter =
+          encounter.status !== "cancelled" &&
+          encounter.status !== "done" &&
+          encounter.status !== "completed" &&
+          encounter.status !== "signed";
+
         if (userRole === "undergraduate") {
+          const undergradEditableStatuses = new Set([
+            "started",
+            "undergrad_complete",
+            "ready",
+            "in_visit",
+          ]);
+
+          // Leadership can finish intake while undergrad is still adding MRN/details.
+          // Keep those ready/in-visit patients visible until undergrad explicitly saves
+          // Complete / Edit Undergrad Intake, then remove them from this registration list.
           return (
             isGeneralRegistrationEncounter &&
-            encounter.status === "started"
+            undergradEditableStatuses.has(encounter.status) &&
+            !encounter.undergradCompletedAt
           );
         }
 
         if (isLeadershipView) {
+          // Leadership registration should only clear after leadership completes intake.
+          // Undergrad completion can happen before/after leadership and should not
+          // remove the patient from this list. Use the leadership flag as the source
+          // of truth instead of relying only on status, so simultaneous workflows stay visible.
           return (
             isGeneralRegistrationEncounter &&
-            isRegistrationStatus &&
+            isActiveRegistrationEncounter &&
             !encounter.leadershipIntakeComplete
           );
         }
@@ -3841,7 +3864,13 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
     try {
       await updatePatientInSupabase(registrationPatientId, patientUpdates);
 
-      const nextStatus = encounter.leadershipIntakeComplete ? "ready" : "undergrad_complete";
+      const currentStatus = encounter.status || "started";
+      const activeRegistrationStatuses = new Set(["started", "undergrad_complete"]);
+      const nextStatus = activeRegistrationStatuses.has(currentStatus)
+        ? encounter.leadershipIntakeComplete
+          ? "ready"
+          : "undergrad_complete"
+        : currentStatus;
 
       const nextVisitType = undergradRegistrationForm.visitType || encounter.visitType || "general";
       const nextSpecialtyType =
@@ -3853,8 +3882,11 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
           ? undergradRegistrationForm.refillMedicationRequest || ""
           : "";
 
+      const undergradCompletedAt = encounter.undergradCompletedAt || new Date().toISOString();
+
       await updateEncounterInSupabase(registrationEncounterId, {
         status: nextStatus,
+        undergradCompletedAt,
         dailyNumber: undergradRegistrationForm.dailyNumber || "",
         visitType: nextVisitType,
         specialtyType: nextSpecialtyType,
@@ -3873,6 +3905,7 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
                   ? {
                       ...e,
                       status: nextStatus,
+                      undergradCompletedAt,
                       dailyNumber: undergradRegistrationForm.dailyNumber || "",
                       visitType: nextVisitType,
                       specialtyType: nextSpecialtyType,
@@ -4879,6 +4912,11 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
 
       if (!shouldContinue) return;
     }
+
+    if (isSubmittingIntakeRef.current) return;
+    isSubmittingIntakeRef.current = true;
+    setIsSubmittingIntake(true);
+
     if (isEditingIntake && selectedPatient && selectedEncounter) {
       try {
         console.log("editingPatientId:", editingPatientId);
@@ -4889,7 +4927,7 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
           lastName: intakeForm.lastName,
           preferredName: intakeForm.preferredName,
           dob: intakeForm.dob,
-          mrn: intakeForm.mrn.trim() || selectedPatient.mrn,
+          ...(intakeForm.mrn.trim() ? { mrn: intakeForm.mrn.trim() } : {}),
           last4ssn: intakeForm.last4ssn,
           phone: intakeForm.phone,
           pronouns: intakeForm.pronouns,
@@ -5014,10 +5052,14 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
         setIsEditingIntake(false);
         setEditingPatientId(null);
         setActiveView("registration");
+        isSubmittingIntakeRef.current = false;
+        setIsSubmittingIntake(false);
         return;
       } catch (error) {
         console.error("Failed to update intake in Supabase:", error);
         window.alert(`Supabase save error: ${error.message}`);
+        isSubmittingIntakeRef.current = false;
+        setIsSubmittingIntake(false);
         return;
       }
     }
@@ -5143,6 +5185,8 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
       } catch (error) {
         console.error("Failed to create duplicate-patient encounter:", error);
         window.alert(`Supabase save error: ${error.message}`);
+        isSubmittingIntakeRef.current = false;
+        setIsSubmittingIntake(false);
         return;
       }
     } else {
@@ -5249,9 +5293,13 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
       } catch (error) {
         console.error("Supabase save error:", error);
         window.alert(`Supabase save error: ${error.message}`);
+        isSubmittingIntakeRef.current = false;
+        setIsSubmittingIntake(false);
         return;
       }
     }
+    isSubmittingIntakeRef.current = false;
+    setIsSubmittingIntake(false);
     setShowIntakeModal(false);
     setIntakeTab(0);
     setIntakeForm(EMPTY_FORM);
@@ -5650,6 +5698,50 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
     }
 
     await updateEncounterInSupabase(encounterId, updates);
+
+    refreshClinicData?.();
+  }
+
+  async function finalizeClinicDay(rowsToFinalize = []) {
+    if (!isLeadershipView) return;
+
+    const rows = rowsToFinalize.filter(({ encounter }) => encounter?.id);
+    if (rows.length === 0) return;
+
+    const finalizedAt = new Date().toISOString();
+
+    await Promise.all(
+      rows.map(({ encounter }) => {
+        const updates = {
+          status: "done",
+          doneAt: encounter.doneAt || encounter.done_at || finalizedAt,
+          visitCompletedAt:
+            encounter.visitCompletedAt ||
+            encounter.visit_completed_at ||
+            finalizedAt,
+        };
+
+        return updateEncounterInSupabase(encounter.id, updates);
+      })
+    );
+
+    const finalizedIds = new Set(rows.map(({ encounter }) => String(encounter.id)));
+
+    setPatients((prev) =>
+      prev.map((patient) => ({
+        ...patient,
+        encounters: patient.encounters.map((encounter) =>
+          finalizedIds.has(String(encounter.id))
+            ? {
+                ...encounter,
+                status: "done",
+                doneAt: encounter.doneAt || finalizedAt,
+                visitCompletedAt: encounter.visitCompletedAt || finalizedAt,
+              }
+            : encounter
+        ),
+      }))
+    );
 
     refreshClinicData?.();
   }
@@ -8390,6 +8482,7 @@ await applyEncounterTransition(selectedEncounter.id, {
               patientRecordsTitle={patientRecordsTitle}
               openPatientFromFilteredView={openPatientFromFilteredView}
               getFullPatientName={getFullPatientName}
+              finalizeClinicDay={finalizeClinicDay}
             />
           )}
 
@@ -8840,6 +8933,7 @@ setSelectedClinicDate={setRoomBoardDate}
         intakeForm={intakeForm}
         updateIntakeField={updateIntakeField}
         submitPatient={submitPatient}
+        isSubmittingIntake={isSubmittingIntake}
         isEditingIntake={isEditingIntake}
         intakeMatchPatientId={intakeMatchPatientId}
         intakeMatchedPatient={intakeMatchedPatient}

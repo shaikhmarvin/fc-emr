@@ -1196,6 +1196,14 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                 <p className="text-sm text-slate-600">
                   {encounter.chiefComplaint || "No chief complaint"}
                 </p>
+
+                {isRefillOnlyEncounter(encounter) && getRefillMedicationRequest(encounter) && (
+                  <div className="rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-sm text-purple-900">
+                    <span className="font-semibold">Requested refill(s):</span>{" "}
+                    <span className="whitespace-pre-wrap">{getRefillMedicationRequest(encounter)}</span>
+                  </div>
+                )}
+
                 {getLeadershipQueueNotes(encounter) && (
                   <div className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900">
                     <span className="font-semibold">Leadership note:</span>{" "}

@@ -1,10 +1,16 @@
 import { supabase } from "../lib/supabase";
 
-export async function fetchAllergies() {
-  const { data, error } = await supabase
+export async function fetchAllergies(patientIds = null) {
+  let query = supabase
     .from("allergies")
-    .select("*")
+    .select("id, patient_id, allergen, reaction, severity, notes, is_active, created_at")
     .order("created_at", { ascending: false });
+
+  if (Array.isArray(patientIds) && patientIds.length > 0) {
+    query = query.in("patient_id", patientIds);
+  }
+
+  const { data, error } = await query;
 
   if (error) throw error;
   return data ?? [];

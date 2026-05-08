@@ -182,6 +182,7 @@ export function useClinicData({ authReady, session, userRole }) {
   const timeoutRef = useRef(null);
   const inFlightRef = useRef(false);
   const queuedReloadRef = useRef(false);
+  const lastVisibleRefreshRef = useRef(0);
 
   const loadData = useCallback(async () => {
     if (!authReady || !session || !userRole) return;
@@ -194,13 +195,24 @@ export function useClinicData({ authReady, session, userRole }) {
     inFlightRef.current = true;
 
     try {
-      const [patientsData, encountersData, medicationsData, allergiesData] =
+      const [patientsData, encountersData] =
         await Promise.all([
           fetchPatients(),
           fetchEncounters(),
-          fetchMedications(),
-          fetchAllergies(),
         ]);
+
+      const activePatientIds = [
+        ...new Set(
+          (encountersData || [])
+            .map((encounter) => encounter.patient_id)
+            .filter(Boolean)
+        ),
+      ];
+
+      const [medicationsData, allergiesData] = await Promise.all([
+        fetchMedications(activePatientIds),
+        fetchAllergies(activePatientIds),
+      ]);
 
       setPatients(
         buildPatientMap(
@@ -263,18 +275,29 @@ export function useClinicData({ authReady, session, userRole }) {
   useEffect(() => {
     if (!authReady || !session || !userRole) return;
 
-    const fallbackInterval = setInterval(() => {
+    const refreshVisibleTab = () => {
+      if (document.visibilityState !== "visible") return;
+
+      const now = Date.now();
+      if (now - lastVisibleRefreshRef.current < 15000) return;
+
+      lastVisibleRefreshRef.current = now;
       loadData();
+    };
+
+    const fallbackInterval = setInterval(() => {
+      // Hidden tabs should not keep burning Supabase Disk I/O overnight.
+      refreshVisibleTab();
     }, 120000);
 
     const refreshWhenVisible = () => {
       if (document.visibilityState === "visible") {
-        loadData();
+        refreshVisibleTab();
       }
     };
 
     const refreshOnFocus = () => {
-      loadData();
+      refreshVisibleTab();
     };
 
     document.addEventListener("visibilitychange", refreshWhenVisible);

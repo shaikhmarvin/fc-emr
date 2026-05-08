@@ -6,6 +6,7 @@ export default function IntakeModal({
   intakeForm,
   updateIntakeField,
   submitPatient,
+  isSubmittingIntake = false,
   isEditingIntake,
   intakeMatchPatientId,
   intakeMatchedPatient,
@@ -867,9 +868,14 @@ function ExistingProgramWarning({ programType }) {
 
           <button
             onClick={submitPatient}
-            className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+            disabled={isSubmittingIntake}
+            className={`rounded-lg px-5 py-2.5 text-sm font-semibold text-white ${
+              isSubmittingIntake
+                ? "cursor-not-allowed bg-slate-400"
+                : "bg-blue-600 hover:bg-blue-700"
+            }`}
           >
-            Complete Intake
+            {isSubmittingIntake ? "Completing..." : "Complete Intake"}
           </button>
         </div>
       </div>

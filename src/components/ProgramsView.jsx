@@ -101,12 +101,13 @@ export default function ProgramsView({
 
   const [specialtyFilters, setSpecialtyFilters] = useState(
     PROGRAM_TYPES.reduce((acc, type) => {
-      acc[type] = { patient: "", dob: "" };
+      acc[type] = { patient: "", dob: "", status: "All" };
       return acc;
     }, {})
   );
 
   const [expandedEntryIds, setExpandedEntryIds] = useState([]);
+  const [expandedProgramSettings, setExpandedProgramSettings] = useState({});
 
   const [programDrafts, setProgramDrafts] = useState({});
 
@@ -847,7 +848,7 @@ export default function ProgramsView({
                 return (
                   <div
                     key={entry.id}
-                    className={`rounded-2xl border border-slate-200 bg-white p-4 border-l-4 ${getStatusBorderColor(
+                    className={`rounded-2xl border border-slate-200 bg-white p-4 border-l-4 ${entry.status === "Completed" ? "opacity-70" : ""} ${getStatusBorderColor(
                       entry.status
                     )}`}
                   >
@@ -992,15 +993,33 @@ export default function ProgramsView({
     const currentFilters = specialtyFilters[programType] || {
       patient: "",
       dob: "",
+      status: "All",
     };
 
-    const entries = (specialtyEntries[programType] || []).filter((entry) => {
-      const matchesDate =
-        isGenericTracker ||
-        !specialtyDate ||
-        !entry.specialtyDate ||
-        entry.specialtyDate === specialtyDate;
+    const sortReferralList = (list) => {
+      const statusRank = {
+        "New Referral": 10,
+        "Attempted Contact": 20,
+        Scheduled: 30,
+        Backup: 40,
+        "Unable to Reach": 70,
+        Declined: 80,
+        Completed: 90,
+      };
 
+      return [...list].sort((a, b) => {
+        const aRank = statusRank[a.status] ?? 50;
+        const bRank = statusRank[b.status] ?? 50;
+
+        if (aRank !== bRank) return aRank - bRank;
+
+        return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+      });
+    };
+
+    const allSpecialtyEntries = specialtyEntries[programType] || [];
+
+    const entries = sortReferralList(allSpecialtyEntries.filter((entry) => {
       const patientText = (entry.patientName || "").toLowerCase();
 
       const matchesPatient =
@@ -1010,8 +1029,13 @@ export default function ProgramsView({
       const matchesDob =
         !currentFilters.dob || entry.dob === currentFilters.dob;
 
-      return matchesDate && matchesPatient && matchesDob;
-    });
+      const matchesStatus =
+        !currentFilters.status ||
+        currentFilters.status === "All" ||
+        entry.status === currentFilters.status;
+
+      return matchesPatient && matchesDob && matchesStatus;
+    }));
 
 if (isGenericTracker) {
   return (
@@ -1184,210 +1208,239 @@ if (isGenericTracker) {
   );
 }
 
-    const unscheduledEntries = entries.filter(
-      (entry) => !entry.scheduleType && entry.status !== "Completed" && entry.status !== "Declined"
-    );
+    const referralEntries = entries;
 
-    const primaryEntries = entries.filter(
+    const primaryEntries = allSpecialtyEntries.filter(
       (entry) => entry.scheduleType === "primary" && entry.specialtyDate === specialtyDate
     );
-    const backupEntries = entries.filter(
+    const backupEntries = allSpecialtyEntries.filter(
       (entry) => entry.scheduleType === "backup" && entry.specialtyDate === specialtyDate
     );
 
     return (
       <div className="space-y-6">
         {canEditProgramSettings && (
-        <Card>
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <Field label={`Next ${programType} Clinic Date`}>
-                <input
-                  type="date"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  value={nextProgramDates[programType] || ""}
-                  onChange={async (e) => {
-                    const value = e.target.value;
-
-                    setNextProgramDates((prev) => ({
-                      ...prev,
-                      [programType]: value,
-                    }));
-
-                    await updateProgramSetting(programType, {
-                      next_specialty_date: value,
-                    });
-
-                    await loadProgramSettings();
-                  }}
-                />
-              </Field>
-
-              <ReadOnlyField
-                label="Primary Capacity"
-                value={
-                  config.schedulingType === "timed"
-                    ? `${config.primarySlots.length} slots`
-                    : `${config.primaryCount} spots`
-                }
-              />
-
-              <ReadOnlyField
-                label="Backup Capacity"
-                value={`${config.backupCount} spots`}
-              />
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <h4 className="mb-3 text-sm font-semibold text-slate-900">
-                Edit Capacity
-              </h4>
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                {programType === "Physical Therapy" ? (
-                  <Field label="PT Slots (comma separated)">
+          <Card>
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                <div className="grid flex-1 grid-cols-1 gap-4 md:grid-cols-3">
+                  <Field label={`Next ${programType} Clinic Date`}>
                     <input
+                      type="date"
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                      value={
-                        editingSettings[programType]?.pt_slots?.join(", ") ??
-                        config.primarySlots.join(", ")
-                      }
-                      onChange={(e) =>
-                        setEditingSettings((prev) => ({
+                      value={nextProgramDates[programType] || ""}
+                      onChange={async (e) => {
+                        const value = e.target.value;
+
+                        setNextProgramDates((prev) => ({
                           ...prev,
-                          [programType]: {
-                            ...prev[programType],
-                            pt_slots: e.target.value
-                              .split(",")
-                              .map((slot) => slot.trim())
-                              .filter(Boolean),
-                          },
-                        }))
-                      }
-                    />
-                  </Field>
-                ) : (
-                  <Field label="Primary Count">
-                    <input
-                      type="number"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                      value={
-                        editingSettings[programType]?.primary_count ??
-                        config.primaryCount
-                      }
-                      onChange={(e) =>
-                        setEditingSettings((prev) => ({
-                          ...prev,
-                          [programType]: {
-                            ...prev[programType],
-                            primary_count: Number(e.target.value),
-                          },
-                        }))
-                      }
-                    />
-                  </Field>
-                )}
-
-                <Field label="Backup Count">
-                  <input
-                    type="number"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    value={
-                      editingSettings[programType]?.backup_count ??
-                      config.backupCount
-                    }
-                    onChange={(e) =>
-                      setEditingSettings((prev) => ({
-                        ...prev,
-                        [programType]: {
-                          ...prev[programType],
-                          backup_count: Number(e.target.value),
-                        },
-                      }))
-                    }
-                  />
-                </Field>
-
-                <div className="flex items-end">
-                  <button
-                    onClick={async () => {
-                      const updates = editingSettings[programType];
-                      if (!updates) return;
-
-                      await updateProgramSetting(programType, updates);
-                      await loadProgramSettings();
-
-                      setEditingSettings((prev) => {
-                        const copy = { ...prev };
-                        delete copy[programType];
-                        return copy;
-                      });
-                    }}
-                    className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                  >
-                    Save Capacity
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <h4 className="mb-3 text-sm font-semibold text-slate-900">
-                Assigned Rooms
-              </h4>
-
-              <div className="flex flex-wrap gap-2">
-                {ROOM_OPTIONS.map((room) => {
-                  const isSelected = (programRooms[programType] || []).includes(room.number);
-
-                  return (
-                    <button
-                      key={room.number}
-                      onClick={() => {
-                        const current = programRooms[programType] || [];
-
-                        const updated = isSelected
-                          ? current.filter((r) => r !== room.number)
-                          : [...current, room.number];
-
-                        setProgramRooms((prev) => ({
-                          ...prev,
-                          [programType]: updated,
+                          [programType]: value,
                         }));
+
+                        await updateProgramSetting(programType, {
+                          next_specialty_date: value,
+                        });
+
+                        await loadProgramSettings();
                       }}
-                      className={`px-3 py-2 rounded-lg text-sm border ${isSelected
-                          ? "bg-blue-600 text-white"
-                          : "bg-white text-slate-700"
-                        }`}
-                    >
-                      {room.label}
-                    </button>
-                  );
-                })}
+                    />
+                  </Field>
+
+                  <ReadOnlyField
+                    label="Primary Capacity"
+                    value={
+                      config.schedulingType === "timed"
+                        ? `${config.primarySlots.length} slots`
+                        : `${config.primaryCount} spots`
+                    }
+                    copyable={false}
+                  />
+
+                  <ReadOnlyField
+                    label="Backup Capacity"
+                    value={`${config.backupCount} spots`}
+                    copyable={false}
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExpandedProgramSettings((prev) => ({
+                      ...prev,
+                      [programType]: !prev[programType],
+                    }))
+                  }
+                  className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  {expandedProgramSettings[programType]
+                    ? "Hide clinic settings"
+                    : "Edit capacity / rooms"}
+                </button>
               </div>
 
-              <button
-                className="mt-3 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm"
-                onClick={async () => {
-                  await updateProgramSetting(programType, {
-                    rooms_assigned: {
-                      rooms: programRooms[programType] || [],
-                    },
-                  });
-                  await loadProgramSettings();
-                }}
-              >
-                Save Rooms
-              </button>
+              {expandedProgramSettings[programType] && (
+                <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <h4 className="mb-3 text-sm font-semibold text-slate-900">
+                      Edit Capacity
+                    </h4>
+
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                      {programType === "Physical Therapy" ? (
+                        <Field label="PT Slots (comma separated)">
+                          <input
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            value={
+                              editingSettings[programType]?.pt_slots?.join(", ") ??
+                              config.primarySlots.join(", ")
+                            }
+                            onChange={(e) =>
+                              setEditingSettings((prev) => ({
+                                ...prev,
+                                [programType]: {
+                                  ...prev[programType],
+                                  pt_slots: e.target.value
+                                    .split(",")
+                                    .map((slot) => slot.trim())
+                                    .filter(Boolean),
+                                },
+                              }))
+                            }
+                          />
+                        </Field>
+                      ) : (
+                        <Field label="Primary Count">
+                          <input
+                            type="number"
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            value={
+                              editingSettings[programType]?.primary_count ??
+                              config.primaryCount
+                            }
+                            onChange={(e) =>
+                              setEditingSettings((prev) => ({
+                                ...prev,
+                                [programType]: {
+                                  ...prev[programType],
+                                  primary_count: Number(e.target.value),
+                                },
+                              }))
+                            }
+                          />
+                        </Field>
+                      )}
+
+                      <Field label="Backup Count">
+                        <input
+                          type="number"
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                          value={
+                            editingSettings[programType]?.backup_count ??
+                            config.backupCount
+                          }
+                          onChange={(e) =>
+                            setEditingSettings((prev) => ({
+                              ...prev,
+                              [programType]: {
+                                ...prev[programType],
+                                backup_count: Number(e.target.value),
+                              },
+                            }))
+                          }
+                        />
+                      </Field>
+
+                      <div className="flex items-end">
+                        <button
+                          onClick={async () => {
+                            const updates = editingSettings[programType];
+                            if (!updates) return;
+
+                            await updateProgramSetting(programType, updates);
+                            await loadProgramSettings();
+
+                            setEditingSettings((prev) => {
+                              const copy = { ...prev };
+                              delete copy[programType];
+                              return copy;
+                            });
+                          }}
+                          className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                        >
+                          Save Capacity
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <h4 className="mb-3 text-sm font-semibold text-slate-900">
+                      Assigned Rooms
+                    </h4>
+
+                    <div className="flex flex-wrap gap-2">
+                      {ROOM_OPTIONS.map((room) => {
+                        const isSelected = (programRooms[programType] || []).includes(room.number);
+
+                        return (
+                          <button
+                            key={room.number}
+                            onClick={() => {
+                              const current = programRooms[programType] || [];
+
+                              const updated = isSelected
+                                ? current.filter((r) => r !== room.number)
+                                : [...current, room.number];
+
+                              setProgramRooms((prev) => ({
+                                ...prev,
+                                [programType]: updated,
+                              }));
+                            }}
+                            className={`px-3 py-2 rounded-lg text-sm border ${isSelected
+                                ? "bg-blue-600 text-white"
+                                : "bg-white text-slate-700"
+                              }`}
+                          >
+                            {room.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <button
+                      className="mt-3 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white"
+                      onClick={async () => {
+                        await updateProgramSetting(programType, {
+                          rooms_assigned: {
+                            rooms: programRooms[programType] || [],
+                          },
+                        });
+                        await loadProgramSettings();
+                      }}
+                    >
+                      Save Rooms
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-        </Card>
+          </Card>
         )}
 
         <Card>
-          <h3 className="mb-4 text-lg font-semibold text-slate-900">
-            Unscheduled {programType} Referrals
-          </h3>
-          <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">
+                {programType} Referral List
+              </h3>
+              <p className="text-sm text-slate-500">
+                Running list for this specialty, including scheduled and completed patients.
+              </p>
+            </div>
+          </div>
+          <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-4">
             <Field label="Search Patient">
               <input
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -1421,12 +1474,35 @@ if (isGenericTracker) {
               />
             </Field>
 
+            <Field label="Status">
+              <select
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                value={specialtyFilters[programType]?.status || "All"}
+                onChange={(e) =>
+                  setSpecialtyFilters((prev) => ({
+                    ...prev,
+                    [programType]: {
+                      ...prev[programType],
+                      status: e.target.value,
+                    },
+                  }))
+                }
+              >
+                <option value="All">All statuses</option>
+                {getStatusOptions(programType).map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
             <div className="flex items-end">
               <button
                 onClick={() =>
                   setSpecialtyFilters((prev) => ({
                     ...prev,
-                    [programType]: { patient: "", dob: "" },
+                    [programType]: { patient: "", dob: "", status: "All" },
                   }))
                 }
                 className="w-full rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200"
@@ -1436,17 +1512,17 @@ if (isGenericTracker) {
             </div>
           </div>
 
-          {unscheduledEntries.length === 0 ? (
-            <p className="text-sm text-slate-500">No unscheduled referrals.</p>
+          {referralEntries.length === 0 ? (
+            <p className="text-sm text-slate-500">No referrals match these filters.</p>
           ) : (
             <div className="space-y-3">
-              {unscheduledEntries.map((entry) => {
+              {referralEntries.map((entry) => {
                 const isExpanded = expandedEntryIds.includes(entry.id);
 
                 return (
                   <div
                     key={entry.id}
-                    className={`rounded-2xl border border-slate-200 bg-white p-4 border-l-4 ${getStatusBorderColor(
+                    className={`rounded-2xl border border-slate-200 bg-white p-4 border-l-4 ${entry.status === "Completed" ? "opacity-70" : ""} ${getStatusBorderColor(
                       entry.status
                     )}`}
                   >
@@ -1460,18 +1536,33 @@ if (isGenericTracker) {
                       }
                       className="w-full text-left"
                     >
-                      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                        <ReadOnlyField label="Patient" value={entry.patientName} />
-                        <ReadOnlyField label="Phone" value={entry.phone || "—"} />
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
+                        <div className="md:col-span-2">
+                          <ReadOnlyField label="Patient" value={entry.patientName} />
+                        </div>
 
-                        <div>
+                        <div className="md:col-span-2">
+                          <ReadOnlyField label="Phone" value={entry.phone || "—"} />
+                        </div>
+
+                        <div className="md:col-span-2">
+                          <ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} />
+                        </div>
+
+                        <div className="md:col-span-2">
+                          <ReadOnlyField label="MRN" value={entry.mrn || "—"} />
+                        </div>
+
+                        <div className="md:col-span-1">
                           <label className="mb-1 block text-sm font-medium text-slate-700">
                             Status
                           </label>
                           <StatusBadge status={entry.status} />
                         </div>
 
-                        <ReadOnlyField label="Reason" value={entry.reason || "—"} />
+                        <div className="md:col-span-3">
+                          <ReadOnlyField label="Reason" value={entry.reason || "—"} />
+                        </div>
                       </div>
                     </button>
 
@@ -1795,7 +1886,7 @@ function Field({ label, children, className = "" }) {
   );
 }
 
-function ReadOnlyField({ label, value }) {
+function ReadOnlyField({ label, value, copyable = true }) {
   const displayValue = value || "—";
 
   async function copyValue(event) {
@@ -1819,15 +1910,17 @@ function ReadOnlyField({ label, value }) {
           <span className="truncate">{displayValue}</span>
         </div>
 
-        <button
-          type="button"
-          onClick={copyValue}
-          className="shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-          title={`Copy ${label}`}
-          aria-label={`Copy ${label}`}
-        >
-          ⧉
-        </button>
+        {copyable && (
+          <button
+            type="button"
+            onClick={copyValue}
+            className="shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+            title={`Copy ${label}`}
+            aria-label={`Copy ${label}`}
+          >
+            ⧉
+          </button>
+        )}
       </div>
     </div>
   );

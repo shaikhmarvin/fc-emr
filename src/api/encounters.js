@@ -233,6 +233,10 @@ export async function updateEncounterInSupabase(encounterId, updates) {
     payload.notes = updates.notes;
   }
 
+  if (updates.undergradCompletedAt !== undefined) {
+    payload.undergrad_completed_at = updates.undergradCompletedAt;
+  }
+
   if (updates.leadershipIntakeComplete !== undefined) {
   payload.leadership_intake_complete = updates.leadershipIntakeComplete;
 
@@ -592,11 +596,17 @@ function mapDbStatusToUi(status) {
   }
 }
 
-export async function fetchMedications() {
-  const { data, error } = await supabase
+export async function fetchMedications(patientIds = null) {
+  let query = supabase
     .from("medications")
-    .select("*")
+    .select("id, patient_id, encounter_id, name, dosage, frequency, route, dispense_amount, refill_count, instructions, medication_started_at, is_active, created_at")
     .order("created_at", { ascending: false });
+
+  if (Array.isArray(patientIds) && patientIds.length > 0) {
+    query = query.in("patient_id", patientIds);
+  }
+
+  const { data, error } = await query;
 
   if (error) throw error;
 

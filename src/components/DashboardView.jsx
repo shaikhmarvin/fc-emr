@@ -26,6 +26,7 @@ export default function DashboardView({
   patientRecordsTitle,
   openPatientFromFilteredView,
   getFullPatientName,
+  finalizeClinicDay,
 }) {
 
   const pendingLabEncounters = allEncounterRows.filter(
@@ -43,6 +44,12 @@ export default function DashboardView({
   const [showLabFollowUp, setShowLabFollowUp] = useState(false);
 
   const [showAnalytics, setShowAnalytics] = useState(false);
+
+  const [showFinalizeReview, setShowFinalizeReview] = useState(false);
+
+  const [finalizingClinicDay, setFinalizingClinicDay] = useState(false);
+
+  const [finalizeMessage, setFinalizeMessage] = useState("");
 
   const [exportingRecords, setExportingRecords] = useState(false);
 
@@ -274,70 +281,197 @@ export default function DashboardView({
     );
   }
 
-  const analyticsRows = getAnalyticsRows();
-
-  const completedRows = analyticsRows.filter(({ encounter }) =>
-    isEncounterComplete(encounter)
+  const finalizeCandidateRows = visibleEncounterRows.filter(
+    ({ encounter }) =>
+      encounter &&
+      encounter.status !== "cancelled" &&
+      !isEncounterComplete(encounter)
   );
 
-  const activeRows = analyticsRows.filter(
-  ({ encounter }) =>
-    !isEncounterComplete(encounter) && encounter?.status !== "cancelled"
-);
+  const analyticsRows = showAnalytics ? getAnalyticsRows() : [];
 
-const clinicFlowComplete = activeRows.length === 0;
+  const completedRows = showAnalytics
+    ? analyticsRows.filter(({ encounter }) => isEncounterComplete(encounter))
+    : [];
 
-const cancelledRows = analyticsRows.filter(
-  ({ encounter }) => encounter?.status === "cancelled"
-);
+  const activeRows = showAnalytics
+    ? analyticsRows.filter(
+        ({ encounter }) =>
+          !isEncounterComplete(encounter) && encounter?.status !== "cancelled"
+      )
+    : [];
 
-  const pharmacyRows = analyticsRows.filter(
-    ({ encounter }) => encounter?.pharmacyReadyAt || encounter?.pharmacyPickedUpAt
-  );
+  const clinicFlowComplete = showAnalytics ? activeRows.length === 0 : false;
 
-  const avgUndergradIntakeToUndergradComplete = getAverageFor(
-  analyticsRows,
-  "createdAt",
-  "undergradCompletedAt"
-);
+  const cancelledRows = showAnalytics
+    ? analyticsRows.filter(({ encounter }) => encounter?.status === "cancelled")
+    : [];
 
-const avgUndergradIntakeToLeadershipComplete = getAverageFor(
-  analyticsRows,
-  "createdAt",
-  "leadershipIntakeCompletedAt"
-);
+  const pharmacyRows = showAnalytics
+    ? analyticsRows.filter(
+        ({ encounter }) =>
+          encounter?.pharmacyReadyAt || encounter?.pharmacyPickedUpAt
+      )
+    : [];
 
-const avgLeadershipCompleteToStudentAssigned = getAverageFor(
-  analyticsRows,
-  "leadershipIntakeCompletedAt",
-  "studentAssignedAt"
-);
+  const avgUndergradIntakeToUndergradComplete = showAnalytics
+    ? getAverageFor(analyticsRows, "createdAt", "undergradCompletedAt")
+    : null;
 
-const avgAssignedToUpperLevelAssigned = getAverageFor(
-  analyticsRows,
-  "studentAssignedAt",
-  "upperLevelAssignedAt"
-);
+  const avgUndergradIntakeToLeadershipComplete = showAnalytics
+    ? getAverageFor(analyticsRows, "createdAt", "leadershipIntakeCompletedAt")
+    : null;
 
-const avgStudentAssignedToDone = getAverageToCompletion(
-  analyticsRows,
-  "studentAssignedAt"
-);
+  const avgLeadershipCompleteToStudentAssigned = showAnalytics
+    ? getAverageFor(
+        analyticsRows,
+        "leadershipIntakeCompletedAt",
+        "studentAssignedAt"
+      )
+    : null;
 
-const avgTotalVisitTime = getAverageFromStartToCompletion(analyticsRows);
+  const avgAssignedToUpperLevelAssigned = showAnalytics
+    ? getAverageFor(analyticsRows, "studentAssignedAt", "upperLevelAssignedAt")
+    : null;
 
-const avgPharmacyReadyToPickup = getAverageFor(
-  pharmacyRows,
-  "pharmacyReadyAt",
-  "pharmacyPickedUpAt"
-);
+  const avgStudentAssignedToDone = showAnalytics
+    ? getAverageToCompletion(analyticsRows, "studentAssignedAt")
+    : null;
 
-const firstPatientStartedAt = getFirstTime(analyticsRows, "createdAt");
-const lastVisitCompletedAt = getLastCompletionTime(analyticsRows);
-const lastPharmacyPickupAt = getLastTime(analyticsRows, "pharmacyPickedUpAt");
-const lastLabUpdateAt = getLastLabUpdate(analyticsRows);
+  const avgTotalVisitTime = showAnalytics
+    ? getAverageFromStartToCompletion(analyticsRows)
+    : null;
+
+  const avgPharmacyReadyToPickup = showAnalytics
+    ? getAverageFor(pharmacyRows, "pharmacyReadyAt", "pharmacyPickedUpAt")
+    : null;
+
+  const firstPatientStartedAt = showAnalytics
+    ? getFirstTime(analyticsRows, "createdAt")
+    : null;
+  const lastVisitCompletedAt = showAnalytics
+    ? getLastCompletionTime(analyticsRows)
+    : null;
+  const lastPharmacyPickupAt = showAnalytics
+    ? getLastTime(analyticsRows, "pharmacyPickedUpAt")
+    : null;
+  const lastLabUpdateAt = showAnalytics ? getLastLabUpdate(analyticsRows) : null;
+
+  async function handleFinalizeClinicDay() {
+    if (!selectedClinicDate) {
+      alert("Select a clinic date before finalizing the day.");
+      return;
+    }
+
+    if (!finalizeClinicDay || finalizeCandidateRows.length === 0) return;
+
+    const confirmed = window.confirm(
+      `This will close ${finalizeCandidateRows.length} active encounter${
+        finalizeCandidateRows.length === 1 ? "" : "s"
+      } for ${formatDate(selectedClinicDate)} and then calculate the final analytics. Continue?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setFinalizingClinicDay(true);
+      setFinalizeMessage("");
+
+      await finalizeClinicDay(finalizeCandidateRows);
+
+      setShowFinalizeReview(false);
+      setFinalizeMessage(
+        `Finalized ${finalizeCandidateRows.length} active encounter${
+          finalizeCandidateRows.length === 1 ? "" : "s"
+        } for ${formatDate(selectedClinicDate)}.`
+      );
+      setShowAnalytics(true);
+    } catch (error) {
+      console.error("Failed to finalize clinic day:", error);
+      alert(error.message || "Failed to finalize clinic day.");
+    } finally {
+      setFinalizingClinicDay(false);
+    }
+  }
   return (
     <div className="space-y-4 p-3 sm:p-4 lg:space-y-6 lg:p-6">
+      {isLeadershipView && showFinalizeReview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3">
+          <div className="max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-4 shadow-xl sm:p-6">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">
+                  Finalize Clinic Day
+                </h2>
+                <p className="text-sm text-slate-500">
+                  Review active encounters before closing {formatDate(selectedClinicDate)}.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowFinalizeReview(false)}
+                className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200"
+              >
+                Close
+              </button>
+            </div>
+
+            {finalizeCandidateRows.length === 0 ? (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+                No active encounters need to be closed for this date. You can open analytics now.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  This will set these encounters to complete for end-of-clinic reporting. Cancelled/LWOBS encounters are left unchanged.
+                </div>
+
+                <div className="max-h-80 divide-y overflow-y-auto rounded-xl border border-slate-200">
+                  {finalizeCandidateRows.map(({ patient, encounter }) => (
+                    <div
+                      key={encounter.id}
+                      className="flex flex-col gap-1 p-3 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div>
+                        <p className="font-semibold text-slate-900">
+                          {getFullPatientName(patient)}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          DOB: {formatDate(patient?.dob)} · Visit: {encounter?.visitType || "general"} · Status: {encounter?.status || "unknown"}
+                        </p>
+                      </div>
+
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+                        Will close
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setShowFinalizeReview(false)}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleFinalizeClinicDay}
+                disabled={finalizingClinicDay || finalizeCandidateRows.length === 0}
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {finalizingClinicDay ? "Finalizing..." : "Finalize and Calculate Analytics"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {canViewAnalytics && showAnalytics && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3">
           <div className="max-h-[88vh] w-full max-w-6xl overflow-y-auto rounded-2xl bg-white p-4 shadow-xl sm:p-6">
@@ -521,6 +655,19 @@ upper-level assigned, complete/done, pharmacy ready, pharmacy pickup, and lab up
     </button>
   )}
 
+  {isLeadershipView && selectedClinicDate && (
+    <button
+      type="button"
+      onClick={() => {
+        setFinalizeMessage("");
+        setShowFinalizeReview(true);
+      }}
+      className="w-full rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 sm:w-auto"
+    >
+      End Clinic / Finalize Day
+    </button>
+  )}
+
   {isLeadershipView && (
     <button
       type="button"
@@ -537,6 +684,12 @@ upper-level assigned, complete/done, pharmacy ready, pharmacy pickup, and lab up
   )}
 </div>
       </div>
+
+      {finalizeMessage ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">
+          {finalizeMessage}
+        </div>
+      ) : null}
 
       <div className="rounded-2xl bg-white p-4 shadow sm:p-5">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
