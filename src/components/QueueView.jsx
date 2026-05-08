@@ -575,6 +575,14 @@ function getSelectedRoomQueueClass(encounter) {
     activeUpperLevelNames
   );
 
+
+  function filterAssignmentOptions(options, value) {
+    const query = normalizeName(value);
+    if (!query) return options;
+
+    return (options || []).filter((name) => normalizeName(name).includes(query));
+  }
+
   function isRefillOnlyEncounter(encounter) {
   return (
     encounter?.visitType === "refill_only" ||
@@ -1422,7 +1430,10 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
 
                         {openAssignmentMenu === `${encounter.id}-student` && (
                           <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border bg-white shadow-lg">
-                            {sortedStudentNameOptions.map((name) => {
+                            {filterAssignmentOptions(
+                              sortedStudentNameOptions,
+                              getDraftValue(encounter, "assignedStudent")
+                            ).map((name) => {
                               const isActive = activeStudentNames.has(normalizeName(name));
                               const isSelected =
                                 normalizeName(getDraftValue(encounter, "assignedStudent")) ===
@@ -1492,7 +1503,10 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
 
                         {openAssignmentMenu === `${encounter.id}-upper` && (
                           <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border bg-white shadow-lg">
-                            {sortedUpperLevelNameOptions.map((name) => {
+                            {filterAssignmentOptions(
+                              sortedUpperLevelNameOptions,
+                              getDraftValue(encounter, "assignedUpperLevel")
+                            ).map((name) => {
                               const isActive = activeUpperLevelNames.has(normalizeName(name));
                               const isSelected =
                                 normalizeName(getDraftValue(encounter, "assignedUpperLevel")) ===

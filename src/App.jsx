@@ -4269,16 +4269,25 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
     return "";
   }
 
-  function getActiveRoomRows(roomNumber) {
+  function getActiveRoomRows(roomNumber, clinicDateOverride = boardClinicDate) {
+    const targetClinicDate = normalizeClinicDate(clinicDateOverride || boardClinicDate);
+
     return allEncounterRows.filter(
       ({ encounter }) =>
         Number(encounter.roomNumber) === Number(roomNumber) &&
+        (!targetClinicDate || normalizeClinicDate(encounter.clinicDate) === targetClinicDate) &&
         isEncounterStillOnRoomBoard(encounter)
     );
   }
 
   function getRoomConflictDetails(roomNumber, currentEncounterId, incomingAssignment = {}) {
-    const activeRows = getActiveRoomRows(roomNumber).filter(
+    const targetClinicDate =
+      incomingAssignment.clinicDate ||
+      incomingAssignment.clinic_date ||
+      selectedEncounter?.clinicDate ||
+      boardClinicDate;
+
+    const activeRows = getActiveRoomRows(roomNumber, targetClinicDate).filter(
       ({ encounter }) => String(encounter.id) !== String(currentEncounterId)
     );
 
@@ -4340,7 +4349,7 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
 
   const roomDropdownOptions = useMemo(() => {
     return ROOM_OPTIONS.map((room) => {
-      const roomRows = getActiveRoomRows(room.number);
+      const roomRows = getActiveRoomRows(room.number, boardClinicDate);
 
       const occupied = roomRows.length > 0;
 
@@ -4376,7 +4385,7 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
         displayLabel: `${room.label} — ${room.area}`,
       };
     });
-  }, [allEncounterRows]);
+  }, [allEncounterRows, boardClinicDate]);
 
 
   function updateIntakeField(field, value) {
@@ -5836,6 +5845,7 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
     const conflict = getRoomConflictDetails(numericRoom, encounterId, {
       assignedStudent: nextStudent,
       assignedUpperLevel: nextUpperLevel,
+      clinicDate: encounter.clinicDate,
     });
 
     if (conflict.hasConflict) {
@@ -5930,6 +5940,7 @@ const nextAssignedUpperLevel =
 const conflict = getRoomConflictDetails(roomNumber, selectedEncounter.id, {
   assignedStudent: nextAssignedStudent,
   assignedUpperLevel: nextAssignedUpperLevel,
+  clinicDate: selectedEncounter.clinicDate,
 });
 
     if (conflict.hasConflict) {

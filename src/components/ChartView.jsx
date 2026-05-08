@@ -1169,6 +1169,15 @@ function formatLabDateTime(value) {
     activeUpperLevelNames
   );
 
+  function filterAssignmentOptions(options, value) {
+    const query = normalizeAssignmentName(value);
+    if (!query) return options;
+
+    return (options || []).filter((name) =>
+      normalizeAssignmentName(name).includes(query)
+    );
+  }
+
   const normalizedAssignedStudent = String(assignmentForm.studentName || "").trim().toLowerCase();
   const normalizedAssignedUpperLevel = String(assignmentForm.upperLevelName || "").trim().toLowerCase();
 
@@ -1589,8 +1598,8 @@ function getSelectedRoomOptionClass() {
 
                       {openAssignmentMenu === "chart-student" && (
                         <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border bg-white shadow-lg">
-                          {sortedStudentNameOptions.length > 0 ? (
-                            sortedStudentNameOptions.map((name) => {
+                          {filterAssignmentOptions(sortedStudentNameOptions, assignmentForm.studentName).length > 0 ? (
+                            filterAssignmentOptions(sortedStudentNameOptions, assignmentForm.studentName).map((name) => {
                               const isActive = activeStudentNames.has(normalizeAssignmentName(name));
                               const isSelected =
                                 normalizeAssignmentName(assignmentForm.studentName) ===
@@ -1681,8 +1690,8 @@ function getSelectedRoomOptionClass() {
 
                       {openAssignmentMenu === "chart-upper" && (
                         <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border bg-white shadow-lg">
-                          {sortedUpperLevelNameOptions.length > 0 ? (
-                            sortedUpperLevelNameOptions.map((name) => {
+                          {filterAssignmentOptions(sortedUpperLevelNameOptions, assignmentForm.upperLevelName).length > 0 ? (
+                            filterAssignmentOptions(sortedUpperLevelNameOptions, assignmentForm.upperLevelName).map((name) => {
                               const isActive = activeUpperLevelNames.has(normalizeAssignmentName(name));
                               const isSelected =
                                 normalizeAssignmentName(assignmentForm.upperLevelName) ===

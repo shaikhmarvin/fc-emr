@@ -196,6 +196,16 @@ export default function DashboardView({
 
   function isEncounterComplete(encounter) {
     if (!encounter) return false;
+
+    if ((encounter.visitType || encounter.visit_type) === "refill_only") {
+      return Boolean(
+        encounter.pharmacyPickedUpAt ||
+          encounter.pharmacy_picked_up_at ||
+          encounter.pharmacyStatus === "picked_up" ||
+          encounter.pharmacy_status === "picked_up"
+      );
+    }
+
     if (encounter.status === "done" || encounter.soapStatus === "signed") return true;
     return Boolean(getEncounterCompletionTime(encounter));
   }
@@ -281,6 +291,29 @@ export default function DashboardView({
     );
   }
 
+  function getVisitType(encounter) {
+    return encounter?.visitType || encounter?.visit_type || "general";
+  }
+
+  function isGeneralClinicEncounter(encounter) {
+    const visitType = getVisitType(encounter);
+    return visitType === "general" || visitType === "both" || !visitType;
+  }
+
+  function isRefillOnlyEncounter(encounter) {
+    return getVisitType(encounter) === "refill_only";
+  }
+
+  function getRefillCheckInStart(encounter) {
+    return (
+      encounter?.undergradCompletedAt ||
+      encounter?.undergrad_completed_at ||
+      encounter?.createdAt ||
+      encounter?.created_at ||
+      null
+    );
+  }
+
   const finalizeCandidateRows = visibleEncounterRows.filter(
     ({ encounter }) =>
       encounter &&
@@ -288,7 +321,18 @@ export default function DashboardView({
       !isEncounterComplete(encounter)
   );
 
+  const canOpenAnalyticsForSelectedDate =
+    Boolean(selectedClinicDate) && finalizeCandidateRows.length === 0;
+
   const analyticsRows = showAnalytics ? getAnalyticsRows() : [];
+
+  const generalAnalyticsRows = showAnalytics
+    ? analyticsRows.filter(({ encounter }) => isGeneralClinicEncounter(encounter))
+    : [];
+
+  const refillOnlyAnalyticsRows = showAnalytics
+    ? analyticsRows.filter(({ encounter }) => isRefillOnlyEncounter(encounter))
+    : [];
 
   const completedRows = showAnalytics
     ? analyticsRows.filter(({ encounter }) => isEncounterComplete(encounter))
@@ -315,31 +359,39 @@ export default function DashboardView({
     : [];
 
   const avgUndergradIntakeToUndergradComplete = showAnalytics
-    ? getAverageFor(analyticsRows, "createdAt", "undergradCompletedAt")
+    ? getAverageFor(generalAnalyticsRows, "createdAt", "undergradCompletedAt")
     : null;
 
   const avgUndergradIntakeToLeadershipComplete = showAnalytics
-    ? getAverageFor(analyticsRows, "createdAt", "leadershipIntakeCompletedAt")
+    ? getAverageFor(generalAnalyticsRows, "createdAt", "leadershipIntakeCompletedAt")
     : null;
 
   const avgLeadershipCompleteToStudentAssigned = showAnalytics
     ? getAverageFor(
-        analyticsRows,
+        generalAnalyticsRows,
         "leadershipIntakeCompletedAt",
         "studentAssignedAt"
       )
     : null;
 
   const avgAssignedToUpperLevelAssigned = showAnalytics
-    ? getAverageFor(analyticsRows, "studentAssignedAt", "upperLevelAssignedAt")
+    ? getAverageFor(generalAnalyticsRows, "studentAssignedAt", "upperLevelAssignedAt")
     : null;
 
-  const avgStudentAssignedToDone = showAnalytics
-    ? getAverageToCompletion(analyticsRows, "studentAssignedAt")
+  const avgUpperLevelAssignedToComplete = showAnalytics
+    ? getAverageToCompletion(generalAnalyticsRows, "upperLevelAssignedAt")
     : null;
 
-  const avgTotalVisitTime = showAnalytics
-    ? getAverageFromStartToCompletion(analyticsRows)
+  const avgGeneralAssignedToComplete = showAnalytics
+    ? getAverageToCompletion(generalAnalyticsRows, "studentAssignedAt")
+    : null;
+
+  const avgRefillOnlyCheckInToPickup = showAnalytics
+    ? averageMinutes(
+        refillOnlyAnalyticsRows.map(({ encounter }) =>
+          minutesBetween(getRefillCheckInStart(encounter), getEncounterCompletionTime(encounter))
+        )
+      )
     : null;
 
   const avgPharmacyReadyToPickup = showAnalytics
@@ -559,13 +611,18 @@ export default function DashboardView({
     value={formatMinutes(avgAssignedToUpperLevelAssigned)}
   />
   <AnalyticsMetric
-    label="Student Assigned → Complete"
-    value={formatMinutes(avgStudentAssignedToDone)}
+    label="Upper-Level Assigned → Complete"
+    value={formatMinutes(avgUpperLevelAssignedToComplete)}
   />
   <AnalyticsMetric
-    label="Total Visit Time"
-    value={formatMinutes(avgTotalVisitTime)}
-    subtext="Started → complete; refill-only ends at medication pickup"
+    label="Assigned → Complete"
+    value={formatMinutes(avgGeneralAssignedToComplete)}
+    subtext="General clinic total visit time"
+  />
+  <AnalyticsMetric
+    label="Refill Check-In → Meds Picked Up"
+    value={formatMinutes(avgRefillOnlyCheckInToPickup)}
+    subtext="Refill-only wait time"
   />
   <AnalyticsMetric
     label="Pharmacy Ready → Picked Up"
@@ -600,9 +657,7 @@ export default function DashboardView({
             </div>
 
             <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
-              These numbers are calculated from encounter timestamps:
-started, undergrad complete, leadership complete, student assigned,
-upper-level assigned, complete/done, pharmacy ready, pharmacy pickup, and lab update. Refill-only visits count as complete when medications are picked up.
+              Analytics only open after the selected clinic day has no active encounters. General clinic timing uses student assignment through completion as total visit time. Refill-only wait time uses check-in through medications picked up.
             </div>
           </div>
         </div>
@@ -645,7 +700,7 @@ upper-level assigned, complete/done, pharmacy ready, pharmacy pickup, and lab up
         </div>
 
         <div className="flex flex-col gap-2 rounded-xl bg-white p-3 shadow sm:flex-row sm:items-center">
-  {canViewAnalytics && (
+  {canViewAnalytics && canOpenAnalyticsForSelectedDate && (
     <button
       type="button"
       onClick={() => setShowAnalytics(true)}
