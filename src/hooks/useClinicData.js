@@ -239,26 +239,15 @@ export function useClinicData({ authReady, session, userRole }) {
       }, 250);
     };
 
+    // Keep realtime focused on the live clinic flow.
+    // Patients, medications, and allergies are still refreshed after local saves,
+    // on window focus, and by the fallback interval below. Subscribing every
+    // open device to all four tables was causing full-dataset reload storms.
     const channel = supabase
-      .channel("clinic-data-realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "patients" },
-        triggerReload
-      )
+      .channel("clinic-encounters-realtime")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "encounters" },
-        triggerReload
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "medications" },
-        triggerReload
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "allergies" },
         triggerReload
       )
       .subscribe();
@@ -276,9 +265,26 @@ export function useClinicData({ authReady, session, userRole }) {
 
     const fallbackInterval = setInterval(() => {
       loadData();
-    }, 60000);
+    }, 120000);
 
-    return () => clearInterval(fallbackInterval);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") {
+        loadData();
+      }
+    };
+
+    const refreshOnFocus = () => {
+      loadData();
+    };
+
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    window.addEventListener("focus", refreshOnFocus);
+
+    return () => {
+      clearInterval(fallbackInterval);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      window.removeEventListener("focus", refreshOnFocus);
+    };
   }, [authReady, session, userRole, loadData]);
 
   return {

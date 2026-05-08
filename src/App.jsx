@@ -1167,58 +1167,8 @@ export default function App() {
   }
 
 
-  useEffect(() => {
-    if (!session) return;
-
-    const channel = supabase
-      .channel("formulary-realtime")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "formulary_items" },
-        (payload) => {
-          setFormulary((prev) => {
-            const exists = prev.some(
-              (item) => String(item.id) === String(payload.new.id)
-            );
-            if (exists) return prev;
-            return [payload.new, ...prev];
-          });
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "formulary_items" },
-        (payload) => {
-          setFormulary((prev) => {
-            let changed = false;
-
-            const updated = prev.map((item) => {
-              if (String(item.id) === String(payload.new.id)) {
-                changed = true;
-                return payload.new;
-              }
-              return item;
-            });
-
-            return changed ? updated : prev;
-          });
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "DELETE", schema: "public", table: "formulary_items" },
-        (payload) => {
-          setFormulary((prev) =>
-            prev.filter((item) => item.id !== payload.old.id)
-          );
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [session]);
+  // Formulary realtime disabled to reduce Supabase memory/realtime load.
+  // Formulary still loads on sign-in and updates optimistically after saves.
 
   useEffect(() => {
     if (!session) return;
@@ -1273,54 +1223,8 @@ export default function App() {
     };
   }, [session]);
 
-  useEffect(() => {
-    if (!session) return;
-
-    const channel = supabase
-      .channel("profiles-realtime")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "profiles",
-        },
-        (payload) => {
-          console.log("PROFILES REALTIME:", payload);
-
-          if (payload.eventType === "INSERT") {
-            setProfiles((prev) => {
-              const exists = prev.some((p) => String(p.id) === String(payload.new.id));
-              if (exists) return prev;
-              return [payload.new, ...prev];
-            });
-          }
-
-          if (payload.eventType === "UPDATE") {
-            setProfiles((prev) => {
-              let changed = false;
-
-              const updated = prev.map((p) => {
-                if (String(p.id) === String(payload.new.id)) {
-                  changed = true;
-                  return payload.new;
-                }
-                return p;
-              });
-
-              return changed ? updated : prev;
-            });
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [session]);
-
-
+  // Global profiles realtime disabled. User Management reloads profiles when opened,
+  // and each signed-in user still has their own approval listener in useAuthSession.
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showIntakeModal, setShowIntakeModal] = useState(false);
@@ -3030,164 +2934,11 @@ export default function App() {
   }
 
 
-  useEffect(() => {
-    if (!session) return;
+  // Program entries realtime disabled to reduce background subscriptions.
+  // The Programs view keeps local state in sync after edits and reloads on page open.
 
-    const channel = supabase
-      .channel("program-entries-realtime")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "program_entries",
-        },
-        (payload) => {
-          const eventType = payload.eventType;
-          const row = payload.new || payload.old;
-
-          if (!row) return;
-
-          const mappedRow = {
-            id: row.id,
-            patientId: row.patient_id || "",
-            patientName: row.patient_name || "",
-            mrn: row.mrn || "",
-            dob: row.dob || "",
-            phone: row.phone || "",
-            programType: row.program_type || "",
-            reason: row.reason || "",
-            assignedCoordinator: row.assigned_coordinator || "",
-            status: row.status || "",
-            specialtyDate: row.specialty_date || "",
-            scheduleType: row.schedule_group || "",
-            schedulePosition: row.schedule_position ?? null,
-            appointmentSlot: row.appointment_slot || "",
-            notes: row.notes || "",
-            lastContactAttemptAt: row.last_contact_attempt_at || "",
-            createdAt: row.created_at || "",
-          };
-
-          if (eventType === "INSERT") {
-            setProgramEntries((prev) => {
-              const exists = prev.some(
-                (entry) => String(entry.id) === String(mappedRow.id)
-              );
-              if (exists) return prev;
-              return [mappedRow, ...prev];
-            });
-          }
-
-          if (eventType === "UPDATE") {
-            setProgramEntries((prev) => {
-              let changed = false;
-
-              const updated = prev.map((entry) => {
-                if (String(entry.id) === String(mappedRow.id)) {
-                  changed = true;
-                  return mappedRow;
-                }
-                return entry;
-              });
-
-              return changed ? updated : prev;
-            });
-          }
-
-          if (eventType === "DELETE") {
-            setProgramEntries((prev) =>
-              prev.filter((entry) => entry.id !== row.id)
-            );
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [session]);
-
-  useEffect(() => {
-    if (!session) return;
-
-    const channel = supabase
-      .channel("pap-entries-realtime")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "pap_entries",
-        },
-        (payload) => {
-          const eventType = payload.eventType;
-          const row = payload.new || payload.old;
-
-          if (!row) return;
-
-          const mappedRow = {
-            id: row.id,
-            patientId: row.patient_id || "",
-            patientName: row.patient_name || "",
-            mrn: row.mrn || "",
-            phone: row.phone || "",
-            medication: row.medication || "",
-            company: row.company || "",
-            status: row.status || "Pending Application",
-            startedDate: row.started_date || "",
-            assignedLeadership: row.assigned_leadership || "",
-            approvalUntilDate: row.approval_until_date || "",
-            nextFollowUpDate: row.next_follow_up_date || "",
-            nextRefillDate: row.next_refill_date || "",
-            denialReason: row.denial_reason || "",
-            discontinuedReason: row.discontinued_reason || "",
-            prescriptionChangeNotes: row.prescription_change_notes || "",
-            todoNotes: row.todo_notes || "",
-            generalNotes: row.general_notes || "",
-            createdAt: row.created_at || "",
-            updatedAt: row.updated_at || "",
-          };
-
-          if (eventType === "INSERT") {
-            setPapEntries((prev) => {
-              const exists = prev.some(
-                (entry) => String(entry.id) === String(mappedRow.id)
-              );
-              if (exists) return prev;
-              return [mappedRow, ...prev];
-            });
-          }
-
-          if (eventType === "UPDATE") {
-            setPapEntries((prev) => {
-              let changed = false;
-
-              const updated = prev.map((entry) => {
-                if (String(entry.id) === String(mappedRow.id)) {
-                  changed = true;
-                  return mappedRow;
-                }
-                return entry;
-              });
-
-              return changed ? updated : prev;
-            });
-          }
-
-          if (eventType === "DELETE") {
-            setPapEntries((prev) =>
-              prev.filter((entry) => entry.id !== row.id)
-            );
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [session]);
+  // PAP realtime disabled to reduce background subscriptions.
+  // PAP entries load once per session and update locally after edits.
 
   useEffect(() => {
     if (!session) return;
@@ -3343,6 +3094,8 @@ export default function App() {
 
 const [roomBoardDate, setRoomBoardDate] = useState(getLocalDateInputValue());
 const [specialtyQueueDate, setSpecialtyQueueDate] = useState(getLocalDateInputValue());
+const [queueClinicDate, setQueueClinicDate] = useState(getLocalDateInputValue());
+const [labQueueDate, setLabQueueDate] = useState(getLocalDateInputValue());
   const [, setNow] = useState(Date.now());
   const selectedPatient = patients.find((p) => p.id === selectedPatientId) || null;
   const selectedEncounter =
@@ -3518,8 +3271,13 @@ const [specialtyQueueDate, setSpecialtyQueueDate] = useState(getLocalDateInputVa
       .filter(({ encounter }) => {
         if (!encounter) return false;
 
+        const isSelectedRegistrationDate =
+          normalizeClinicDate(encounter.clinicDate) === selectedClinicDate;
+
         const isGeneralRegistrationEncounter =
           encounter.visitType !== "specialty_only";
+
+        if (!isSelectedRegistrationDate) return false;
 
         const isRegistrationStatus =
           encounter.status === "started" ||
@@ -3543,7 +3301,7 @@ const [specialtyQueueDate, setSpecialtyQueueDate] = useState(getLocalDateInputVa
         return false;
       })
       .sort(sortRowsByDailyNumberThenTime);
-  }, [allEncounterRows, userRole, isLeadershipView]);
+  }, [allEncounterRows, selectedClinicDate, userRole, isLeadershipView]);
 
   async function removeFromRegistration(patientId, encounterId) {
     const confirmed = window.confirm(
@@ -4246,17 +4004,17 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
   );
 
   const waitingEncounterRows = useMemo(() => {
-  const todayClinicDate = formatClinicDate();
+  const effectiveQueueDate = queueClinicDate || formatClinicDate();
 
-  const activeRows = visibleEncounterRows.filter(({ encounter }) => {
-    const isToday =
-      normalizeClinicDate(encounter.clinicDate) === todayClinicDate;
+  const activeRows = allEncounterRows.filter(({ encounter }) => {
+    const isSelectedQueueDate =
+      normalizeClinicDate(encounter.clinicDate) === effectiveQueueDate;
 
     const isPharmacyWorkflow =
       encounter.visitType === "refill_only" ||
       encounter.visitType === "specialty_only";
 
-    if (!isToday) return false;
+    if (!isSelectedQueueDate) return false;
     if (encounter.status === "cancelled") return false;
 
     if (canUseWholeClinicQueueTools) {
@@ -4361,7 +4119,8 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
 
     return [...rows].sort(sortRowsByDailyNumberThenTime);
   }, [
-    visibleEncounterRows,
+    allEncounterRows,
+    queueClinicDate,
     profileNameMap,
     session?.user?.id,
     authFullName,
@@ -4372,12 +4131,12 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
   ]);
 
   const labEncounterRows = useMemo(() => {
-    const todayClinicDate = formatClinicDate();
+    const effectiveLabQueueDate = labQueueDate || formatClinicDate();
 
     return allEncounterRows
       .filter(({ encounter }) => {
         if (!encounter) return false;
-        if (normalizeClinicDate(encounter.clinicDate) !== todayClinicDate) return false;
+        if (normalizeClinicDate(encounter.clinicDate) !== effectiveLabQueueDate) return false;
         if (encounter.status === "cancelled") return false;
         if (encounter.status === "done") return false;
         if (encounter.soapStatus === "signed") return false;
@@ -4391,7 +4150,7 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
         );
       })
       .sort(sortRowsByDailyNumberThenTime);
-  }, [allEncounterRows]);
+  }, [allEncounterRows, labQueueDate]);
 
   useEffect(() => {
     if (userRole !== "undergraduate") return;
@@ -5872,11 +5631,25 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
   async function markMedicationsPickedUp(encounterId) {
     if (!session?.user?.id) return;
 
-    await updateEncounterInSupabase(encounterId, {
+    const targetEncounter = allEncounterRows
+      .map(({ encounter }) => encounter)
+      .find((encounter) => encounter?.id === encounterId);
+
+    const pickedUpAt = new Date().toISOString();
+    const updates = {
       pharmacyStatus: "picked_up",
-      pharmacyNotifiedAt: new Date().toISOString(),
+      pharmacyPickedUpAt: pickedUpAt,
+      pharmacyNotifiedAt: pickedUpAt,
       pharmacyNotifiedBy: session.user.id,
-    });
+    };
+
+    if (targetEncounter?.visitType === "refill_only") {
+      updates.status = "done";
+      updates.doneAt = targetEncounter.doneAt || pickedUpAt;
+      updates.visitCompletedAt = targetEncounter.visitCompletedAt || pickedUpAt;
+    }
+
+    await updateEncounterInSupabase(encounterId, updates);
 
     refreshClinicData?.();
   }
@@ -8611,7 +8384,7 @@ await applyEncounterTransition(selectedEncounter.id, {
               setSelectedClinicDate={setSelectedClinicDate}
               filteredVisiblePatients={filteredVisiblePatients}
               visibleEncounterRows={visibleEncounterRows}
-              allEncounterRows={boardEncounterRows}
+              allEncounterRows={allEncounterRows}
               searchForm={searchForm}
               setSearchForm={setSearchForm}
               patientRecordsTitle={patientRecordsTitle}
@@ -8708,6 +8481,8 @@ await applyEncounterTransition(selectedEncounter.id, {
           {activeView === "registration" && (
             <RegistrationView
               registrationRows={registrationRows}
+              selectedClinicDate={selectedClinicDate}
+              setSelectedClinicDate={setSelectedClinicDate}
               openUndergradRegistration={openUndergradRegistration}
               openLeadershipRegistration={openLeadershipRegistration}
               getFullPatientName={getFullPatientName}
@@ -8734,6 +8509,8 @@ await applyEncounterTransition(selectedEncounter.id, {
           {activeView === "lab-queue" && userRole === "lab" && (
             <LabQueueView
               labEncounterRows={labEncounterRows}
+              selectedClinicDate={labQueueDate}
+              setSelectedClinicDate={setLabQueueDate}
               openPatientChart={openPatientChart}
               getFullPatientName={getFullPatientName}
               onUpdateLabTracking={updateLabTracking}
@@ -8745,6 +8522,8 @@ await applyEncounterTransition(selectedEncounter.id, {
               userRole={userRole}
               searchForm={searchForm}
               waitingEncounterRows={waitingEncounterRows}
+              selectedClinicDate={queueClinicDate}
+              setSelectedClinicDate={setQueueClinicDate}
               openPatientChart={openPatientChart}
               getPatientBoardName={getPatientBoardName}
               spanishBadge={spanishBadge}

@@ -297,7 +297,10 @@ export default function UndergradIntakeView({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   function handleChange(key, value) {
-    if (["firstName", "lastName", "dob", "phone"].includes(key) && matchPatientId) {
+    // Keep the existing-patient link when undergrad adds updateable details
+    // like phone, ethnicity, address, sex, etc. Only identity edits should
+    // clear the match and return the form to "create new patient" mode.
+    if (["firstName", "lastName", "dob"].includes(key) && matchPatientId) {
       setMatchPatientId(null);
     }
 

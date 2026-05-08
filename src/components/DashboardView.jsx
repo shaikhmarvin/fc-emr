@@ -163,6 +163,72 @@ export default function DashboardView({
     );
   }
 
+  function getEncounterCompletionTime(encounter) {
+    if (!encounter) return null;
+
+    if (encounter.visitType === "refill_only") {
+      return (
+        encounter.pharmacyPickedUpAt ||
+        encounter.pharmacy_picked_up_at ||
+        encounter.doneAt ||
+        encounter.done_at ||
+        encounter.visitCompletedAt ||
+        encounter.visit_completed_at ||
+        null
+      );
+    }
+
+    return (
+      encounter.doneAt ||
+      encounter.done_at ||
+      encounter.visitCompletedAt ||
+      encounter.visit_completed_at ||
+      null
+    );
+  }
+
+  function isEncounterComplete(encounter) {
+    if (!encounter) return false;
+    if (encounter.status === "done" || encounter.soapStatus === "signed") return true;
+    return Boolean(getEncounterCompletionTime(encounter));
+  }
+
+  function getAverageToCompletion(rows, startField) {
+    return averageMinutes(
+      rows.map(({ encounter }) =>
+        minutesBetween(encounter?.[startField], getEncounterCompletionTime(encounter))
+      )
+    );
+  }
+
+  function getLastCompletionTime(rows) {
+    const times = rows
+      .map(({ encounter }) => toTime(getEncounterCompletionTime(encounter)))
+      .filter(Boolean);
+
+    if (times.length === 0) return null;
+
+    return new Date(Math.max(...times)).toISOString();
+  }
+
+  function getFirstMeaningfulStartTime(encounter) {
+    return (
+      encounter?.undergradCompletedAt ||
+      encounter?.undergrad_completed_at ||
+      encounter?.createdAt ||
+      encounter?.created_at ||
+      null
+    );
+  }
+
+  function getAverageFromStartToCompletion(rows) {
+    return averageMinutes(
+      rows.map(({ encounter }) =>
+        minutesBetween(getFirstMeaningfulStartTime(encounter), getEncounterCompletionTime(encounter))
+      )
+    );
+  }
+
   function getFirstTime(rows, field) {
     const times = rows
       .map(({ encounter }) => toTime(encounter?.[field]))
@@ -210,13 +276,13 @@ export default function DashboardView({
 
   const analyticsRows = getAnalyticsRows();
 
-  const completedRows = analyticsRows.filter(
-    ({ encounter }) => encounter?.status === "done"
+  const completedRows = analyticsRows.filter(({ encounter }) =>
+    isEncounterComplete(encounter)
   );
 
   const activeRows = analyticsRows.filter(
   ({ encounter }) =>
-    encounter?.status !== "done" && encounter?.status !== "cancelled"
+    !isEncounterComplete(encounter) && encounter?.status !== "cancelled"
 );
 
 const clinicFlowComplete = activeRows.length === 0;
@@ -253,17 +319,12 @@ const avgAssignedToUpperLevelAssigned = getAverageFor(
   "upperLevelAssignedAt"
 );
 
-const avgStudentAssignedToDone = getAverageFor(
+const avgStudentAssignedToDone = getAverageToCompletion(
   analyticsRows,
-  "studentAssignedAt",
-  "doneAt"
+  "studentAssignedAt"
 );
 
-const avgTotalVisitTime = getAverageFor(
-  analyticsRows,
-  "createdAt",
-  "doneAt"
-);
+const avgTotalVisitTime = getAverageFromStartToCompletion(analyticsRows);
 
 const avgPharmacyReadyToPickup = getAverageFor(
   pharmacyRows,
@@ -272,7 +333,7 @@ const avgPharmacyReadyToPickup = getAverageFor(
 );
 
 const firstPatientStartedAt = getFirstTime(analyticsRows, "createdAt");
-const lastVisitCompletedAt = getLastTime(analyticsRows, "doneAt");
+const lastVisitCompletedAt = getLastCompletionTime(analyticsRows);
 const lastPharmacyPickupAt = getLastTime(analyticsRows, "pharmacyPickedUpAt");
 const lastLabUpdateAt = getLastLabUpdate(analyticsRows);
   return (
@@ -348,11 +409,11 @@ const lastLabUpdateAt = getLastLabUpdate(analyticsRows);
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
   <AnalyticsMetric
-    label="Undergrad Intake Complete → Undergrad Complete"
+    label="Started → Undergrad Complete"
     value={formatMinutes(avgUndergradIntakeToUndergradComplete)}
   />
   <AnalyticsMetric
-    label="Undergrad Intake Complete → Leadership Complete"
+    label="Started → Leadership Complete"
     value={formatMinutes(avgUndergradIntakeToLeadershipComplete)}
   />
   <AnalyticsMetric
@@ -364,13 +425,13 @@ const lastLabUpdateAt = getLastLabUpdate(analyticsRows);
     value={formatMinutes(avgAssignedToUpperLevelAssigned)}
   />
   <AnalyticsMetric
-    label="Student Assigned → Done"
+    label="Student Assigned → Complete"
     value={formatMinutes(avgStudentAssignedToDone)}
   />
   <AnalyticsMetric
     label="Total Visit Time"
     value={formatMinutes(avgTotalVisitTime)}
-    subtext="Started → Done"
+    subtext="Started → complete; refill-only ends at medication pickup"
   />
   <AnalyticsMetric
     label="Pharmacy Ready → Picked Up"
@@ -407,7 +468,7 @@ const lastLabUpdateAt = getLastLabUpdate(analyticsRows);
             <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
               These numbers are calculated from encounter timestamps:
 started, undergrad complete, leadership complete, student assigned,
-upper-level assigned, done, pharmacy ready, pharmacy pickup, and lab update.
+upper-level assigned, complete/done, pharmacy ready, pharmacy pickup, and lab update. Refill-only visits count as complete when medications are picked up.
             </div>
           </div>
         </div>

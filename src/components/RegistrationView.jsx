@@ -64,6 +64,8 @@ function getDailyCardNumber(patient, encounter) {
 
 export default function RegistrationView({
   registrationRows,
+  selectedClinicDate,
+  setSelectedClinicDate,
   openUndergradRegistration,
   openLeadershipRegistration,
   getFullPatientName,
@@ -123,6 +125,17 @@ export default function RegistrationView({
     </p>
   </div>
 
+  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+    <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+      Clinic Date
+      <input
+        type="date"
+        value={selectedClinicDate || ""}
+        onChange={(e) => setSelectedClinicDate?.(e.target.value)}
+        className="min-h-[42px] rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal normal-case text-slate-900"
+      />
+    </label>
+
   {isLeadershipView && (
     <button
       type="button"
@@ -132,6 +145,7 @@ export default function RegistrationView({
       ⚙️ Intake Settings
     </button>
   )}
+  </div>
 </div>
 
 {isLeadershipView && showIntakeSettings && (
@@ -316,32 +330,33 @@ export default function RegistrationView({
 </div>
 
                 <div className="flex flex-col gap-2 sm:flex-row">
-  {(userRole === "undergraduate" || isLeadershipView) && (
-    <button
-      onClick={() => openUndergradRegistration(patient.id, encounter.id)}
-      className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-    >
-      {userRole === "undergraduate" ? "Complete / Edit Undergrad Intake" : "Edit Undergrad Intake"}
-    </button>
-  )}
+                  {(userRole === "undergraduate" || isLeadershipView) && (
+                    <button
+                      onClick={() => openUndergradRegistration(patient.id, encounter.id)}
+                      className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                    >
+                      {userRole === "undergraduate" ? "Complete / Edit Undergrad Intake" : "Edit Undergrad Intake"}
+                    </button>
+                  )}
 
-  {isLeadershipView && (
-    <button
-      onClick={() => openLeadershipRegistration(patient.id, encounter.id)}
-      className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-    >
-      Leadership Intake
-    </button>
-  )}
-  {isLeadershipView && (
-  <button
-    onClick={() => onRemoveFromRegistration(patient.id, encounter.id)}
-    className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
-  >
-    Remove
-  </button>
-)}
-</div>
+                  {isLeadershipView && (
+                    <button
+                      onClick={() => openLeadershipRegistration(patient.id, encounter.id)}
+                      className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                    >
+                      Leadership Intake
+                    </button>
+                  )}
+
+                  {isLeadershipView && (
+                    <button
+                      onClick={() => onRemoveFromRegistration(patient.id, encounter.id)}
+                      className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ))

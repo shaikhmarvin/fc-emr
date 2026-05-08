@@ -106,6 +106,8 @@ function labStatusBadge(encounter) {
 
 export default function LabQueueView({
   labEncounterRows,
+  selectedClinicDate,
+  setSelectedClinicDate,
   openPatientChart,
   getFullPatientName,
   onUpdateLabTracking,
@@ -152,11 +154,21 @@ export default function LabQueueView({
           <div>
             <h3 className="text-lg font-semibold text-slate-900">Lab Queue</h3>
             <p className="mt-1 text-sm text-slate-500">
-              Today’s active patients only. Track specimen collection without requiring lab orders.
+              Active patients for the selected clinic date. Track specimen collection without requiring lab orders.
             </p>
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Clinic Date
+              <input
+                type="date"
+                value={selectedClinicDate || ""}
+                onChange={(e) => setSelectedClinicDate?.(e.target.value)}
+                className="min-h-[44px] rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal normal-case text-slate-900"
+              />
+            </label>
+
             <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
               <input
                 type="checkbox"

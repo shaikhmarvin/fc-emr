@@ -1,8 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { formatDate, getStatusLabel } from "../utils";
 import { getClinicAlert } from "../utils/clinicAlerts";
-import { fetchStaffRoster } from "../api/clinicStaffRoster";
-import { supabase } from "../lib/supabase";
 
 const CLINIC_URL = "https://fc-emr.vercel.app/"; // CHANGE THIS
 const WIFI_NAME = "Volunteers"; // CHANGE THIS
@@ -60,66 +58,23 @@ export default function BoardDisplay({
 }) {
   const [now, setNow] = useState(new Date());
 
-  const [displayRoster, setDisplayRoster] = useState({
-    attendings: "",
-    residents: "",
-    upperLevels: "",
-  });
-
   useEffect(() => {
     const interval = setInterval(() => {
       setNow(new Date());
-    }, 1000);
+    }, 60000);
 
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    if (!selectedClinicDate) return;
-
-    let cancelled = false;
-
-    setDisplayRoster({
-      attendings: "",
-      residents: "",
-      upperLevels: "",
-    });
-
-    async function loadRoster() {
-      const roster = await fetchStaffRoster(selectedClinicDate);
-      if (!cancelled) {
-        setDisplayRoster(roster);
-      }
-    }
-
-    loadRoster();
-
-    const channel = supabase
-      .channel(`board_display_staff_roster_${selectedClinicDate}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "clinic_staff_roster",
-          filter: `clinic_date=eq.${selectedClinicDate}`,
-        },
-        loadRoster
-      )
-      .subscribe();
-
-    return () => {
-      cancelled = true;
-      supabase.removeChannel(channel);
-    };
-  }, [selectedClinicDate]);
-
-  const roster =
-    todayStaffRoster?.attendings ||
-      todayStaffRoster?.residents ||
-      todayStaffRoster?.upperLevels
-      ? todayStaffRoster
-      : displayRoster;
+  const roster = useMemo(
+    () =>
+      todayStaffRoster || {
+        attendings: "",
+        residents: "",
+        upperLevels: "",
+      },
+    [todayStaffRoster]
+  );
 
   function getReservedSpecialtyForRoom(roomNumber) {
     return (tonightReservedRooms || []).find(
@@ -130,8 +85,8 @@ export default function BoardDisplay({
 
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-slate-900 p-3 text-white">
-      <div className="mb-2 grid shrink-0 grid-cols-[minmax(210px,0.8fr)_minmax(360px,1.6fr)_minmax(260px,0.9fr)] items-start gap-3">
+    <div className="flex h-screen flex-col overflow-hidden bg-slate-900 p-3 text-white xl:p-4">
+      <div className="mb-2 grid shrink-0 grid-cols-[minmax(230px,0.75fr)_minmax(460px,1.7fr)_minmax(260px,0.8fr)] items-start gap-3 2xl:gap-4">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold leading-tight xl:text-3xl">Free Clinic Room Board</h1>
           <p className="text-xs text-slate-300 xl:text-sm">Live Display</p>
@@ -175,17 +130,17 @@ export default function BoardDisplay({
                 return (
                   <div
                     key={section.label}
-                    className="min-w-0 rounded-xl border border-slate-500 bg-slate-800/90 px-2 py-1.5 shadow xl:px-3 xl:py-2"
+                    className="min-w-0 rounded-xl border border-slate-500 bg-slate-800/90 px-3 py-2 shadow xl:px-4 xl:py-3"
                   >
-                    <div className="mb-1 border-b border-slate-500 pb-0.5 text-center text-[11px] font-extrabold leading-tight text-white xl:text-xs">
+                    <div className="mb-1 border-b border-slate-500 pb-1 text-center text-xs font-extrabold leading-tight text-white xl:text-sm">
                       {section.label}
                     </div>
 
-                    <div className="grid grid-cols-1 gap-x-2 gap-y-0.5 sm:[grid-template-columns:repeat(auto-fit,minmax(90px,1fr))]">
+                    <div className="grid grid-cols-1 gap-x-3 gap-y-1 sm:[grid-template-columns:repeat(auto-fit,minmax(105px,1fr))]">
                       {names.slice(0, maxNames).map((name, idx) => (
                         <div
                           key={`${section.label}-${idx}`}
-                          className="min-w-0 truncate text-[11px] font-bold leading-tight text-white xl:text-xs 2xl:text-sm"
+                          className="min-w-0 truncate text-sm font-bold leading-tight text-white xl:text-base 2xl:text-lg"
                           title={name}
                         >
                           {idx + 1}. {name}
@@ -245,7 +200,7 @@ export default function BoardDisplay({
       </div>
 
       <div className="min-h-0 flex-1">
-        <div className="grid h-full grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        <div className="grid h-full grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:gap-3">
           {ROOM_OPTIONS.map((room) => {
             const reservedSpecialty = getReservedSpecialtyForRoom(room.number);
             const computedRows = getRoomRows(allEncounterRows, room.number);
@@ -275,7 +230,7 @@ export default function BoardDisplay({
             return (
               <div
                 key={room.number}
-                className={`min-h-[170px] rounded-2xl border p-2.5 shadow ${occupied
+                className={`min-h-[180px] overflow-hidden rounded-2xl border p-2.5 shadow xl:min-h-[190px] xl:p-3 ${occupied
                     ? primaryEncounter.status === "roomed"
                       ? "border-green-300 bg-green-100 text-slate-900"
                       : primaryEncounter.status === "in_visit"
@@ -285,7 +240,7 @@ export default function BoardDisplay({
                   }`}
               >
                 <div className="mb-2">
-                  <p className="text-xl font-bold">{room.label}</p>
+                  <p className="text-2xl font-extrabold leading-tight xl:text-3xl">{room.label}</p>
                   <p className="text-xs opacity-70">{room.area}</p>
                   {reservedSpecialty && (
                     <div className="mt-0.5 rounded bg-violet-200 px-1 py-0.5 text-[10px] font-bold text-violet-900">
@@ -296,11 +251,11 @@ export default function BoardDisplay({
 
                 {occupied ? (
                   <div className="space-y-1.5">
-                    <p className="text-lg font-semibold leading-tight">
+                    <p className="truncate text-xl font-extrabold leading-tight xl:text-2xl" title={getPatientBoardName(primaryPatient)}>
                       {getPatientBoardName(primaryPatient)}
                     </p>
 
-                    <div className="space-y-0.5 text-sm">
+                    <div className="space-y-0.5 text-base leading-tight xl:text-lg">
   <p>
     <span className="font-semibold">Student:</span>{" "}
     {getStudentBoardName(primaryEncounter.assignedStudent)}
@@ -344,13 +299,13 @@ export default function BoardDisplay({
                         {grayRows.slice(0, 2).map(({ patient, encounter }) => (
                           <div
                             key={encounter.id}
-                            className="rounded-lg bg-slate-400/30 px-2 py-1.5 text-xs text-slate-800"
+                            className="rounded-lg bg-slate-400/30 px-2 py-1.5 text-sm text-slate-800"
                           >
                             <div className="font-medium leading-tight">
   {getPatientBoardName(patient)}
 </div>
 
-<div className="mt-0.5 text-[11px] opacity-80">
+<div className="mt-0.5 truncate text-xs opacity-80">
   {encounter.assignedStudent ? `Student: ${getStudentBoardName(encounter.assignedStudent)}` : ""}
   {encounter.assignedUpperLevel
     ? `${encounter.assignedStudent ? " • " : ""}Upper: ${getStudentBoardName(encounter.assignedUpperLevel)}`
@@ -360,7 +315,7 @@ export default function BoardDisplay({
                         ))}
 
                         {grayRows.length > 2 && (
-                          <div className="rounded-lg bg-slate-400/30 px-2 py-1.5 text-xs text-slate-800">
+                          <div className="rounded-lg bg-slate-400/30 px-2 py-1.5 text-sm text-slate-800">
                             +{grayRows.length - 2} more
                           </div>
                         )}

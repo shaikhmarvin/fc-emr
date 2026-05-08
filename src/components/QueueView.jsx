@@ -4,6 +4,8 @@ export default function QueueView({
   userRole,
   searchForm,
   waitingEncounterRows,
+  selectedClinicDate,
+  setSelectedClinicDate,
   openPatientChart,
   getPatientBoardName,
   spanishBadge,
@@ -119,6 +121,11 @@ const [prioritizeRefillOnly, setPrioritizeRefillOnly] = useState(false);
     userRole === "pharmacy" ||
     userRole === "undergraduate" ||
     (canRefill && userRole !== "leadership" && userRole !== "attending");
+  const canMarkMedicationsReady = userRole === "pharmacy";
+  const canBypassPharmacyReadyForPickup =
+    userRole === "undergraduate" ||
+    (canRefill && userRole !== "pharmacy" && userRole !== "leadership" && userRole !== "attending");
+  const canMarkMedicationsPickedUp = canUsePharmacyQueue;
 
   function getEncounterIntakeFlag(encounter, field) {
     const intakeData = encounter?.intakeData || encounter?.intake_data || {};
@@ -194,6 +201,11 @@ const [prioritizeRefillOnly, setPrioritizeRefillOnly] = useState(false);
     }
 
     return null;
+  }
+
+  function getCompactPatientLabel(patient, encounter) {
+    const dailyNumber = getDailyCardNumber(patient, encounter);
+    return `${dailyNumber ? `#${dailyNumber} — ` : ""}${getFullQueuePatientName(patient)}`;
   }
 
 
@@ -592,8 +604,13 @@ function getPharmacyStatusRank(encounter) {
 }
 
 function rowMatchesPharmacyStatusFilter(encounter) {
-  if (pharmacyStatusFilter === "ready") return encounter?.pharmacyStatus === "meds_ready";
-  if (pharmacyStatusFilter === "picked_up") return encounter?.pharmacyStatus === "picked_up";
+  const status = encounter?.pharmacyStatus || "waiting";
+
+  if (pharmacyStatusFilter === "waiting") return status === "waiting";
+  if (pharmacyStatusFilter === "ready") return status === "meds_ready";
+  if (pharmacyStatusFilter === "sent") return status === "patient_sent";
+  if (pharmacyStatusFilter === "picked_up") return status === "picked_up";
+
   return true;
 }
 
@@ -621,8 +638,9 @@ const sortedPharmacyRows = [...pharmacyRows].sort((a, b) => {
 
 const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
   ({ patient, encounter }) => {
-    if (isRefillOnlyEncounter(encounter)) return false;
-    if (isSpecialtyOnlyEncounter(encounter) && !canUseWholeClinicQueueTools) return false;
+    if (isRefillOnlyEncounter(encounter) && !canUsePharmacyQueue) return false;
+    if (isSpecialtyOnlyEncounter(encounter) && !canUseWholeClinicQueueTools && !canUsePharmacyQueue) return false;
+    if (canUsePharmacyQueue && !rowMatchesPharmacyStatusFilter(encounter)) return false;
 
     return rowMatchesQueueSearch(patient, encounter);
   }
@@ -641,6 +659,18 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
   }
 
   const sortedFilteredWaitingEncounterRows = [...filteredWaitingEncounterRows].sort((a, b) => {
+    if (canUsePharmacyQueue) {
+      const aReady = a.encounter?.pharmacyStatus === "meds_ready";
+      const bReady = b.encounter?.pharmacyStatus === "meds_ready";
+      if (aReady !== bReady) return aReady ? -1 : 1;
+
+      if (prioritizeRefillOnly) {
+        const aRefillOnly = isRefillOnlyEncounter(a.encounter);
+        const bRefillOnly = isRefillOnlyEncounter(b.encounter);
+        if (aRefillOnly !== bRefillOnly) return aRefillOnly ? -1 : 1;
+      }
+    }
+
     if (canUseOphthoQueueTools && ophthoPriorityView) {
       const scoreDiff = getOphthoPriorityScore(b) - getOphthoPriorityScore(a);
       if (scoreDiff !== 0) return scoreDiff;
@@ -667,7 +697,7 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
           encounter.assignedStudent || encounter.assignedUpperLevel
       )
       : [];
-  if (canUsePharmacyQueue) {
+  if (userRole === "pharmacy") {
   return (
     <div className="space-y-4 p-3 sm:p-4 lg:p-6">
       <div className="rounded-2xl bg-white p-4 shadow sm:p-5">
@@ -677,11 +707,18 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
               {userRole === "undergraduate" ? "Undergrad Pharmacy Queue" : canRefill && userRole !== "pharmacy" ? "Refill / Pharmacy Queue" : "Pharmacy Medication Queue"}
             </h3>
             <p className="mt-1 text-sm text-slate-500">
-              Mark medications ready, sent, or picked up.
+              Pharmacy marks medications ready. Undergrad, refill, or pharmacy can mark pickup after delivery.
             </p>
           </div>
 
           <div className="flex w-full flex-col gap-2 lg:w-80">
+  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Clinic Date</label>
+  <input
+    type="date"
+    value={selectedClinicDate || ""}
+    onChange={(e) => setSelectedClinicDate?.(e.target.value)}
+    className="w-full rounded-lg border border-slate-300 bg-white p-3 text-sm"
+  />
   <input
     className="w-full rounded-lg border p-3"
     placeholder="Search by name, DOB, or daily card #"
@@ -705,7 +742,9 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
     onChange={(e) => setPharmacyStatusFilter(e.target.value)}
   >
     <option value="all">All medication statuses</option>
+    <option value="waiting">Waiting / Not Ready</option>
     <option value="ready">Medications Ready</option>
+    <option value="sent">Patient Sent</option>
     <option value="picked_up">Medications Picked Up</option>
   </select>
 </div>
@@ -795,14 +834,6 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                       >
                         Medications Ready
                       </button>
-
-                      <button
-                        type="button"
-                        onClick={() => onMarkMedicationsPickedUp?.(encounter.id)}
-                        className="min-h-[40px] flex-1 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-                      >
-                        Medications Picked Up
-                      </button>
                     </div>
                   ) : null}
 
@@ -846,40 +877,57 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
 }
   return (
     <div className="space-y-4 p-3 sm:p-4 lg:space-y-6 lg:p-6">
-      {userRole === "undergraduate" && pharmacyReadyRows.length > 0 && (
-        <section className="rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-4 shadow-sm">
-          <h2 className="text-lg font-bold text-emerald-900">
-            Pharmacy Pickup Needed
-          </h2>
+      {canUsePharmacyQueue && pharmacyReadyRows.length > 0 && (
+        <section className="rounded-2xl border border-emerald-300 bg-emerald-50 p-3 shadow-sm sm:p-4">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-base font-bold text-emerald-950 sm:text-lg">
+                Medications Ready
+              </h2>
+              <p className="text-xs text-emerald-800 sm:text-sm">
+                Patients ready for medication pickup/delivery. These also sort to the top of the queue below.
+              </p>
+            </div>
+            <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-emerald-800 shadow-sm">
+              {pharmacyReadyRows.length} ready
+            </span>
+          </div>
 
-          <p className="mt-1 text-sm text-emerald-800">
-            Please find these patients and guide them to pharmacy.
-          </p>
-
-          <div className="mt-3 grid gap-2 md:grid-cols-2">
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {pharmacyReadyRows.map(({ patient, encounter }) => (
               <div
                 key={encounter.id}
-                className="flex items-center justify-between gap-3 rounded-xl bg-white p-3 shadow-sm"
+                className="flex flex-col gap-2 rounded-xl bg-white p-2.5 shadow-sm sm:flex-row sm:items-center sm:justify-between"
               >
-                <div>
-                  <div className="font-bold text-slate-900">
-                    {getPharmacyDailyNumber(patient, encounter)}
-                    {getFullQueuePatientName(patient)}
-                  </div>
-
-                  <div className="text-xs text-slate-500">
-                    Medications ready for pickup
-                  </div>
-                </div>
-
                 <button
                   type="button"
-                  onClick={() => onMarkPatientSentToPharmacy?.(encounter.id)}
-                  className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                  onClick={() => openPatientChart(patient.id, encounter.id)}
+                  className="min-w-0 text-left"
                 >
-                  Patient Sent
+                  <div className="truncate text-sm font-bold text-slate-950">
+                    {getCompactPatientLabel(patient, encounter)}
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    DOB: {formatDate(patient.dob)}
+                  </div>
                 </button>
+
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onMarkPatientSentToPharmacy?.(encounter.id)}
+                    className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+                  >
+                    Patient Sent
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onMarkMedicationsPickedUp?.(encounter.id)}
+                    className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                  >
+                    Picked Up
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -904,9 +952,9 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
               {userRole === "attending"
                 ? "Patients awaiting attending signature."
                 : canUseOphthoQueueTools
-                  ? "All clinic patients for today except refill-only, including completed general visits. Use the checkbox to prioritize DM / HTN / Ophtho list."
+                  ? "All clinic patients for the selected date except refill-only, including completed general visits. Use the checkbox to prioritize DM / HTN / Ophtho list."
                   : canUseSocialWorkQueueTools
-                    ? "All clinic patients for today except refill-only, including completed and in-visit patients."
+                    ? "All clinic patients for the selected date except refill-only, including completed and in-visit patients."
                     : userRole === "student"
                     ? "Patients assigned to you that are still waiting."
                     : userRole === "upper_level"
@@ -916,12 +964,46 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
           </div>
 
           <div className="flex w-full flex-col gap-2 lg:w-80">
+            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Clinic Date</label>
+            <input
+              type="date"
+              value={selectedClinicDate || ""}
+              onChange={(e) => setSelectedClinicDate?.(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 bg-white p-3 text-sm"
+            />
+
             <input
               className="w-full rounded-lg border p-3"
               placeholder="Search by name, DOB, or daily card #"
               value={queueSearch}
               onChange={(e) => setQueueSearch(e.target.value)}
             />
+
+            {canUsePharmacyQueue && (
+              <>
+                <label className="flex items-center gap-2 rounded-lg border border-purple-100 bg-purple-50 px-3 py-2 text-sm font-semibold text-purple-800">
+                  <input
+                    type="checkbox"
+                    checked={prioritizeRefillOnly}
+                    onChange={(e) => setPrioritizeRefillOnly(e.target.checked)}
+                    className="h-4 w-4"
+                  />
+                  Prioritize refill-only
+                </label>
+
+                <select
+                  className="w-full rounded-lg border border-slate-300 bg-white p-3 text-sm"
+                  value={pharmacyStatusFilter}
+                  onChange={(e) => setPharmacyStatusFilter(e.target.value)}
+                >
+                  <option value="all">All medication statuses</option>
+                  <option value="waiting">Waiting / Not Ready</option>
+                  <option value="ready">Medications Ready</option>
+                  <option value="sent">Patient Sent</option>
+                  <option value="picked_up">Medications Picked Up</option>
+                </select>
+              </>
+            )}
 
             {canUseOphthoQueueTools && (
               <label className="flex items-center gap-2 rounded-lg border border-orange-100 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-800">
@@ -1169,7 +1251,7 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                   {papBadge?.(encounter)}
                 </div>
 
-{canUsePharmacyQueue && !encounter?.pharmacyStatus && (
+{canMarkMedicationsReady && !encounter?.pharmacyStatus && (
   <button
     type="button"
     onClick={() => onMarkMedicationsReady?.(encounter.id)}
@@ -1179,51 +1261,48 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
   </button>
 )}
 
-{canUsePharmacyQueue && encounter?.pharmacyStatus === "meds_ready" && (
-  <div className="mt-2 flex gap-2">
-    <button
-      type="button"
-      onClick={() => onMarkMedicationsPickedUp?.(encounter.id)}
-      className="min-h-[40px] flex-1 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-    >
-      Medications Picked Up
-    </button>
+{canMarkMedicationsPickedUp &&
+  encounter?.pharmacyStatus !== "picked_up" &&
+  (canBypassPharmacyReadyForPickup ||
+    encounter?.pharmacyStatus === "meds_ready" ||
+    encounter?.pharmacyStatus === "patient_sent") && (
+    <div className="mt-2 flex gap-2">
+      <button
+        type="button"
+        onClick={() => onMarkMedicationsPickedUp?.(encounter.id)}
+        className="min-h-[40px] flex-1 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+      >
+        Medications Picked Up
+      </button>
 
-    <button
-      type="button"
-      onClick={() => onClearPharmacyStatus?.(encounter.id)}
-      className="min-h-[40px] rounded-lg bg-slate-500 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-600"
-    >
-      Undo Medication Status
-    </button>
-  </div>
+      {canMarkMedicationsReady && encounter?.pharmacyStatus === "meds_ready" && (
+        <button
+          type="button"
+          onClick={() => onClearPharmacyStatus?.(encounter.id)}
+          className="min-h-[40px] rounded-lg bg-slate-500 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-600"
+        >
+          Undo Medication Status
+        </button>
+      )}
+    </div>
 )}
 
-{canUsePharmacyQueue &&
-  encounter?.pharmacyStatus === "patient_sent" && (
-    <button
-      type="button"
-      onClick={() => onMarkMedicationsPickedUp?.(encounter.id)}
-      className="mt-2 min-h-[40px] w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-    >
-      Medications Picked Up
-    </button>
-)}
-
-{canUsePharmacyQueue &&
+{canMarkMedicationsPickedUp &&
   encounter?.pharmacyStatus === "picked_up" && (
     <div className="mt-2 flex gap-2">
       <div className="min-h-[40px] flex-1 rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
         Medications Picked Up
       </div>
 
-      <button
-        type="button"
-        onClick={() => onMarkMedicationsReady?.(encounter.id)}
-        className="min-h-[40px] rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
-      >
-        Meds Ready Again
-      </button>
+      {canMarkMedicationsReady && (
+        <button
+          type="button"
+          onClick={() => onMarkMedicationsReady?.(encounter.id)}
+          className="min-h-[40px] rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+        >
+          Meds Ready Again
+        </button>
+      )}
     </div>
 )}
 
