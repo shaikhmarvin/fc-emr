@@ -589,6 +589,77 @@ function isSpecialtyOnlyEncounter(encounter) {
   );
 }
 
+function getEncounterSpecialtyName(encounter) {
+  const intakeData = encounter?.intakeData || encounter?.intake_data || {};
+  const rawSpecialty =
+    encounter?.specialtyType ||
+    encounter?.specialty_type ||
+    intakeData?.specialtyType ||
+    intakeData?.specialty_type ||
+    "";
+
+  const specialtyMap = {
+    ophthalmology: "Ophthalmology",
+    ophtho: "Ophthalmology",
+    pt: "PT",
+    physical_therapy: "PT",
+    "physical therapy": "PT",
+    dermatology: "Dermatology",
+    derm: "Dermatology",
+    mental_health: "Mental Health",
+    "mental health": "Mental Health",
+    addiction_medicine: "Addiction Medicine",
+    "addiction medicine": "Addiction Medicine",
+    social_work: "Social Work",
+    "social work": "Social Work",
+  };
+
+  const key = String(rawSpecialty).trim().toLowerCase();
+  return specialtyMap[key] || rawSpecialty;
+}
+
+function getVisitReasonLabel(encounter) {
+  const intakeData = encounter?.intakeData || encounter?.intake_data || {};
+  const visitType =
+    encounter?.visitType ||
+    encounter?.visit_type ||
+    intakeData?.visitType ||
+    intakeData?.visit_type ||
+    "general";
+  const specialtyName = getEncounterSpecialtyName(encounter);
+
+  if (visitType === "refill_only") return "Refill Only";
+  if (visitType === "specialty_only") {
+    return specialtyName ? `${specialtyName} Only` : "Specialty Only";
+  }
+  if (visitType === "both") {
+    return specialtyName ? `General + ${specialtyName}` : "General + Specialty";
+  }
+  if (specialtyName) return `General + ${specialtyName}`;
+  return "General";
+}
+
+function getVisitReasonBadgeClasses(encounter) {
+  const intakeData = encounter?.intakeData || encounter?.intake_data || {};
+  const visitType =
+    encounter?.visitType ||
+    encounter?.visit_type ||
+    intakeData?.visitType ||
+    intakeData?.visit_type ||
+    "general";
+
+  if (visitType === "refill_only") {
+    return "bg-purple-100 text-purple-900 ring-purple-200";
+  }
+  if (visitType === "specialty_only") {
+    return "bg-amber-100 text-amber-900 ring-amber-200";
+  }
+  if (visitType === "both" || getEncounterSpecialtyName(encounter)) {
+    return "bg-indigo-100 text-indigo-900 ring-indigo-200";
+  }
+  return "bg-slate-100 text-slate-900 ring-slate-200";
+}
+
 function isPharmacyWorkflowEncounter(encounter) {
   return (
     isRefillOnlyEncounter(encounter) ||
@@ -706,7 +777,7 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
             <h3 className="text-lg font-semibold">
               {userRole === "undergraduate" ? "Undergrad Pharmacy Queue" : canRefill && userRole !== "pharmacy" ? "Refill / Pharmacy Queue" : "Pharmacy Medication Queue"}
             </h3>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm font-medium text-slate-800">
               Pharmacy marks medications ready. Undergrad, refill, or pharmacy can mark pickup after delivery.
             </p>
           </div>
@@ -767,7 +838,7 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
               >
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="font-semibold text-slate-800">
+                    <p className="font-bold text-slate-950">
                       {getDailyCardNumber(patient, encounter)
                         ? `#${getDailyCardNumber(patient, encounter)} — `
                         : ""}
@@ -784,7 +855,7 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                     </div>
                   </div>
 
-                  <p className="text-sm text-slate-600">
+                  <p className="text-sm font-medium text-slate-900">
                     {encounter.chiefComplaint || "No chief complaint"}
                   </p>
 
@@ -795,7 +866,7 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                     </div>
                   )}
 
-                  <div className="flex flex-wrap gap-x-3 text-xs text-slate-500">
+                  <div className="flex flex-wrap gap-x-3 text-xs font-medium text-slate-800">
                     <span>DOB: {formatDate(patient.dob)}</span>
                     <span>MRN: {patient.mrn || "—"}</span>
                     <span>Wait: {formatWaitTime(encounter.createdAt)}</span>
@@ -904,10 +975,17 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                   onClick={() => openPatientChart(patient.id, encounter.id)}
                   className="min-w-0 text-left"
                 >
-                  <div className="truncate text-sm font-bold text-slate-950">
-                    {getCompactPatientLabel(patient, encounter)}
+                  <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                    <span className="truncate text-sm font-bold text-slate-950">
+                      {getCompactPatientLabel(patient, encounter)}
+                    </span>
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ${getVisitReasonBadgeClasses(encounter)}`}
+                    >
+                      {getVisitReasonLabel(encounter)}
+                    </span>
                   </div>
-                  <div className="text-xs text-slate-500">
+                  <div className="text-xs font-medium text-slate-800">
                     DOB: {formatDate(patient.dob)}
                   </div>
                 </button>
@@ -948,7 +1026,7 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                     ? "My Queue"
                     : "Waiting Queue"}
             </h3>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm font-medium text-slate-800">
               {userRole === "attending"
                 ? "Patients awaiting attending signature."
                 : canUseOphthoQueueTools
@@ -1064,11 +1142,11 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                       }}
                       className="w-full text-left hover:bg-blue-50"
                     >
-                      <div className="text-sm font-semibold text-slate-800">
+                      <div className="text-sm font-bold text-slate-950">
                         {patient ? getPatientBoardName(patient) : `Patient ${req.patient_id}`}
                       </div>
 
-                      <div className="mt-1 text-sm text-slate-600">
+                      <div className="mt-1 text-sm font-medium text-slate-900">
                         Medication: {displayMedication?.name || req.medication_id}
                       </div>
 
@@ -1078,15 +1156,15 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                         </div>
                       )}
 
-                      <div className="mt-1 text-xs text-slate-500">
+                      <div className="mt-1 text-xs font-medium text-slate-800">
                         Dosage: {displayMedication?.dosage || "—"} • Frequency: {displayMedication?.frequency || "—"}
                       </div>
 
-                      <div className="mt-1 text-xs text-slate-500">
+                      <div className="mt-1 text-xs font-medium text-slate-800">
                         Dispense: {displayMedication?.dispenseAmount || "—"} • Refills: {displayMedication?.refillCount ?? "—"}
                       </div>
 
-                      <div className="mt-1 text-xs text-slate-500">
+                      <div className="mt-1 text-xs font-medium text-slate-800">
                         Requested by: {profileNameMap?.[req.requested_by] || "Unknown User"}
                       </div>
 
@@ -1103,7 +1181,7 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                                 className="text-xs text-slate-600"
                               >
                                 <span className="font-medium text-slate-700">{field.label}:</span>{" "}
-                                <span className="text-slate-500">{field.before}</span>{" "}
+                                <span className="text-slate-800 font-medium">{field.before}</span>{" "}
                                 <span className="font-semibold text-purple-700">→</span>{" "}
                                 <span className="text-slate-800">{field.after}</span>
                               </div>
@@ -1178,7 +1256,7 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
               <div className="flex flex-col gap-2">
                 {/* Top row */}
                 <div className="flex items-center justify-between">
-                  <p className="font-semibold text-slate-800">
+                  <p className="font-bold text-slate-950">
                     {getDailyCardNumber(patient, encounter)
                       ? `#${getDailyCardNumber(patient, encounter)} — `
                       : ""}
@@ -1193,7 +1271,7 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                 </div>
 
                 {/* Chief complaint */}
-                <p className="text-sm text-slate-600">
+                <p className="text-sm font-medium text-slate-900">
                   {encounter.chiefComplaint || "No chief complaint"}
                 </p>
 
@@ -1214,14 +1292,14 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                 )}
 
                 {/* Secondary info */}
-                <div className="flex flex-wrap gap-x-3 text-xs text-slate-500">
+                <div className="flex flex-wrap gap-x-3 text-xs font-medium text-slate-800">
   <span>DOB: {formatDate(patient.dob)}</span>
   <span>MRN: {patient.mrn || "—"}</span>
   <span>Wait: {formatWaitTime(encounter.createdAt)}</span>
 </div>
 
                 {/* Assignment info */}
-                <p className="text-xs text-slate-500">
+                <p className="text-xs font-medium text-slate-800">
                   Student: {encounter.assignedStudent || "—"} • Upper: {encounter.assignedUpperLevel || "—"}
                   {encounter.skipUpperLevel ? " • Skip Upper Approved" : ""}
                 </p>
@@ -1520,7 +1598,7 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
               >
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center justify-between">
-                    <p className="font-semibold text-slate-800">
+                    <p className="font-bold text-slate-950">
                       {getDailyCardNumber(patient, encounter)
                         ? `#${getDailyCardNumber(patient, encounter)} — `
                         : ""}
@@ -1534,7 +1612,7 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                     </span>
                   </div>
 
-                  <p className="text-sm text-slate-600">
+                  <p className="text-sm font-medium text-slate-900">
                     {encounter.chiefComplaint || "No chief complaint"}
                   </p>
                   {getLeadershipQueueNotes(encounter) && (
@@ -1546,13 +1624,13 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                     </div>
                   )}
 
-                  <div className="flex flex-wrap gap-x-3 text-xs text-slate-500">
+                  <div className="flex flex-wrap gap-x-3 text-xs font-medium text-slate-800">
   <span>DOB: {formatDate(patient.dob)}</span>
   <span>MRN: {patient.mrn || "—"}</span>
   <span>Wait: {formatWaitTime(encounter.createdAt)}</span>
 </div>
 
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs font-medium text-slate-800">
                     Student: {encounter.assignedStudent || "—"} • Upper: {encounter.assignedUpperLevel || "—"}
                   </p>
 
@@ -1598,7 +1676,7 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
               Approve Refill
             </h3>
 
-            <p className="mt-2 text-sm text-slate-600">
+            <p className="mt-2 text-sm font-medium text-slate-900">
               Select the attending and enter the 4-digit PIN to approve this refill request.
             </p>
 
