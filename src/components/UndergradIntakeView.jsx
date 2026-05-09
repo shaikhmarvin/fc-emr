@@ -32,6 +32,40 @@ function normalizeNamePart(value = "") {
     .trim();
 }
 
+function normalizeNameTokens(value = "") {
+  return String(value)
+    .toLowerCase()
+    .split(/[^a-z0-9]+/g)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function namePartMatchesPrefix(inputName = "", patientName = "") {
+  const input = normalizeNamePart(inputName);
+  const patient = normalizeNamePart(patientName);
+  const inputTokens = normalizeNameTokens(inputName);
+  const patientTokens = normalizeNameTokens(patientName);
+
+  if (!input || !patient) return false;
+  if (Math.min(input.length, patient.length) < 3) return false;
+
+  if (patient.startsWith(input) || input.startsWith(patient)) return true;
+
+  return inputTokens.some((inputToken) =>
+    patientTokens.some((patientToken) => {
+      if (Math.min(inputToken.length, patientToken.length) < 3) return false;
+      return patientToken.startsWith(inputToken) || inputToken.startsWith(patientToken);
+    })
+  );
+}
+
+function namesAreCompatible(inputName = "", patientName = "") {
+  return (
+    namesAreSimilar(inputName, patientName) ||
+    namePartMatchesPrefix(inputName, patientName)
+  );
+}
+
 function normalizeDateString(value = "") {
   return String(value).replace(/\D/g, "").slice(0, 8);
 }
@@ -152,52 +186,68 @@ function buildPatientMatchCandidates(patients = [], form = {}) {
   const lastNameReady = normalizedLast.length >= 3;
   const dobReady = normalizedDob.length === 8;
 
-if (!firstNameReady || !lastNameReady) return [];
+  // Do not show match noise until there is enough identity info entered.
+  // Either a usable full-name pattern, or an exact DOB plus at least one name part.
+  if (!((firstNameReady && lastNameReady) || (dobReady && (firstNameReady || lastNameReady)))) {
+    return [];
+  }
 
   return (patients || [])
     .map((patient) => {
-      const firstDistance = levenshteinDistance(firstName, patient.firstName || "");
-      const lastDistance = levenshteinDistance(lastName, patient.lastName || "");
+      const patientFirst = patient.firstName || "";
+      const patientLast = patient.lastName || "";
+      const patientDob = patient.dob || "";
 
-      const firstSimilar = namesAreSimilar(firstName, patient.firstName || "");
-      const lastSimilar = namesAreSimilar(lastName, patient.lastName || "");
+      const firstDistance = levenshteinDistance(firstName, patientFirst);
+      const lastDistance = levenshteinDistance(lastName, patientLast);
 
-      const dobExact =
-        normalizedDob === normalizeDateString(patient.dob || "");
+      const firstExact = normalizeNamePart(firstName) === normalizeNamePart(patientFirst);
+      const lastExact = normalizeNamePart(lastName) === normalizeNamePart(patientLast);
 
-      const dobClose =
-        !dobExact && datesDifferByOneDigit(dob, patient.dob || "");
+      const firstSimilar = namesAreSimilar(firstName, patientFirst);
+      const lastSimilar = namesAreSimilar(lastName, patientLast);
+      const firstPrefix = namePartMatchesPrefix(firstName, patientFirst);
+      const lastPrefix = namePartMatchesPrefix(lastName, patientLast);
 
-      if (!firstSimilar || !lastSimilar) return null;
+      const firstCompatible = firstNameReady && namesAreCompatible(firstName, patientFirst);
+      const lastCompatible = lastNameReady && namesAreCompatible(lastName, patientLast);
 
-const strongNameMatch =
-  firstDistance <= 1 &&
-  lastDistance <= 1 &&
-  normalizedFirst.length >= 3 &&
-  normalizedLast.length >= 3;
+      const dobExact = normalizedDob === normalizeDateString(patientDob);
+      const dobClose = !dobExact && datesDifferByOneDigit(dob, patientDob);
 
-if (!strongNameMatch && !dobExact && !dobClose) {
-  return null;
-}
+      const firstAndLastMatch = firstCompatible && lastCompatible;
+      const exactDobWithPartialName = dobExact && (firstCompatible || lastCompatible);
+      const closeDobWithStrongName = dobClose && firstAndLastMatch;
 
-      const firstExact = firstDistance === 0;
-      const lastExact = lastDistance === 0;
+      // Intuitive matching rules:
+      // 1) First + last name are compatible, including hyphen/prefix last names.
+      // 2) Exact DOB + either first or last name compatible is enough to surface.
+      // 3) One-digit DOB typo only surfaces when both names are compatible.
+      if (!firstAndLastMatch && !exactDobWithPartialName && !closeDobWithStrongName) {
+        return null;
+      }
 
       let score = 0;
+
       if (firstExact) score += 4;
       else if (firstSimilar) score += 3;
+      else if (firstPrefix) score += 2;
 
       if (lastExact) score += 5;
       else if (lastSimilar) score += 4;
+      else if (lastPrefix) score += 3;
 
       if (dobExact) score += 6;
       else if (dobClose) score += 3;
 
+      if (firstAndLastMatch) score += 2;
+      if (exactDobWithPartialName && !firstAndLastMatch) score += 1;
+
       return {
         patient,
         score,
-        firstSimilar,
-        lastSimilar,
+        firstSimilar: firstCompatible,
+        lastSimilar: lastCompatible,
         dobExact,
         dobClose,
         phoneExact: false,
