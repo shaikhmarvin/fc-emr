@@ -847,37 +847,47 @@ export default function App() {
   const [registrationPatientId, setRegistrationPatientId] = useState(null);
   const [registrationEncounterId, setRegistrationEncounterId] = useState(null);
 
-  const [activeView, setActiveView] = useState("dashboard");
+  const [activeView, setActiveView] = useState(() => {
+  return window.localStorage.getItem("active-view") || "dashboard";
+});
   const [pharmacyToast, setPharmacyToast] = useState(null);
   const [lastPharmacyToastKey, setLastPharmacyToastKey] = useState("");
 
   useEffect(() => {
-    if (userRole === "undergraduate") {
-      setActiveView("undergrad-intake");
-      return;
-    }
+  if (!userRole) return;
 
-    if (userRole === "pharmacy" || userRole === "social_work") {
-      setActiveView("queue");
-      return;
-    }
+  if (userRole === "undergraduate") {
+    setActiveView("undergrad-intake");
+    return;
+  }
 
-    if (userRole === "lab") {
-      setActiveView("lab-queue");
-      return;
-    }
+  if (userRole === "pharmacy" || userRole === "social_work") {
+    setActiveView("queue");
+    return;
+  }
 
-    if (
-      userRole === "student" ||
-      userRole === "upper_level" ||
-      userRole === "attending"
-    ) {
-      setActiveView("queue");
-      return;
-    }
+  if (userRole === "lab") {
+    setActiveView("lab-queue");
+    return;
+  }
 
-    setActiveView("dashboard");
-  }, [userRole]);
+  if (
+    userRole === "student" ||
+    userRole === "upper_level" ||
+    userRole === "attending"
+  ) {
+    setActiveView("queue");
+    return;
+  }
+
+  // Leadership should keep whatever page was saved in localStorage.
+}, [userRole]);
+
+  useEffect(() => {
+  if (!activeView) return;
+
+  window.localStorage.setItem("active-view", activeView);
+}, [activeView]);
 
   const canLabQueueAccess = canUseLabQueue(userRole);
   const canRefill = canRefillAccess || userRole === "attending" || userRole === "leadership";
@@ -906,6 +916,7 @@ export default function App() {
     ms34Names: "",
     ms12Names: "",
   });
+ 
   const [summaryRefreshStatus, setSummaryRefreshStatus] = useState("");
   const [programEntries, setProgramEntries] = useState([]);
   const [programsLoaded, setProgramsLoaded] = useState(false);
@@ -3442,52 +3453,103 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
   );
 
   const summaryPatientRows = useMemo(() => {
-    const priorityForVisitType = (visitType) => {
-      if (visitType === "general") return 1;
-      if (visitType === "both") return 2;
-      if (visitType === "specialty_only") return 3;
-      if (visitType === "refill_only") return 4;
-      return 5;
-    };
+  const priorityForVisitType = (visitType) => {
+    if (visitType === "general") return 1;
+    if (visitType === "both") return 2;
 
-    const rowMap = new Map();
+    // specialty-only and refill-only should NOT count
+    // toward new/returning general clinic totals
+    if (visitType === "specialty_only") return 99;
+    if (visitType === "refill_only") return 100;
 
-    visibleEncounterRows.forEach((row) => {
-      if (row.encounter?.visitType === "refill_only") return;
+    return 101;
+  };
 
-      const patientKey = String(row.patient?.id || row.encounter?.patientId || "");
-      if (!patientKey) return;
+  const rowMap = new Map();
 
-      const existing = rowMap.get(patientKey);
-      if (!existing) {
-        rowMap.set(patientKey, row);
-        return;
-      }
+  visibleEncounterRows.forEach((row) => {
+    const visitType = row.encounter?.visitType;
 
-      const existingPriority = priorityForVisitType(existing.encounter?.visitType);
-      const nextPriority = priorityForVisitType(row.encounter?.visitType);
+    // exclude specialty-only + refill-only
+    if (
+      visitType === "specialty_only" ||
+      visitType === "refill_only"
+    ) {
+      return;
+    }
 
-      if (nextPriority < existingPriority) {
-        rowMap.set(patientKey, row);
-      }
-    });
+    const patientKey = String(
+      row.patient?.id || row.encounter?.patientId || ""
+    );
 
-    return Array.from(rowMap.values());
-  }, [visibleEncounterRows]);
+    if (!patientKey) return;
 
-  const newPatientCount = summaryPatientRows.filter(
-    ({ encounter }) => encounter.newReturning === "New"
-  ).length;
+    const existing = rowMap.get(patientKey);
 
-  const returningPatientCount = summaryPatientRows.filter(
-    ({ encounter }) => encounter.newReturning === "Returning"
-  ).length;
+    if (!existing) {
+      rowMap.set(patientKey, row);
+      return;
+    }
 
-  const totalPatientCount = summaryPatientRows.length;
+    const existingPriority = priorityForVisitType(
+      existing.encounter?.visitType
+    );
+
+    const nextPriority = priorityForVisitType(
+      row.encounter?.visitType
+    );
+
+    if (nextPriority < existingPriority) {
+      rowMap.set(patientKey, row);
+    }
+  });
+
+  return Array.from(rowMap.values());
+}, [visibleEncounterRows]);
+
+const newPatientCount = summaryPatientRows.filter(
+  ({ encounter }) => encounter.newReturning === "New"
+).length;
+
+const returningPatientCount = summaryPatientRows.filter(
+  ({ encounter }) => encounter.newReturning === "Returning"
+).length;
+
+const totalPatientCount = summaryPatientRows.length;
 
   const autoLwobsCount = visibleEncounterRows.filter(
     ({ encounter }) => String(encounter.status || "").toLowerCase() === "cancelled"
   ).length;
+
+   const clinicSummaryStorageKey = selectedClinicDate
+  ? `clinic-summary-${selectedClinicDate}`
+  : "";
+
+useEffect(() => {
+  if (!clinicSummaryStorageKey) return;
+
+  const saved = window.localStorage.getItem(clinicSummaryStorageKey);
+
+  if (!saved) return;
+
+  try {
+    setClinicSummary((prev) => ({
+      ...prev,
+      ...JSON.parse(saved),
+    }));
+  } catch (error) {
+    console.error("Failed to load saved clinic summary:", error);
+  }
+}, [clinicSummaryStorageKey]);
+
+useEffect(() => {
+  if (!clinicSummaryStorageKey) return;
+
+  window.localStorage.setItem(
+    clinicSummaryStorageKey,
+    JSON.stringify(clinicSummary)
+  );
+}, [clinicSummary, clinicSummaryStorageKey]);
 
   const [profiles, setProfiles] = useState([]);
   const [loadingProfiles, setLoadingProfiles] = useState(false);
@@ -3557,42 +3619,74 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
 }, [patients, refillRequests, profileById, selectedClinicDate]);
 
   const specialtyCounts = useMemo(() => {
-    const counts = {
-      pt: 0,
-      dermatology: 0,
-      ophthalmology: 0,
-      mental_health: 0,
-      addiction: 0,
-    };
+  const counts = {
+    pt: { specialtyOnly: 0, both: 0 },
+    dermatology: { specialtyOnly: 0, both: 0 },
+    ophthalmology: { specialtyOnly: 0, both: 0 },
+    mental_health: { specialtyOnly: 0, both: 0 },
+    addiction: { specialtyOnly: 0, both: 0 },
+  };
 
-    patients.forEach((patient) => {
-      patient.encounters.forEach((encounter) => {
-        if (encounter.clinicDate !== selectedClinicDate) return;
+  patients.forEach((patient) => {
+    patient.encounters.forEach((encounter) => {
+      if (encounter.clinicDate !== selectedClinicDate) return;
+      if (!encounter.specialtyType) return;
 
-        if (
-          (encounter.visitType === "specialty_only" || encounter.visitType === "both") &&
-          encounter.specialtyType
-        ) {
-          counts[encounter.specialtyType] =
-            (counts[encounter.specialtyType] || 0) + 1;
-        }
-      });
+      const specialty = encounter.specialtyType;
+
+      if (!counts[specialty]) return;
+
+      if (encounter.visitType === "specialty_only") {
+        counts[specialty].specialtyOnly += 1;
+      }
+
+      if (encounter.visitType === "both") {
+        counts[specialty].both += 1;
+      }
     });
+  });
 
-    return counts;
-  }, [patients, selectedClinicDate]);
+  const formatSpecialtyCount = ({ specialtyOnly, both }) =>
+  `${specialtyOnly} specialty-only + ${both} general/free clinic`;
+
+return {
+  pt: formatSpecialtyCount(counts.pt),
+  dermatology: formatSpecialtyCount(counts.dermatology),
+  ophthalmology: formatSpecialtyCount(counts.ophthalmology),
+  mental_health: formatSpecialtyCount(counts.mental_health),
+  addiction: formatSpecialtyCount(counts.addiction),
+};
+}, [patients, selectedClinicDate]);
 
   useEffect(() => {
     setClinicSummary((prev) => ({
-      ...prev,
-      refillCount: String(autoRefillPatientCount),
-      lwobsCount: String(autoLwobsCount),
-      mentalHealthCount: String(specialtyCounts.mental_health || 0),
-      addictionMedicineCount: String(specialtyCounts.addiction || 0),
-      ptCount: String(specialtyCounts.pt || 0),
-      dermatologyCount: String(specialtyCounts.dermatology || 0),
-      ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
-    }));
+  ...prev,
+  refillCount:
+    prev.refillCount || String(autoRefillPatientCount),
+
+  lwobsCount:
+    prev.lwobsCount || String(autoLwobsCount),
+
+  mentalHealthCount:
+    prev.mentalHealthCount ||
+    String(specialtyCounts.mental_health || 0),
+
+  addictionMedicineCount:
+    prev.addictionMedicineCount ||
+    String(specialtyCounts.addiction || 0),
+
+  ptCount:
+    prev.ptCount ||
+    String(specialtyCounts.pt || 0),
+
+  dermatologyCount:
+    prev.dermatologyCount ||
+    String(specialtyCounts.dermatology || 0),
+
+  ophthalmologyCount:
+    prev.ophthalmologyCount ||
+    String(specialtyCounts.ophthalmology || 0),
+}));
   }, [
     autoRefillPatientCount,
     autoLwobsCount,
