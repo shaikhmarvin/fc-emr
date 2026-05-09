@@ -169,6 +169,42 @@ const [prioritizeRefillOnly, setPrioritizeRefillOnly] = useState(false);
     );
   }
 
+    function getQueueWaitLabel(encounter) {
+    const startTime =
+      encounter?.leadership_intake_completed_at ||
+      encounter?.leadershipIntakeCompletedAt ||
+      encounter?.created_at ||
+      encounter?.createdAt;
+
+    const completedTime =
+      encounter?.visit_completed_at ||
+      encounter?.visitCompletedAt ||
+      encounter?.done_at ||
+      encounter?.doneAt ||
+      encounter?.pharmacy_picked_up_at ||
+      encounter?.pharmacyPickedUpAt ||
+      encounter?.soap_signed_at ||
+      encounter?.soapSignedAt;
+
+    if (completedTime && startTime) {
+      const start = new Date(startTime);
+      const completed = new Date(completedTime);
+
+      if (!Number.isNaN(start.getTime()) && !Number.isNaN(completed.getTime())) {
+        const diffMs = Math.max(0, completed.getTime() - start.getTime());
+        const totalMinutes = Math.round(diffMs / 60000);
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+
+        return hours > 0 ? `${hours}h ${minutes}m final` : `${minutes}m final`;
+      }
+    }
+
+    if (isGeneralVisitComplete(encounter)) return "Complete";
+
+    return formatWaitTime(startTime);
+  }
+
   function getPharmacyDailyNumber(patient, encounter) {
     return getDailyCardNumber(patient, encounter)
       ? `#${getDailyCardNumber(patient, encounter)} — `
@@ -877,7 +913,7 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                   <div className="flex flex-wrap gap-x-3 text-xs font-medium text-slate-800">
                     <span>DOB: {formatDate(patient.dob)}</span>
                     <span>MRN: {patient.mrn || "—"}</span>
-                    <span>Wait: {formatWaitTime(encounter.createdAt)}</span>
+                    <span>Wait: {getQueueWaitLabel(encounter)}</span>
                   </div>
 
                   <div className="flex flex-wrap gap-2">
@@ -1303,7 +1339,7 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                 <div className="flex flex-wrap gap-x-3 text-xs font-medium text-slate-800">
   <span>DOB: {formatDate(patient.dob)}</span>
   <span>MRN: {patient.mrn || "—"}</span>
-  <span>Wait: {formatWaitTime(encounter.createdAt)}</span>
+  <span>Wait: {getQueueWaitLabel(encounter)}</span>
 </div>
 
                 {/* Assignment info */}
@@ -1325,7 +1361,7 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                   {spanishBadge(encounter)}
                   {htnBadge?.(encounter)}
                   {diabetesBadge?.(encounter)}
-                  {isPatientOnOphthoList(patient, encounter) && (
+                  {canUseOphthoQueueTools && isPatientOnOphthoList(patient, encounter) && (
                     <span className="rounded-full bg-orange-100 px-2 py-1 text-xs font-semibold text-orange-800">
                       Ophtho List
                     </span>
@@ -1641,7 +1677,7 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                   <div className="flex flex-wrap gap-x-3 text-xs font-medium text-slate-800">
   <span>DOB: {formatDate(patient.dob)}</span>
   <span>MRN: {patient.mrn || "—"}</span>
-  <span>Wait: {formatWaitTime(encounter.createdAt)}</span>
+  <span>Wait: {getQueueWaitLabel(encounter)}</span>
 </div>
 
                   <p className="text-xs font-medium text-slate-800">
@@ -1660,7 +1696,7 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                     {spanishBadge(encounter)}
                     {htnBadge?.(encounter)}
                     {diabetesBadge?.(encounter)}
-                    {isPatientOnOphthoList(patient, encounter) && (
+                    {canUseOphthoQueueTools && isPatientOnOphthoList(patient, encounter) && (
                       <span className="rounded-full bg-orange-100 px-2 py-1 text-xs font-semibold text-orange-800">
                         Ophtho List
                       </span>

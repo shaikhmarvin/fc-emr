@@ -171,28 +171,24 @@ export default function DashboardView({
   }
 
   function getEncounterCompletionTime(encounter) {
-    if (!encounter) return null;
+  if (!encounter) return null;
 
-    if (encounter.visitType === "refill_only") {
-      return (
-        encounter.pharmacyPickedUpAt ||
-        encounter.pharmacy_picked_up_at ||
-        encounter.doneAt ||
-        encounter.done_at ||
-        encounter.visitCompletedAt ||
-        encounter.visit_completed_at ||
-        null
-      );
-    }
+  const visitType = encounter.visitType || encounter.visit_type;
 
-    return (
-      encounter.doneAt ||
-      encounter.done_at ||
-      encounter.visitCompletedAt ||
-      encounter.visit_completed_at ||
-      null
-    );
+  if (visitType === "refill_only") {
+    return encounter.pharmacyPickedUpAt || encounter.pharmacy_picked_up_at || null;
   }
+
+  return (
+    encounter.pharmacyPickedUpAt ||
+    encounter.pharmacy_picked_up_at ||
+    encounter.visitCompletedAt ||
+    encounter.visit_completed_at ||
+    encounter.doneAt ||
+    encounter.done_at ||
+    null
+  );
+}
 
   function isEncounterComplete(encounter) {
     if (!encounter) return false;
@@ -398,6 +394,28 @@ export default function DashboardView({
     ? getAverageFor(pharmacyRows, "pharmacyReadyAt", "pharmacyPickedUpAt")
     : null;
 
+  const avgGeneralTotalClinicTime = showAnalytics
+  ? averageMinutes(
+      generalAnalyticsRows.map(({ encounter }) =>
+        minutesBetween(
+          encounter?.undergradCompletedAt,
+          getEncounterCompletionTime(encounter)
+        )
+      )
+    )
+  : null;
+
+const avgGeneralVisitCompleteToMedsPickedUp = showAnalytics
+  ? averageMinutes(
+      generalAnalyticsRows.map(({ encounter }) =>
+        minutesBetween(
+          encounter?.visitCompletedAt,
+          encounter?.pharmacyPickedUpAt
+        )
+      )
+    )
+  : null;
+
   const firstPatientStartedAt = showAnalytics
     ? getFirstTime(analyticsRows, "createdAt")
     : null;
@@ -594,6 +612,11 @@ export default function DashboardView({
               </h3>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <AnalyticsMetric
+  label="Total Clinic Time"
+  value={formatMinutes(avgGeneralTotalClinicTime)}
+  subtext="General clinic: undergrad complete → visit complete or meds picked up"
+/>
   <AnalyticsMetric
     label="Started → Undergrad Complete"
     value={formatMinutes(avgUndergradIntakeToUndergradComplete)}
@@ -625,9 +648,10 @@ export default function DashboardView({
     subtext="Refill-only wait time"
   />
   <AnalyticsMetric
-    label="Pharmacy Ready → Picked Up"
-    value={formatMinutes(avgPharmacyReadyToPickup)}
-  />
+  label="Visit Complete → Meds Picked Up"
+  value={formatMinutes(avgGeneralVisitCompleteToMedsPickedUp)}
+  subtext="General clinic pharmacy delay after visit completion"
+/>
 </div>
             </div>
 
