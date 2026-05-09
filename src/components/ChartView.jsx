@@ -830,6 +830,11 @@ function formatLabDateTime(value) {
   const [attendingPin, setAttendingPin] = useState("");
   const [chiefComplaintDraft, setChiefComplaintDraft] = useState("");
   const [labFilter, setLabFilter] = useState("all");
+
+  useEffect(() => {
+  window.scrollTo(0, 0);
+}, [selectedEncounterId]);
+
   const rapidResultOptions = [
     { value: "", label: "—" },
     { value: "positive", label: "Positive" },
