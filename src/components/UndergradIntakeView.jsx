@@ -21,6 +21,10 @@ function formatPhoneNumber(value) {
   return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
 
+function capitalizeNameInput(value = "") {
+  return String(value).replace(/\b([a-z])/g, (match) => match.toUpperCase());
+}
+
 function normalizeNamePart(value = "") {
   return String(value)
     .toLowerCase()
@@ -69,12 +73,12 @@ function namesAreSimilar(inputName = "", patientName = "") {
   const patient = normalizeNamePart(patientName);
 
   if (!input || !patient) return false;
+  if (input.length < 2 || patient.length < 2) return false;
   if (input === patient) return true;
-  if (input.length >= 3 && patient.startsWith(input)) return true;
-  if (patient.length >= 3 && input.startsWith(patient)) return true;
 
   const maxLength = Math.max(input.length, patient.length);
   const allowedDistance = maxLength <= 5 ? 1 : 2;
+
   return levenshteinDistance(input, patient) <= allowedDistance;
 }
 
@@ -99,6 +103,21 @@ function getPatientFullName(patient) {
 
 function formatDisplayDate(value) {
   if (!value) return "—";
+
+  const text = String(value).trim();
+
+  const yyyyMmDd = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (yyyyMmDd) {
+    const [, yyyy, mm, dd] = yyyyMmDd;
+    return `${mm}/${dd}/${yyyy}`;
+  }
+
+  const mmDdYyyy = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (mmDdYyyy) {
+    const [, mm, dd, yyyy] = mmDdYyyy;
+    return `${mm.padStart(2, "0")}/${dd.padStart(2, "0")}/${yyyy}`;
+  }
+
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleDateString();
@@ -124,38 +143,55 @@ function buildPatientMatchCandidates(patients = [], form = {}) {
   const firstName = form.firstName || "";
   const lastName = form.lastName || "";
   const dob = form.dob || "";
-  const phoneDigits = onlyDigits(form.phone);
 
-  const hasEnoughSearchInfo =
-    (normalizeNamePart(firstName).length >= 2 && normalizeNamePart(lastName).length >= 2) ||
-    (!!dob && (normalizeNamePart(firstName).length >= 2 || normalizeNamePart(lastName).length >= 2)) ||
-    phoneDigits.length >= 7;
+  const normalizedFirst = normalizeNamePart(firstName);
+  const normalizedLast = normalizeNamePart(lastName);
+  const normalizedDob = normalizeDateString(dob);
 
-  if (!hasEnoughSearchInfo) return [];
+  const firstNameReady = normalizedFirst.length >= 2;
+  const lastNameReady = normalizedLast.length >= 3;
+  const dobReady = normalizedDob.length === 8;
+
+if (!firstNameReady || !lastNameReady) return [];
 
   return (patients || [])
     .map((patient) => {
+      const firstDistance = levenshteinDistance(firstName, patient.firstName || "");
+      const lastDistance = levenshteinDistance(lastName, patient.lastName || "");
+
       const firstSimilar = namesAreSimilar(firstName, patient.firstName || "");
       const lastSimilar = namesAreSimilar(lastName, patient.lastName || "");
-      const dobExact = !!dob && normalizeDateString(dob) === normalizeDateString(patient.dob || "");
-      const dobClose = !!dob && !dobExact && datesDifferByOneDigit(dob, patient.dob || "");
-      const phoneExact =
-        phoneDigits.length >= 7 &&
-        onlyDigits(patient.phone || "").slice(-7) === phoneDigits.slice(-7);
+
+      const dobExact =
+        normalizedDob === normalizeDateString(patient.dob || "");
+
+      const dobClose =
+        !dobExact && datesDifferByOneDigit(dob, patient.dob || "");
+
+      if (!firstSimilar || !lastSimilar) return null;
+
+const strongNameMatch =
+  firstDistance <= 1 &&
+  lastDistance <= 1 &&
+  normalizedFirst.length >= 3 &&
+  normalizedLast.length >= 3;
+
+if (!strongNameMatch && !dobExact && !dobClose) {
+  return null;
+}
+
+      const firstExact = firstDistance === 0;
+      const lastExact = lastDistance === 0;
 
       let score = 0;
-      if (firstSimilar) score += 3;
-      if (lastSimilar) score += 4;
-      if (dobExact) score += 5;
+      if (firstExact) score += 4;
+      else if (firstSimilar) score += 3;
+
+      if (lastExact) score += 5;
+      else if (lastSimilar) score += 4;
+
+      if (dobExact) score += 6;
       else if (dobClose) score += 3;
-      if (phoneExact) score += 3;
-
-      const hasIdentityAnchor = dobExact || dobClose || phoneExact;
-      const hasNameAnchor = firstSimilar || lastSimilar;
-
-      if (!hasNameAnchor && !phoneExact) return null;
-      if (!hasIdentityAnchor && !(firstSimilar && lastSimilar)) return null;
-      if (score < 4) return null;
 
       return {
         patient,
@@ -164,20 +200,11 @@ function buildPatientMatchCandidates(patients = [], form = {}) {
         lastSimilar,
         dobExact,
         dobClose,
-        phoneExact,
+        phoneExact: false,
       };
     })
     .filter(Boolean)
-    .sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score;
-      const bDate = new Date(
-        (b.patient.encounters || [])[0]?.createdAt || (b.patient.encounters || [])[0]?.clinicDate || 0
-      ).getTime();
-      const aDate = new Date(
-        (a.patient.encounters || [])[0]?.createdAt || (a.patient.encounters || [])[0]?.clinicDate || 0
-      ).getTime();
-      return bDate - aDate;
-    })
+    .sort((a, b) => b.score - a.score)
     .slice(0, 6);
 }
 
@@ -364,7 +391,7 @@ export default function UndergradIntakeView({
       firstName: patient.firstName || "",
       preferredName: patient.preferredName || "",
       lastName: patient.lastName || "",
-      dob: patient.dob || "",
+      dob: prev.dob || patient.dob || "",
       mrn: patient.mrn || "",
       phone: patient.phone || "",
       isReturning: "Returning",
@@ -407,7 +434,7 @@ export default function UndergradIntakeView({
 
   if (matchedPatientFired) {
       const firedDateLabel = matchedPatient?.firedAt
-        ? new Date(matchedPatient.firedAt).toLocaleDateString()
+        ? formatDisplayDate(matchedPatient.firedAt)
         : "an unknown date";
       const firedReasonLabel = matchedPatient?.firedReason || "No reason entered.";
 
@@ -510,10 +537,21 @@ export default function UndergradIntakeView({
                         Last seen: {getLastSeenLabel(patient)}
                       </span>
                       {patient.fired && (
-                        <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-rose-700">
-                          Fired
-                        </span>
-                      )}
+  <div className="w-full rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+    <div className="mb-1 flex flex-wrap items-center gap-2">
+      <span className="rounded-full bg-rose-100 px-2 py-0.5 font-bold uppercase tracking-wide text-rose-700">
+        Fired
+      </span>
+      <span className="font-semibold">
+        Date: {patient.firedAt ? formatDisplayDate(patient.firedAt) : "Unknown"}
+      </span>
+    </div>
+    <div>
+      <span className="font-semibold">Reason:</span>{" "}
+      {patient.firedReason || "No reason entered."}
+    </div>
+  </div>
+)}
                     </div>
 
                     <div className="space-y-1 text-sm text-slate-700">
@@ -560,7 +598,7 @@ export default function UndergradIntakeView({
             <div className="mt-1 grid gap-1 sm:grid-cols-2">
               <p>
                 <span className="font-medium">Date:</span>{" "}
-                {matchedPatient?.firedAt ? new Date(matchedPatient.firedAt).toLocaleDateString() : "—"}
+                {matchedPatient?.firedAt ? formatDisplayDate(matchedPatient.firedAt) : "—"}
               </p>
               <p>
                 <span className="font-medium">Reason:</span>{" "}
@@ -601,7 +639,7 @@ export default function UndergradIntakeView({
                   className={`w-full rounded-lg border px-3 py-2 text-sm ${matchedPatient ? "border-slate-200 bg-slate-50 text-slate-600" : "border-slate-300"}`}
                   value={form.firstName}
                   readOnly={!!matchedPatient}
-                  onChange={(e) => handleChange("firstName", e.target.value)}
+                  onChange={(e) => handleChange("firstName", capitalizeNameInput(e.target.value))}
                 />
               </div>
               <div>
@@ -612,7 +650,7 @@ export default function UndergradIntakeView({
                   className={`w-full rounded-lg border px-3 py-2 text-sm ${matchedPatient ? "border-slate-200 bg-slate-50 text-slate-600" : "border-slate-300"}`}
                   value={form.lastName}
                   readOnly={!!matchedPatient}
-                  onChange={(e) => handleChange("lastName", e.target.value)}
+                  onChange={(e) => handleChange("lastName", capitalizeNameInput(e.target.value))}
                 />
               </div>
               <div>

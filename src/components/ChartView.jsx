@@ -1300,27 +1300,48 @@ function getSelectedRoomOptionClass() {
       </button>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <div className="rounded-2xl bg-white p-3 shadow sm:p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-            Patient Snapshot
-          </p>
+  <div className="flex flex-wrap items-center justify-between gap-2">
+    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+      Patient Snapshot
+    </p>
 
-          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <div>
-              <p className="text-lg font-semibold text-slate-800">
-                {getFullPatientName(selectedPatient)}
-              </p>
-              <p className="text-sm text-slate-500">
-                MRN: {selectedPatient.mrn || "—"}
-              </p>
-            </div>
+    {selectedPatient.fired && (
+      <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-rose-700">
+        Fired
+      </span>
+    )}
+  </div>
 
-            <div className="space-y-1 text-sm text-slate-700">
-              <p>DOB: {selectedPatient.dob ? formatDate(selectedPatient.dob) : "—"}</p>
-              <p>Age: {selectedPatient.age || "—"}</p>
-              <p>Phone: {selectedPatient.phone || "—"}</p>
-            </div>
-          </div>
-        </div>
+  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+    <div>
+      <p className="text-lg font-semibold text-slate-800">
+        {getFullPatientName(selectedPatient)}
+      </p>
+      <p className="text-sm text-slate-500">
+        MRN: {selectedPatient.mrn || "—"}
+      </p>
+    </div>
+
+    <div className="space-y-1 text-sm text-slate-700">
+      <p>DOB: {selectedPatient.dob ? formatDate(selectedPatient.dob) : "—"}</p>
+      <p>Age: {selectedPatient.age || "—"}</p>
+      <p>Phone: {selectedPatient.phone || "—"}</p>
+    </div>
+  </div>
+
+  {selectedPatient.fired && (
+    <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
+      <p>
+        <span className="font-semibold">Fired date:</span>{" "}
+        {selectedPatient.firedAt ? formatDate(selectedPatient.firedAt) : "Unknown"}
+      </p>
+      <p>
+        <span className="font-semibold">Reason:</span>{" "}
+        {selectedPatient.firedReason || "No reason entered."}
+      </p>
+    </div>
+  )}
+</div>
 
         <div className="rounded-2xl bg-white p-3 shadow sm:p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
