@@ -34,17 +34,31 @@ function PatientSearch({ searchForm, setSearchForm }) {
 
         </div>
 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-  <input
-    type="date"
-    className="w-full rounded-lg border px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-    value={searchForm.dob}
-    onChange={(e) =>
-      setSearchForm((prev) => ({ ...prev, dob: e.target.value }))
-    }
-  />
+  <div className="flex gap-2">
+    <input
+      type="date"
+      className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+      value={searchForm.dob}
+      onChange={(e) =>
+        setSearchForm((prev) => ({ ...prev, dob: e.target.value }))
+      }
+    />
+
+    {searchForm.dob && (
+      <button
+        type="button"
+        onClick={() =>
+          setSearchForm((prev) => ({ ...prev, dob: "" }))
+        }
+        className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+      >
+        Clear
+      </button>
+    )}
+  </div>
 
   <input
-    className="w-full rounded-lg border px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+    className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
     placeholder="Last 4 SSN"
     value={searchForm.last4ssn}
     onChange={(e) =>

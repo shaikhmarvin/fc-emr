@@ -332,7 +332,7 @@ const effectiveClinicDate = selectedClinicDate || today;
             type="date"
             value={effectiveClinicDate}
             onChange={(e) => setSelectedClinicDate?.(e.target.value)}
-            className="min-h-[44px] w-full rounded-lg border border-slate-300 px-3 py-2 text-sm sm:text-base"
+            className="min-w-0 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
         />
     </div>
 

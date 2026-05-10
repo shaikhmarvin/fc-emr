@@ -704,7 +704,7 @@ const avgGeneralVisitCompleteToMedsPickedUp = showAnalytics
                 All Dates
               </button>
 
-              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+              <div className="min-w-0 rounded-lg border border-gray-300 px-2 py-1.5 text-sm sm:w-auto">
                 <label className="text-sm font-medium text-gray-700">
                   Clinic Date:
                 </label>
