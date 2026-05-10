@@ -3246,21 +3246,26 @@ const [labQueueDate, setLabQueueDate] = useState(getLocalDateInputValue());
   return allEncounterRows
     .filter(({ encounter }) => {
       if (!encounter) return false;
-      if (encounter.visitType !== "specialty_only") return false;
+
+      const visitType = encounter.visitType || "general";
+      const specialtyType = encounter.specialtyType || "";
+
       if (normalizeClinicDate(encounter.clinicDate) !== clinicDateForSpecialtyQueue) return false;
-      if (!encounter.specialtyType) return false;
-      if (encounter.status === "done") return false;
+      if (!specialtyType) return false;
       if (encounter.status === "cancelled") return false;
-      if (encounter.soapStatus === "signed") return false;
 
       return (
-        encounter.status === "undergrad_complete" ||
-        encounter.status === "ready" ||
-        encounter.status === "roomed" ||
-        encounter.status === "in_visit"
+        visitType === "specialty_only" ||
+        visitType === "both" ||
+        encounter.dualVisit === true
       );
     })
     .sort((a, b) => {
+      const aDone = a.encounter.status === "done" || a.encounter.soapStatus === "signed";
+      const bDone = b.encounter.status === "done" || b.encounter.soapStatus === "signed";
+
+      if (aDone !== bDone) return aDone ? 1 : -1;
+
       const aTime = new Date(a.encounter.createdAt || 0).getTime();
       const bTime = new Date(b.encounter.createdAt || 0).getTime();
       return aTime - bTime;
@@ -3641,37 +3646,56 @@ useEffect(() => {
     ophthalmology: { specialtyOnly: 0, both: 0 },
     mental_health: { specialtyOnly: 0, both: 0 },
     addiction: { specialtyOnly: 0, both: 0 },
+    social_work: { specialtyOnly: 0, both: 0 },
   };
 
   patients.forEach((patient) => {
-    patient.encounters.forEach((encounter) => {
-      if (encounter.clinicDate !== selectedClinicDate) return;
-      if (!encounter.specialtyType) return;
+    const encountersForDate = (patient.encounters || []).filter(
+      (encounter) => normalizeClinicDate(encounter.clinicDate) === selectedClinicDate
+    );
 
-      const specialty = encounter.specialtyType;
+    encountersForDate.forEach((encounter) => {
+      const specialty = String(encounter.specialtyType || "").toLowerCase();
+      if (!specialty || !counts[specialty]) return;
 
-      if (!counts[specialty]) return;
+      const visitType = String(encounter.visitType || "general").toLowerCase();
 
-      if (encounter.visitType === "specialty_only") {
-        counts[specialty].specialtyOnly += 1;
-      }
+      const hasGeneralSameDay = encountersForDate.some((otherEncounter) => {
+        if (!otherEncounter || otherEncounter.id === encounter.id) return false;
 
-      if (encounter.visitType === "both") {
+        const otherVisitType = String(otherEncounter.visitType || "general").toLowerCase();
+
+        return (
+          otherVisitType === "general" ||
+          otherVisitType === "both" ||
+          otherEncounter.dualVisit === true
+        );
+      });
+
+      const isGeneralAndSpecialty =
+        visitType === "both" ||
+        encounter.dualVisit === true ||
+        hasGeneralSameDay;
+
+      if (isGeneralAndSpecialty) {
         counts[specialty].both += 1;
+      } else if (visitType === "specialty_only") {
+        counts[specialty].specialtyOnly += 1;
       }
     });
   });
 
   const formatSpecialtyCount = ({ specialtyOnly, both }) =>
-  `${specialtyOnly} specialty-only + ${both} general/free clinic`;
+    `${specialtyOnly} specialty-only + ${both} general/free clinic`;
 
-return {
-  pt: formatSpecialtyCount(counts.pt),
-  dermatology: formatSpecialtyCount(counts.dermatology),
-  ophthalmology: formatSpecialtyCount(counts.ophthalmology),
-  mental_health: formatSpecialtyCount(counts.mental_health),
-  addiction: formatSpecialtyCount(counts.addiction),
-};
+  return {
+    pt: formatSpecialtyCount(counts.pt),
+    dermatology: formatSpecialtyCount(counts.dermatology),
+    ophthalmology: formatSpecialtyCount(counts.ophthalmology),
+    mental_health: formatSpecialtyCount(counts.mental_health),
+    addiction: formatSpecialtyCount(counts.addiction),
+    social_work: formatSpecialtyCount(counts.social_work),
+  };
 }, [patients, selectedClinicDate]);
 
   useEffect(() => {
