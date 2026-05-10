@@ -386,20 +386,20 @@ function pharmacyStatusBadge(encounter) {
   }
 
   if (encounter?.pharmacyStatus === "no_meds_needed") {
-  return (
-    <span className="rounded-full bg-zinc-100 px-2 py-1 text-xs font-semibold text-zinc-700">
-      No Medications Needed
-    </span>
-  );
-}
+    return (
+      <span className="rounded-full bg-zinc-100 px-2 py-1 text-xs font-semibold text-zinc-700">
+        No Medications Needed
+      </span>
+    );
+  }
 
-if (encounter?.pharmacyStatus === "meds_not_picked_up") {
-  return (
-    <span className="rounded-full bg-orange-100 px-2 py-1 text-xs font-semibold text-orange-800">
-      Meds Not Picked Up
-    </span>
-  );
-}
+  if (encounter?.pharmacyStatus === "meds_not_picked_up") {
+    return (
+      <span className="rounded-full bg-orange-100 px-2 py-1 text-xs font-semibold text-orange-800">
+        Meds Not Picked Up
+      </span>
+    );
+  }
 
   return null;
 }
@@ -864,46 +864,46 @@ export default function App() {
   const [registrationEncounterId, setRegistrationEncounterId] = useState(null);
 
   const [activeView, setActiveView] = useState(() => {
-  return window.localStorage.getItem("active-view") || "dashboard";
-});
+    return window.localStorage.getItem("active-view") || "dashboard";
+  });
   const [pharmacyToast, setPharmacyToast] = useState(null);
   const [lastPharmacyToastKey, setLastPharmacyToastKey] = useState("");
 
   useEffect(() => {
-  if (!userRole) return;
+    if (!userRole) return;
 
-  if (userRole === "undergraduate") {
-    setActiveView("undergrad-intake");
-    return;
-  }
+    if (userRole === "undergraduate") {
+      setActiveView("undergrad-intake");
+      return;
+    }
 
-  if (userRole === "pharmacy" || userRole === "social_work") {
-    setActiveView("queue");
-    return;
-  }
+    if (userRole === "pharmacy" || userRole === "social_work") {
+      setActiveView("queue");
+      return;
+    }
 
-  if (userRole === "lab") {
-    setActiveView("lab-queue");
-    return;
-  }
+    if (userRole === "lab") {
+      setActiveView("lab-queue");
+      return;
+    }
 
-  if (
-    userRole === "student" ||
-    userRole === "upper_level" ||
-    userRole === "attending"
-  ) {
-    setActiveView("queue");
-    return;
-  }
+    if (
+      userRole === "student" ||
+      userRole === "upper_level" ||
+      userRole === "attending"
+    ) {
+      setActiveView("queue");
+      return;
+    }
 
-  // Leadership should keep whatever page was saved in localStorage.
-}, [userRole]);
+    // Leadership should keep whatever page was saved in localStorage.
+  }, [userRole]);
 
   useEffect(() => {
-  if (!activeView) return;
+    if (!activeView) return;
 
-  window.localStorage.setItem("active-view", activeView);
-}, [activeView]);
+    window.localStorage.setItem("active-view", activeView);
+  }, [activeView]);
 
   const canLabQueueAccess = canUseLabQueue(userRole);
   const canRefill = canRefillAccess || userRole === "attending" || userRole === "leadership";
@@ -932,7 +932,7 @@ export default function App() {
     ms34Names: "",
     ms12Names: "",
   });
- 
+
   const [summaryRefreshStatus, setSummaryRefreshStatus] = useState("");
   const [programEntries, setProgramEntries] = useState([]);
   const [programsLoaded, setProgramsLoaded] = useState(false);
@@ -1285,7 +1285,7 @@ export default function App() {
     userRole,
   });
 
-  
+
 
   async function saveClinicResourceSetting(resourceKey, updates) {
     const previousSettings = [...clinicResourceSettings];
@@ -2434,51 +2434,51 @@ export default function App() {
   }
 
   async function cleanupSavedLabImportPacket(packetId, batchId) {
-  if (!packetId) return;
+    if (!packetId) return;
 
-  const { error: packetDeleteError } = await supabase
-    .from("lab_import_packets")
-    .delete()
-    .eq("id", packetId);
+    const { error: packetDeleteError } = await supabase
+      .from("lab_import_packets")
+      .delete()
+      .eq("id", packetId);
 
-  if (packetDeleteError) throw packetDeleteError;
+    if (packetDeleteError) throw packetDeleteError;
 
-  if (!batchId) {
-    setLabImportPackets((prev) => prev.filter((packet) => packet.packetId !== packetId));
+    if (!batchId) {
+      setLabImportPackets((prev) => prev.filter((packet) => packet.packetId !== packetId));
 
-    if (selectedLabImportPacketId === packetId) {
-      setSelectedLabImportPacketId(null);
-      setLabImportPacket(null);
+      if (selectedLabImportPacketId === packetId) {
+        setSelectedLabImportPacketId(null);
+        setLabImportPacket(null);
+      }
+
+      return;
     }
 
-    return;
+    const { data: remainingPackets, error: remainingError } = await supabase
+      .from("lab_import_packets")
+      .select("id")
+      .eq("batch_id", batchId)
+      .limit(1);
+
+    if (remainingError) throw remainingError;
+
+    if ((remainingPackets || []).length === 0) {
+      const { error: batchDeleteError } = await supabase
+        .from("lab_import_batches")
+        .delete()
+        .eq("id", batchId);
+
+      if (batchDeleteError) throw batchDeleteError;
+
+      setActiveLabImportBatchId(null);
+      setLabImportPackets([]);
+      setLabImportPacket(null);
+      setSelectedLabImportPacketId(null);
+      return;
+    }
+
+    await loadSharedLabImportBatch(batchId);
   }
-
-  const { data: remainingPackets, error: remainingError } = await supabase
-    .from("lab_import_packets")
-    .select("id")
-    .eq("batch_id", batchId)
-    .limit(1);
-
-  if (remainingError) throw remainingError;
-
-  if ((remainingPackets || []).length === 0) {
-    const { error: batchDeleteError } = await supabase
-      .from("lab_import_batches")
-      .delete()
-      .eq("id", batchId);
-
-    if (batchDeleteError) throw batchDeleteError;
-
-    setActiveLabImportBatchId(null);
-    setLabImportPackets([]);
-    setLabImportPacket(null);
-    setSelectedLabImportPacketId(null);
-    return;
-  }
-
-  await loadSharedLabImportBatch(batchId);
-}
 
   async function handleLiveUpdateLabPacketLabs(packetId, reviewedLabs) {
     if (!packetId) return;
@@ -3118,13 +3118,13 @@ export default function App() {
 
 
   const [selectedClinicDate, setSelectedClinicDate] = useState(
-  getLocalDateInputValue()
-);
+    getLocalDateInputValue()
+  );
 
-const [roomBoardDate, setRoomBoardDate] = useState(getLocalDateInputValue());
-const [specialtyQueueDate, setSpecialtyQueueDate] = useState(getLocalDateInputValue());
-const [queueClinicDate, setQueueClinicDate] = useState(getLocalDateInputValue());
-const [labQueueDate, setLabQueueDate] = useState(getLocalDateInputValue());
+  const [roomBoardDate, setRoomBoardDate] = useState(getLocalDateInputValue());
+  const [specialtyQueueDate, setSpecialtyQueueDate] = useState(getLocalDateInputValue());
+  const [queueClinicDate, setQueueClinicDate] = useState(getLocalDateInputValue());
+  const [labQueueDate, setLabQueueDate] = useState(getLocalDateInputValue());
   const [, setNow] = useState(Date.now());
   const selectedPatient = patients.find((p) => p.id === selectedPatientId) || null;
   const selectedEncounter =
@@ -3208,8 +3208,8 @@ const [labQueueDate, setLabQueueDate] = useState(getLocalDateInputValue());
   }, [selectedPatient]);
 
   const patientRecordsTitle = selectedClinicDate
-  ? `Patient Records — ${formatDate(selectedClinicDate)}`
-  : "Patient Records — All Encounters";
+    ? `Patient Records — ${formatDate(selectedClinicDate)}`
+    : "Patient Records — All Encounters";
 
 
   const allEncounterRows = useMemo(() => {
@@ -3241,36 +3241,36 @@ const [labQueueDate, setLabQueueDate] = useState(getLocalDateInputValue());
   }, [patients]);
 
   const specialtyEncounterRows = useMemo(() => {
-  const clinicDateForSpecialtyQueue = specialtyQueueDate || formatClinicDate();
+    const clinicDateForSpecialtyQueue = specialtyQueueDate || formatClinicDate();
 
-  return allEncounterRows
-    .filter(({ encounter }) => {
-      if (!encounter) return false;
+    return allEncounterRows
+      .filter(({ encounter }) => {
+        if (!encounter) return false;
 
-      const visitType = encounter.visitType || "general";
-      const specialtyType = encounter.specialtyType || "";
+        const visitType = encounter.visitType || "general";
+        const specialtyType = encounter.specialtyType || "";
 
-      if (normalizeClinicDate(encounter.clinicDate) !== clinicDateForSpecialtyQueue) return false;
-      if (!specialtyType) return false;
-      if (encounter.status === "cancelled") return false;
+        if (normalizeClinicDate(encounter.clinicDate) !== clinicDateForSpecialtyQueue) return false;
+        if (!specialtyType) return false;
+        if (encounter.status === "cancelled") return false;
 
-      return (
-        visitType === "specialty_only" ||
-        visitType === "both" ||
-        encounter.dualVisit === true
-      );
-    })
-    .sort((a, b) => {
-      const aDone = a.encounter.status === "done" || a.encounter.soapStatus === "signed";
-      const bDone = b.encounter.status === "done" || b.encounter.soapStatus === "signed";
+        return (
+          visitType === "specialty_only" ||
+          visitType === "both" ||
+          encounter.dualVisit === true
+        );
+      })
+      .sort((a, b) => {
+        const aDone = a.encounter.status === "done" || a.encounter.soapStatus === "signed";
+        const bDone = b.encounter.status === "done" || b.encounter.soapStatus === "signed";
 
-      if (aDone !== bDone) return aDone ? 1 : -1;
+        if (aDone !== bDone) return aDone ? 1 : -1;
 
-      const aTime = new Date(a.encounter.createdAt || 0).getTime();
-      const bTime = new Date(b.encounter.createdAt || 0).getTime();
-      return aTime - bTime;
-    });
-}, [allEncounterRows, specialtyQueueDate]);
+        const aTime = new Date(a.encounter.createdAt || 0).getTime();
+        const bTime = new Date(b.encounter.createdAt || 0).getTime();
+        return aTime - bTime;
+      });
+  }, [allEncounterRows, specialtyQueueDate]);
 
   const specialtyRoomRulesForBoard = useMemo(() => {
     const today = formatClinicDate();
@@ -3402,63 +3402,63 @@ const [labQueueDate, setLabQueueDate] = useState(getLocalDateInputValue());
 
   const boardClinicDate = roomBoardDate || formatClinicDate();
 
-const boardEncounterRows = useMemo(() => {
-  return allEncounterRows.filter(
-    ({ encounter }) =>
-      normalizeClinicDate(encounter.clinicDate) === boardClinicDate
-  );
-}, [allEncounterRows, boardClinicDate]);
+  const boardEncounterRows = useMemo(() => {
+    return allEncounterRows.filter(
+      ({ encounter }) =>
+        normalizeClinicDate(encounter.clinicDate) === boardClinicDate
+    );
+  }, [allEncounterRows, boardClinicDate]);
 
-useEffect(() => {
-  if (!session || !boardClinicDate) return;
+  useEffect(() => {
+    if (!session || !boardClinicDate) return;
 
-  let cancelled = false;
+    let cancelled = false;
 
-  setTodayStaffRoster({
-    attendings: "",
-    residents: "",
-    upperLevels: "",
-  });
+    setTodayStaffRoster({
+      attendings: "",
+      residents: "",
+      upperLevels: "",
+    });
 
-  async function loadRoster() {
-    const roster = await fetchStaffRoster(boardClinicDate);
-    if (!cancelled) {
-      setTodayStaffRoster(roster);
+    async function loadRoster() {
+      const roster = await fetchStaffRoster(boardClinicDate);
+      if (!cancelled) {
+        setTodayStaffRoster(roster);
+      }
+    }
+
+    loadRoster();
+
+    const channel = supabase
+      .channel(`clinic_staff_roster_${boardClinicDate}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "clinic_staff_roster",
+          filter: `clinic_date=eq.${boardClinicDate}`,
+        },
+        () => {
+          loadRoster();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [session, boardClinicDate]);
+
+  async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
+    try {
+      await saveStaffRoster(boardClinicDate, nextRoster);
+    } catch (error) {
+      console.error("Failed to save staff roster:", error);
+      showToast?.("Unable to save staff roster.", "error");
     }
   }
-
-  loadRoster();
-
-  const channel = supabase
-    .channel(`clinic_staff_roster_${boardClinicDate}`)
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "clinic_staff_roster",
-        filter: `clinic_date=eq.${boardClinicDate}`,
-      },
-      () => {
-        loadRoster();
-      }
-    )
-    .subscribe();
-
-  return () => {
-    cancelled = true;
-    supabase.removeChannel(channel);
-  };
-}, [session, boardClinicDate]);
-
-async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
-  try {
-    await saveStaffRoster(boardClinicDate, nextRoster);
-  } catch (error) {
-    console.error("Failed to save staff roster:", error);
-    showToast?.("Unable to save staff roster.", "error");
-  }
-}
 
 
   const filteredPatients = patients.filter((patient) =>
@@ -3474,103 +3474,103 @@ async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
   );
 
   const summaryPatientRows = useMemo(() => {
-  const priorityForVisitType = (visitType) => {
-    if (visitType === "general") return 1;
-    if (visitType === "both") return 2;
+    const priorityForVisitType = (visitType) => {
+      if (visitType === "general") return 1;
+      if (visitType === "both") return 2;
 
-    // specialty-only and refill-only should NOT count
-    // toward new/returning general clinic totals
-    if (visitType === "specialty_only") return 99;
-    if (visitType === "refill_only") return 100;
+      // specialty-only and refill-only should NOT count
+      // toward new/returning general clinic totals
+      if (visitType === "specialty_only") return 99;
+      if (visitType === "refill_only") return 100;
 
-    return 101;
-  };
+      return 101;
+    };
 
-  const rowMap = new Map();
+    const rowMap = new Map();
 
-  visibleEncounterRows.forEach((row) => {
-    const visitType = row.encounter?.visitType;
+    visibleEncounterRows.forEach((row) => {
+      const visitType = row.encounter?.visitType;
 
-    // exclude specialty-only + refill-only
-    if (
-      visitType === "specialty_only" ||
-      visitType === "refill_only"
-    ) {
-      return;
-    }
+      // exclude specialty-only + refill-only
+      if (
+        visitType === "specialty_only" ||
+        visitType === "refill_only"
+      ) {
+        return;
+      }
 
-    const patientKey = String(
-      row.patient?.id || row.encounter?.patientId || ""
-    );
+      const patientKey = String(
+        row.patient?.id || row.encounter?.patientId || ""
+      );
 
-    if (!patientKey) return;
+      if (!patientKey) return;
 
-    const existing = rowMap.get(patientKey);
+      const existing = rowMap.get(patientKey);
 
-    if (!existing) {
-      rowMap.set(patientKey, row);
-      return;
-    }
+      if (!existing) {
+        rowMap.set(patientKey, row);
+        return;
+      }
 
-    const existingPriority = priorityForVisitType(
-      existing.encounter?.visitType
-    );
+      const existingPriority = priorityForVisitType(
+        existing.encounter?.visitType
+      );
 
-    const nextPriority = priorityForVisitType(
-      row.encounter?.visitType
-    );
+      const nextPriority = priorityForVisitType(
+        row.encounter?.visitType
+      );
 
-    if (nextPriority < existingPriority) {
-      rowMap.set(patientKey, row);
-    }
-  });
+      if (nextPriority < existingPriority) {
+        rowMap.set(patientKey, row);
+      }
+    });
 
-  return Array.from(rowMap.values());
-}, [visibleEncounterRows]);
+    return Array.from(rowMap.values());
+  }, [visibleEncounterRows]);
 
-const newPatientCount = summaryPatientRows.filter(
-  ({ encounter }) => encounter.newReturning === "New"
-).length;
+  const newPatientCount = summaryPatientRows.filter(
+    ({ encounter }) => encounter.newReturning === "New"
+  ).length;
 
-const returningPatientCount = summaryPatientRows.filter(
-  ({ encounter }) => encounter.newReturning === "Returning"
-).length;
+  const returningPatientCount = summaryPatientRows.filter(
+    ({ encounter }) => encounter.newReturning === "Returning"
+  ).length;
 
-const totalPatientCount = summaryPatientRows.length;
+  const totalPatientCount = summaryPatientRows.length;
 
   const autoLwobsCount = visibleEncounterRows.filter(
     ({ encounter }) => String(encounter.status || "").toLowerCase() === "cancelled"
   ).length;
 
-   const clinicSummaryStorageKey = selectedClinicDate
-  ? `clinic-summary-${selectedClinicDate}`
-  : "";
+  const clinicSummaryStorageKey = selectedClinicDate
+    ? `clinic-summary-${selectedClinicDate}`
+    : "";
 
-useEffect(() => {
-  if (!clinicSummaryStorageKey) return;
+  useEffect(() => {
+    if (!clinicSummaryStorageKey) return;
 
-  const saved = window.localStorage.getItem(clinicSummaryStorageKey);
+    const saved = window.localStorage.getItem(clinicSummaryStorageKey);
 
-  if (!saved) return;
+    if (!saved) return;
 
-  try {
-    setClinicSummary((prev) => ({
-      ...prev,
-      ...JSON.parse(saved),
-    }));
-  } catch (error) {
-    console.error("Failed to load saved clinic summary:", error);
-  }
-}, [clinicSummaryStorageKey]);
+    try {
+      setClinicSummary((prev) => ({
+        ...prev,
+        ...JSON.parse(saved),
+      }));
+    } catch (error) {
+      console.error("Failed to load saved clinic summary:", error);
+    }
+  }, [clinicSummaryStorageKey]);
 
-useEffect(() => {
-  if (!clinicSummaryStorageKey) return;
+  useEffect(() => {
+    if (!clinicSummaryStorageKey) return;
 
-  window.localStorage.setItem(
-    clinicSummaryStorageKey,
-    JSON.stringify(clinicSummary)
-  );
-}, [clinicSummary, clinicSummaryStorageKey]);
+    window.localStorage.setItem(
+      clinicSummaryStorageKey,
+      JSON.stringify(clinicSummary)
+    );
+  }, [clinicSummary, clinicSummaryStorageKey]);
 
   const [profiles, setProfiles] = useState([]);
   const [loadingProfiles, setLoadingProfiles] = useState(false);
@@ -3608,13 +3608,13 @@ useEffect(() => {
   const autoRefillPatientCount = useMemo(() => {
     const patientIds = new Set();
     patients.forEach((patient) => {
-  patient.encounters.forEach((encounter) => {
-    if (encounter.clinicDate !== selectedClinicDate) return;
-    if (encounter.visitType !== "refill_only") return;
+      patient.encounters.forEach((encounter) => {
+        if (encounter.clinicDate !== selectedClinicDate) return;
+        if (encounter.visitType !== "refill_only") return;
 
-    patientIds.add(String(patient.id));
-  });
-});
+        patientIds.add(String(patient.id));
+      });
+    });
 
     refillRequests.forEach((request) => {
       const status = String(request.status || "").toLowerCase();
@@ -3637,96 +3637,96 @@ useEffect(() => {
     });
 
     return patientIds.size;
-}, [patients, refillRequests, profileById, selectedClinicDate]);
+  }, [patients, refillRequests, profileById, selectedClinicDate]);
 
   const specialtyCounts = useMemo(() => {
-  const counts = {
-    pt: { specialtyOnly: 0, both: 0 },
-    dermatology: { specialtyOnly: 0, both: 0 },
-    ophthalmology: { specialtyOnly: 0, both: 0 },
-    mental_health: { specialtyOnly: 0, both: 0 },
-    addiction: { specialtyOnly: 0, both: 0 },
-    social_work: { specialtyOnly: 0, both: 0 },
-  };
+    const counts = {
+      pt: { specialtyOnly: 0, both: 0 },
+      dermatology: { specialtyOnly: 0, both: 0 },
+      ophthalmology: { specialtyOnly: 0, both: 0 },
+      mental_health: { specialtyOnly: 0, both: 0 },
+      addiction: { specialtyOnly: 0, both: 0 },
+      social_work: { specialtyOnly: 0, both: 0 },
+    };
 
-  patients.forEach((patient) => {
-    const encountersForDate = (patient.encounters || []).filter(
-      (encounter) => normalizeClinicDate(encounter.clinicDate) === selectedClinicDate
-    );
+    patients.forEach((patient) => {
+      const encountersForDate = (patient.encounters || []).filter(
+        (encounter) => normalizeClinicDate(encounter.clinicDate) === selectedClinicDate
+      );
 
-    encountersForDate.forEach((encounter) => {
-      const specialty = String(encounter.specialtyType || "").toLowerCase();
-      if (!specialty || !counts[specialty]) return;
+      encountersForDate.forEach((encounter) => {
+        const specialty = String(encounter.specialtyType || "").toLowerCase();
+        if (!specialty || !counts[specialty]) return;
 
-      const visitType = String(encounter.visitType || "general").toLowerCase();
+        const visitType = String(encounter.visitType || "general").toLowerCase();
 
-      const hasGeneralSameDay = encountersForDate.some((otherEncounter) => {
-        if (!otherEncounter || otherEncounter.id === encounter.id) return false;
+        const hasGeneralSameDay = encountersForDate.some((otherEncounter) => {
+          if (!otherEncounter || otherEncounter.id === encounter.id) return false;
 
-        const otherVisitType = String(otherEncounter.visitType || "general").toLowerCase();
+          const otherVisitType = String(otherEncounter.visitType || "general").toLowerCase();
 
-        return (
-          otherVisitType === "general" ||
-          otherVisitType === "both" ||
-          otherEncounter.dualVisit === true
-        );
+          return (
+            otherVisitType === "general" ||
+            otherVisitType === "both" ||
+            otherEncounter.dualVisit === true
+          );
+        });
+
+        const isGeneralAndSpecialty =
+          visitType === "both" ||
+          encounter.dualVisit === true ||
+          hasGeneralSameDay;
+
+        if (isGeneralAndSpecialty) {
+          counts[specialty].both += 1;
+        } else if (visitType === "specialty_only") {
+          counts[specialty].specialtyOnly += 1;
+        }
       });
-
-      const isGeneralAndSpecialty =
-        visitType === "both" ||
-        encounter.dualVisit === true ||
-        hasGeneralSameDay;
-
-      if (isGeneralAndSpecialty) {
-        counts[specialty].both += 1;
-      } else if (visitType === "specialty_only") {
-        counts[specialty].specialtyOnly += 1;
-      }
     });
-  });
 
-  const formatSpecialtyCount = ({ specialtyOnly, both }) =>
-    `${specialtyOnly} specialty-only + ${both} general/free clinic`;
+    const formatSpecialtyCount = ({ specialtyOnly, both }) =>
+      `${specialtyOnly} specialty-only + ${both} general/free clinic`;
 
-  return {
-    pt: formatSpecialtyCount(counts.pt),
-    dermatology: formatSpecialtyCount(counts.dermatology),
-    ophthalmology: formatSpecialtyCount(counts.ophthalmology),
-    mental_health: formatSpecialtyCount(counts.mental_health),
-    addiction: formatSpecialtyCount(counts.addiction),
-    social_work: formatSpecialtyCount(counts.social_work),
-  };
-}, [patients, selectedClinicDate]);
+    return {
+      pt: formatSpecialtyCount(counts.pt),
+      dermatology: formatSpecialtyCount(counts.dermatology),
+      ophthalmology: formatSpecialtyCount(counts.ophthalmology),
+      mental_health: formatSpecialtyCount(counts.mental_health),
+      addiction: formatSpecialtyCount(counts.addiction),
+      social_work: formatSpecialtyCount(counts.social_work),
+    };
+  }, [patients, selectedClinicDate]);
 
   useEffect(() => {
     setClinicSummary((prev) => ({
-  ...prev,
-  refillCount:
-    prev.refillCount || String(autoRefillPatientCount),
+      ...prev,
+      refillCount:
+        prev.refillCount || String(autoRefillPatientCount),
 
-  lwobsCount:
-    prev.lwobsCount || String(autoLwobsCount),
+      lwobsCount:
+        prev.lwobsCount || String(autoLwobsCount),
 
-  mentalHealthCount:
-    prev.mentalHealthCount ||
-    String(specialtyCounts.mental_health || 0),
+      mentalHealthCount:
+        prev.mentalHealthCount ||
+        String(specialtyCounts.mental_health || 0),
 
-  addictionMedicineCount:
-    prev.addictionMedicineCount ||
-    String(specialtyCounts.addiction || 0),
+      addictionMedicineCount:
+        prev.addictionMedicineCount ||
+        String(specialtyCounts.addiction || 0),
 
-  ptCount:
-    prev.ptCount ||
-    String(specialtyCounts.pt || 0),
+      ptCount:
+        prev.ptCount ||
+        String(specialtyCounts.pt || 0),
 
-  dermatologyCount:
-    prev.dermatologyCount ||
-    String(specialtyCounts.dermatology || 0),
+      dermatologyCount:
+        prev.dermatologyCount ||
+        String(specialtyCounts.dermatology || 0),
 
-  ophthalmologyCount:
-    prev.ophthalmologyCount ||
-    String(specialtyCounts.ophthalmology || 0),
-}));
+      ophthalmologyCount:
+        prev.ophthalmologyCount ||
+        String(specialtyCounts.ophthalmology || 0),
+    }));
   }, [
     autoRefillPatientCount,
     autoLwobsCount,
@@ -3867,51 +3867,51 @@ useEffect(() => {
       let savedEncounter = null;
 
       if (data.visitType === "both") {
-  const generalEncounter = {
-    ...encounterBase,
-    visitType: "general",
-    specialtyType: "",
-    status: "started",
-    leadershipIntakeComplete: false,
-    pharmacyStatus: "",
-  };
+        const generalEncounter = {
+          ...encounterBase,
+          visitType: "general",
+          specialtyType: "",
+          status: "started",
+          leadershipIntakeComplete: false,
+          pharmacyStatus: "",
+        };
 
-  const specialtyEncounter = {
-    ...encounterBase,
-    visitType: "specialty_only",
-    specialtyType: data.specialtyType || "",
-    chiefComplaint: data.specialtyType
-      ? `${data.specialtyType} Specialty Visit`
-      : "Specialty Visit",
-    status: "undergrad_complete",
-    leadershipIntakeComplete: true,
-    pharmacyStatus: "waiting",
-  };
+        const specialtyEncounter = {
+          ...encounterBase,
+          visitType: "specialty_only",
+          specialtyType: data.specialtyType || "",
+          chiefComplaint: data.specialtyType
+            ? `${data.specialtyType} Specialty Visit`
+            : "Specialty Visit",
+          status: "undergrad_complete",
+          leadershipIntakeComplete: true,
+          pharmacyStatus: "waiting",
+        };
 
-  savedEncounter = await createEncounterInSupabase(targetPatient.id, generalEncounter);
-  await createEncounterInSupabase(targetPatient.id, specialtyEncounter);
-} else {
-  const isRefillOnly = data.visitType === "refill_only";
-  const isSpecialtyOnly = data.visitType === "specialty_only";
+        savedEncounter = await createEncounterInSupabase(targetPatient.id, generalEncounter);
+        await createEncounterInSupabase(targetPatient.id, specialtyEncounter);
+      } else {
+        const isRefillOnly = data.visitType === "refill_only";
+        const isSpecialtyOnly = data.visitType === "specialty_only";
 
-  const singleEncounter = {
-    ...encounterBase,
-    visitType: data.visitType || "general",
-    specialtyType: isRefillOnly ? "" : data.specialtyType || "",
-    chiefComplaint: isRefillOnly
-      ? "Refills Only"
-      : isSpecialtyOnly
-        ? data.specialtyType
-          ? `${data.specialtyType} Specialty Visit`
-          : "Specialty Visit"
-        : encounterBase.chiefComplaint || data.chiefComplaint || "",
-    status: isRefillOnly || isSpecialtyOnly ? "undergrad_complete" : "started",
-    leadershipIntakeComplete: isRefillOnly || isSpecialtyOnly,
-    pharmacyStatus: isRefillOnly || isSpecialtyOnly ? "waiting" : "",
-  };
+        const singleEncounter = {
+          ...encounterBase,
+          visitType: data.visitType || "general",
+          specialtyType: isRefillOnly ? "" : data.specialtyType || "",
+          chiefComplaint: isRefillOnly
+            ? "Refills Only"
+            : isSpecialtyOnly
+              ? data.specialtyType
+                ? `${data.specialtyType} Specialty Visit`
+                : "Specialty Visit"
+              : encounterBase.chiefComplaint || data.chiefComplaint || "",
+          status: isRefillOnly || isSpecialtyOnly ? "undergrad_complete" : "started",
+          leadershipIntakeComplete: isRefillOnly || isSpecialtyOnly,
+          pharmacyStatus: isRefillOnly || isSpecialtyOnly ? "waiting" : "",
+        };
 
-  savedEncounter = await createEncounterInSupabase(targetPatient.id, singleEncounter);
-}
+        savedEncounter = await createEncounterInSupabase(targetPatient.id, singleEncounter);
+      }
 
       await refreshClinicData();
 
@@ -4037,14 +4037,14 @@ useEffect(() => {
               encounters: p.encounters.map((e) =>
                 e.id === registrationEncounterId
                   ? {
-                      ...e,
-                      status: nextStatus,
-                      undergradCompletedAt,
-                      dailyNumber: undergradRegistrationForm.dailyNumber || "",
-                      visitType: nextVisitType,
-                      specialtyType: nextSpecialtyType,
-                      refillMedicationRequest: nextRefillMedicationRequest,
-                    }
+                    ...e,
+                    status: nextStatus,
+                    undergradCompletedAt,
+                    dailyNumber: undergradRegistrationForm.dailyNumber || "",
+                    visitType: nextVisitType,
+                    specialtyType: nextSpecialtyType,
+                    refillMedicationRequest: nextRefillMedicationRequest,
+                  }
                   : e
               ),
             }
@@ -4171,44 +4171,44 @@ useEffect(() => {
   );
 
   const waitingEncounterRows = useMemo(() => {
-  const effectiveQueueDate = queueClinicDate || formatClinicDate();
+    const effectiveQueueDate = queueClinicDate || formatClinicDate();
 
-  const activeRows = allEncounterRows.filter(({ encounter }) => {
-    const isSelectedQueueDate =
-      normalizeClinicDate(encounter.clinicDate) === effectiveQueueDate;
+    const activeRows = allEncounterRows.filter(({ encounter }) => {
+      const isSelectedQueueDate =
+        normalizeClinicDate(encounter.clinicDate) === effectiveQueueDate;
 
-    const isPharmacyWorkflow =
-      encounter.visitType === "refill_only" ||
-      encounter.visitType === "specialty_only";
+      const isPharmacyWorkflow =
+        encounter.visitType === "refill_only" ||
+        encounter.visitType === "specialty_only";
 
-    if (!isSelectedQueueDate) return false;
-    if (encounter.status === "cancelled") return false;
+      if (!isSelectedQueueDate) return false;
+      if (encounter.status === "cancelled") return false;
 
-    if (canUseWholeClinicQueueTools) {
-      if (encounter.visitType === "refill_only") return false;
+      if (canUseWholeClinicQueueTools) {
+        if (encounter.visitType === "refill_only") return false;
+
+        return (
+          encounter.status === "ready" ||
+          encounter.status === "roomed" ||
+          encounter.status === "in_visit" ||
+          encounter.status === "done" ||
+          encounter.soapStatus === "signed" ||
+          isPharmacyWorkflow
+        );
+      }
+
+      if (isPharmacyWorkflow) {
+        return true;
+      }
 
       return (
         encounter.status === "ready" ||
         encounter.status === "roomed" ||
         encounter.status === "in_visit" ||
         encounter.status === "done" ||
-        encounter.soapStatus === "signed" ||
-        isPharmacyWorkflow
+        encounter.soapStatus === "signed"
       );
-    }
-
-    if (isPharmacyWorkflow) {
-      return true;
-    }
-
-    return (
-      encounter.status === "ready" ||
-      encounter.status === "roomed" ||
-      encounter.status === "in_visit" ||
-      encounter.status === "done" ||
-      encounter.soapStatus === "signed"
-    );
-  });
+    });
 
     const currentUserName = (
       profileNameMap[session?.user?.id] ||
@@ -4258,13 +4258,13 @@ useEffect(() => {
       ) {
         rows = activeRows;
       } else {
-  // leadership/general queue should only show general assignable encounters
-  rows = activeRows.filter(
-    ({ encounter }) =>
-      encounter.visitType !== "specialty_only" &&
-      encounter.visitType !== "refill_only"
-  );
-}
+        // leadership/general queue should only show general assignable encounters
+        rows = activeRows.filter(
+          ({ encounter }) =>
+            encounter.visitType !== "specialty_only" &&
+            encounter.visitType !== "refill_only"
+        );
+      }
 
       rows = [...rows].sort((a, b) => {
         const aUnassigned =
@@ -4689,17 +4689,17 @@ useEffect(() => {
   }, [activeTodayProfiles]);
 
   useEffect(() => {
-  const ms12StudentsOnly = (activeStudents || []).filter(
-    (profile) => profile.role === "student"
-  );
+    const ms12StudentsOnly = (activeStudents || []).filter(
+      (profile) => profile.role === "student"
+    );
 
-  setClinicSummary((prev) => ({
-    ...prev,
-    attendingNames: prev.attendingNames || joinActiveNames(activeAttendings),
-    ms34Names: prev.ms34Names || joinActiveNames(activeUpperLevels),
-    ms12Names: prev.ms12Names || joinActiveNames(ms12StudentsOnly),
-  }));
-}, [activeAttendings, activeUpperLevels, activeStudents]);
+    setClinicSummary((prev) => ({
+      ...prev,
+      attendingNames: prev.attendingNames || joinActiveNames(activeAttendings),
+      ms34Names: prev.ms34Names || joinActiveNames(activeUpperLevels),
+      ms12Names: prev.ms12Names || joinActiveNames(ms12StudentsOnly),
+    }));
+  }, [activeAttendings, activeUpperLevels, activeStudents]);
 
   const canAccessSpecialtyQueue =
     userRole === "leadership" ||
@@ -5470,16 +5470,16 @@ useEffect(() => {
   }
 
   function openPatientEditModal() {
-  const patientForEdit = dashboardSelectedPatient || selectedPatient;
+    const patientForEdit = dashboardSelectedPatient || selectedPatient;
 
-  if (!patientForEdit) {
-    alert("Select a patient first.");
-    return;
+    if (!patientForEdit) {
+      alert("Select a patient first.");
+      return;
+    }
+
+    setDashboardSelectedPatientId(patientForEdit.id);
+    setShowPatientInfoEditModal(true);
   }
-
-  setDashboardSelectedPatientId(patientForEdit.id);
-  setShowPatientInfoEditModal(true);
-}
 
   async function saveDashboardPatientEdits(patientId, updates, encounterId = null, encounterUpdates = null) {
     const trimmedMrn = (updates.mrn || "").trim();
@@ -5846,51 +5846,51 @@ useEffect(() => {
   }
 
   async function finalizeClinicDay(rowsToFinalize = []) {
-  if (!isLeadershipView) return;
+    if (!isLeadershipView) return;
 
-  const rows = rowsToFinalize.filter(({ encounter }) => encounter?.id);
-  if (rows.length === 0) return;
+    const rows = rowsToFinalize.filter(({ encounter }) => encounter?.id);
+    if (rows.length === 0) return;
 
-  const finalizedAt = new Date().toISOString();
+    const finalizedAt = new Date().toISOString();
 
-  function isRefillOnly(encounter) {
-    return (encounter?.visitType || encounter?.visit_type) === "refill_only";
-  }
+    function isRefillOnly(encounter) {
+      return (encounter?.visitType || encounter?.visit_type) === "refill_only";
+    }
 
-  await Promise.all(
-    rows.map(({ encounter }) => {
-      const pharmacyStatus =
-        encounter.pharmacyStatus || encounter.pharmacy_status || "";
+    await Promise.all(
+      rows.map(({ encounter }) => {
+        const pharmacyStatus =
+          encounter.pharmacyStatus || encounter.pharmacy_status || "";
 
-      const updates = {
-        status: "done",
-        doneAt: encounter.doneAt || encounter.done_at || finalizedAt,
-        visitCompletedAt:
-          encounter.visitCompletedAt ||
-          encounter.visit_completed_at ||
-          finalizedAt,
-      };
+        const updates = {
+          status: "done",
+          doneAt: encounter.doneAt || encounter.done_at || finalizedAt,
+          visitCompletedAt:
+            encounter.visitCompletedAt ||
+            encounter.visit_completed_at ||
+            finalizedAt,
+        };
 
-      if (isRefillOnly(encounter)) {
-        if (pharmacyStatus === "meds_ready" || pharmacyStatus === "patient_sent") {
-          updates.pharmacyStatus = "meds_not_picked_up";
-        } else if (!pharmacyStatus || pharmacyStatus === "waiting") {
-          updates.pharmacyStatus = "no_meds_needed";
+        if (isRefillOnly(encounter)) {
+          if (pharmacyStatus === "meds_ready" || pharmacyStatus === "patient_sent") {
+            updates.pharmacyStatus = "meds_not_picked_up";
+          } else if (!pharmacyStatus || pharmacyStatus === "waiting") {
+            updates.pharmacyStatus = "no_meds_needed";
+          }
         }
-      }
 
-      return updateEncounterInSupabase(encounter.id, updates);
-    })
-  );
+        return updateEncounterInSupabase(encounter.id, updates);
+      })
+    );
 
-  const finalizedIds = new Set(rows.map(({ encounter }) => String(encounter.id)));
+    const finalizedIds = new Set(rows.map(({ encounter }) => String(encounter.id)));
 
-  setPatients((prev) =>
-    prev.map((patient) => ({
-      ...patient,
-      encounters: patient.encounters.map((encounter) =>
-        finalizedIds.has(String(encounter.id))
-          ? {
+    setPatients((prev) =>
+      prev.map((patient) => ({
+        ...patient,
+        encounters: patient.encounters.map((encounter) =>
+          finalizedIds.has(String(encounter.id))
+            ? {
               ...encounter,
               status: "done",
               doneAt: encounter.doneAt || finalizedAt,
@@ -5905,13 +5905,13 @@ useEffect(() => {
                 ? { pharmacyStatus: "no_meds_needed" }
                 : {}),
             }
-          : encounter
-      ),
-    }))
-  );
+            : encounter
+        ),
+      }))
+    );
 
-  refreshClinicData?.();
-}
+    refreshClinicData?.();
+  }
 
   async function clearPharmacyStatus(encounterId) {
     await updateEncounterInSupabase(encounterId, {
@@ -6018,31 +6018,31 @@ useEffect(() => {
 
     try {
       const studentChanged =
-  String(nextStudent || "").trim() !== String(encounter.assignedStudent || "").trim();
+        String(nextStudent || "").trim() !== String(encounter.assignedStudent || "").trim();
 
-const upperLevelChanged =
-  String(nextUpperLevel || "").trim() !== String(encounter.assignedUpperLevel || "").trim();
+      const upperLevelChanged =
+        String(nextUpperLevel || "").trim() !== String(encounter.assignedUpperLevel || "").trim();
 
-await applyEncounterTransition(encounterId, {
-  assignedStudent: nextStudent,
-  assignedUpperLevel: nextUpperLevel,
-  roomNumber: String(numericRoom),
-  status: "in_visit",
+      await applyEncounterTransition(encounterId, {
+        assignedStudent: nextStudent,
+        assignedUpperLevel: nextUpperLevel,
+        roomNumber: String(numericRoom),
+        status: "in_visit",
 
-  studentAssignedAt:
-    nextStudent && (!encounter.studentAssignedAt || studentChanged)
-      ? new Date().toISOString()
-      : encounter.studentAssignedAt || null,
+        studentAssignedAt:
+          nextStudent && (!encounter.studentAssignedAt || studentChanged)
+            ? new Date().toISOString()
+            : encounter.studentAssignedAt || null,
 
-  upperLevelAssignedAt:
-    nextUpperLevel && (!encounter.upperLevelAssignedAt || upperLevelChanged)
-      ? new Date().toISOString()
-      : encounter.upperLevelAssignedAt || null,
+        upperLevelAssignedAt:
+          nextUpperLevel && (!encounter.upperLevelAssignedAt || upperLevelChanged)
+            ? new Date().toISOString()
+            : encounter.upperLevelAssignedAt || null,
 
-  skipUpperLevel: nextUpperLevel ? false : encounter.skipUpperLevel,
-  skipUpperLevelBy: nextUpperLevel ? null : encounter.skipUpperLevelBy,
-  skipUpperLevelAt: nextUpperLevel ? null : encounter.skipUpperLevelAt,
-});
+        skipUpperLevel: nextUpperLevel ? false : encounter.skipUpperLevel,
+        skipUpperLevelBy: nextUpperLevel ? null : encounter.skipUpperLevelBy,
+        skipUpperLevelAt: nextUpperLevel ? null : encounter.skipUpperLevelAt,
+      });
 
     } catch (error) {
       console.error("Failed to assign encounter from queue:", error);
@@ -6090,16 +6090,16 @@ await applyEncounterTransition(encounterId, {
     }
 
     const nextAssignedStudent =
-  assignmentForm.studentName || selectedEncounter.assignedStudent || "";
+      assignmentForm.studentName || selectedEncounter.assignedStudent || "";
 
-const nextAssignedUpperLevel =
-  assignmentForm.upperLevelName || selectedEncounter.assignedUpperLevel || "";
+    const nextAssignedUpperLevel =
+      assignmentForm.upperLevelName || selectedEncounter.assignedUpperLevel || "";
 
-const conflict = getRoomConflictDetails(roomNumber, selectedEncounter.id, {
-  assignedStudent: nextAssignedStudent,
-  assignedUpperLevel: nextAssignedUpperLevel,
-  clinicDate: selectedEncounter.clinicDate,
-});
+    const conflict = getRoomConflictDetails(roomNumber, selectedEncounter.id, {
+      assignedStudent: nextAssignedStudent,
+      assignedUpperLevel: nextAssignedUpperLevel,
+      clinicDate: selectedEncounter.clinicDate,
+    });
 
     if (conflict.hasConflict) {
       const confirmed = window.confirm(
@@ -6114,31 +6114,31 @@ const conflict = getRoomConflictDetails(roomNumber, selectedEncounter.id, {
 
     try {
       const studentChanged =
-  String(nextAssignedStudent || "").trim() !== String(selectedEncounter.assignedStudent || "").trim();
+        String(nextAssignedStudent || "").trim() !== String(selectedEncounter.assignedStudent || "").trim();
 
-const upperLevelChanged =
-  String(nextAssignedUpperLevel || "").trim() !== String(selectedEncounter.assignedUpperLevel || "").trim();
+      const upperLevelChanged =
+        String(nextAssignedUpperLevel || "").trim() !== String(selectedEncounter.assignedUpperLevel || "").trim();
 
-await applyEncounterTransition(selectedEncounter.id, {
-  roomNumber: String(roomNumber),
-  status: "in_visit",
-  assignedStudent: nextAssignedStudent,
-  assignedUpperLevel: nextAssignedUpperLevel,
+      await applyEncounterTransition(selectedEncounter.id, {
+        roomNumber: String(roomNumber),
+        status: "in_visit",
+        assignedStudent: nextAssignedStudent,
+        assignedUpperLevel: nextAssignedUpperLevel,
 
-  studentAssignedAt:
-    nextAssignedStudent && (!selectedEncounter.studentAssignedAt || studentChanged)
-      ? new Date().toISOString()
-      : selectedEncounter.studentAssignedAt || null,
+        studentAssignedAt:
+          nextAssignedStudent && (!selectedEncounter.studentAssignedAt || studentChanged)
+            ? new Date().toISOString()
+            : selectedEncounter.studentAssignedAt || null,
 
-  upperLevelAssignedAt:
-    nextAssignedUpperLevel && (!selectedEncounter.upperLevelAssignedAt || upperLevelChanged)
-      ? new Date().toISOString()
-      : selectedEncounter.upperLevelAssignedAt || null,
+        upperLevelAssignedAt:
+          nextAssignedUpperLevel && (!selectedEncounter.upperLevelAssignedAt || upperLevelChanged)
+            ? new Date().toISOString()
+            : selectedEncounter.upperLevelAssignedAt || null,
 
-  skipUpperLevel: nextAssignedUpperLevel ? false : selectedEncounter.skipUpperLevel,
-  skipUpperLevelBy: nextAssignedUpperLevel ? null : selectedEncounter.skipUpperLevelBy,
-  skipUpperLevelAt: nextAssignedUpperLevel ? null : selectedEncounter.skipUpperLevelAt,
-});
+        skipUpperLevel: nextAssignedUpperLevel ? false : selectedEncounter.skipUpperLevel,
+        skipUpperLevelBy: nextAssignedUpperLevel ? null : selectedEncounter.skipUpperLevelBy,
+        skipUpperLevelAt: nextAssignedUpperLevel ? null : selectedEncounter.skipUpperLevelAt,
+      });
 
     } catch (error) {
       console.error("Failed to assign encounter:", error);
@@ -6193,22 +6193,22 @@ await applyEncounterTransition(selectedEncounter.id, {
     }));
   }
   async function deletePatientCompletely(patientId) {
-  const patientToDelete = patients.find(
-    (patient) => String(patient.id) === String(patientId)
-  );
+    const patientToDelete = patients.find(
+      (patient) => String(patient.id) === String(patientId)
+    );
 
-  const confirmed = window.confirm(
-    "Delete this patient completely? This cannot be undone."
-  );
-  if (!confirmed) return;
+    const confirmed = window.confirm(
+      "Delete this patient completely? This cannot be undone."
+    );
+    if (!confirmed) return;
 
     try {
       await deletePapEntriesForPatient(patientId);
       await deleteProgramEntriesForPatient(
-  patientId,
-  patientToDelete ? getFullPatientName(patientToDelete) : "",
-  patientToDelete?.dob || ""
-);
+        patientId,
+        patientToDelete ? getFullPatientName(patientToDelete) : "",
+        patientToDelete?.dob || ""
+      );
       await deleteRefillRequestsForPatient(patientId);
       await deletePatientInSupabase(patientId);
 
@@ -6244,19 +6244,19 @@ await applyEncounterTransition(selectedEncounter.id, {
     lockLeadershipActions();
 
     const updates =
-  status === "ready"
-    ? {
-        status: "ready",
-        roomNumber: "",
-        assignedStudent: "",
-        assignedUpperLevel: "",
-        studentAssignedAt: null,
-        upperLevelAssignedAt: null,
-        skipUpperLevel: false,
-        skipUpperLevelBy: null,
-        skipUpperLevelAt: null,
-      }
-    : { status };
+      status === "ready"
+        ? {
+          status: "ready",
+          roomNumber: "",
+          assignedStudent: "",
+          assignedUpperLevel: "",
+          studentAssignedAt: null,
+          upperLevelAssignedAt: null,
+          skipUpperLevel: false,
+          skipUpperLevelBy: null,
+          skipUpperLevelAt: null,
+        }
+        : { status };
 
     try {
       await applyEncounterTransition(selectedEncounter.id, updates);
@@ -6279,10 +6279,10 @@ await applyEncounterTransition(selectedEncounter.id, {
 
     try {
       await applyEncounterTransition(selectedEncounter.id, {
-  status: "done",
-  visitCompletedAt:
-    selectedEncounter.visitCompletedAt || new Date().toISOString(),
-});
+        status: "done",
+        visitCompletedAt:
+          selectedEncounter.visitCompletedAt || new Date().toISOString(),
+      });
     } catch (error) {
       console.error("Failed to complete visit / free room:", error);
       showToast({
@@ -7957,11 +7957,11 @@ await applyEncounterTransition(selectedEncounter.id, {
     }
 
     function blankStaffSideCell() {
-  return new TableCell({
-    columnSpan: 2,
-    children: [new Paragraph({ text: "" })],
-  });
-}
+      return new TableCell({
+        columnSpan: 2,
+        children: [new Paragraph({ text: "" })],
+      });
+    }
     function formatDobForSummary(dob) {
       if (!dob) return "";
 
@@ -8438,45 +8438,53 @@ await applyEncounterTransition(selectedEncounter.id, {
                   ) : null}
                 </>
               ) : null}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  authMode === "login" ? handleSignIn() : handleSignUp();
+                }}
+              >
+                <input
+                  className="w-full rounded-lg border px-3 py-3 text-sm"
+                  placeholder="Email"
+                  value={authEmail}
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                />
 
-              <input
-                className="w-full rounded-lg border px-3 py-3 text-sm"
-                placeholder="Email"
-                value={authEmail}
-                onChange={(e) => setAuthEmail(e.target.value)}
-              />
+                <input
+                  className="w-full rounded-lg border px-3 py-3 text-sm"
+                  placeholder="Password"
+                  type="password"
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                />
 
-              <input
-                className="w-full rounded-lg border px-3 py-3 text-sm"
-                placeholder="Password"
-                type="password"
-                value={authPassword}
-                onChange={(e) => setAuthPassword(e.target.value)}
-              />
+                {authMessage ? (
+                  <div className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700">
+                    {authMessage}
+                  </div>
+                ) : null}
 
-              {authMessage ? (
-                <div className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700">
-                  {authMessage}
-                </div>
-              ) : null}
-
-              {authMode === "login" ? (
-                <button
-                  onClick={handleSignIn}
-                  disabled={authLoading}
-                  className="w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {authLoading ? "Signing In..." : "Log In"}
-                </button>
-              ) : (
-                <button
-                  onClick={handleSignUp}
-                  disabled={authLoading}
-                  className="w-full rounded-lg bg-slate-800 px-4 py-3 text-sm font-medium text-white hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {authLoading ? "Creating Account..." : "Create Account"}
-                </button>
-              )}
+                {authMode === "login" ? (
+                  <button
+                    type="submit"
+                    onClick={handleSignIn}
+                    disabled={authLoading}
+                    className="w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {authLoading ? "Signing In..." : "Log In"}
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    onClick={handleSignUp}
+                    disabled={authLoading}
+                    className="w-full rounded-lg bg-slate-800 px-4 py-3 text-sm font-medium text-white hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {authLoading ? "Creating Account..." : "Create Account"}
+                  </button>
+                )}
+              </form>
             </div>
           </div>
         </div>
@@ -8507,7 +8515,7 @@ await applyEncounterTransition(selectedEncounter.id, {
         selectedClinicDate={boardClinicDate}
         tonightSpecialtyNames={tonightSpecialtyNames}
         tonightReservedRooms={tonightReservedRooms}
-        
+
       />
     );
   }
@@ -8631,8 +8639,8 @@ await applyEncounterTransition(selectedEncounter.id, {
             <DashboardView
               isLeadershipView={isLeadershipView}
               canViewAnalytics={
-    isLeadershipView || userRole === "undergraduate" || userRole === "attending"
-  }
+                isLeadershipView || userRole === "undergraduate" || userRole === "attending"
+              }
               canEditMrn={userRole === "undergraduate" || isLeadershipView}
               canEditUndergradFields={userRole === "undergraduate" || isLeadershipView}
               canEditAllPatientFields={isLeadershipView}
@@ -8832,7 +8840,7 @@ await applyEncounterTransition(selectedEncounter.id, {
               isLeadershipView={isLeadershipView}
               dualVisitBadge={dualVisitBadge}
               selectedClinicDate={specialtyQueueDate}
-setSelectedClinicDate={setSpecialtyQueueDate}
+              setSelectedClinicDate={setSpecialtyQueueDate}
             />
           )}
 
@@ -8840,7 +8848,7 @@ setSelectedClinicDate={setSpecialtyQueueDate}
             <RoomBoard
               ROOM_OPTIONS={ROOM_OPTIONS}
               selectedClinicDate={boardClinicDate}
-setSelectedClinicDate={setRoomBoardDate}
+              setSelectedClinicDate={setRoomBoardDate}
               canOpenCharts={userRole !== "lab"}
               roomMap={roomMap}
               allEncounterRows={boardEncounterRows}

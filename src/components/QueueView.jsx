@@ -55,6 +55,7 @@ const [prioritizeRefillOnly, setPrioritizeRefillOnly] = useState(false);
   const [refillApproveMessage, setRefillApproveMessage] = useState("");
   const [directApproveBusyId, setDirectApproveBusyId] = useState(null);
   const [deleteRefillBusyId, setDeleteRefillBusyId] = useState(null);
+  const [assignmentBusyId, setAssignmentBusyId] = useState(null);
 
   function getDraftValue(encounter, field) {
     return queueAssignmentDrafts[encounter.id]?.[field] ?? encounter[field] ?? "";
@@ -70,15 +71,25 @@ const [prioritizeRefillOnly, setPrioritizeRefillOnly] = useState(false);
     }));
   }
 
-  function submitDraft(encounter) {
+  async function submitDraft(encounter) {
+    if (!encounter?.id) return;
+    if (assignmentBusyId === encounter.id) return;
+
     const draft = queueAssignmentDrafts[encounter.id] || {};
 
-    onAssignFromQueue(encounter.id, {
-      assignedStudent: draft.assignedStudent ?? encounter.assignedStudent ?? "",
-      assignedUpperLevel:
-        draft.assignedUpperLevel ?? encounter.assignedUpperLevel ?? "",
-      roomNumber: draft.roomNumber ?? encounter.roomNumber ?? "",
-    });
+    try {
+      setAssignmentBusyId(encounter.id);
+      await onAssignFromQueue?.(encounter.id, {
+        assignedStudent: draft.assignedStudent ?? encounter.assignedStudent ?? "",
+        assignedUpperLevel:
+          draft.assignedUpperLevel ?? encounter.assignedUpperLevel ?? "",
+        roomNumber: draft.roomNumber ?? encounter.roomNumber ?? "",
+      });
+    } finally {
+      setAssignmentBusyId((currentId) =>
+        currentId === encounter.id ? null : currentId
+      );
+    }
   }
 
   function getPharmacyDisplayName(patient) {
@@ -1622,9 +1633,10 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                     <button
                       type="button"
                       onClick={() => submitDraft(encounter)}
-                      className="min-h-[40px] rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700"
+                      disabled={assignmentBusyId === encounter.id}
+                      className="min-h-[40px] rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      Assign / Start
+                      {assignmentBusyId === encounter.id ? "Assigning..." : "Assign / Start"}
                     </button>
                   </div>
                 )}

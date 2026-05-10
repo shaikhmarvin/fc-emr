@@ -224,10 +224,8 @@ export default function RoomBoard({
       <div>
         <p className="text-sm text-slate-500">
           {isLeadershipView
-            ? selectedPatient && selectedEncounter
-              ? `Current patient: ${getPatientBoardName(selectedPatient)}. Click any room below to assign or reassign.`
-              : "Open a patient chart first, then come here to assign them to a room."
-            : "Students can view room assignments here, but only leadership can change them."}
+            ? "Click an occupied room card to open that patient’s chart."
+            : "Students can view room assignments here."}
         </p>
       </div>
 
@@ -275,28 +273,8 @@ export default function RoomBoard({
             <button
               key={room.number}
               type="button"
-              disabled={isLeadershipView ? false : !occupied || !canOpenCharts}
+              disabled={!occupied || !canOpenCharts}
               onClick={() => {
-                if (selectedEncounter?.soapStatus === "signed") return;
-
-                if (isLeadershipView && selectedPatient && selectedEncounter) {
-                  const selectedSpecialtyType = selectedEncounter.specialtyType;
-                  const selectedRules = SPECIALTY_ROOM_RULES?.[selectedSpecialtyType];
-
-                  if (
-                    selectedRules?.allowedRooms?.length > 0 &&
-                    !selectedRules.allowedRooms.includes(String(room.number))
-                  ) {
-                    const confirmAssign = window.confirm(
-                      `This room is not preferred for ${selectedRules.label}. Assign anyway?`
-                    );
-                    if (!confirmAssign) return;
-                  }
-
-                  assignEncounterToRoom(room.number);
-                  return;
-                }
-
                 if (canOpenCharts && occupied && primaryPatient && primaryEncounter) {
                   openPatientChart(primaryPatient.id, primaryEncounter.id);
                 }
@@ -310,7 +288,7 @@ export default function RoomBoard({
                 : reservedSpecialty
                   ? "border-violet-300 bg-violet-50 hover:bg-violet-100"
                   : "border-slate-200 bg-white hover:bg-slate-50"
-                }`}
+                } disabled:cursor-not-allowed disabled:opacity-70`}
             >
               <div className="mb-2 flex items-start justify-between gap-2">
                 <div>
@@ -328,7 +306,7 @@ export default function RoomBoard({
                   className={`rounded-full px-2 py-1 text-xs font-medium ${occupied
                     ? "bg-slate-200 text-slate-700"
                     : "bg-emerald-100 text-emerald-700"
-                    }`}
+                    } disabled:cursor-not-allowed disabled:opacity-70`}
                 >
                   {occupied ? "Occupied" : "Available"}
                 </span>
@@ -436,9 +414,7 @@ export default function RoomBoard({
               ) : (
                 <div className="flex h-[140px] items-center justify-center">
                   <p className="text-center text-sm text-slate-400">
-                    {isLeadershipView && selectedPatient && selectedEncounter
-                      ? "Click to assign current patient"
-                      : "No patient assigned"}
+                    No patient assigned
                   </p>
                 </div>
               )}

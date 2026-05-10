@@ -55,6 +55,7 @@ export default function UndergradRegistrationModal({
 
   const [stateSearch, setStateSearch] = useState("");
   const [showStateDropdown, setShowStateDropdown] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const filteredStates = useMemo(() => {
     const query = stateSearch.trim().toLowerCase();
@@ -68,6 +69,17 @@ export default function UndergradRegistrationModal({
 
   function handleChange(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  async function handleSafeSubmit() {
+    if (isSaving) return;
+
+    try {
+      setIsSaving(true);
+      await onSubmit?.();
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   function handleConditionToggle(condition) {
@@ -525,10 +537,12 @@ const displayMrn =
 
         <div className="flex justify-end border-t px-6 py-4">
           <button
-            onClick={onSubmit}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            type="button"
+            onClick={handleSafeSubmit}
+            disabled={isSaving}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Save Undergrad Intake
+            {isSaving ? "Saving..." : "Save Undergrad Intake"}
           </button>
         </div>
       </div>
