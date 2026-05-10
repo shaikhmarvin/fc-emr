@@ -474,15 +474,15 @@ export default function UndergradIntakeView({
   async function handleSubmit() {
     if (isSubmitting) return;
 
-  if (
-    (form.visitType === "both" || form.visitType === "specialty_only") &&
-    !form.specialtyType
-  ) {
-    alert("Please select a specialty before starting the encounter.");
-    return;
-  }
+    if (
+      (form.visitType === "both" || form.visitType === "specialty_only") &&
+      !form.specialtyType
+    ) {
+      alert("Please select a specialty before starting the encounter.");
+      return;
+    }
 
-  if (matchedPatientFired) {
+    if (matchedPatientFired) {
       const firedDateLabel = matchedPatient?.firedAt
         ? formatDisplayDate(matchedPatient.firedAt)
         : "an unknown date";
@@ -535,10 +535,10 @@ export default function UndergradIntakeView({
             Enter patient demographics and form details before full registration.
           </p>
           {tonightSpecialtyNames.length > 0 && (
-  <div className="mt-3 rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-sm font-semibold text-purple-800">
-    Tonight’s Specialties: {tonightSpecialtyNames.join(", ")}
-  </div>
-)}
+            <div className="mt-3 rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-sm font-semibold text-purple-800">
+              Tonight’s Specialties: {tonightSpecialtyNames.join(", ")}
+            </div>
+          )}
         </div>
 
         {matchedPatient && (
@@ -587,21 +587,21 @@ export default function UndergradIntakeView({
                         Last seen: {getLastSeenLabel(patient)}
                       </span>
                       {patient.fired && (
-  <div className="w-full rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
-    <div className="mb-1 flex flex-wrap items-center gap-2">
-      <span className="rounded-full bg-rose-100 px-2 py-0.5 font-bold uppercase tracking-wide text-rose-700">
-        Fired
-      </span>
-      <span className="font-semibold">
-        Date: {patient.firedAt ? formatDisplayDate(patient.firedAt) : "Unknown"}
-      </span>
-    </div>
-    <div>
-      <span className="font-semibold">Reason:</span>{" "}
-      {patient.firedReason || "No reason entered."}
-    </div>
-  </div>
-)}
+                        <div className="w-full rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+                          <div className="mb-1 flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-rose-100 px-2 py-0.5 font-bold uppercase tracking-wide text-rose-700">
+                              Fired
+                            </span>
+                            <span className="font-semibold">
+                              Date: {patient.firedAt ? formatDisplayDate(patient.firedAt) : "Unknown"}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="font-semibold">Reason:</span>{" "}
+                            {patient.firedReason || "No reason entered."}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="space-y-1 text-sm text-slate-700">
@@ -717,24 +717,41 @@ export default function UndergradIntakeView({
 
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  DOB
-                </label>
-                <input
-  type="date"
-  min="1900-01-01"
-  max={new Date().toISOString().split("T")[0]}
-  className={`w-full rounded-lg border px-3 py-2 text-sm ${matchedPatient ? "border-slate-200 bg-slate-50 text-slate-600" : "border-slate-300"}`}
-  value={form.dob}
-  readOnly={!!matchedPatient}
-  onChange={(e) => handleChange("dob", e.target.value)}
-  onInput={(e) => {
-    if (e.target.value.length > 10) {
-      e.target.value = e.target.value.slice(0, 10);
-    }
-  }}
-/>
-              </div>
+  <label className="mb-1 block text-sm font-medium text-slate-700">
+    DOB
+  </label>
+
+  <div className="flex gap-2">
+    <input
+      type="date"
+      min="1900-01-01"
+      max={new Date().toISOString().split("T")[0]}
+      className={`min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm ${
+        matchedPatient
+          ? "border-slate-200 bg-slate-50 text-slate-600"
+          : "border-slate-300"
+      }`}
+      value={form.dob}
+      readOnly={!!matchedPatient}
+      onChange={(e) => handleChange("dob", e.target.value)}
+      onInput={(e) => {
+        if (e.target.value.length > 10) {
+          e.target.value = e.target.value.slice(0, 10);
+        }
+      }}
+    />
+
+    {form.dob && !matchedPatient && (
+      <button
+        type="button"
+        onClick={() => handleChange("dob", "")}
+        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+      >
+        Clear
+      </button>
+    )}
+  </div>
+</div>
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -755,21 +772,21 @@ export default function UndergradIntakeView({
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   value={form.visitType || "general"}
                   onChange={(e) => {
-  const nextVisitType = e.target.value;
+                    const nextVisitType = e.target.value;
 
-  handleChange("visitType", nextVisitType);
+                    handleChange("visitType", nextVisitType);
 
-  if (
-    nextVisitType !== "both" &&
-    nextVisitType !== "specialty_only"
-  ) {
-    handleChange("specialtyType", "");
-  }
+                    if (
+                      nextVisitType !== "both" &&
+                      nextVisitType !== "specialty_only"
+                    ) {
+                      handleChange("specialtyType", "");
+                    }
 
-  if (nextVisitType !== "refill_only") {
-    handleChange("refillMedicationRequest", "");
-  }
-}}
+                    if (nextVisitType !== "refill_only") {
+                      handleChange("refillMedicationRequest", "");
+                    }
+                  }}
                 >
                   <option value="general">General Clinic</option>
                   <option value="specialty_only">Specialty Clinic Only</option>
