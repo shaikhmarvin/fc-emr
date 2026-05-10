@@ -849,7 +849,7 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
     type="date"
     value={selectedClinicDate || ""}
     onChange={(e) => setSelectedClinicDate?.(e.target.value)}
-    className="w-full rounded-lg border border-slate-300 bg-white p-3 text-sm"
+    className="min-w-0 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm"
   />
   <input
     className="w-full rounded-lg border p-3"
@@ -1108,7 +1108,7 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
               type="date"
               value={selectedClinicDate || ""}
               onChange={(e) => setSelectedClinicDate?.(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 bg-white p-3 text-sm"
+              className="min-w-0 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm"
             />
 
             <input
