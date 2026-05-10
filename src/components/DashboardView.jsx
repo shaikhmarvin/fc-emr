@@ -171,40 +171,40 @@ export default function DashboardView({
   }
 
   function getEncounterCompletionTime(encounter) {
-  if (!encounter) return null;
+    if (!encounter) return null;
 
-  const visitType = encounter.visitType || encounter.visit_type;
+    const visitType = encounter.visitType || encounter.visit_type;
 
-  if (visitType === "refill_only") {
-    return encounter.pharmacyPickedUpAt || encounter.pharmacy_picked_up_at || null;
+    if (visitType === "refill_only") {
+      return encounter.pharmacyPickedUpAt || encounter.pharmacy_picked_up_at || null;
+    }
+
+    return (
+      encounter.pharmacyPickedUpAt ||
+      encounter.pharmacy_picked_up_at ||
+      encounter.visitCompletedAt ||
+      encounter.visit_completed_at ||
+      encounter.doneAt ||
+      encounter.done_at ||
+      null
+    );
   }
-
-  return (
-    encounter.pharmacyPickedUpAt ||
-    encounter.pharmacy_picked_up_at ||
-    encounter.visitCompletedAt ||
-    encounter.visit_completed_at ||
-    encounter.doneAt ||
-    encounter.done_at ||
-    null
-  );
-}
 
   function isEncounterComplete(encounter) {
     if (!encounter) return false;
 
     if ((encounter.visitType || encounter.visit_type) === "refill_only") {
-  const pharmacyStatus =
-    encounter.pharmacyStatus || encounter.pharmacy_status;
+      const pharmacyStatus =
+        encounter.pharmacyStatus || encounter.pharmacy_status;
 
-  return Boolean(
-    encounter.pharmacyPickedUpAt ||
-      encounter.pharmacy_picked_up_at ||
-      ["picked_up", "no_meds_needed", "meds_not_picked_up"].includes(
-        pharmacyStatus
-      )
-  );
-}
+      return Boolean(
+        encounter.pharmacyPickedUpAt ||
+        encounter.pharmacy_picked_up_at ||
+        ["picked_up", "no_meds_needed", "meds_not_picked_up"].includes(
+          pharmacyStatus
+        )
+      );
+    }
 
     if (encounter.status === "done" || encounter.soapStatus === "signed") return true;
     return Boolean(getEncounterCompletionTime(encounter));
@@ -267,17 +267,17 @@ export default function DashboardView({
   }
 
   function getLastLabUpdate(rows) {
-  const times = rows
-    .flatMap(({ encounter }) => [
-      toTime(encounter?.labCollectedAt),
-      toTime(encounter?.labUnableAt),
-    ])
-    .filter(Boolean);
+    const times = rows
+      .flatMap(({ encounter }) => [
+        toTime(encounter?.labCollectedAt),
+        toTime(encounter?.labUnableAt),
+      ])
+      .filter(Boolean);
 
-  if (times.length === 0) return null;
+    if (times.length === 0) return null;
 
-  return new Date(Math.max(...times)).toISOString();
-}
+    return new Date(Math.max(...times)).toISOString();
+  }
 
   function AnalyticsMetric({ label, value, subtext }) {
     return (
@@ -340,9 +340,9 @@ export default function DashboardView({
 
   const activeRows = showAnalytics
     ? analyticsRows.filter(
-        ({ encounter }) =>
-          !isEncounterComplete(encounter) && encounter?.status !== "cancelled"
-      )
+      ({ encounter }) =>
+        !isEncounterComplete(encounter) && encounter?.status !== "cancelled"
+    )
     : [];
 
   const clinicFlowComplete = showAnalytics ? activeRows.length === 0 : false;
@@ -353,9 +353,9 @@ export default function DashboardView({
 
   const pharmacyRows = showAnalytics
     ? analyticsRows.filter(
-        ({ encounter }) =>
-          encounter?.pharmacyReadyAt || encounter?.pharmacyPickedUpAt
-      )
+      ({ encounter }) =>
+        encounter?.pharmacyReadyAt || encounter?.pharmacyPickedUpAt
+    )
     : [];
 
   const avgUndergradIntakeToUndergradComplete = showAnalytics
@@ -368,10 +368,10 @@ export default function DashboardView({
 
   const avgLeadershipCompleteToStudentAssigned = showAnalytics
     ? getAverageFor(
-        generalAnalyticsRows,
-        "leadershipIntakeCompletedAt",
-        "studentAssignedAt"
-      )
+      generalAnalyticsRows,
+      "leadershipIntakeCompletedAt",
+      "studentAssignedAt"
+    )
     : null;
 
   const avgAssignedToUpperLevelAssigned = showAnalytics
@@ -388,10 +388,10 @@ export default function DashboardView({
 
   const avgRefillOnlyCheckInToPickup = showAnalytics
     ? averageMinutes(
-        refillOnlyAnalyticsRows.map(({ encounter }) =>
-          minutesBetween(getRefillCheckInStart(encounter), getEncounterCompletionTime(encounter))
-        )
+      refillOnlyAnalyticsRows.map(({ encounter }) =>
+        minutesBetween(getRefillCheckInStart(encounter), getEncounterCompletionTime(encounter))
       )
+    )
     : null;
 
   const avgPharmacyReadyToPickup = showAnalytics
@@ -399,7 +399,7 @@ export default function DashboardView({
     : null;
 
   const avgGeneralTotalClinicTime = showAnalytics
-  ? averageMinutes(
+    ? averageMinutes(
       generalAnalyticsRows.map(({ encounter }) =>
         minutesBetween(
           encounter?.undergradCompletedAt,
@@ -407,10 +407,10 @@ export default function DashboardView({
         )
       )
     )
-  : null;
+    : null;
 
-const avgGeneralVisitCompleteToMedsPickedUp = showAnalytics
-  ? averageMinutes(
+  const avgGeneralVisitCompleteToMedsPickedUp = showAnalytics
+    ? averageMinutes(
       generalAnalyticsRows.map(({ encounter }) =>
         minutesBetween(
           encounter?.visitCompletedAt,
@@ -418,7 +418,7 @@ const avgGeneralVisitCompleteToMedsPickedUp = showAnalytics
         )
       )
     )
-  : null;
+    : null;
 
   const firstPatientStartedAt = showAnalytics
     ? getFirstTime(analyticsRows, "createdAt")
@@ -440,8 +440,7 @@ const avgGeneralVisitCompleteToMedsPickedUp = showAnalytics
     if (!finalizeClinicDay || finalizeCandidateRows.length === 0) return;
 
     const confirmed = window.confirm(
-      `This will close ${finalizeCandidateRows.length} active encounter${
-        finalizeCandidateRows.length === 1 ? "" : "s"
+      `This will close ${finalizeCandidateRows.length} active encounter${finalizeCandidateRows.length === 1 ? "" : "s"
       } for ${formatDate(selectedClinicDate)} and then calculate the final analytics. Continue?`
     );
 
@@ -455,8 +454,7 @@ const avgGeneralVisitCompleteToMedsPickedUp = showAnalytics
 
       setShowFinalizeReview(false);
       setFinalizeMessage(
-        `Finalized ${finalizeCandidateRows.length} active encounter${
-          finalizeCandidateRows.length === 1 ? "" : "s"
+        `Finalized ${finalizeCandidateRows.length} active encounter${finalizeCandidateRows.length === 1 ? "" : "s"
         } for ${formatDate(selectedClinicDate)}.`
       );
       setShowAnalytics(true);
@@ -616,47 +614,47 @@ const avgGeneralVisitCompleteToMedsPickedUp = showAnalytics
               </h3>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <AnalyticsMetric
-  label="Total Clinic Time"
-  value={formatMinutes(avgGeneralTotalClinicTime)}
-  subtext="General clinic: undergrad complete → visit complete or meds picked up"
-/>
-  <AnalyticsMetric
-    label="Started → Undergrad Complete"
-    value={formatMinutes(avgUndergradIntakeToUndergradComplete)}
-  />
-  <AnalyticsMetric
-    label="Started → Leadership Complete"
-    value={formatMinutes(avgUndergradIntakeToLeadershipComplete)}
-  />
-  <AnalyticsMetric
-  label="Leadership Complete → Student Assigned"
-  value={formatMinutes(avgLeadershipCompleteToStudentAssigned)}
-/>
-  <AnalyticsMetric
-    label="Assigned → Upper-Level Assigned"
-    value={formatMinutes(avgAssignedToUpperLevelAssigned)}
-  />
-  <AnalyticsMetric
-    label="Upper-Level Assigned → Complete"
-    value={formatMinutes(avgUpperLevelAssignedToComplete)}
-  />
-  <AnalyticsMetric
-    label="Assigned → Complete"
-    value={formatMinutes(avgGeneralAssignedToComplete)}
-    subtext="General clinic total visit time"
-  />
-  <AnalyticsMetric
-    label="Refill Check-In → Meds Picked Up"
-    value={formatMinutes(avgRefillOnlyCheckInToPickup)}
-    subtext="Refill-only wait time"
-  />
-  <AnalyticsMetric
-  label="Visit Complete → Meds Picked Up"
-  value={formatMinutes(avgGeneralVisitCompleteToMedsPickedUp)}
-  subtext="General clinic pharmacy delay after visit completion"
-/>
-</div>
+                <AnalyticsMetric
+                  label="Total Clinic Time"
+                  value={formatMinutes(avgGeneralTotalClinicTime)}
+                  subtext="General clinic: undergrad complete → visit complete or meds picked up"
+                />
+                <AnalyticsMetric
+                  label="Started → Undergrad Complete"
+                  value={formatMinutes(avgUndergradIntakeToUndergradComplete)}
+                />
+                <AnalyticsMetric
+                  label="Started → Leadership Complete"
+                  value={formatMinutes(avgUndergradIntakeToLeadershipComplete)}
+                />
+                <AnalyticsMetric
+                  label="Leadership Complete → Student Assigned"
+                  value={formatMinutes(avgLeadershipCompleteToStudentAssigned)}
+                />
+                <AnalyticsMetric
+                  label="Assigned → Upper-Level Assigned"
+                  value={formatMinutes(avgAssignedToUpperLevelAssigned)}
+                />
+                <AnalyticsMetric
+                  label="Upper-Level Assigned → Complete"
+                  value={formatMinutes(avgUpperLevelAssignedToComplete)}
+                />
+                <AnalyticsMetric
+                  label="Assigned → Complete"
+                  value={formatMinutes(avgGeneralAssignedToComplete)}
+                  subtext="General clinic total visit time"
+                />
+                <AnalyticsMetric
+                  label="Refill Check-In → Meds Picked Up"
+                  value={formatMinutes(avgRefillOnlyCheckInToPickup)}
+                  subtext="Refill-only wait time"
+                />
+                <AnalyticsMetric
+                  label="Visit Complete → Meds Picked Up"
+                  value={formatMinutes(avgGeneralVisitCompleteToMedsPickedUp)}
+                  subtext="General clinic pharmacy delay after visit completion"
+                />
+              </div>
             </div>
 
             <div className="mt-4">
@@ -665,23 +663,23 @@ const avgGeneralVisitCompleteToMedsPickedUp = showAnalytics
               </h3>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-  <AnalyticsMetric
-    label="First Patient Started"
-    value={formatTime(firstPatientStartedAt)}
-  />
-  <AnalyticsMetric
-    label="Last Visit Complete"
-    value={formatTime(lastVisitCompletedAt)}
-  />
-  <AnalyticsMetric
-    label="Last Pharmacy Pickup"
-    value={formatTime(lastPharmacyPickupAt)}
-  />
-  <AnalyticsMetric
-    label="Last Lab Update"
-    value={formatTime(lastLabUpdateAt)}
-  />
-</div>
+                <AnalyticsMetric
+                  label="First Patient Started"
+                  value={formatTime(firstPatientStartedAt)}
+                />
+                <AnalyticsMetric
+                  label="Last Visit Complete"
+                  value={formatTime(lastVisitCompletedAt)}
+                />
+                <AnalyticsMetric
+                  label="Last Pharmacy Pickup"
+                  value={formatTime(lastPharmacyPickupAt)}
+                />
+                <AnalyticsMetric
+                  label="Last Lab Update"
+                  value={formatTime(lastLabUpdateAt)}
+                />
+              </div>
             </div>
 
             <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
@@ -704,16 +702,16 @@ const avgGeneralVisitCompleteToMedsPickedUp = showAnalytics
                 All Dates
               </button>
 
-              <div className="min-w-0 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm"> 
-                <label className="text-sm font-medium text-gray-700">
-                  Clinic Date:
+              <div className="flex w-full flex-col gap-2 sm:w-auto">
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Clinic Date
                 </label>
 
                 <input
                   type="date"
-                  value={selectedClinicDate}
+                  value={selectedClinicDate || ""}
                   onChange={(e) => setSelectedClinicDate(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 sm:w-auto"
+                  className="min-w-0 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm"
                 />
               </div>
             </div>
@@ -728,44 +726,44 @@ const avgGeneralVisitCompleteToMedsPickedUp = showAnalytics
         </div>
 
         <div className="flex flex-col gap-2 rounded-xl bg-white p-3 shadow sm:flex-row sm:items-center">
-  {canViewAnalytics && canOpenAnalyticsForSelectedDate && (
-    <button
-      type="button"
-      onClick={() => setShowAnalytics(true)}
-      className="w-full rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 sm:w-auto"
-    >
-      📊 Analytics
-    </button>
-  )}
+          {canViewAnalytics && canOpenAnalyticsForSelectedDate && (
+            <button
+              type="button"
+              onClick={() => setShowAnalytics(true)}
+              className="w-full rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 sm:w-auto"
+            >
+              📊 Analytics
+            </button>
+          )}
 
-  {isLeadershipView && selectedClinicDate && (
-    <button
-      type="button"
-      onClick={() => {
-        setFinalizeMessage("");
-        setShowFinalizeReview(true);
-      }}
-      className="w-full rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 sm:w-auto"
-    >
-      End Clinic / Finalize Day
-    </button>
-  )}
+          {isLeadershipView && selectedClinicDate && (
+            <button
+              type="button"
+              onClick={() => {
+                setFinalizeMessage("");
+                setShowFinalizeReview(true);
+              }}
+              className="w-full rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 sm:w-auto"
+            >
+              End Clinic / Finalize Day
+            </button>
+          )}
 
-  {isLeadershipView && (
-    <button
-      type="button"
-      onClick={handleExportSignedRecords}
-      disabled={exportingRecords}
-      className="inline-flex w-full items-center justify-center whitespace-nowrap rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-    >
-      {exportingRecords
-        ? "Exporting..."
-        : selectedClinicDate
-          ? "Export Records for Selected Date"
-          : "Export Signed Records"}
-    </button>
-  )}
-</div>
+          {isLeadershipView && (
+            <button
+              type="button"
+              onClick={handleExportSignedRecords}
+              disabled={exportingRecords}
+              className="inline-flex w-full items-center justify-center whitespace-nowrap rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+            >
+              {exportingRecords
+                ? "Exporting..."
+                : selectedClinicDate
+                  ? "Export Records for Selected Date"
+                  : "Export Signed Records"}
+            </button>
+          )}
+        </div>
       </div>
 
       {finalizeMessage ? (
