@@ -713,7 +713,11 @@ function isPharmacyWorkflowEncounter(encounter) {
 
 function getPharmacyStatusRank(encounter) {
   if (encounter?.pharmacyStatus === "meds_ready") return 0;
-  if (encounter?.pharmacyStatus === "picked_up") return 3;
+  if (
+  encounter?.pharmacyStatus === "picked_up" ||
+  encounter?.pharmacyStatus === "no_meds_needed" ||
+  encounter?.pharmacyStatus === "meds_not_picked_up"
+) return 3;
   if (encounter?.pharmacyStatus === "patient_sent") return 2;
   return 1;
 }
@@ -724,7 +728,9 @@ function rowMatchesPharmacyStatusFilter(encounter) {
   if (pharmacyStatusFilter === "waiting") return status === "waiting";
   if (pharmacyStatusFilter === "ready") return status === "meds_ready";
   if (pharmacyStatusFilter === "sent") return status === "patient_sent";
-  if (pharmacyStatusFilter === "picked_up") return status === "picked_up";
+  if (pharmacyStatusFilter === "picked_up") {
+  return ["picked_up", "no_meds_needed", "meds_not_picked_up"].includes(status);
+}
 
   return true;
 }

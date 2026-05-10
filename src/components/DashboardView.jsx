@@ -194,13 +194,17 @@ export default function DashboardView({
     if (!encounter) return false;
 
     if ((encounter.visitType || encounter.visit_type) === "refill_only") {
-      return Boolean(
-        encounter.pharmacyPickedUpAt ||
-          encounter.pharmacy_picked_up_at ||
-          encounter.pharmacyStatus === "picked_up" ||
-          encounter.pharmacy_status === "picked_up"
-      );
-    }
+  const pharmacyStatus =
+    encounter.pharmacyStatus || encounter.pharmacy_status;
+
+  return Boolean(
+    encounter.pharmacyPickedUpAt ||
+      encounter.pharmacy_picked_up_at ||
+      ["picked_up", "no_meds_needed", "meds_not_picked_up"].includes(
+        pharmacyStatus
+      )
+  );
+}
 
     if (encounter.status === "done" || encounter.soapStatus === "signed") return true;
     return Boolean(getEncounterCompletionTime(encounter));

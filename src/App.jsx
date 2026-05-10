@@ -385,6 +385,22 @@ function pharmacyStatusBadge(encounter) {
     );
   }
 
+  if (encounter?.pharmacyStatus === "no_meds_needed") {
+  return (
+    <span className="rounded-full bg-zinc-100 px-2 py-1 text-xs font-semibold text-zinc-700">
+      No Medications Needed
+    </span>
+  );
+}
+
+if (encounter?.pharmacyStatus === "meds_not_picked_up") {
+  return (
+    <span className="rounded-full bg-orange-100 px-2 py-1 text-xs font-semibold text-orange-800">
+      Meds Not Picked Up
+    </span>
+  );
+}
+
   return null;
 }
 
@@ -5806,48 +5822,72 @@ return {
   }
 
   async function finalizeClinicDay(rowsToFinalize = []) {
-    if (!isLeadershipView) return;
+  if (!isLeadershipView) return;
 
-    const rows = rowsToFinalize.filter(({ encounter }) => encounter?.id);
-    if (rows.length === 0) return;
+  const rows = rowsToFinalize.filter(({ encounter }) => encounter?.id);
+  if (rows.length === 0) return;
 
-    const finalizedAt = new Date().toISOString();
+  const finalizedAt = new Date().toISOString();
 
-    await Promise.all(
-      rows.map(({ encounter }) => {
-        const updates = {
-          status: "done",
-          doneAt: encounter.doneAt || encounter.done_at || finalizedAt,
-          visitCompletedAt:
-            encounter.visitCompletedAt ||
-            encounter.visit_completed_at ||
-            finalizedAt,
-        };
-
-        return updateEncounterInSupabase(encounter.id, updates);
-      })
-    );
-
-    const finalizedIds = new Set(rows.map(({ encounter }) => String(encounter.id)));
-
-    setPatients((prev) =>
-      prev.map((patient) => ({
-        ...patient,
-        encounters: patient.encounters.map((encounter) =>
-          finalizedIds.has(String(encounter.id))
-            ? {
-                ...encounter,
-                status: "done",
-                doneAt: encounter.doneAt || finalizedAt,
-                visitCompletedAt: encounter.visitCompletedAt || finalizedAt,
-              }
-            : encounter
-        ),
-      }))
-    );
-
-    refreshClinicData?.();
+  function isRefillOnly(encounter) {
+    return (encounter?.visitType || encounter?.visit_type) === "refill_only";
   }
+
+  await Promise.all(
+    rows.map(({ encounter }) => {
+      const pharmacyStatus =
+        encounter.pharmacyStatus || encounter.pharmacy_status || "";
+
+      const updates = {
+        status: "done",
+        doneAt: encounter.doneAt || encounter.done_at || finalizedAt,
+        visitCompletedAt:
+          encounter.visitCompletedAt ||
+          encounter.visit_completed_at ||
+          finalizedAt,
+      };
+
+      if (isRefillOnly(encounter)) {
+        if (pharmacyStatus === "meds_ready" || pharmacyStatus === "patient_sent") {
+          updates.pharmacyStatus = "meds_not_picked_up";
+        } else if (!pharmacyStatus || pharmacyStatus === "waiting") {
+          updates.pharmacyStatus = "no_meds_needed";
+        }
+      }
+
+      return updateEncounterInSupabase(encounter.id, updates);
+    })
+  );
+
+  const finalizedIds = new Set(rows.map(({ encounter }) => String(encounter.id)));
+
+  setPatients((prev) =>
+    prev.map((patient) => ({
+      ...patient,
+      encounters: patient.encounters.map((encounter) =>
+        finalizedIds.has(String(encounter.id))
+          ? {
+              ...encounter,
+              status: "done",
+              doneAt: encounter.doneAt || finalizedAt,
+              visitCompletedAt: encounter.visitCompletedAt || finalizedAt,
+              ...(((encounter.visitType || encounter.visit_type) === "refill_only" &&
+                (encounter.pharmacyStatus === "meds_ready" ||
+                  encounter.pharmacyStatus === "patient_sent"))
+                ? { pharmacyStatus: "meds_not_picked_up" }
+                : {}),
+              ...(((encounter.visitType || encounter.visit_type) === "refill_only" &&
+                (!encounter.pharmacyStatus || encounter.pharmacyStatus === "waiting"))
+                ? { pharmacyStatus: "no_meds_needed" }
+                : {}),
+            }
+          : encounter
+      ),
+    }))
+  );
+
+  refreshClinicData?.();
+}
 
   async function clearPharmacyStatus(encounterId) {
     await updateEncounterInSupabase(encounterId, {
