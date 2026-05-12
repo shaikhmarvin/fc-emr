@@ -571,219 +571,220 @@ export default function ProgramsView({
     return (
       <div className="space-y-6">
         {canAddAnyProgramEntry && (
-        <Card>
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-semibold text-slate-900">
-                Add Referral Entry
-              </h3>
-              <p className="mt-1 text-sm text-slate-500">
-                Create a new specialty referral from intake.
-              </p>
-            </div>
+          <Card>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Add Referral Entry
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Create a new specialty referral from intake.
+                </p>
+              </div>
 
-            <button
-              onClick={() => setShowAddReferral((prev) => !prev)}
-              className={`rounded-lg px-4 py-2 text-sm font-medium transition ${showAddReferral
+              <button
+                onClick={() => setShowAddReferral((prev) => !prev)}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${showAddReferral
                   ? "border border-slate-300 text-slate-700 hover:bg-slate-50"
                   : "bg-green-600 text-white hover:bg-green-700"
-                }`}
-            >
-              {showAddReferral ? "Hide Form" : "+ Add New Entry"}
-            </button>
-          </div>
+                  }`}
+              >
+                {showAddReferral ? "Hide Form" : "+ Add New Entry"}
+              </button>
+            </div>
 
-          {showAddReferral && (
-            <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
-              <div className="rounded-2xl border border-slate-200 p-4">
-                <h4 className="mb-4 text-sm font-semibold text-slate-900">
-                  Find Patient
-                </h4>
+            {showAddReferral && (
+              <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <h4 className="mb-4 text-sm font-semibold text-slate-900">
+                    Find Patient
+                  </h4>
 
-                <div className="space-y-3">
-                  <Field label="Search Name">
-                    <input
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                      value={patientSearch.name}
-                      onChange={(e) =>
-                        setPatientSearch((prev) => ({ ...prev, name: e.target.value }))
-                      }
-                    />
-                  </Field>
+                  <div className="space-y-3">
+                    <Field label="Search Name">
+                      <input
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                        value={patientSearch.name}
+                        onChange={(e) =>
+                          setPatientSearch((prev) => ({ ...prev, name: e.target.value }))
+                        }
+                      />
+                    </Field>
 
-                  <Field label="Search MRN">
-                    <input
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                      value={patientSearch.mrn}
-                      onChange={(e) =>
-                        setPatientSearch((prev) => ({ ...prev, mrn: e.target.value }))
-                      }
-                    />
-                  </Field>
+                    <Field label="Search MRN">
+                      <input
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                        value={patientSearch.mrn}
+                        onChange={(e) =>
+                          setPatientSearch((prev) => ({ ...prev, mrn: e.target.value }))
+                        }
+                      />
+                    </Field>
 
-                  <Field label="Search DOB">
-                    <input
-                      type="date"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                      value={patientSearch.dob}
-                      onChange={(e) =>
-                        setPatientSearch((prev) => ({ ...prev, dob: e.target.value }))
-                      }
-                    />
-                  </Field>
+                    <Field label="Search DOB">
+                      <input
+                        type="date"
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                        value={patientSearch.dob}
+                        onChange={(e) =>
+                          setPatientSearch((prev) => ({ ...prev, dob: e.target.value }))
+                        }
+                      />
+                    </Field>
 
-                  <div className="max-h-56 overflow-y-auto rounded-lg border border-slate-200">
-                    {filteredPatientOptions.slice(0, 12).map((patient) => (
-                      <button
-                        key={patient.id}
-                        type="button"
-                        onClick={() => handleSelectPatient(patient)}
-                        className={`w-full border-b px-3 py-3 text-left last:border-b-0 hover:bg-slate-50 ${newEntry.patientId === patient.id ? "bg-slate-100" : ""
-                          }`}
+                    <div className="max-h-56 overflow-y-auto rounded-lg border border-slate-200">
+                      {filteredPatientOptions.slice(0, 12).map((patient) => (
+                        <button
+                          key={patient.id}
+                          type="button"
+                          onClick={() => handleSelectPatient(patient)}
+                          className={`w-full border-b px-3 py-3 text-left last:border-b-0 hover:bg-slate-50 ${newEntry.patientId === patient.id ? "bg-slate-100" : ""
+                            }`}
+                        >
+                          <div className="font-medium text-slate-900">
+                            {patient.firstName} {patient.lastName}
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            MRN: {patient.mrn || "—"} | DOB: {formatDisplayDate(patient.dob)} | Phone:{" "}
+                            {patient.phone || "—"}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <h4 className="mb-4 text-sm font-semibold text-slate-900">
+                    Referral Details
+                  </h4>
+
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <Field label="Selected Patient">
+                      <input
+                        className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm"
+                        value={newEntry.patientName}
+                        readOnly
+                      />
+                    </Field>
+
+                    <Field label="Phone">
+                      <input
+                        className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm"
+                        value={newEntry.phone}
+                        readOnly
+                      />
+                    </Field>
+
+                    <Field label="MRN">
+                      <input
+                        className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm"
+                        value={newEntry.mrn}
+                        readOnly
+                      />
+                    </Field>
+
+                    <Field label="DOB">
+                      <input
+                        className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm"
+                        value={newEntry.dob}
+                        readOnly
+                      />
+                    </Field>
+
+                    <Field label="Program Type">
+                      <select
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                        value={newEntry.programType}
+                        onChange={(e) =>
+                          setNewEntry((prev) => {
+                            const nextType = e.target.value;
+                            const statusOptions = getStatusOptions(nextType);
+
+                            return {
+                              ...prev,
+                              programType: nextType,
+                              status: statusOptions.includes(prev.status)
+                                ? prev.status
+                                : statusOptions[0],
+                              specialtyDate: isGenericTrackingProgram(nextType) ? "" : prev.specialtyDate,
+                            };
+                          })
+                        }
                       >
-                        <div className="font-medium text-slate-900">
-                          {patient.firstName} {patient.lastName}
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          MRN: {patient.mrn || "—"} | DOB: {formatDisplayDate(patient.dob)} | Phone:{" "}
-                          {patient.phone || "—"}
-                        </div>
-                      </button>
-                    ))}
+                        {accessibleProgramTypes.map((type) => (
+                          <option key={type} value={type}>
+                            {type}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+
+
+                    <Field label="Status">
+                      <select
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                        value={newEntry.status}
+                        onChange={(e) =>
+                          setNewEntry((prev) => ({ ...prev, status: e.target.value }))
+                        }
+                      >
+                        {getStatusOptions(newEntry.programType).map((status) => (
+                          <option key={status} value={status}>
+                            {status}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+
+                    <Field label="Scheduled Visit Date">
+                      <input
+                        type="date"
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                        value={newEntry.specialtyDate}
+                        onChange={(e) =>
+                          setNewEntry((prev) => ({
+                            ...prev,
+                            specialtyDate: e.target.value,
+                          }))
+                        }
+                      />
+                    </Field>
+
+                    <Field label="Reason" className="md:col-span-2">
+                      <textarea
+                        rows={2}
+                        className="min-h-[70px] w-full resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm leading-snug whitespace-pre-wrap break-words"
+                        value={newEntry.reason}
+                        onChange={(e) =>
+                          setNewEntry((prev) => ({ ...prev, reason: e.target.value }))
+                        }
+                      />
+                    </Field>
+
+                    <Field label="Notes" className="md:col-span-2">
+                      <textarea
+                        className="min-h-[90px] w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                        value={newEntry.notes}
+                        onChange={(e) =>
+                          setNewEntry((prev) => ({ ...prev, notes: e.target.value }))
+                        }
+                      />
+                    </Field>
+                  </div>
+
+                  <div className="mt-4">
+                    <button
+                      onClick={handleAddEntry}
+                      className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                    >
+                      Add Referral
+                    </button>
                   </div>
                 </div>
               </div>
-
-              <div className="rounded-2xl border border-slate-200 p-4">
-                <h4 className="mb-4 text-sm font-semibold text-slate-900">
-                  Referral Details
-                </h4>
-
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <Field label="Selected Patient">
-                    <input
-                      className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm"
-                      value={newEntry.patientName}
-                      readOnly
-                    />
-                  </Field>
-
-                  <Field label="Phone">
-                    <input
-                      className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm"
-                      value={newEntry.phone}
-                      readOnly
-                    />
-                  </Field>
-
-                  <Field label="MRN">
-                    <input
-                      className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm"
-                      value={newEntry.mrn}
-                      readOnly
-                    />
-                  </Field>
-
-                  <Field label="DOB">
-                    <input
-                      className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm"
-                      value={newEntry.dob}
-                      readOnly
-                    />
-                  </Field>
-
-                  <Field label="Program Type">
-                    <select
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                      value={newEntry.programType}
-                      onChange={(e) =>
-                        setNewEntry((prev) => {
-                          const nextType = e.target.value;
-                          const statusOptions = getStatusOptions(nextType);
-
-                          return {
-                            ...prev,
-                            programType: nextType,
-                            status: statusOptions.includes(prev.status)
-                              ? prev.status
-                              : statusOptions[0],
-                            specialtyDate: isGenericTrackingProgram(nextType) ? "" : prev.specialtyDate,
-                          };
-                        })
-                      }
-                    >
-                      {accessibleProgramTypes.map((type) => (
-                        <option key={type} value={type}>
-                          {type}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-
-
-                  <Field label="Status">
-                    <select
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                      value={newEntry.status}
-                      onChange={(e) =>
-                        setNewEntry((prev) => ({ ...prev, status: e.target.value }))
-                      }
-                    >
-                      {getStatusOptions(newEntry.programType).map((status) => (
-                        <option key={status} value={status}>
-                          {status}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-
-                  <Field label="Scheduled Visit Date">
-                    <input
-                      type="date"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                      value={newEntry.specialtyDate}
-                      onChange={(e) =>
-                        setNewEntry((prev) => ({
-                          ...prev,
-                          specialtyDate: e.target.value,
-                        }))
-                      }
-                    />
-                  </Field>
-
-                  <Field label="Reason" className="md:col-span-2">
-                    <input
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                      value={newEntry.reason}
-                      onChange={(e) =>
-                        setNewEntry((prev) => ({ ...prev, reason: e.target.value }))
-                      }
-                    />
-                  </Field>
-
-                  <Field label="Notes" className="md:col-span-2">
-                    <textarea
-                      className="min-h-[90px] w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                      value={newEntry.notes}
-                      onChange={(e) =>
-                        setNewEntry((prev) => ({ ...prev, notes: e.target.value }))
-                      }
-                    />
-                  </Field>
-                </div>
-
-                <div className="mt-4">
-                  <button
-                    onClick={handleAddEntry}
-                    className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-                  >
-                    Add Referral
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </Card>
+            )}
+          </Card>
         )}
 
         <Card>
@@ -934,8 +935,9 @@ export default function ProgramsView({
 
                         <div className="mt-4">
                           <Field label="Reason">
-                            <input
-                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            <textarea
+                              rows={2}
+                              className="min-h-[70px] w-full resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm leading-snug whitespace-pre-wrap break-words"
                               value={getProgramDraftValue(entry, "reason")}
                               onChange={(e) =>
                                 setProgramDraftValue(entry.id, "reason", e.target.value)
@@ -1037,176 +1039,176 @@ export default function ProgramsView({
       return matchesPatient && matchesDob && matchesStatus;
     }));
 
-if (isGenericTracker) {
-  return (
-    <div className="space-y-6">
-      <Card>
-        <h3 className="mb-4 text-lg font-semibold text-slate-900">
-          {programType} Tracking
-        </h3>
+    if (isGenericTracker) {
+      return (
+        <div className="space-y-6">
+          <Card>
+            <h3 className="mb-4 text-lg font-semibold text-slate-900">
+              {programType} Tracking
+            </h3>
 
-        <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Field label="Search Patient">
-            <input
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              value={specialtyFilters[programType]?.patient || ""}
-              onChange={(e) =>
-                setSpecialtyFilters((prev) => ({
-                  ...prev,
-                  [programType]: {
-                    ...prev[programType],
-                    patient: e.target.value,
-                  },
-                }))
-              }
-            />
-          </Field>
+            <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+              <Field label="Search Patient">
+                <input
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={specialtyFilters[programType]?.patient || ""}
+                  onChange={(e) =>
+                    setSpecialtyFilters((prev) => ({
+                      ...prev,
+                      [programType]: {
+                        ...prev[programType],
+                        patient: e.target.value,
+                      },
+                    }))
+                  }
+                />
+              </Field>
 
-          <Field label="Search DOB">
-            <input
-              type="date"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              value={specialtyFilters[programType]?.dob || ""}
-              onChange={(e) =>
-                setSpecialtyFilters((prev) => ({
-                  ...prev,
-                  [programType]: {
-                    ...prev[programType],
-                    dob: e.target.value,
-                  },
-                }))
-              }
-            />
-          </Field>
+              <Field label="Search DOB">
+                <input
+                  type="date"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={specialtyFilters[programType]?.dob || ""}
+                  onChange={(e) =>
+                    setSpecialtyFilters((prev) => ({
+                      ...prev,
+                      [programType]: {
+                        ...prev[programType],
+                        dob: e.target.value,
+                      },
+                    }))
+                  }
+                />
+              </Field>
 
-          <div className="flex items-end">
-            <button
-              onClick={() =>
-                setSpecialtyFilters((prev) => ({
-                  ...prev,
-                  [programType]: { patient: "", dob: "" },
-                }))
-              }
-              className="w-full rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200"
-            >
-              Clear Filters
-            </button>
-          </div>
-        </div>
-
-        {entries.length === 0 ? (
-          <p className="text-sm text-slate-500">No {programType} entries.</p>
-        ) : (
-          <div className="space-y-3">
-            {entries.map((entry) => {
-              const isExpanded = expandedEntryIds.includes(entry.id);
-
-              return (
-                <div
-                  key={entry.id}
-                  className={`rounded-2xl border border-slate-200 bg-white p-4 border-l-4 ${getStatusBorderColor(
-                    entry.status
-                  )}`}
+              <div className="flex items-end">
+                <button
+                  onClick={() =>
+                    setSpecialtyFilters((prev) => ({
+                      ...prev,
+                      [programType]: { patient: "", dob: "" },
+                    }))
+                  }
+                  className="w-full rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200"
                 >
-                  <button
-                    onClick={() =>
-                      setExpandedEntryIds((prev) =>
-                        prev.includes(entry.id)
-                          ? prev.filter((id) => id !== entry.id)
-                          : [...prev, entry.id]
-                      )
-                    }
-                    className="w-full text-left"
-                  >
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                      <ReadOnlyField label="Patient" value={entry.patientName} />
-                      <ReadOnlyField label="Phone" value={entry.phone || "—"} />
-                      <div>
-                        <label className="mb-1 block text-sm font-medium text-slate-700">
-                          Status
-                        </label>
-                        <StatusBadge status={entry.status} />
-                      </div>
-                      <ReadOnlyField label="Reason" value={entry.reason || "—"} />
+                  Clear Filters
+                </button>
+              </div>
+            </div>
+
+            {entries.length === 0 ? (
+              <p className="text-sm text-slate-500">No {programType} entries.</p>
+            ) : (
+              <div className="space-y-3">
+                {entries.map((entry) => {
+                  const isExpanded = expandedEntryIds.includes(entry.id);
+
+                  return (
+                    <div
+                      key={entry.id}
+                      className={`rounded-2xl border border-slate-200 bg-white p-4 border-l-4 ${getStatusBorderColor(
+                        entry.status
+                      )}`}
+                    >
+                      <button
+                        onClick={() =>
+                          setExpandedEntryIds((prev) =>
+                            prev.includes(entry.id)
+                              ? prev.filter((id) => id !== entry.id)
+                              : [...prev, entry.id]
+                          )
+                        }
+                        className="w-full text-left"
+                      >
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                          <ReadOnlyField label="Patient" value={entry.patientName} />
+                          <ReadOnlyField label="Phone" value={entry.phone || "—"} />
+                          <div>
+                            <label className="mb-1 block text-sm font-medium text-slate-700">
+                              Status
+                            </label>
+                            <StatusBadge status={entry.status} />
+                          </div>
+                          <ReadOnlyField label="Reason" value={entry.reason || "—"} />
+                        </div>
+                      </button>
+
+                      {isExpanded && (
+                        <>
+                          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                            <ReadOnlyField label="MRN" value={entry.mrn || "—"} />
+                            <ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} />
+                            <ReadOnlyField
+                              label="Last Contact Attempt"
+                              value={
+                                entry.lastContactAttemptAt
+                                  ? formatDisplayDate(entry.lastContactAttemptAt)
+                                  : "—"
+                              }
+                            />
+
+                            <Field label="Status">
+                              <select
+                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                value={entry.status}
+                                onChange={(e) =>
+                                  handleProgramStatusChange(entry, e.target.value)
+                                }
+                              >
+                                {getStatusOptions(programType).map((status) => (
+                                  <option key={status} value={status}>
+                                    {status}
+                                  </option>
+                                ))}
+                              </select>
+                            </Field>
+                          </div>
+
+                          <div className="mt-4">
+                            <Field label="Reason">
+                              <input
+                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                value={getProgramDraftValue(entry, "reason")}
+                                onChange={(e) =>
+                                  setProgramDraftValue(entry.id, "reason", e.target.value)
+                                }
+                                onBlur={() => saveProgramDraftValue(entry, "reason")}
+                              />
+                            </Field>
+                          </div>
+
+                          <div className="mt-4">
+                            <Field label="Notes">
+                              <textarea
+                                className="min-h-[90px] w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                value={getProgramDraftValue(entry, "notes")}
+                                onChange={(e) =>
+                                  setProgramDraftValue(entry.id, "notes", e.target.value)
+                                }
+                                onBlur={() => saveProgramDraftValue(entry, "notes")}
+                              />
+                            </Field>
+                          </div>
+
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            <button
+                              onClick={() => handleDeleteEntry(entry.id)}
+                              className="rounded-lg bg-red-100 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-200"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
-                  </button>
-
-                  {isExpanded && (
-                    <>
-                      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-                        <ReadOnlyField label="MRN" value={entry.mrn || "—"} />
-                        <ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} />
-                        <ReadOnlyField
-                          label="Last Contact Attempt"
-                          value={
-                            entry.lastContactAttemptAt
-                              ? formatDisplayDate(entry.lastContactAttemptAt)
-                              : "—"
-                          }
-                        />
-
-                        <Field label="Status">
-                          <select
-                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                            value={entry.status}
-                            onChange={(e) =>
-                              handleProgramStatusChange(entry, e.target.value)
-                            }
-                          >
-                            {getStatusOptions(programType).map((status) => (
-                              <option key={status} value={status}>
-                                {status}
-                              </option>
-                            ))}
-                          </select>
-                        </Field>
-                      </div>
-
-                      <div className="mt-4">
-                        <Field label="Reason">
-                          <input
-                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                            value={getProgramDraftValue(entry, "reason")}
-                            onChange={(e) =>
-                              setProgramDraftValue(entry.id, "reason", e.target.value)
-                            }
-                            onBlur={() => saveProgramDraftValue(entry, "reason")}
-                          />
-                        </Field>
-                      </div>
-
-                      <div className="mt-4">
-                        <Field label="Notes">
-                          <textarea
-                            className="min-h-[90px] w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                            value={getProgramDraftValue(entry, "notes")}
-                            onChange={(e) =>
-                              setProgramDraftValue(entry.id, "notes", e.target.value)
-                            }
-                            onBlur={() => saveProgramDraftValue(entry, "notes")}
-                          />
-                        </Field>
-                      </div>
-
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        <button
-                          onClick={() => handleDeleteEntry(entry.id)}
-                          className="rounded-lg bg-red-100 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-200"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </Card>
-    </div>
-  );
-}
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+        </div>
+      );
+    }
 
     const referralEntries = entries;
 
@@ -1399,8 +1401,8 @@ if (isGenericTracker) {
                               }));
                             }}
                             className={`px-3 py-2 rounded-lg text-sm border ${isSelected
-                                ? "bg-blue-600 text-white"
-                                : "bg-white text-slate-700"
+                              ? "bg-blue-600 text-white"
+                              : "bg-white text-slate-700"
                               }`}
                           >
                             {room.label}
@@ -1561,7 +1563,7 @@ if (isGenericTracker) {
                         </div>
 
                         <div className="md:col-span-3">
-                          <ReadOnlyField label="Reason" value={entry.reason || "—"} />
+                          <ReadOnlyField label="Reason" value={entry.reason || "—"} multiline />
                         </div>
                       </div>
                     </button>
@@ -1886,7 +1888,7 @@ function Field({ label, children, className = "" }) {
   );
 }
 
-function ReadOnlyField({ label, value, copyable = true }) {
+function ReadOnlyField({ label, value, copyable = true, multiline = false }) {
   const displayValue = value || "—";
 
   async function copyValue(event) {
@@ -1901,13 +1903,21 @@ function ReadOnlyField({ label, value, copyable = true }) {
   }
 
   return (
-    <div onClick={(e) => e.stopPropagation()}>
+    <div className="min-w-0" onClick={(e) => e.stopPropagation()}>
       <label className="mb-1 block text-sm font-medium text-slate-700">
         {label}
       </label>
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-start gap-2">
         <div className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800">
-          <span className="truncate">{displayValue}</span>
+          <span
+            className={
+              multiline
+                ? "block whitespace-normal break-words leading-snug"
+                : "block truncate"
+            }
+          >
+            {displayValue}
+          </span>
         </div>
 
         {copyable && (
