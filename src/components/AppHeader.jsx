@@ -36,7 +36,19 @@ export default function AppHeader({
                 {activeView === "queue" && "Live Waiting Queue"}
                 {activeView === "board" && "Main Room Board"}
                 {activeView === "formulary" && "Clinic Formulary"}
-                {activeView === "chart" ? "Patient Chart" : ""}
+                {activeView === "chart" && "Patient Chart"}
+                {activeView === "programs" && "Programs Tracker"}
+                {activeView === "lab" && "Lab Queue"}
+                {activeView === "lab-import" && "Lab Import Review"}
+                {activeView === "specialty-queue" && "Specialty Queue"}
+                {activeView === "pharmacy" && "Pharmacy Queue"}
+                {activeView === "users" && "User Management"}
+                {activeView === "undergrad-intake" && "Patient Intake"}
+                {activeView === "analytics" && "Clinic Analytics"}
+                {activeView === "roomboard" && "Room Board"}
+                {activeView === "summary" && "Clinic Summary"}
+                {activeView === "pap" && "Patient Assistance Program Tracker"}
+                {activeView === "registration" && "Patient Registration"}
               </h2>
 
               <p className="text-sm text-slate-500">
