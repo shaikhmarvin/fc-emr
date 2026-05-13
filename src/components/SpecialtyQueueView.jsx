@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { VISIT_TYPE_BADGE_STYLES } from "../constants";
 
 function isDualVisit(patient, encounter) {
     const intakeData = encounter?.intakeData || encounter?.intake_data || {};
@@ -57,7 +58,9 @@ function getSpecialtyLabel(type) {
 
 function dualSpecialtyBadge(encounter) {
     return (
-        <span className="inline-flex items-center whitespace-nowrap rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+        <span
+            className={`inline-flex items-center whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold ${VISIT_TYPE_BADGE_STYLES.both.badgeClass}`}
+        >
             General + {getSpecialtyLabel(encounter?.specialtyType)}
         </span>
     );
@@ -185,12 +188,14 @@ function SpecialtyTable({
 
                                     <div>
                                         {isDualVisit(patient, encounter) ? (
-    dualSpecialtyBadge(encounter)
-) : (
-    <span className="inline-flex items-center whitespace-nowrap rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-800">
-        Specialty Only
-    </span>
-)}
+                                            dualSpecialtyBadge(encounter)
+                                        ) : (
+                                            <span
+                                                className={`inline-flex items-center whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold ${VISIT_TYPE_BADGE_STYLES.specialty_only.badgeClass}`}
+                                            >
+                                                Specialty Only
+                                            </span>
+                                        )}
                                     </div>
 
                                     <div className="text-slate-700">
@@ -235,12 +240,14 @@ function SpecialtyTable({
                                     </div>
 
                                     {isDualVisit(patient, encounter) ? (
-    dualSpecialtyBadge(encounter)
-) : (
-    <span className="inline-flex items-center whitespace-nowrap rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-800">
-        Specialty Only
-    </span>
-)}
+                                        dualSpecialtyBadge(encounter)
+                                    ) : (
+                                        <span
+                                            className={`inline-flex items-center whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold ${VISIT_TYPE_BADGE_STYLES.specialty_only.badgeClass}`}
+                                        >
+                                            Specialty Only
+                                        </span>
+                                    )}
                                 </div>
 
                                 <div className="text-sm text-slate-600">
@@ -271,20 +278,20 @@ function SpecialtyTable({
 export default function SpecialtyQueueView({
     specialtyEncounterRows,
     selectedClinicDate,
-setSelectedClinicDate,
+    setSelectedClinicDate,
     openPatientChart,
     getFullPatientName,
     formatDate,
     isLeadershipView,
     dualVisitBadge,
-    
+
 }) {
 
     const [selectedSpecialty, setSelectedSpecialty] = useState("");
 
     const [search, setSearch] = useState("");
     const today = new Date().toISOString().slice(0, 10);
-const effectiveClinicDate = selectedClinicDate || today;
+    const effectiveClinicDate = selectedClinicDate || today;
 
     const ptRows = specialtyEncounterRows.filter(
         ({ encounter }) => encounter.specialtyType === "pt"
@@ -324,41 +331,45 @@ const effectiveClinicDate = selectedClinicDate || today;
                     </div>
 
                     <div className="grid w-full gap-3 lg:max-w-2xl lg:grid-cols-[180px_1fr]">
-    <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">
-            Clinic Date
-        </label>
-        <input
-            type="date"
-            value={effectiveClinicDate}
-            onChange={(e) => setSelectedClinicDate?.(e.target.value)}
-            className="min-w-0 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
-        />
-    </div>
+                        <div>
+                            <label className="mb-1 block text-sm font-medium text-slate-700">
+                                Clinic Date
+                            </label>
+                            <input
+                                type="date"
+                                value={effectiveClinicDate}
+                                onChange={(e) => setSelectedClinicDate?.(e.target.value)}
+                                className="min-w-0 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                            />
+                        </div>
 
-    <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">
-            Search patients
-        </label>
-        <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search name, DOB, daily #, MRN, phone, specialty, complaint"
-            className="min-h-[44px] w-full rounded-lg border border-slate-300 px-3 py-2 text-sm sm:text-base"
-        />
-    </div>
-</div>
+                        <div>
+                            <label className="mb-1 block text-sm font-medium text-slate-700">
+                                Search patients
+                            </label>
+                            <input
+                                type="text"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                placeholder="Search name, DOB, daily #, MRN, phone, specialty, complaint"
+                                className="min-h-[44px] w-full rounded-lg border border-slate-300 px-3 py-2 text-sm sm:text-base"
+                            />
+                        </div>
+                    </div>
                 </div>
 
                 <div className="mt-4 flex flex-wrap gap-2">
                     <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
                         Total Matches: {totalMatches}
                     </span>
-                    <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-800">
+                    <span
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold ${VISIT_TYPE_BADGE_STYLES.specialty_only.badgeClass}`}
+                    >
                         Specialty Only
                     </span>
-                    <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-800">
+                    <span
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold ${VISIT_TYPE_BADGE_STYLES.both.badgeClass}`}
+                    >
                         General + Specialty
                     </span>
                 </div>

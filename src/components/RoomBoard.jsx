@@ -1,4 +1,5 @@
 import { getStatusLabel } from "../utils";
+import { VISIT_TYPE_BADGE_STYLES, getEncounterVisitTypeKey } from "../constants";
 
 function normalizeName(value) {
   return (value || "").trim();
@@ -341,19 +342,15 @@ export default function RoomBoard({
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    {primaryEncounter.visitType !== "general" && (
-                      <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-800">
-                        {rules?.label ||
-                          specialtyLabelMap[primaryEncounter.specialtyType] ||
-                          "Specialty"}
-                      </span>
-                    )}
-
-                    {primaryEncounter.visitType === "both" && (
-                      <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
-                        Dual Visit
-                      </span>
-                    )}
+                    {getEncounterVisitTypeKey(primaryEncounter) !== "general" && (
+  <span
+    className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${
+      VISIT_TYPE_BADGE_STYLES[getEncounterVisitTypeKey(primaryEncounter)]?.badgeClass
+    }`}
+  >
+    {VISIT_TYPE_BADGE_STYLES[getEncounterVisitTypeKey(primaryEncounter)]?.label}
+  </span>
+)}
 
                     {newReturningBadge?.(primaryEncounter)}
                     {priorityBadge(primaryEncounter)}

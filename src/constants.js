@@ -111,3 +111,62 @@ export const PROGRAM_STATUSES = [
   "Completed",
   "No Show",
 ];
+
+export const VISIT_TYPE_BADGE_STYLES = {
+  general: {
+    label: "General",
+    badgeClass: "border-blue-200 bg-blue-50 text-blue-800",
+    cardClass: "border-blue-200 bg-blue-50",
+    labelClass: "text-blue-800",
+    countClass: "text-blue-900",
+    activeFilterClass: "border-blue-300 bg-blue-100 text-blue-900",
+  },
+  both: {
+    label: "General + Specialty",
+    badgeClass: "border-violet-200 bg-violet-50 text-violet-800",
+    cardClass: "border-violet-200 bg-violet-50",
+    labelClass: "text-violet-800",
+    countClass: "text-violet-900",
+    activeFilterClass: "border-violet-300 bg-violet-100 text-violet-900",
+  },
+  specialty_only: {
+    label: "Specialty Only",
+    badgeClass: "border-amber-200 bg-amber-50 text-amber-800",
+    cardClass: "border-amber-200 bg-amber-50",
+    labelClass: "text-amber-800",
+    countClass: "text-amber-900",
+    activeFilterClass: "border-amber-300 bg-amber-100 text-amber-900",
+  },
+  refill_only: {
+    label: "Refill Only",
+    badgeClass: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    cardClass: "border-emerald-200 bg-emerald-50",
+    labelClass: "text-emerald-800",
+    countClass: "text-emerald-900",
+    activeFilterClass: "border-emerald-300 bg-emerald-100 text-emerald-900",
+  },
+};
+
+export const VISIT_TYPE_FILTERS = [
+  { key: "all", label: "All" },
+  { key: "general", label: "General" },
+  { key: "both", label: "General + Specialty" },
+  { key: "specialty_only", label: "Specialty Only" },
+  { key: "refill_only", label: "Refill Only" },
+];
+
+export function getEncounterVisitTypeKey(encounter) {
+  const intakeData = encounter?.intakeData || encounter?.intake_data || {};
+  const visitType =
+    encounter?.visitType ||
+    encounter?.visit_type ||
+    intakeData?.visitType ||
+    intakeData?.visit_type ||
+    "general";
+
+  if (visitType === "both") return "both";
+  if (visitType === "specialty_only") return "specialty_only";
+  if (visitType === "refill_only") return "refill_only";
+
+  return "general";
+}

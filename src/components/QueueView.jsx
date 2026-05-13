@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { formatDate, getStatusClasses, getStatusLabel } from "../utils";
+import { VISIT_TYPE_BADGE_STYLES, getEncounterVisitTypeKey } from "../constants";
 export default function QueueView({
   userRole,
   searchForm,
@@ -695,24 +696,8 @@ function getVisitReasonLabel(encounter) {
 }
 
 function getVisitReasonBadgeClasses(encounter) {
-  const intakeData = encounter?.intakeData || encounter?.intake_data || {};
-  const visitType =
-    encounter?.visitType ||
-    encounter?.visit_type ||
-    intakeData?.visitType ||
-    intakeData?.visit_type ||
-    "general";
-
-  if (visitType === "refill_only") {
-    return "bg-purple-100 text-purple-900 ring-purple-200";
-  }
-  if (visitType === "specialty_only") {
-    return "bg-amber-100 text-amber-900 ring-amber-200";
-  }
-  if (visitType === "both" || getEncounterSpecialtyName(encounter)) {
-    return "bg-indigo-100 text-indigo-900 ring-indigo-200";
-  }
-  return "bg-slate-100 text-slate-900 ring-slate-200";
+  const key = getEncounterVisitTypeKey(encounter);
+  return VISIT_TYPE_BADGE_STYLES[key]?.badgeClass || VISIT_TYPE_BADGE_STYLES.general.badgeClass;
 }
 
 function isPharmacyWorkflowEncounter(encounter) {
@@ -934,17 +919,15 @@ const filteredWaitingEncounterRows = (waitingEncounterRows || []).filter(
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    {isRefillOnlyEncounter(encounter) && (
-                      <span className="rounded-full bg-purple-100 px-2 py-1 text-xs font-semibold text-purple-800">
-                        Refill Only
-                      </span>
-                    )}
-
-                    {isSpecialtyOnlyEncounter(encounter) && (
-                      <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
-                        Specialty Only
-                      </span>
-                    )}
+                    {["refill_only", "specialty_only"].includes(getEncounterVisitTypeKey(encounter)) && (
+  <span
+    className={`rounded-full border px-2 py-1 text-xs font-semibold ${
+      VISIT_TYPE_BADGE_STYLES[getEncounterVisitTypeKey(encounter)]?.badgeClass
+    }`}
+  >
+    {VISIT_TYPE_BADGE_STYLES[getEncounterVisitTypeKey(encounter)]?.label}
+  </span>
+)}
 
                     {dualVisitBadge?.(encounter)}
                     {newReturningBadge?.(encounter)}

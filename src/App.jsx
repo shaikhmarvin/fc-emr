@@ -108,6 +108,7 @@ import {
   PT_TIME_SLOTS,
   PROGRAM_TYPES,
   PROGRAM_STATUSES,
+  VISIT_TYPE_BADGE_STYLES,
 } from "./constants";
 import {
   calculateAge,
@@ -354,7 +355,7 @@ function dualVisitBadge(encounter) {
     "Specialty";
 
   return (
-    <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
+    <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${VISIT_TYPE_BADGE_STYLES.both.badgeClass}`}>
       General + {specialtyLabel}
     </span>
   );

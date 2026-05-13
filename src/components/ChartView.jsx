@@ -4,6 +4,7 @@ import OphthalmologySoapForm from "./OphthalmologySoapForm";
 import { downloadEncounterPdf } from "../utils/pdfGenerator";
 import logo from "../assets/free-clinic-logo.png";
 import { getClinicAlert } from "../utils/clinicAlerts";
+import { VISIT_TYPE_BADGE_STYLES, getEncounterVisitTypeKey } from "../constants";
 export default function ChartView({
   selectedPatient,
   selectedEncounter,
@@ -1398,15 +1399,27 @@ function getSelectedRoomOptionClass() {
       </div>
 
       {specialtyBadgeText && (
-  <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
-    <span className="text-xs font-semibold uppercase tracking-wide text-amber-700">
-      Visit Type
-    </span>
+  <div
+  className={`flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 ${
+    VISIT_TYPE_BADGE_STYLES[getEncounterVisitTypeKey(selectedEncounter)]?.cardClass
+  }`}
+>
+  <span
+    className={`text-xs font-semibold uppercase tracking-wide ${
+      VISIT_TYPE_BADGE_STYLES[getEncounterVisitTypeKey(selectedEncounter)]?.labelClass
+    }`}
+  >
+    Visit Type
+  </span>
 
-    <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
-      {specialtyBadgeText}
-    </span>
-  </div>
+  <span
+    className={`rounded-full border px-2 py-1 text-xs font-semibold ${
+      VISIT_TYPE_BADGE_STYLES[getEncounterVisitTypeKey(selectedEncounter)]?.badgeClass
+    }`}
+  >
+    {specialtyBadgeText}
+  </span>
+</div>
 )}
       <div className="grid grid-cols-1 gap-4">
 

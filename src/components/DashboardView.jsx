@@ -4,6 +4,11 @@ import PatientTable from "./PatientTable";
 import { downloadSignedEncountersZip } from "../utils/pdfGenerator";
 import logo from "../assets/free-clinic-logo.png";
 import { formatDate } from "../utils";
+import {
+  VISIT_TYPE_BADGE_STYLES,
+  VISIT_TYPE_FILTERS,
+  getEncounterVisitTypeKey,
+} from "../constants";
 
 export default function DashboardView({
   isLeadershipView,
@@ -42,6 +47,8 @@ export default function DashboardView({
   );
 
   const [showLabFollowUp, setShowLabFollowUp] = useState(false);
+
+  const [visitTypeFilter, setVisitTypeFilter] = useState("all");
 
   const [showAnalytics, setShowAnalytics] = useState(false);
 
@@ -294,6 +301,45 @@ export default function DashboardView({
   function getVisitType(encounter) {
     return encounter?.visitType || encounter?.visit_type || "general";
   }
+
+  function getRowsForPatient(patient) {
+    return visibleEncounterRows.filter(
+      ({ patient: rowPatient }) => rowPatient?.id === patient?.id
+    );
+  }
+
+  function getPatientVisitTypeSummary(patient) {
+    const rows = getRowsForPatient(patient);
+    const visitTypes = new Set(
+      rows.map(({ encounter }) => getEncounterVisitTypeKey(encounter))
+    );
+
+    if (visitTypes.has("refill_only")) return "refill_only";
+    if (visitTypes.has("both")) return "both";
+    if (visitTypes.has("general") && visitTypes.has("specialty_only")) return "both";
+    if (visitTypes.has("specialty_only")) return "specialty_only";
+
+    return "general";
+  }
+
+  const visitTypeCounts = {
+    general: 0,
+    both: 0,
+    specialty_only: 0,
+    refill_only: 0,
+  };
+
+  filteredVisiblePatients.forEach((patient) => {
+    const key = getPatientVisitTypeSummary(patient);
+    visitTypeCounts[key] += 1;
+  });
+
+  const visitTypeFilteredPatients =
+    visitTypeFilter === "all"
+      ? filteredVisiblePatients
+      : filteredVisiblePatients.filter(
+        (patient) => getPatientVisitTypeSummary(patient) === visitTypeFilter
+      );
 
   function isGeneralClinicEncounter(encounter) {
     const visitType = getVisitType(encounter);
@@ -794,99 +840,59 @@ export default function DashboardView({
           </div>
 
           <div className="grid w-full gap-2 sm:grid-cols-2 lg:w-auto lg:min-w-[420px]">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm font-medium text-slate-600">General</span>
-                <span className="text-xl font-bold text-slate-900">
-                  {
-                    filteredVisiblePatients.filter((patient) => {
-                      const encounters = visibleEncounterRows.filter(
-                        ({ patient: rowPatient }) => rowPatient.id === patient.id
-                      );
+            {["general", "both", "specialty_only", "refill_only"].map((key) => {
+              const style = VISIT_TYPE_BADGE_STYLES[key];
 
-                      const hasGeneral = encounters.some(
-                        ({ encounter }) => encounter?.visitType === "general"
-                      );
+              return (
+                <div
+                  key={key}
+                  className={`rounded-xl border px-3 py-2 ${style.cardClass}`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className={`text-sm font-medium ${style.labelClass}`}>
+                      {style.label}
+                    </span>
+                    <span className={`text-xl font-bold ${style.countClass}`}>
+                      {visitTypeCounts[key]}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
 
-                      const hasSpecialty = encounters.some(
-                        ({ encounter }) => encounter?.visitType === "specialty_only"
-                      );
+        <div className="mt-4 border-t border-slate-200 pt-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Filter Patients
+          </p>
 
-                      return hasGeneral && !hasSpecialty;
-                    }).length
-                  }
-                </span>
-              </div>
-            </div>
+          <div className="flex flex-wrap gap-2">
+            {VISIT_TYPE_FILTERS.map((filter) => {
+              const isActive = visitTypeFilter === filter.key;
+              const style =
+                filter.key === "all"
+                  ? null
+                  : VISIT_TYPE_BADGE_STYLES[filter.key];
 
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm font-medium text-amber-800">
-                  General + Specialty
-                </span>
-                <span className="text-xl font-bold text-amber-900">
-                  {
-                    filteredVisiblePatients.filter((patient) => {
-                      const encounters = visibleEncounterRows.filter(
-                        ({ patient: rowPatient }) => rowPatient.id === patient.id
-                      );
-
-                      const hasGeneral = encounters.some(
-                        ({ encounter }) => encounter?.visitType === "general"
-                      );
-
-                      const hasSpecialty = encounters.some(
-                        ({ encounter }) => encounter?.visitType === "specialty_only"
-                      );
-
-                      return hasGeneral && hasSpecialty;
-                    }).length
-                  }
-                </span>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm font-medium text-violet-800">
-                  Specialty Only
-                </span>
-                <span className="text-xl font-bold text-violet-900">
-                  {
-                    filteredVisiblePatients.filter((patient) => {
-                      const encounters = visibleEncounterRows.filter(
-                        ({ patient: rowPatient }) => rowPatient.id === patient.id
-                      );
-
-                      const hasGeneral = encounters.some(
-                        ({ encounter }) => encounter?.visitType === "general"
-                      );
-
-                      const hasSpecialty = encounters.some(
-                        ({ encounter }) => encounter?.visitType === "specialty_only"
-                      );
-
-                      return !hasGeneral && hasSpecialty;
-                    }).length
-                  }
-                </span>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm font-medium text-emerald-800">
-                  Refill Only
-                </span>
-                <span className="text-xl font-bold text-emerald-900">
-                  {
-                    visibleEncounterRows.filter(
-                      ({ encounter }) => encounter?.visitType === "refill_only"
-                    ).length
-                  }
-                </span>
-              </div>
-            </div>
+              return (
+                <button
+                  key={filter.key}
+                  type="button"
+                  onClick={() => setVisitTypeFilter(filter.key)}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${isActive
+                      ? filter.key === "all"
+                        ? "border-slate-400 bg-slate-800 text-white"
+                        : style.activeFilterClass
+                      : filter.key === "all"
+                        ? "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                        : `${style.badgeClass} hover:opacity-80`
+                    }`}
+                >
+                  {filter.label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -928,6 +934,7 @@ export default function DashboardView({
 
       <div className="rounded-2xl bg-white p-3 shadow sm:p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+
           <PatientSearch searchForm={searchForm} setSearchForm={setSearchForm} />
 
           {(canEditUndergradFields || canEditAllPatientFields) && (
@@ -1038,7 +1045,8 @@ export default function DashboardView({
 
       <PatientTable
         title={patientRecordsTitle}
-        patients={filteredVisiblePatients}
+        patients={visitTypeFilteredPatients}
+        getPatientVisitTypeSummary={getPatientVisitTypeSummary}
         onSelectPatient={openPatientFromFilteredView}
         getFullPatientName={getFullPatientName}
         canEditMrn={canEditMrn}

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { formatDate, getStatusLabel } from "../utils";
 import { getClinicAlert } from "../utils/clinicAlerts";
+import { VISIT_TYPE_BADGE_STYLES, getEncounterVisitTypeKey } from "../constants";
 
 const CLINIC_URL = "https://fc-emr.vercel.app/"; // CHANGE THIS
 const WIFI_NAME = "Volunteers"; // CHANGE THIS
@@ -307,11 +308,15 @@ export default function BoardDisplay({
                     </div>
 
                     <div className="flex flex-wrap gap-1 overflow-hidden">
-                      {primaryEncounter.visitType === "both" && (
-                        <span className="rounded-full bg-amber-200 px-2 py-0.5 text-xs font-extrabold text-amber-950">
-                          Dual Visit
-                        </span>
-                      )}
+                      {getEncounterVisitTypeKey(primaryEncounter) !== "general" && (
+  <span
+    className={`rounded-full border px-2 py-0.5 text-xs font-extrabold ${
+      VISIT_TYPE_BADGE_STYLES[getEncounterVisitTypeKey(primaryEncounter)]?.badgeClass
+    }`}
+  >
+    {VISIT_TYPE_BADGE_STYLES[getEncounterVisitTypeKey(primaryEncounter)]?.label}
+  </span>
+)}
 
                       {newReturningBadge?.(primaryEncounter)}
                       {priorityBadge(primaryEncounter)}

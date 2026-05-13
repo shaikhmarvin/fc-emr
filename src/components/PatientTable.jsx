@@ -1,4 +1,5 @@
 import { formatDate } from "../utils";
+import { VISIT_TYPE_BADGE_STYLES } from "../constants";
 
 export default function PatientTable({
   title,
@@ -10,6 +11,7 @@ export default function PatientTable({
   canDeletePatient,
   deletePatientCompletely,
   selectedPatientId,
+  getPatientVisitTypeSummary,
 }) {
   return (
     <div className="rounded-2xl bg-white shadow">
@@ -40,9 +42,25 @@ export default function PatientTable({
                     : ""
                   }`}
               >
-                <td className="px-4 py-3 font-semibold text-slate-800">
-                  {getFullPatientName(patient)}
-                </td>
+                <td className="px-4 py-3">
+  <div className="flex flex-col gap-1">
+    <span className="font-semibold text-slate-800">
+      {getFullPatientName(patient)}
+    </span>
+
+    {getPatientVisitTypeSummary && (
+      <span
+        className={`w-fit rounded-full border px-2 py-0.5 text-xs font-semibold ${
+          VISIT_TYPE_BADGE_STYLES[getPatientVisitTypeSummary(patient)]?.badgeClass ||
+          VISIT_TYPE_BADGE_STYLES.general.badgeClass
+        }`}
+      >
+        {VISIT_TYPE_BADGE_STYLES[getPatientVisitTypeSummary(patient)]?.label ||
+          "General"}
+      </span>
+    )}
+  </div>
+</td>
 
                 <td className="px-4 py-3">{patient.mrn || "—"}</td>
 
@@ -96,6 +114,17 @@ export default function PatientTable({
               <p className="text-base font-semibold text-slate-900">
                 {getFullPatientName(patient)}
               </p>
+              {getPatientVisitTypeSummary && (
+  <span
+    className={`inline-flex w-fit rounded-full border px-2 py-0.5 text-xs font-semibold ${
+      VISIT_TYPE_BADGE_STYLES[getPatientVisitTypeSummary(patient)]?.badgeClass ||
+      VISIT_TYPE_BADGE_STYLES.general.badgeClass
+    }`}
+  >
+    {VISIT_TYPE_BADGE_STYLES[getPatientVisitTypeSummary(patient)]?.label ||
+      "General"}
+  </span>
+)}
               <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-slate-600">
                 <span>MRN: {patient.mrn || "—"}</span>
                 <span>DOB: {formatDate(patient.dob) || "—"}</span>
