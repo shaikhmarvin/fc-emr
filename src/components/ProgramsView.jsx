@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { PT_TIME_SLOTS, ROOM_OPTIONS } from "../constants";
 import { fetchProgramSettings, updateProgramSetting } from "../api/programSettings";
+import { createPatientInSupabase } from "../api/patients";
 
 
 
@@ -130,6 +131,16 @@ export default function ProgramsView({
     schedulePosition: null,
     appointmentSlot: "",
   });
+
+  const [manualPatient, setManualPatient] = useState({
+  firstName: "",
+  lastName: "",
+  dob: "",
+  phone: "",
+  mrn: "",
+});
+
+const [savingManualPatient, setSavingManualPatient] = useState(false);
 
   function getProgramDraftValue(entry, field) {
     return programDrafts[entry.id]?.[field] ?? entry[field] ?? "";
@@ -316,6 +327,49 @@ export default function ProgramsView({
 
     setPatientSearch({ name: "", mrn: "", dob: "" });
   }
+
+  async function handleCreateHistoricalPatient() {
+  if (!canAddAnyProgramEntry) return;
+
+  if (
+    !manualPatient.firstName.trim() ||
+    !manualPatient.lastName.trim() ||
+    !manualPatient.dob ||
+    !manualPatient.phone.trim() ||
+    !manualPatient.mrn.trim()
+  ) {
+    alert("Please fill out first name, last name, DOB, phone, and MRN.");
+    return;
+  }
+
+  setSavingManualPatient(true);
+
+  try {
+    const createdPatient = await createPatientInSupabase({
+      firstName: manualPatient.firstName.trim(),
+      lastName: manualPatient.lastName.trim(),
+      dob: manualPatient.dob,
+      phone: manualPatient.phone.trim(),
+      mrn: manualPatient.mrn.trim(),
+      intakeStatus: "historical-specialty",
+    });
+
+    handleSelectPatient(createdPatient);
+
+    setManualPatient({
+      firstName: "",
+      lastName: "",
+      dob: "",
+      phone: "",
+      mrn: "",
+    });
+  } catch (error) {
+    console.error("Failed creating historical specialty patient:", error);
+    alert("Could not create patient. Check console/Supabase error.");
+  } finally {
+    setSavingManualPatient(false);
+  }
+}
 
   function handleAddEntry() {
     if (!canAddAnyProgramEntry) return;
@@ -568,6 +622,47 @@ export default function ProgramsView({
     return `${datePart} ${timePart}`;
   }
 
+  async function handleCreateHistoricalPatient() {
+  if (
+    !manualPatient.firstName.trim() ||
+    !manualPatient.lastName.trim() ||
+    !manualPatient.dob ||
+    !manualPatient.phone.trim() ||
+    !manualPatient.mrn.trim()
+  ) {
+    alert("Please fill out all patient fields.");
+    return;
+  }
+
+  try {
+    setSavingManualPatient(true);
+
+    const createdPatient = await createPatientInSupabase({
+      firstName: manualPatient.firstName,
+      lastName: manualPatient.lastName,
+      dob: manualPatient.dob,
+      phone: manualPatient.phone,
+      mrn: manualPatient.mrn,
+      intakeStatus: "historical-specialty",
+    });
+
+    handleSelectPatient(createdPatient);
+
+    setManualPatient({
+      firstName: "",
+      lastName: "",
+      dob: "",
+      phone: "",
+      mrn: "",
+    });
+  } catch (error) {
+    console.error(error);
+    alert("Failed creating patient.");
+  } finally {
+    setSavingManualPatient(false);
+  }
+}
+
   function renderTracker() {
     return (
       <div className="space-y-6">
@@ -652,6 +747,94 @@ export default function ProgramsView({
                         </button>
                       ))}
                     </div>
+                    <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4">
+  <h4 className="mb-3 text-sm font-semibold text-slate-900">
+    Patient not found?
+  </h4>
+
+  <p className="mb-4 text-xs text-slate-500">
+    Create historical/manual specialty patient
+  </p>
+
+  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+    <Field label="First Name">
+      <input
+        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        value={manualPatient.firstName}
+        onChange={(e) =>
+          setManualPatient((prev) => ({
+            ...prev,
+            firstName: e.target.value,
+          }))
+        }
+      />
+    </Field>
+
+    <Field label="Last Name">
+      <input
+        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        value={manualPatient.lastName}
+        onChange={(e) =>
+          setManualPatient((prev) => ({
+            ...prev,
+            lastName: e.target.value,
+          }))
+        }
+      />
+    </Field>
+
+    <Field label="DOB">
+      <input
+        type="date"
+        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        value={manualPatient.dob}
+        onChange={(e) =>
+          setManualPatient((prev) => ({
+            ...prev,
+            dob: e.target.value,
+          }))
+        }
+      />
+    </Field>
+
+    <Field label="Phone">
+      <input
+        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        value={manualPatient.phone}
+        onChange={(e) =>
+          setManualPatient((prev) => ({
+            ...prev,
+            phone: e.target.value,
+          }))
+        }
+      />
+    </Field>
+
+    <Field label="MRN">
+      <input
+        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        value={manualPatient.mrn}
+        onChange={(e) =>
+          setManualPatient((prev) => ({
+            ...prev,
+            mrn: e.target.value,
+          }))
+        }
+      />
+    </Field>
+  </div>
+
+  <button
+    type="button"
+    onClick={handleCreateHistoricalPatient}
+    disabled={savingManualPatient}
+    className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+  >
+    {savingManualPatient
+      ? "Creating Patient..."
+      : "Create Patient + Select"}
+  </button>
+</div>
                   </div>
                 </div>
 
@@ -1172,7 +1355,7 @@ export default function ProgramsView({
             <div className="mt-4 rounded-xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm text-violet-900">
               {ophthoClinicMode === "on_day"
                 ? "On Day: showing patients scheduled/flagged for ophthalmology today."
-                : "Off Day: showing today’s leadership-completed patients with ophtho interest or diabetes screening need. HTN alone is not included."}
+                : "Off Day: showing today’s leadership-completed patients with ophtho interest or diabetes screening need."}
             </div>
           </Card>
 
