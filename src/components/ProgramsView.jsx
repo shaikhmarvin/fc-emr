@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { PT_TIME_SLOTS, ROOM_OPTIONS } from "../constants";
+import {
+  PT_TIME_SLOTS,
+  ROOM_OPTIONS,
+  formatPhone,
+} from "../constants";
 import { fetchProgramSettings, updateProgramSetting } from "../api/programSettings";
 import { createPatientInSupabase } from "../api/patients";
 
@@ -802,11 +806,11 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
         className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
         value={manualPatient.phone}
         onChange={(e) =>
-          setManualPatient((prev) => ({
-            ...prev,
-            phone: e.target.value,
-          }))
-        }
+  setManualPatient((prev) => ({
+    ...prev,
+    phone: formatPhone(e.target.value),
+  }))
+}
       />
     </Field>
 
