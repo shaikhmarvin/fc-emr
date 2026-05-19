@@ -20,6 +20,25 @@ function getTodayInputValue() {
   return `${year}-${month}-${day}`;
 }
 
+function getLivePatientData(entry, patientsById) {
+  const patientId = entry?.patientId ?? entry?.patient_id;
+  const patient =
+    patientsById?.[patientId] ??
+    patientsById?.[String(patientId)];
+
+  return {
+    patientName: patient
+      ? `${patient.firstName || ""} ${patient.lastName || ""}`.trim()
+      : entry?.patientName || "Unknown Patient",
+
+    dob: patient?.dob || entry?.dob || "",
+
+    mrn: patient?.mrn || entry?.mrn || "",
+
+    phone: patient?.phone || entry?.phone || "",
+  };
+}
+
 export default function PAPView({
   papEntries,
   addPapEntry,
@@ -43,6 +62,15 @@ export default function PAPView({
     dueFilter: "",
   });
 
+  const patientsById = useMemo(() => {
+    const map = {};
+    (patients || []).forEach((p) => {
+      map[p.id] = p;
+      map[String(p.id)] = p;
+    });
+    return map;
+  }, [patients]);
+
   const [expandedEntryIds, setExpandedEntryIds] = useState([]);
 
   const [papDrafts, setPapDrafts] = useState({});
@@ -53,6 +81,7 @@ export default function PAPView({
     patientId: "",
     patientName: "",
     mrn: "",
+    dob: "",
     phone: "",
     medication: "",
     company: "",
@@ -190,7 +219,7 @@ function savePapDraftValue(entry, field) {
           (filters.dueFilter === "overdue" && dueState === "overdue") ||
           (filters.dueFilter === "none" && dueState === "none");
 
-        const patientText = (entry.patientName || "").toLowerCase();
+        const patientText = (getLivePatientData(entry, patientsById).patientName || "").toLowerCase();
         const medicationText = (entry.medication || "").toLowerCase();
 
         const matchesPatient =
@@ -228,6 +257,7 @@ function savePapDraftValue(entry, field) {
       patientId: patient.id,
       patientName: `${patient.firstName || ""} ${patient.lastName || ""}`.trim(),
       mrn: patient.mrn || "",
+      dob: patient.dob || "",
       phone: patient.phone || "",
     }));
 
@@ -253,6 +283,7 @@ function savePapDraftValue(entry, field) {
       patientId: newEntry.patientId,
       patientName: newEntry.patientName,
       mrn: newEntry.mrn,
+      dob: newEntry.dob,
       phone: newEntry.phone,
       medication: newEntry.medication,
       company: newEntry.company,
@@ -723,7 +754,7 @@ function savePapDraftValue(entry, field) {
                     className="w-full text-left"
                   >
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
-                      <ReadOnlyField label="Patient" value={entry.patientName} />
+                      <ReadOnlyField label="Patient" value={getLivePatientData(entry, patientsById).patientName} />
                       <ReadOnlyField label="Medication" value={entry.medication || "—"} />
                       <ReadOnlyField label="Company" value={entry.company || "—"} />
                       <ReadOnlyField label="Started Date" value={entry.startedDate || "—"} />
@@ -742,8 +773,9 @@ function savePapDraftValue(entry, field) {
                   {isExpanded && (
                     <>
                       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-                        <ReadOnlyField label="MRN" value={entry.mrn || "—"} />
-                        <ReadOnlyField label="Phone" value={entry.phone || "—"} />
+                        <ReadOnlyField label="MRN" value={getLivePatientData(entry, patientsById).mrn || "—"} />
+                        <ReadOnlyField label="DOB" value={getLivePatientData(entry, patientsById).dob || "—"} />
+                        <ReadOnlyField label="Phone" value={getLivePatientData(entry, patientsById).phone || "—"} />
 
                         <Field label="Assigned Leadership">
                           <select

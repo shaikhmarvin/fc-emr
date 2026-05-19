@@ -64,6 +64,25 @@ function isGenericTrackingProgram(programType) {
   return GENERIC_TRACKING_PROGRAMS.includes(programType);
 }
 
+function getLiveProgramPatientData(entry, patientsById) {
+  const patientId = entry?.patientId ?? entry?.patient_id;
+  const patient =
+    patientsById?.[patientId] ??
+    patientsById?.[String(patientId)];
+
+  return {
+    patientName: patient
+      ? `${patient.firstName || ""} ${patient.lastName || ""}`.trim()
+      : entry?.patientName || "Unknown Patient",
+
+    dob: patient?.dob || entry?.dob || "",
+
+    mrn: patient?.mrn || entry?.mrn || "",
+
+    phone: patient?.phone || entry?.phone || "",
+  };
+}
+
 export default function ProgramsView({
   programEntries,
   addProgramEntry,
@@ -89,6 +108,10 @@ export default function ProgramsView({
 
   const canEditProgramSettings = isLeadershipView;
   const canAddAnyProgramEntry = isLeadershipView;
+
+  const patientsById = useMemo(() => {
+    return Object.fromEntries((patients || []).map((p) => [String(p.id), p]));
+  }, [patients]);
 
   const [nextProgramDates, setNextProgramDates] = useState({});
 
@@ -290,14 +313,14 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
   const trackerEntries = useMemo(() => {
     return programEntries
       .filter((entry) => {
-        const patientText = (entry.patientName || "").toLowerCase();
+        const patientText = (getLiveProgramPatientData(entry, patientsById).patientName || "").toLowerCase();
 
         const matchesPatient =
           !filters.patient ||
           patientText.includes(filters.patient.toLowerCase());
 
         const matchesDob =
-          !filters.dob || entry.dob === filters.dob;
+          !filters.dob || getLiveProgramPatientData(entry, patientsById).dob === filters.dob;
 
         const matchesProgram =
           !filters.programType || entry.programType === filters.programType;
@@ -308,7 +331,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
         return hasProgramAccess && matchesPatient && matchesDob && matchesProgram;
       })
       .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-  }, [programEntries, filters, accessibleProgramTypes, isLeadershipView]);
+  }, [programEntries, filters, accessibleProgramTypes, isLeadershipView, patientsById]);
 
   const specialtyEntries = useMemo(() => {
     return accessibleProgramTypes.reduce((acc, type) => {
@@ -391,10 +414,10 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
     const entry = {
       id: Date.now(),
       patientId: newEntry.patientId,
-      patientName: newEntry.patientName,
-      mrn: newEntry.mrn,
-      dob: newEntry.dob,
-      phone: newEntry.phone,
+      patientName: getLiveProgramPatientData(newEntry, patientsById).patientName,
+      mrn: getLiveProgramPatientData(newEntry, patientsById).mrn,
+      dob: getLiveProgramPatientData(newEntry, patientsById).dob,
+      phone: getLiveProgramPatientData(newEntry, patientsById).phone,
       programType: newEntry.programType,
       reason: newEntry.reason,
       status: newEntry.status,
@@ -1053,7 +1076,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                       className="w-full text-left"
                     >
                       <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
-                        <ReadOnlyField label="Patient" value={entry.patientName} />
+                        <ReadOnlyField label="Patient" value={getLiveProgramPatientData(entry, patientsById).patientName} />
                         <ReadOnlyField label="Phone" value={entry.phone || "—"} />
                         <ReadOnlyField label="Program" value={entry.programType} />
 
@@ -1075,8 +1098,8 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                     {isExpanded && (
                       <>
                         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-                          <ReadOnlyField label="MRN" value={entry.mrn || "—"} />
-                          <ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} />
+                          <ReadOnlyField label="MRN" value={getLiveProgramPatientData(entry, patientsById).mrn || "—"} />
+                          <ReadOnlyField label="DOB" value={formatDisplayDate(getLiveProgramPatientData(entry, patientsById).dob)} />
                           <ReadOnlyField
                             label="Last Contact Attempt"
                             value={
@@ -1300,14 +1323,14 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
     const allSpecialtyEntries = specialtyEntries[programType] || [];
 
     const entries = sortReferralList(allSpecialtyEntries.filter((entry) => {
-      const patientText = (entry.patientName || "").toLowerCase();
+      const patientText = (getLiveProgramPatientData(entry, patientsById).patientName || "").toLowerCase();
 
       const matchesPatient =
         !currentFilters.patient ||
         patientText.includes(currentFilters.patient.toLowerCase());
 
       const matchesDob =
-        !currentFilters.dob || entry.dob === currentFilters.dob;
+        !currentFilters.dob || getLiveProgramPatientData(entry, patientsById).dob === currentFilters.dob;
 
       const matchesStatus =
         !currentFilters.status ||
@@ -1499,7 +1522,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                         className="w-full text-left"
                       >
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                          <ReadOnlyField label="Patient" value={entry.patientName} />
+                          <ReadOnlyField label="Patient" value={getLiveProgramPatientData(entry, patientsById).patientName} />
                           <ReadOnlyField label="Phone" value={entry.phone || "—"} />
                           <div>
                             <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -1514,8 +1537,8 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                       {isExpanded && (
                         <>
                           <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-                            <ReadOnlyField label="MRN" value={entry.mrn || "—"} />
-                            <ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} />
+                            <ReadOnlyField label="MRN" value={getLiveProgramPatientData(entry, patientsById).mrn || "—"} />
+                            <ReadOnlyField label="DOB" value={formatDisplayDate(getLiveProgramPatientData(entry, patientsById).dob)} />
                             <ReadOnlyField
                               label="Last Contact Attempt"
                               value={
@@ -1918,7 +1941,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                     >
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
                         <div className="md:col-span-2">
-                          <ReadOnlyField label="Patient" value={entry.patientName} />
+                          <ReadOnlyField label="Patient" value={getLiveProgramPatientData(entry, patientsById).patientName} />
                         </div>
 
                         <div className="md:col-span-2">
@@ -1926,11 +1949,11 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                         </div>
 
                         <div className="md:col-span-2">
-                          <ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} />
+                          <ReadOnlyField label="DOB" value={formatDisplayDate(getLiveProgramPatientData(entry, patientsById).dob)} />
                         </div>
 
                         <div className="md:col-span-2">
-                          <ReadOnlyField label="MRN" value={entry.mrn || "—"} />
+                          <ReadOnlyField label="MRN" value={getLiveProgramPatientData(entry, patientsById).mrn || "—"} />
                         </div>
 
                         <div className="md:col-span-1">
@@ -1949,8 +1972,8 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                     {isExpanded && (
                       <>
                         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-                          <ReadOnlyField label="MRN" value={entry.mrn || "—"} />
-                          <ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} />
+                          <ReadOnlyField label="MRN" value={getLiveProgramPatientData(entry, patientsById).mrn || "—"} />
+                          <ReadOnlyField label="DOB" value={formatDisplayDate(getLiveProgramPatientData(entry, patientsById).dob)} />
                           <ReadOnlyField
                             label="Last Contact Attempt"
                             value={
@@ -2073,6 +2096,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                         label={slot}
                         entry={assigned}
                         onUnassign={handleUnassign}
+                        patientsById={patientsById}
                       />
                     );
                   })}
@@ -2095,6 +2119,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                         label={`Backup ${i + 1}`}
                         entry={assigned}
                         onUnassign={handleUnassign}
+                        patientsById={patientsById}
                       />
                     );
                   })}
@@ -2119,6 +2144,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                         label={`Primary ${i + 1}`}
                         entry={assigned}
                         onUnassign={handleUnassign}
+                        patientsById={patientsById}
                       />
                     );
                   })}
@@ -2141,6 +2167,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                         label={`Backup ${i + 1}`}
                         entry={assigned}
                         onUnassign={handleUnassign}
+                        patientsById={patientsById}
                       />
                     );
                   })}
@@ -2314,7 +2341,7 @@ function ReadOnlyField({ label, value, copyable = true, multiline = false }) {
   );
 }
 
-function SchedulerRow({ label, entry, onUnassign }) {
+function SchedulerRow({ label, entry, onUnassign, patientsById }) {
   return (
     <div className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3">
       <div>
@@ -2327,7 +2354,7 @@ function SchedulerRow({ label, entry, onUnassign }) {
                 onClick={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
               >
-                {entry.patientName} • {entry.phone || "No phone"}
+                {getLiveProgramPatientData(entry, patientsById).patientName} • {getLiveProgramPatientData(entry, patientsById).phone || "No phone"}
               </span>
               <StatusBadge status={entry.status} />
             </>
