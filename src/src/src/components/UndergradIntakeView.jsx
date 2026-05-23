@@ -440,7 +440,7 @@ export default function UndergradIntakeView({
       }
 
       if (nextVisitType === "refill_only") {
-        nextForm.refillNumber = "";
+        nextForm.refillNumber = prev.refillNumber || getNextRefillNumber(patients);
       } else {
         nextForm.refillNumber = "";
         nextForm.refillMedicationRequest = "";
@@ -872,11 +872,11 @@ export default function UndergradIntakeView({
                     <p className="text-xs font-bold uppercase tracking-wide text-purple-700">
                       Refill Queue Number
                     </p>
-                    <p className="mt-1 text-lg font-extrabold text-purple-950">
-                      Assigned after intake is submitted
+                    <p className="mt-1 text-3xl font-extrabold text-purple-950">
+                      R{form.refillNumber || getNextRefillNumber(patients)}
                     </p>
                     <p className="mt-1 text-xs text-purple-700">
-                      Prevents duplicate R#s when multiple refill intakes are submitted at the same time.
+                      Auto-counts refill-only patients for today and resets on the next clinic date.
                     </p>
                   </div>
 

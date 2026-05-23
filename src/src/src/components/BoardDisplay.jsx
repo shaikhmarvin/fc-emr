@@ -80,13 +80,6 @@ export default function BoardDisplay({
   tonightReservedRooms = [],
 }) {
   const [now, setNow] = useState(new Date());
-  const [boardZoom, setBoardZoom] = useState(() => {
-    const savedZoom = Number(window.localStorage.getItem("board-display-zoom"));
-    return Number.isFinite(savedZoom) && savedZoom >= 75 && savedZoom <= 125
-      ? savedZoom
-      : 100;
-  });
-
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -95,11 +88,6 @@ export default function BoardDisplay({
 
     return () => clearInterval(interval);
   }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem("board-display-zoom", String(boardZoom));
-  }, [boardZoom]);
-
 
   const roster = useMemo(
     () =>
@@ -120,41 +108,13 @@ export default function BoardDisplay({
 
 
   return (
-    <div
-      className="flex h-screen flex-col overflow-hidden bg-slate-900 p-2 text-white xl:p-3"
-      style={{
-        zoom: `${boardZoom}%`,
-      }}
-    >
+    <div className="flex h-screen flex-col overflow-hidden bg-slate-900 p-2 text-white xl:p-3">
       <div className="mb-2 shrink-0">
         <div className="flex flex-wrap items-start justify-between gap-2 2xl:gap-3">
           <div className="flex min-w-0 flex-1 flex-wrap items-start gap-2 2xl:gap-3">
             <div className="shrink-0 rounded-xl border border-slate-600 bg-slate-800/55 px-2.5 py-1.5 shadow">
               <h1 className="text-[clamp(1rem,1.25vw,1.45rem)] font-extrabold leading-tight">Free Clinic Board</h1>
               <p className="text-[0.7rem] font-semibold leading-tight text-slate-300 xl:text-xs">Live Display</p>
-            </div>
-
-            <div className="flex shrink-0 items-center gap-1 rounded-xl border border-slate-600 bg-slate-800/55 px-2 py-1.5 shadow">
-              <span className="text-[0.65rem] font-bold uppercase tracking-wide text-slate-300">
-                Board Zoom
-              </span>
-              <button
-                type="button"
-                onClick={() => setBoardZoom((value) => Math.max(75, value - 5))}
-                className="rounded-md bg-slate-700 px-2 py-1 text-xs font-bold text-white hover:bg-slate-600"
-              >
-                −
-              </button>
-              <span className="w-10 text-center text-xs font-bold text-white">
-                {boardZoom}%
-              </span>
-              <button
-                type="button"
-                onClick={() => setBoardZoom((value) => Math.min(125, value + 5))}
-                className="rounded-md bg-slate-700 px-2 py-1 text-xs font-bold text-white hover:bg-slate-600"
-              >
-                +
-              </button>
             </div>
 
             {(roster.attendings || roster.residents || roster.upperLevels) && (

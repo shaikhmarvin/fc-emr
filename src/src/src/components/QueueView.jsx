@@ -1415,7 +1415,7 @@ export default function QueueView({
                     className="mt-2 min-h-[40px] rounded-lg bg-teal-600 px-3 py-2 text-sm font-bold text-white hover:bg-teal-700"
                   >
                     Mark Seen by Social Work
-                  </button>
+                  </button
                 )}
 
                 {canMarkMedicationsReady && !encounter?.pharmacyStatus && (

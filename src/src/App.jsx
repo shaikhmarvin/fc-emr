@@ -17,6 +17,7 @@ import LabQueueView from "./components/LabQueueView";
 import {
   createEncounterInSupabase,
   updateEncounterInSupabase,
+  assignNextRefillNumberInSupabase,
   createMedicationInSupabase,
   updateMedicationInSupabase,
   deleteMedicationInSupabase,
@@ -3854,7 +3855,7 @@ export default function App() {
         clinicDate: formatClinicDate(),
         createdAt: new Date().toISOString(),
         dailyNumber: data.dailyNumber || "",
-        refillNumber: data.visitType === "refill_only" ? data.refillNumber || "" : "",
+        refillNumber: "",
         newReturning: data.matchedPatientId ? "Returning" : (data.isReturning || "New"),
         visitLocation: "In Clinic",
         chiefComplaint: "",
@@ -3936,6 +3937,13 @@ export default function App() {
         };
 
         savedEncounter = await createEncounterInSupabase(targetPatient.id, singleEncounter);
+
+        if (isRefillOnly && savedEncounter?.id) {
+          await assignNextRefillNumberInSupabase(
+            savedEncounter.id,
+            savedEncounter.clinic_date || singleEncounter.clinicDate
+          );
+        }
       }
 
       await refreshClinicData();
@@ -4048,12 +4056,21 @@ export default function App() {
         status: nextStatus,
         undergradCompletedAt,
         dailyNumber: undergradRegistrationForm.dailyNumber || "",
-        refillNumber: nextVisitType === "refill_only" ? undergradRegistrationForm.refillNumber || encounter.refillNumber || "" : "",
+        refillNumber: nextVisitType === "refill_only" ? encounter.refillNumber || "" : "",
         visitType: nextVisitType,
         specialtyType: nextSpecialtyType,
         refillMedicationRequest: nextRefillMedicationRequest,
         dualVisit: nextVisitType === "both",
       });
+
+      let assignedRefillNumber = encounter.refillNumber || "";
+
+      if (nextVisitType === "refill_only" && !assignedRefillNumber) {
+        assignedRefillNumber = await assignNextRefillNumberInSupabase(
+          registrationEncounterId,
+          encounter.clinicDate || formatClinicDate()
+        );
+      }
 
       setPatients((prev) =>
         prev.map((p) =>
@@ -4068,7 +4085,7 @@ export default function App() {
                     status: nextStatus,
                     undergradCompletedAt,
                     dailyNumber: undergradRegistrationForm.dailyNumber || "",
-                    refillNumber: nextVisitType === "refill_only" ? undergradRegistrationForm.refillNumber || encounter.refillNumber || "" : "",
+                    refillNumber: nextVisitType === "refill_only" ? assignedRefillNumber || "" : "",
                     visitType: nextVisitType,
                     specialtyType: nextSpecialtyType,
                     refillMedicationRequest: nextRefillMedicationRequest,

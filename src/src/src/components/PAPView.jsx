@@ -20,16 +20,6 @@ function getTodayInputValue() {
   return `${year}-${month}-${day}`;
 }
 
-function getLivePatientName(entry, patientsById) {
-  const patient = patientsById?.[entry.patientId];
-
-  if (patient) {
-    return `${patient.firstName || ""} ${patient.lastName || ""}`.trim();
-  }
-
-  return entry.patientName || "Unknown Patient";
-}
-
 export default function PAPView({
   papEntries,
   addPapEntry,
@@ -52,12 +42,6 @@ export default function PAPView({
   const [filters, setFilters] = useState({
     dueFilter: "",
   });
-
-  const patientsById = useMemo(() => {
-  return Object.fromEntries(
-    patients.map((p) => [p.id, p])
-  );
-}, [patients]);
 
   const [expandedEntryIds, setExpandedEntryIds] = useState([]);
 
@@ -206,7 +190,7 @@ function savePapDraftValue(entry, field) {
           (filters.dueFilter === "overdue" && dueState === "overdue") ||
           (filters.dueFilter === "none" && dueState === "none");
 
-        const patientText = (getLivePatientName(entry, patientsById) || "").toLowerCase();
+        const patientText = (entry.patientName || "").toLowerCase();
         const medicationText = (entry.medication || "").toLowerCase();
 
         const matchesPatient =
@@ -253,7 +237,7 @@ function savePapDraftValue(entry, field) {
   function handleAddEntry() {
     if (
       !newEntry.patientId ||
-      !newgetLivePatientName(entry, patientsById) ||
+      !newEntry.patientName ||
       !newEntry.medication.trim() ||
       !newEntry.company.trim() ||
       !newEntry.assignedLeadership.trim()
@@ -267,7 +251,7 @@ function savePapDraftValue(entry, field) {
     const entry = {
       id: Date.now(),
       patientId: newEntry.patientId,
-      patientName: newgetLivePatientName(entry, patientsById),
+      patientName: newEntry.patientName,
       mrn: newEntry.mrn,
       phone: newEntry.phone,
       medication: newEntry.medication,
@@ -434,7 +418,7 @@ function savePapDraftValue(entry, field) {
           <Field label="Selected Patient">
             <input
               className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm"
-              value={newgetLivePatientName(entry, patientsById)}
+              value={newEntry.patientName}
               readOnly
             />
           </Field>
@@ -739,7 +723,7 @@ function savePapDraftValue(entry, field) {
                     className="w-full text-left"
                   >
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
-                      <ReadOnlyField label="Patient" value={getLivePatientName(entry, patientsById)} />
+                      <ReadOnlyField label="Patient" value={entry.patientName} />
                       <ReadOnlyField label="Medication" value={entry.medication || "—"} />
                       <ReadOnlyField label="Company" value={entry.company || "—"} />
                       <ReadOnlyField label="Started Date" value={entry.startedDate || "—"} />

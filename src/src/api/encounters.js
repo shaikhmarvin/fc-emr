@@ -210,6 +210,17 @@ export async function createEncounterInSupabase(patientId, encounter) {
   return data;
 }
 
+export async function assignNextRefillNumberInSupabase(encounterId, clinicDate) {
+  const { data, error } = await supabase.rpc("assign_next_refill_number", {
+    target_encounter_id: encounterId,
+    target_clinic_date: clinicDate,
+  });
+
+  if (error) throw error;
+
+  return data;
+}
+
 export async function updateEncounterInSupabase(encounterId, updates) {
   const payload = {};
 
