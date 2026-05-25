@@ -3705,8 +3705,11 @@ export default function App() {
       });
     });
 
-    const formatSpecialtyCount = ({ specialtyOnly, both }) =>
-      `${specialtyOnly} specialty-only + ${both} general/free clinic`;
+    const formatSpecialtyCount = ({ specialtyOnly, both }) => {
+  if (!specialtyOnly && !both) return "0";
+
+  return `${specialtyOnly} Specialty-only + ${both} Spec+Gen`;
+};
 
     return {
       pt: formatSpecialtyCount(counts.pt),
@@ -3727,25 +3730,11 @@ export default function App() {
       lwobsCount:
         prev.lwobsCount || String(autoLwobsCount),
 
-      mentalHealthCount:
-        prev.mentalHealthCount ||
-        String(specialtyCounts.mental_health || 0),
-
-      addictionMedicineCount:
-        prev.addictionMedicineCount ||
-        String(specialtyCounts.addiction || 0),
-
-      ptCount:
-        prev.ptCount ||
-        String(specialtyCounts.pt || 0),
-
-      dermatologyCount:
-        prev.dermatologyCount ||
-        String(specialtyCounts.dermatology || 0),
-
-      ophthalmologyCount:
-        prev.ophthalmologyCount ||
-        String(specialtyCounts.ophthalmology || 0),
+      mentalHealthCount: String(specialtyCounts.mental_health || 0),
+addictionMedicineCount: String(specialtyCounts.addiction || 0),
+ptCount: String(specialtyCounts.pt || 0),
+dermatologyCount: String(specialtyCounts.dermatology || 0),
+ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
 
       socialWorkCount:
         prev.socialWorkCount ||
@@ -5894,33 +5883,73 @@ export default function App() {
     refreshClinicData?.();
   }
 
-  async function markSeenBySocialWork(encounterId) {
-    if (!session?.user?.id) return;
+async function markSeenBySocialWork(encounterId) {
+  if (!session?.user?.id) {
+    alert("Unable to mark seen: no signed-in user found.");
+    return;
+  }
 
-    const seenAt = new Date().toISOString();
+  const targetRow = allEncounterRows.find(
+    ({ encounter }) => String(encounter?.id) === String(encounterId)
+  );
 
-    await updateEncounterInSupabase(encounterId, {
-      socialWorkSeen: true,
-      socialWorkSeenAt: seenAt,
-      socialWorkSeenBy: session.user.id,
-    });
+  if (!targetRow?.encounter?.id) {
+    alert("Unable to mark seen: encounter was not found.");
+    return;
+  }
+
+  const seenAt = new Date().toISOString();
+  const targetEncounter = targetRow.encounter;
+  const localIntakeData =
+    targetEncounter.intakeData || targetEncounter.intake_data || {};
+
+  const nextIntakeData = {
+    ...localIntakeData,
+    socialWorkSeen: true,
+    socialWorkSeenAt: seenAt,
+    socialWorkSeenBy: session.user.id,
+  };
+
+  try {
+    const { data, error } = await supabase
+      .from("encounters")
+      .update({ intake_data: nextIntakeData })
+      .eq("id", encounterId)
+      .select("id, intake_data")
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (!data) {
+      throw new Error(
+        "Supabase did not return the updated encounter. This may be an RLS/policy issue."
+      );
+    }
 
     setPatients((prev) =>
       prev.map((patient) => ({
         ...patient,
         encounters: patient.encounters.map((encounter) =>
-          encounter.id === encounterId
+          String(encounter.id) === String(encounterId)
             ? {
                 ...encounter,
                 socialWorkSeen: true,
                 socialWorkSeenAt: seenAt,
                 socialWorkSeenBy: session.user.id,
+                intakeData: data.intake_data || nextIntakeData,
+                intake_data: data.intake_data || nextIntakeData,
               }
             : encounter
         ),
       }))
     );
+
+    await refreshClinicData?.();
+  } catch (error) {
+    console.error("Failed to mark seen by Social Work:", error);
+    alert(`Failed to mark seen by Social Work: ${error.message}`);
   }
+}
 
   async function finalizeClinicDay(rowsToFinalize = []) {
     if (!isLeadershipView) return;

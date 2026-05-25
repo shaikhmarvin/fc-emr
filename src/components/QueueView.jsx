@@ -129,7 +129,11 @@ export default function QueueView({
     ? specialtyAccess
     : [];
   const canUseOphthoQueueTools = normalizedSpecialtyAccess.includes("Ophthalmology");
-  const canUseSocialWorkQueueTools = userRole === "social_work";
+  const canUseSocialWorkQueueTools =
+  userRole === "social_work" || userRole === "leadership";
+
+const canMarkSeenBySocialWork =
+  userRole === "social_work";
   const canUseWholeClinicQueueTools = canUseOphthoQueueTools || canUseSocialWorkQueueTools;
   const canUsePharmacyQueue =
     userRole === "pharmacy" ||
@@ -348,9 +352,14 @@ export default function QueueView({
   }
 
   function isSeenBySocialWork(encounter) {
-    const intakeData = encounter?.intakeData || encounter?.intake_data || {};
-    return encounter?.socialWorkSeen === true || intakeData?.socialWorkSeen === true;
-  }
+  const intakeData = encounter?.intakeData || encounter?.intake_data || {};
+  return (
+    encounter?.socialWorkSeen === true ||
+    encounter?.socialWorkSeen === "true" ||
+    intakeData?.socialWorkSeen === true ||
+    intakeData?.socialWorkSeen === "true"
+  );
+}
 
   function getSocialWorkSeenAt(encounter) {
     const intakeData = encounter?.intakeData || encounter?.intake_data || {};
@@ -1408,7 +1417,7 @@ export default function QueueView({
                   {papBadge?.(encounter)}
                 </div>
 
-                {canUseSocialWorkQueueTools && !isSeenBySocialWork(encounter) && (
+                {canMarkSeenBySocialWork && !isSeenBySocialWork(encounter) && (
                   <button
                     type="button"
                     onClick={() => onMarkSeenBySocialWork?.(encounter.id)}

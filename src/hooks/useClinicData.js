@@ -127,6 +127,20 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
         intake.refillRequest ??
         intake.refill_request ??
         "",
+        socialWorkSeen:
+  intake.socialWorkSeen ??
+  intake.social_work_seen ??
+  false,
+
+socialWorkSeenAt:
+  intake.socialWorkSeenAt ??
+  intake.social_work_seen_at ??
+  null,
+
+socialWorkSeenBy:
+  intake.socialWorkSeenBy ??
+  intake.social_work_seen_by ??
+  null,
       leadershipIntakeComplete: encounter.leadership_intake_complete ?? false,
       pharmacyStatus: encounter.pharmacy_status || "",
       skipUpperLevel: encounter.skip_upper_level ?? false,
