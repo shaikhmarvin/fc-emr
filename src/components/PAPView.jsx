@@ -434,7 +434,7 @@ function savePapDraftValue(entry, field) {
           <Field label="Selected Patient">
             <input
               className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm"
-              value={getLivePatientName(entry, patientsById)}
+              value={getLivePatientName(newEntry, patientsById)}
               readOnly
             />
           </Field>
@@ -739,7 +739,7 @@ function savePapDraftValue(entry, field) {
                     className="w-full text-left"
                   >
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
-                      <ReadOnlyField label="Patient" value={getLivePatientName(entry, patientsById)} />
+                      <ReadOnlyField label="Patient" value={getLivePatientName(newEntry, patientsById)} />
                       <ReadOnlyField label="Medication" value={entry.medication || "—"} />
                       <ReadOnlyField label="Company" value={entry.company || "—"} />
                       <ReadOnlyField label="Started Date" value={entry.startedDate || "—"} />

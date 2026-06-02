@@ -2311,13 +2311,20 @@ function mergeBrokenLabelLines(lines = []) {
     let current = lines[i];
     const next = lines[i + 1];
 
+    const currentLab = findLabMatch(current);
+    const nextLab = findLabMatch(next);
+
     if (
       current &&
       next &&
       current.length < 25 &&
       !extractAllNumbersFromLine(current).length &&
       !extractCategoricalValue(current) &&
-      !isHeaderLine(current)
+      !isHeaderLine(current) &&
+      !currentLab &&
+      !nextLab &&
+      !/^value$/i.test(String(next || "").trim()) &&
+      !/^range$/i.test(String(next || "").trim())
     ) {
       const combined = `${current} ${next}`;
       if (findLabMatch(combined)) {
@@ -2433,6 +2440,324 @@ function mergeDifferentialLabelLines(lines = []) {
   return merged;
 }
 
+
+function parseUmcVerticalValueBlocks(rawText = "") {
+  if (!isUmcLabText(rawText)) return [];
+
+  const lines = String(rawText || "")
+    .split("\n")
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+
+  const results = [];
+
+  function isSectionStop(line = "") {
+    const raw = String(line || "").trim();
+    if (!raw) return true;
+
+    return (
+      /^patient\s*[.: ]/i.test(raw) ||
+      /^blood specimen\b/i.test(raw) ||
+      /^urine specimen\b/i.test(raw) ||
+      /^resulting labs$/i.test(raw) ||
+      /^legend\b/i.test(raw) ||
+      /^director:/i.test(raw) ||
+      /^page:\s*\d+/i.test(raw) ||
+      /^printed:/i.test(raw) ||
+      /^fax services$/i.test(raw) ||
+      /^result recipient:?$/i.test(raw) ||
+      /^submitted by:?$/i.test(raw) ||
+      /^authorizing provider:?$/i.test(raw) ||
+      /^ordering provider:?$/i.test(raw) ||
+      /^comments:?$/i.test(raw)
+    );
+  }
+
+  function isPossibleValueLine(line = "") {
+    const raw = String(line || "").trim();
+    if (!raw) return false;
+    if (/^range$/i.test(raw) || /^value$/i.test(raw)) return false;
+    if (isHeaderLine(raw) || isIgnoredNarrativeLine(raw) || isIgnoredUmcStaffLine(raw)) return false;
+    if (/^[A-Z]{1,4}\d{3,}$/i.test(raw)) return false;
+    if (/^(mL\/min|mg\/dL|mmol\/L|g\/dL|K\/UL|M\/UL|%|fL|pg)$/i.test(raw)) return false;
+
+    const categorical = extractCategoricalValue(raw);
+    if (categorical) return true;
+
+    const numbers = extractAllNumbersFromLine(raw);
+    if (numbers.length === 0) return false;
+
+    // Most reference ranges have two or more numeric bounds. A result is usually
+    // a single number, possibly with H/L/A or < / >.
+    if (numbers.length === 1) return true;
+    if (/[()]\s*[HLA]\s*[)]?/i.test(raw)) return true;
+    if (/^[<>]=?\s*\d/.test(raw)) return true;
+
+    return false;
+  }
+
+  function parseValueForLab(line = "", lab = null) {
+    const categorical = extractCategoricalValue(line);
+    if (categorical) return categorical;
+
+    const value = extractNumberFromLine(line);
+    if (value === null || value === undefined) return null;
+
+    return rescueNumericValueByRange(value, lab);
+  }
+
+  for (let i = 0; i < lines.length; i += 1) {
+    if (!/^value$/i.test(lines[i])) continue;
+
+    const labelEntries = [];
+    for (let j = i - 1; j >= 0 && labelEntries.length < 35; j -= 1) {
+      const raw = lines[j];
+
+      if (/^range$/i.test(raw) || /^value$/i.test(raw)) break;
+      if (isSectionStop(raw)) break;
+
+      const lab = findLabMatch(raw);
+      if (!lab) continue;
+
+      labelEntries.unshift({
+        index: j,
+        rawLine: raw,
+        lab,
+      });
+    }
+
+    if (labelEntries.length === 0) continue;
+
+    const valueEntries = [];
+    for (let j = i + 1; j < lines.length && valueEntries.length < labelEntries.length + 8; j += 1) {
+      const raw = lines[j];
+
+      if (/^range$/i.test(raw)) continue;
+      if (j > i + 1 && isSectionStop(raw)) break;
+
+      const maybeLab = findLabMatch(raw);
+      if (maybeLab && valueEntries.length > 0) break;
+
+      if (!isPossibleValueLine(raw)) continue;
+
+      valueEntries.push({
+        index: j,
+        rawLine: raw,
+      });
+    }
+
+    if (valueEntries.length === 0) continue;
+
+    const pairCount = Math.min(labelEntries.length, valueEntries.length);
+
+    for (let pairIndex = 0; pairIndex < pairCount; pairIndex += 1) {
+      const labelEntry = labelEntries[pairIndex];
+      const valueEntry = valueEntries[pairIndex];
+      const parsedValue = parseValueForLab(valueEntry.rawLine, labelEntry.lab);
+
+      if (parsedValue === null || parsedValue === undefined || parsedValue === "") continue;
+
+      results.push(
+        buildParsedLab(
+          labelEntry.lab,
+          labelEntry.rawLine,
+          valueEntry.rawLine,
+          parsedValue,
+          {
+            parseMethod: "umc_vertical_value_block",
+            matchIndex: labelEntry.index,
+            valueLineIndex: valueEntry.index,
+            valueSourceLine: valueEntry.rawLine,
+          }
+        )
+      );
+    }
+  }
+
+  return results;
+}
+
+
+
+function parseUmcOrderedTableValues(rawText = "") {
+  if (!isUmcLabText(rawText)) return [];
+
+  const originalLines = String(rawText || "")
+    .split("\n")
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+
+  const results = [];
+
+  const PANEL_STARTS = [
+    /comprehensive metabolic panel/i,
+    /cbc without differential/i,
+    /cbc w\/?\s*auto differential/i,
+    /cbc with differential/i,
+    /manual differential/i,
+    /lipid panel/i,
+  ];
+
+  const hardStops = [
+    /^patient\s*[.: ]/i,
+    /^result recipient:?$/i,
+    /^submitted by:?$/i,
+    /^authorizing provider:?$/i,
+    /^resulting labs$/i,
+    /^legend\b/i,
+    /^printed:/i,
+    /^fax services$/i,
+  ];
+
+  function isPanelStart(line = "") {
+    return PANEL_STARTS.some((rx) => rx.test(line));
+  }
+
+  function isHardStop(line = "") {
+    const raw = String(line || "").trim();
+    if (!raw) return true;
+    return hardStops.some((rx) => rx.test(raw));
+  }
+
+  function isNoiseLine(line = "") {
+    const raw = String(line || "").trim();
+    if (!raw) return true;
+    if (/^value$/i.test(raw) || /^range$/i.test(raw)) return true;
+    if (/^rq\d+/i.test(raw)) return true;
+    if (/^page:\s*\d+/i.test(raw)) return true;
+    if (/^comments:?$/i.test(raw)) return true;
+    if (/^blood specimen\b/i.test(raw) || /^urine specimen\b/i.test(raw)) return true;
+    if (/^this is an appended report/i.test(raw)) return true;
+    if (/^collection questions$/i.test(raw)) return true;
+    if (/^!?\s*has the patient been fasting/i.test(raw)) return true;
+    if (/^yes$/i.test(raw)) return true;
+    if (/^(mL\/min|mg\/dL|mmol\/L|g\/dL|K\/UL|M\/UL|%|fL|pg|ug\/dL|ng\/mL|mcintUnit\/mL|mclntUnit\/mL)$/i.test(raw)) return true;
+    if (isIgnoredNarrativeLine(raw) || isIgnoredUmcStaffLine(raw) || isMorphologyNarrativeLine(raw)) return true;
+    return false;
+  }
+
+  function numericCandidate(line = "", lab = null) {
+    const raw = String(line || "").trim();
+    if (!raw || isNoiseLine(raw)) return null;
+
+    const categorical = extractCategoricalValue(raw);
+    if (categorical) return categorical;
+
+    const numbers = extractAllNumbersFromLine(raw);
+    if (numbers.length === 0) return null;
+
+    // Most range lines carry two bounds plus units. Result lines normally carry
+    // one value, sometimes with H/L/A or a comparator.
+    if (numbers.length > 1 && !/[()]\s*[HLA]\s*[)]?/i.test(raw) && !/^[<>]=?\s*\d/.test(raw)) {
+      return null;
+    }
+
+    const value = extractNumberFromLine(raw);
+    if (value === null || value === undefined) return null;
+    return rescueNumericValueByRange(value, lab);
+  }
+
+  function shouldTreatAsLabel(line = "") {
+    const raw = String(line || "").trim();
+    if (!raw || isNoiseLine(raw)) return false;
+    if (extractCategoricalValue(raw)) return false;
+    const lab = findLabMatch(raw);
+    if (!lab) return false;
+
+    // Do not treat a row that is primarily a result value as a label.
+    const nums = extractAllNumbersFromLine(raw);
+    if (nums.length > 0 && raw.length < 16) return false;
+
+    return true;
+  }
+
+  const starts = [];
+  for (let i = 0; i < originalLines.length; i += 1) {
+    if (isPanelStart(originalLines[i])) starts.push(i);
+  }
+
+  for (let s = 0; s < starts.length; s += 1) {
+    const start = starts[s];
+    let end = s < starts.length - 1 ? starts[s + 1] : originalLines.length;
+
+    for (let j = start + 1; j < end; j += 1) {
+      if (j > start + 4 && isHardStop(originalLines[j])) {
+        end = j;
+        break;
+      }
+    }
+
+    const segment = originalLines.slice(start, end);
+    if (segment.length < 3) continue;
+
+    const labelEntries = [];
+    const valueEntries = [];
+
+    for (let localIndex = 1; localIndex < segment.length; localIndex += 1) {
+      const raw = segment[localIndex];
+      if (isNoiseLine(raw)) continue;
+
+      const lab = shouldTreatAsLabel(raw) ? findLabMatch(raw) : null;
+      if (lab) {
+        labelEntries.push({
+          index: start + localIndex,
+          rawLine: raw,
+          lab,
+        });
+        continue;
+      }
+
+      // Hold off parsing until we know the label sequence; values are paired by order below.
+      valueEntries.push({
+        index: start + localIndex,
+        rawLine: raw,
+      });
+    }
+
+    if (labelEntries.length === 0 || valueEntries.length === 0) continue;
+
+    let valueCursor = 0;
+
+    for (let labelIndex = 0; labelIndex < labelEntries.length; labelIndex += 1) {
+      const labelEntry = labelEntries[labelIndex];
+
+      let found = null;
+      while (valueCursor < valueEntries.length) {
+        const candidate = valueEntries[valueCursor];
+        valueCursor += 1;
+
+        const parsedValue = numericCandidate(candidate.rawLine, labelEntry.lab);
+        if (parsedValue === null || parsedValue === undefined || parsedValue === "") continue;
+
+        found = {
+          ...candidate,
+          value: parsedValue,
+        };
+        break;
+      }
+
+      if (!found) continue;
+
+      results.push(
+        buildParsedLab(
+          labelEntry.lab,
+          labelEntry.rawLine,
+          found.rawLine,
+          found.value,
+          {
+            parseMethod: "umc_ordered_table",
+            matchIndex: labelEntry.index,
+            valueLineIndex: found.index,
+            valueSourceLine: found.rawLine,
+          }
+        )
+      );
+    }
+  }
+
+  return results;
+}
+
 export function parseLabsFromText(
   rawText = "",
   existingLabs = [],
@@ -2449,6 +2774,8 @@ export function parseLabsFromText(
 
   const umcHivResults = parseUmcHivPage(rawText);
   const umcImmunologyResults = parseUmcImmunologyRows(rawText);
+  const umcVerticalResults = parseUmcVerticalValueBlocks(rawText);
+  const umcOrderedTableResults = parseUmcOrderedTableValues(rawText);
 
   let lines = String(rawText || "")
   .split("\n")
@@ -2459,7 +2786,12 @@ lines = mergeBrokenLabelLines(lines);
 lines = mergeDifferentialLabelLines(lines);
 lines = normalizeCbcInterleaving(lines);
 
-  const results = [...umcHivResults, ...umcImmunologyResults];
+  const results = [
+    ...umcHivResults,
+    ...umcImmunologyResults,
+    ...umcVerticalResults,
+    ...umcOrderedTableResults,
+  ];
   const consumed = new Set();
   const umcMode = isUmcLabText(rawText);
 

@@ -2433,6 +2433,143 @@ function mergeDifferentialLabelLines(lines = []) {
   return merged;
 }
 
+
+function parseUmcVerticalValueBlocks(rawText = "") {
+  if (!isUmcLabText(rawText)) return [];
+
+  const lines = String(rawText || "")
+    .split("\n")
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+
+  const results = [];
+
+  function isSectionStop(line = "") {
+    const raw = String(line || "").trim();
+    if (!raw) return true;
+
+    return (
+      /^patient\s*[.: ]/i.test(raw) ||
+      /^blood specimen\b/i.test(raw) ||
+      /^urine specimen\b/i.test(raw) ||
+      /^resulting labs$/i.test(raw) ||
+      /^legend\b/i.test(raw) ||
+      /^director:/i.test(raw) ||
+      /^page:\s*\d+/i.test(raw) ||
+      /^printed:/i.test(raw) ||
+      /^fax services$/i.test(raw) ||
+      /^result recipient:?$/i.test(raw) ||
+      /^submitted by:?$/i.test(raw) ||
+      /^authorizing provider:?$/i.test(raw) ||
+      /^ordering provider:?$/i.test(raw) ||
+      /^comments:?$/i.test(raw)
+    );
+  }
+
+  function isPossibleValueLine(line = "") {
+    const raw = String(line || "").trim();
+    if (!raw) return false;
+    if (/^range$/i.test(raw) || /^value$/i.test(raw)) return false;
+    if (isHeaderLine(raw) || isIgnoredNarrativeLine(raw) || isIgnoredUmcStaffLine(raw)) return false;
+    if (/^[A-Z]{1,4}\d{3,}$/i.test(raw)) return false;
+    if (/^(mL\/min|mg\/dL|mmol\/L|g\/dL|K\/UL|M\/UL|%|fL|pg)$/i.test(raw)) return false;
+
+    const categorical = extractCategoricalValue(raw);
+    if (categorical) return true;
+
+    const numbers = extractAllNumbersFromLine(raw);
+    if (numbers.length === 0) return false;
+
+    // Most reference ranges have two or more numeric bounds. A result is usually
+    // a single number, possibly with H/L/A or < / >.
+    if (numbers.length === 1) return true;
+    if (/[()]\s*[HLA]\s*[)]?/i.test(raw)) return true;
+    if (/^[<>]=?\s*\d/.test(raw)) return true;
+
+    return false;
+  }
+
+  function parseValueForLab(line = "", lab = null) {
+    const categorical = extractCategoricalValue(line);
+    if (categorical) return categorical;
+
+    const value = extractNumberFromLine(line);
+    if (value === null || value === undefined) return null;
+
+    return rescueNumericValueByRange(value, lab);
+  }
+
+  for (let i = 0; i < lines.length; i += 1) {
+    if (!/^value$/i.test(lines[i])) continue;
+
+    const labelEntries = [];
+    for (let j = i - 1; j >= 0 && labelEntries.length < 35; j -= 1) {
+      const raw = lines[j];
+
+      if (/^range$/i.test(raw) || /^value$/i.test(raw)) break;
+      if (isSectionStop(raw)) break;
+
+      const lab = findLabMatch(raw);
+      if (!lab) continue;
+
+      labelEntries.unshift({
+        index: j,
+        rawLine: raw,
+        lab,
+      });
+    }
+
+    if (labelEntries.length === 0) continue;
+
+    const valueEntries = [];
+    for (let j = i + 1; j < lines.length && valueEntries.length < labelEntries.length + 8; j += 1) {
+      const raw = lines[j];
+
+      if (/^range$/i.test(raw)) continue;
+      if (j > i + 1 && isSectionStop(raw)) break;
+
+      const maybeLab = findLabMatch(raw);
+      if (maybeLab && valueEntries.length > 0) break;
+
+      if (!isPossibleValueLine(raw)) continue;
+
+      valueEntries.push({
+        index: j,
+        rawLine: raw,
+      });
+    }
+
+    if (valueEntries.length === 0) continue;
+
+    const pairCount = Math.min(labelEntries.length, valueEntries.length);
+
+    for (let pairIndex = 0; pairIndex < pairCount; pairIndex += 1) {
+      const labelEntry = labelEntries[pairIndex];
+      const valueEntry = valueEntries[pairIndex];
+      const parsedValue = parseValueForLab(valueEntry.rawLine, labelEntry.lab);
+
+      if (parsedValue === null || parsedValue === undefined || parsedValue === "") continue;
+
+      results.push(
+        buildParsedLab(
+          labelEntry.lab,
+          labelEntry.rawLine,
+          valueEntry.rawLine,
+          parsedValue,
+          {
+            parseMethod: "umc_vertical_value_block",
+            matchIndex: labelEntry.index,
+            valueLineIndex: valueEntry.index,
+            valueSourceLine: valueEntry.rawLine,
+          }
+        )
+      );
+    }
+  }
+
+  return results;
+}
+
 export function parseLabsFromText(
   rawText = "",
   existingLabs = [],
@@ -2449,6 +2586,7 @@ export function parseLabsFromText(
 
   const umcHivResults = parseUmcHivPage(rawText);
   const umcImmunologyResults = parseUmcImmunologyRows(rawText);
+  const umcVerticalResults = parseUmcVerticalValueBlocks(rawText);
 
   let lines = String(rawText || "")
   .split("\n")
@@ -2459,7 +2597,7 @@ lines = mergeBrokenLabelLines(lines);
 lines = mergeDifferentialLabelLines(lines);
 lines = normalizeCbcInterleaving(lines);
 
-  const results = [...umcHivResults, ...umcImmunologyResults];
+  const results = [...umcHivResults, ...umcImmunologyResults, ...umcVerticalResults];
   const consumed = new Set();
   const umcMode = isUmcLabText(rawText);
 

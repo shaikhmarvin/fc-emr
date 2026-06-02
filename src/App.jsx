@@ -1372,12 +1372,15 @@ export default function App() {
       let cleaned = String(value || "")
         .replace(/\bmedical record number\b.*$/i, "")
         .replace(/\bmrn\b.*$/i, "")
+        .replace(/\b\d{3}[-\s]?\d{2}[-\s]?\d{2}\b/g, "")
         .replace(/\bdob\b.*$/i, "")
         .replace(/\bage\b.*$/i, "")
         .replace(/\bmale\b.*$/i, "")
         .replace(/\bfemale\b.*$/i, "")
         .replace(/\bsex\b.*$/i, "")
         .replace(/\s+/g, " ")
+        .trim()
+        .replace(/^[.:\-\s]+/, "")
         .trim();
 
       if (cleaned.includes(",")) {
@@ -1410,7 +1413,7 @@ export default function App() {
       const compact = lines[i].replace(/\s+/g, " ").trim();
 
       const patientSameLine = compact.match(
-        /\bpat(?:ient|lent|lient|ent)\s*[:\-]?\s*(.*)$/i
+        /\bpat(?:ient|lent|lient|ent)\s*[.:\-]?\s*(.*)$/i
       );
 
       if (patientSameLine) {
@@ -1464,12 +1467,15 @@ export default function App() {
       }
     }
 
-    // fallback for OCR lines like:
-    // "M, 57 yr, 1/12/1969"
-    for (const line of lines) {
-      const anyDateMatch = line.match(/\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/);
-      if (anyDateMatch) {
-        return normalizeExtractedDate(anyDateMatch[1]);
+    // fallback for OCR demographic lines like:
+    // "M, 57 yrs, 1/12/1969" or "F. 40 yrs, 5/4/1986"
+    // Do NOT grab dates from specimen/collected/printed lines as DOB.
+    for (const line of lines.slice(0, 12)) {
+      const demographicDateMatch = line.match(
+        /^\s*[MF]\s*[,.]\s*\d{1,3}\s*(?:yr|yrs|years)\b.*?\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/i
+      );
+      if (demographicDateMatch) {
+        return normalizeExtractedDate(demographicDateMatch[1]);
       }
     }
 
@@ -1741,9 +1747,19 @@ export default function App() {
 
     if (!text) return false;
 
+    // UMC fax OCR commonly emits patient headers as:
+    //   Patient James Smith MRN: 123-45-67
+    //   Patient: James Smith MRN: 123-45-67
+    //   Patient. James Smith MRN: 123-45-67
+    // Treat Patient+MRN as a reliable packet start. Repeated pages for the
+    // same patient are stitched back together by mergeConsecutivePacketsForSamePatient.
+    if (/^pat(?:ient|lent|lient|ent)\s*[.:\s-]+.+\bmrn\s*:/i.test(text)) {
+      return true;
+    }
+
     if (
-      /^pat(?:ient|lent|lient|ent)\s*[:\s-]/i.test(text) ||
-      /\bpat(?:ient|lent|lient|ent)\s+.+\bmrn\b/i.test(text) ||
+      /^pat(?:ient|lent|lient|ent)\s*[.:\s-]/i.test(text) ||
+      /\bpat(?:ient|lent|lient|ent)\s*[.:\s-]+.+\bmrn\b/i.test(text) ||
       /^name\s*[:\s-]/i.test(text)
     ) {
       return true;
@@ -1756,16 +1772,21 @@ export default function App() {
     if (!looksLikeCommaName) return false;
 
     return (
-      /^pat(?:ient|lent|lient|ent)\s*[:\s-]*$/i.test(nextText) ||
-      /^pat(?:ient|lent|lient|ent)\s*[:\s-]/i.test(nextText) ||
-      /^pat(?:ient|lent|lient|ent)\s*[:\s-]*$/i.test(prevText) ||
+      /^pat(?:ient|lent|lient|ent)\s*[.:\s-]*$/i.test(nextText) ||
+      /^pat(?:ient|lent|lient|ent)\s*[.:\s-]/i.test(nextText) ||
+      /^pat(?:ient|lent|lient|ent)\s*[.:\s-]*$/i.test(prevText) ||
       /^dob\s*[:\-]/i.test(nextText) ||
       /^dob\s*[:\-]/i.test(nextTwoText)
     );
   }
 
   function looksLikeDobLine(line = "") {
-    return /\bdob\s*[:\-]?\s*\d{1,2}\/\d{1,2}\/\d{2,4}/i.test(String(line || "").trim());
+    const text = String(line || "").trim();
+
+    return (
+      /\bdob\s*[:\-]?\s*\d{1,2}\/\d{1,2}\/\d{2,4}/i.test(text) ||
+      /^[MF]\s*,\s*\d{1,3}\s*yrs?\s*,\s*\d{1,2}\/\d{1,2}\/\d{2,4}\b/i.test(text)
+    );
   }
 
   function looksLikeMrnLine(line = "") {
@@ -1880,92 +1901,130 @@ export default function App() {
 
     if (lines.length === 0) return [];
 
-    const packets = [];
-    let current = [];
-
-    function pushCurrent() {
-      const text = current.join("\n").trim();
-      if (text) {
-        packets.push({
-          packetId: `packet-${packets.length + 1}`,
-          rawText: text,
-        });
-      }
-      current = [];
+    function normalizeMrn(value = "") {
+      return String(value || "").replace(/\D/g, "");
     }
 
-    function looksLikeDivider(line = "") {
+    function extractMrnFromLine(line = "") {
       const text = String(line || "").trim();
-      return /^[-_=]{5,}$/.test(text);
+
+      const labeled = text.match(/\bMRN\s*[:#]?\s*([0-9]{2,4}[-\s]?[0-9]{2}[-\s]?[0-9]{2,4})\b/i);
+      if (labeled) return normalizeMrn(labeled[1]);
+
+      const standalone = text.match(/\b([0-9]{3}[-\s]?[0-9]{2}[-\s]?[0-9]{2})\b/);
+      if (standalone) return normalizeMrn(standalone[1]);
+
+      return "";
     }
 
-    function windowHasDob(startIndex, endIndex) {
-      const start = Math.max(0, startIndex);
-      const end = Math.min(lines.length - 1, endIndex);
-
-      for (let i = start; i <= end; i += 1) {
-        if (looksLikeDobLine(lines[i])) return true;
-      }
-      return false;
+    function isPatientMrnHeader(line = "") {
+      const text = String(line || "").trim();
+      return /^pat(?:ient|lent|lient|ent)\s*[.:\s-]*.+\bmrn\s*:/i.test(text);
     }
 
-    function currentPacketLooksReal() {
-      if (current.length === 0) return false;
+    function packetFamilyForSegment(segmentText = "") {
+      const text = String(segmentText || "").toLowerCase();
 
-      const joined = current.join("\n").toLowerCase();
+      const hasPap =
+        /\bpap test\b/.test(text) ||
+        text.includes("anatomical pathology") ||
+        text.includes("specimen adequacy") ||
+        text.includes("negative for intraepithelial lesion") ||
+        text.includes("cervix");
+
+      const hasRadiology =
+        text.includes("findings") &&
+        text.includes("impression");
+
+      const hasInfectious =
+        text.includes("chlamydia") ||
+        text.includes("gonorrhoeae") ||
+        text.includes("gonorrhea") ||
+        text.includes("hiv screen") ||
+        text.includes("syphilis screen") ||
+        text.includes("hepatitis");
+
+      const hasStructured =
+        text.includes("comprehensive metabolic panel") ||
+        text.includes("cbc") ||
+        text.includes("wbc") ||
+        text.includes("rbc") ||
+        text.includes("hemoglobin") ||
+        text.includes("platelet") ||
+        text.includes("glucose") ||
+        text.includes("sodium") ||
+        text.includes("potassium") ||
+        text.includes("creatinine") ||
+        text.includes("lipid panel") ||
+        text.includes("thyroid stimulating hormone") ||
+        text.includes("t4") ||
+        text.includes("vitamin b");
+
+      if (hasRadiology) return "radiology";
+      if (hasPap) return "pathology";
+      if (hasStructured) return "structured";
+      if (hasInfectious) return "infectious";
+      return "other";
+    }
+
+    function segmentLooksWorthKeeping(segmentText = "") {
+      const text = String(segmentText || "").toLowerCase();
+
       return (
-        joined.includes("collected date") ||
-        joined.includes("procedure") ||
-        joined.includes("result") ||
-        joined.includes("chemistry") ||
-        joined.includes("cbc") ||
-        joined.includes("immunology") ||
-        joined.includes("molecular diagnostics")
+        text.includes("final result") ||
+        text.includes("value") ||
+        text.includes("range") ||
+        text.includes("pap test") ||
+        text.includes("interpretation") ||
+        text.includes("specimen adequacy")
       );
     }
 
+    const headerIndexes = [];
     for (let i = 0; i < lines.length; i += 1) {
-      const line = lines[i];
-      const prev = i > 0 ? lines[i - 1] : "";
-      const next = i < lines.length - 1 ? lines[i + 1] : "";
-      const next2 = i < lines.length - 2 ? lines[i + 2] : "";
-      const next3 = i < lines.length - 3 ? lines[i + 3] : "";
-
-      if (looksLikeDivider(line)) {
-        continue;
+      if (isPatientMrnHeader(lines[i])) {
+        headerIndexes.push(i);
       }
-
-      const patientBoundary =
-        current.length > 0 &&
-        currentPacketLooksReal() &&
-        (
-          (
-            looksLikePatientStart(line) &&
-            (
-              looksLikeDobLine(line) ||
-              looksLikeDobLine(prev) ||
-              looksLikeDobLine(next) ||
-              looksLikeDobLine(next2) ||
-              looksLikeDobLine(next3) ||
-              windowHasDob(i - 1, i + 3)
-            )
-          ) ||
-          (
-            /^patient\s*:/i.test(String(line || "").trim()) &&
-            windowHasDob(i, i + 3)
-          )
-        );
-
-      if (patientBoundary) {
-        pushCurrent();
-      }
-
-      current.push(line);
     }
 
-    pushCurrent();
+    if (headerIndexes.length === 0) {
+      return [{
+        packetId: "packet-1",
+        rawText: lines.join("\n").trim(),
+      }];
+    }
 
-    return packets;
+    const grouped = new Map();
+    const orderedKeys = [];
+
+    for (let h = 0; h < headerIndexes.length; h += 1) {
+      const startIndex = headerIndexes[h];
+      const endIndex = h < headerIndexes.length - 1 ? headerIndexes[h + 1] : lines.length;
+      const segmentLines = lines.slice(startIndex, endIndex);
+      const segmentText = segmentLines.join("\n").trim();
+      if (!segmentText || !segmentLooksWorthKeeping(segmentText)) continue;
+
+      const mrn = extractMrnFromLine(segmentLines[0]) || `unknown-${h}`;
+      // Group by MRN only. UMC often sends the same patient as multiple page
+      // fragments whose family can look different (structured vs other vs
+      // infectious), especially continuation pages like "Patient. Name MRN".
+      // Splitting by family creates duplicate review packets for the same PDF.
+      const key = mrn;
+
+      if (!grouped.has(key)) {
+        grouped.set(key, []);
+        orderedKeys.push(key);
+      }
+
+      grouped.get(key).push(segmentText);
+    }
+
+    return orderedKeys
+      .map((key, index) => ({
+        packetId: `packet-${index + 1}`,
+        rawText: grouped.get(key).join("\n").trim(),
+      }))
+      .filter((packet) => packet.rawText);
   }
 
   function classifyLabPacket(rawText = "") {
@@ -2117,16 +2176,15 @@ export default function App() {
       })
       .filter((packet) => {
         const hasLabs = (packet.labs || []).length > 0;
-        const hasExtractedPatient =
-          !!String(packet.extractedPatientName || "").trim() &&
-          !!String(packet.extractedDob || "").trim();
 
         const isNonNumericButImportant =
           packet.packetType === "Pathology / PAP" ||
-          packet.packetType === "Radiology / Report" ||
-          packet.packetType === "Single Test Report";
+          packet.packetType === "Radiology / Report";
 
-        return hasLabs || isNonNumericButImportant || hasExtractedPatient;
+        // Do not keep demographic-only UMC header fragments as separate packets.
+        // They cause review rows with a patient name but zero labs, then the real lab page
+        // appears as a separate packet with a bad extracted DOB/name.
+        return hasLabs || isNonNumericButImportant;
       });
 
     return mergeDuplicatePacketsByPatientDobAndType(builtPackets);
