@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./lib/supabase";
-import { createPatientInSupabase, updatePatientInSupabase } from "./api/patients";
+import { createPatientInSupabase, updatePatientInSupabase, mergePatientsByMrnInSupabase } from "./api/patients";
 import {
   parseLabsFromText,
   extractPatientNameFromLabText as extractPatientNameFromLabTextFromParser,
@@ -1323,6 +1323,19 @@ export default function App() {
 
   const dashboardSelectedPatient =
     patients.find((p) => p.id === dashboardSelectedPatientId) || null;
+
+  const duplicateMrnPatientsForSelected = useMemo(() => {
+    if (!dashboardSelectedPatient?.mrn) return [];
+
+    const selectedMrn = String(dashboardSelectedPatient.mrn).trim().toLowerCase();
+    if (!selectedMrn) return [];
+
+    return patients.filter(
+      (patient) =>
+        String(patient.id) !== String(dashboardSelectedPatient.id) &&
+        String(patient.mrn || "").trim().toLowerCase() === selectedMrn
+    );
+  }, [dashboardSelectedPatient, patients]);
 
 
   function normalizeExtractedDate(value = "") {
@@ -4220,6 +4233,12 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
       if (!isSelectedQueueDate) return false;
       if (encounter.status === "cancelled") return false;
 
+      // Keep specialty-only/refill-only workflow rows out of the normal General Queue.
+      // They still appear in Pharmacy Queue and the dedicated specialty/social-work views.
+      if (!isPharmacyQueueView && !canUseWholeClinicQueueTools && isPharmacyWorkflow) {
+        return false;
+      }
+
       if (canUseWholeClinicQueueTools && !isPharmacyQueueView) {
         if (encounter.visitType === "refill_only") return false;
 
@@ -4229,7 +4248,7 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
           encounter.status === "in_visit" ||
           encounter.status === "done" ||
           encounter.soapStatus === "signed" ||
-          isPharmacyWorkflow
+          encounter.visitType === "specialty_only"
         );
       }
 
@@ -6298,6 +6317,60 @@ async function markSeenBySocialWork(encounterId) {
       roomNumber: String(numericRoom),
     }));
   }
+  async function mergePatientRecordsByMrn(sourcePatientId, targetPatientId) {
+    const sourcePatient = patients.find(
+      (patient) => String(patient.id) === String(sourcePatientId)
+    );
+    const targetPatient = patients.find(
+      (patient) => String(patient.id) === String(targetPatientId)
+    );
+
+    if (!sourcePatient || !targetPatient) {
+      alert("Could not find both patient records to merge.");
+      return;
+    }
+
+    const sourceMrn = String(sourcePatient.mrn || "").trim().toLowerCase();
+    const targetMrn = String(targetPatient.mrn || "").trim().toLowerCase();
+
+    if (!sourceMrn || sourceMrn !== targetMrn) {
+      alert("Merge is only allowed when both patient records have the same MRN.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Merge duplicate MRN records?\n\nKeep: ${getFullPatientName(targetPatient)} (${targetPatient.dob || "DOB unknown"})\nMerge/delete: ${getFullPatientName(sourcePatient)} (${sourcePatient.dob || "DOB unknown"})\nMRN: ${targetPatient.mrn}\n\nThis moves encounters, meds, allergies, refills, PAP, and specialty tracker entries to the kept patient, then deletes the duplicate patient record.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      await mergePatientsByMrnInSupabase({
+        sourcePatientId,
+        targetPatientId,
+      });
+
+      await refreshClinicData();
+
+      setDashboardSelectedPatientId(targetPatientId);
+      setSelectedPatientId(targetPatientId);
+
+      if (String(selectedPatientId) === String(sourcePatientId)) {
+        setSelectedEncounterId(null);
+      }
+
+      showToast({
+        title: "Patient records merged",
+        message: `Duplicate MRN ${targetPatient.mrn} was merged into ${getFullPatientName(targetPatient)}.`,
+        type: "success",
+        duration: 5000,
+      });
+    } catch (error) {
+      console.error("Patient merge failed:", error);
+      alert(error.message || "Failed to merge patient records.");
+    }
+  }
+
   async function deletePatientCompletely(patientId) {
     const patientToDelete = patients.find(
       (patient) => String(patient.id) === String(patientId)
@@ -8755,6 +8828,8 @@ async function markSeenBySocialWork(encounterId) {
               deletePatientCompletely={deletePatientCompletely}
               openPatientEditModal={openPatientEditModal}
               dashboardSelectedPatient={dashboardSelectedPatient}
+              duplicateMrnPatientsForSelected={duplicateMrnPatientsForSelected}
+              mergePatientRecordsByMrn={mergePatientRecordsByMrn}
               selectedClinicDate={selectedClinicDate}
               setSelectedClinicDate={setSelectedClinicDate}
               filteredVisiblePatients={filteredVisiblePatients}

@@ -253,7 +253,7 @@ function savePapDraftValue(entry, field) {
   function handleAddEntry() {
     if (
       !newEntry.patientId ||
-      !newgetLivePatientName(entry, patientsById) ||
+      !getLivePatientName(entry, patientsById) ||
       !newEntry.medication.trim() ||
       !newEntry.company.trim() ||
       !newEntry.assignedLeadership.trim()
@@ -267,7 +267,7 @@ function savePapDraftValue(entry, field) {
     const entry = {
       id: Date.now(),
       patientId: newEntry.patientId,
-      patientName: newgetLivePatientName(entry, patientsById),
+      patientName: getLivePatientName(entry, patientsById),
       mrn: newEntry.mrn,
       phone: newEntry.phone,
       medication: newEntry.medication,
@@ -434,7 +434,7 @@ function savePapDraftValue(entry, field) {
           <Field label="Selected Patient">
             <input
               className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm"
-              value={newgetLivePatientName(entry, patientsById)}
+              value={getLivePatientName(entry, patientsById)}
               readOnly
             />
           </Field>

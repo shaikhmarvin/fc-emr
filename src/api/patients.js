@@ -262,3 +262,20 @@ export async function deletePatientInSupabase(patientId) {
 
   return data;
 }
+export async function mergePatientsByMrnInSupabase({ sourcePatientId, targetPatientId }) {
+  if (!sourcePatientId || !targetPatientId) {
+    throw new Error("Both source and target patient IDs are required for merge.");
+  }
+
+  if (String(sourcePatientId) === String(targetPatientId)) {
+    throw new Error("Cannot merge a patient into itself.");
+  }
+
+  const { data, error } = await supabase.rpc("merge_patients_by_mrn", {
+    source_patient_id: sourcePatientId,
+    target_patient_id: targetPatientId,
+  });
+
+  if (error) throw error;
+  return data;
+}
