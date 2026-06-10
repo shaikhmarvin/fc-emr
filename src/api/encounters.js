@@ -631,6 +631,10 @@ function mapDbStatusToUi(status) {
 }
 
 export async function fetchMedications(patientIds = null) {
+  if (Array.isArray(patientIds) && patientIds.length === 0) {
+    return [];
+  }
+
   let query = supabase
     .from("medications")
     .select("id, patient_id, encounter_id, name, dosage, frequency, route, dispense_amount, refill_count, instructions, medication_started_at, is_active, created_at")

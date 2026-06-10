@@ -1,6 +1,10 @@
 import { supabase } from "../lib/supabase";
 
 export async function fetchAllergies(patientIds = null) {
+  if (Array.isArray(patientIds) && patientIds.length === 0) {
+    return [];
+  }
+
   let query = supabase
     .from("allergies")
     .select("id, patient_id, allergen, reaction, severity, notes, is_active, created_at")
