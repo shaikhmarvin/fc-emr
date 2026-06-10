@@ -1398,6 +1398,269 @@ export default function App() {
     );
   }
 
+  function getEncounterVisitKind(encounter = {}) {
+    const visitType = String(encounter.visitType || encounter.visit_type || "general");
+
+    if (visitType === "specialty_only") return "specialty";
+    if (visitType === "both") return "both";
+    if (visitType === "refill_only") return "refill";
+    return "general";
+  }
+
+  function findSameDayEncounter(patient, sourceEncounter, visitType) {
+    if (!patient || !sourceEncounter) return null;
+
+    const sourceClinicDate = normalizeClinicDate(sourceEncounter.clinicDate);
+    const sourceDailyNumber = String(sourceEncounter.dailyNumber || "").trim();
+    const candidates = (patient.encounters || []).filter((encounter) => {
+      if (String(encounter.id) === String(sourceEncounter.id)) return false;
+      if ((encounter.visitType || "general") !== visitType) return false;
+      if (normalizeClinicDate(encounter.clinicDate) !== sourceClinicDate) return false;
+
+      return true;
+    });
+
+    if (candidates.length <= 1) return candidates[0] || null;
+
+    if (sourceDailyNumber) {
+      const dailyMatches = candidates.filter(
+        (encounter) => String(encounter.dailyNumber || "").trim() === sourceDailyNumber
+      );
+
+      if (dailyMatches.length === 1) return dailyMatches[0];
+    }
+
+    throw new Error(
+      "Could not safely choose the matching same-day encounter. Please resolve duplicate same-day encounters before changing visit type."
+    );
+  }
+
+  function encounterHasProtectedClinicalWork(encounter = {}) {
+    const status = String(encounter.status || "").toLowerCase();
+    const blockedStatuses = new Set(["roomed", "in_visit", "done", "completed"]);
+    const hasSoap =
+      Boolean(encounter.soapSubjective) ||
+      Boolean(encounter.soapObjective) ||
+      Boolean(encounter.soapAssessment) ||
+      Boolean(encounter.soapPlan) ||
+      String(encounter.soapStatus || "draft").toLowerCase() !== "draft";
+    const hasVitals =
+      Array.isArray(encounter.vitalsHistory) && encounter.vitalsHistory.length > 0;
+    const hasLabs =
+      (encounter.inHouseLabs && Object.keys(encounter.inHouseLabs).length > 0) ||
+      (Array.isArray(encounter.importedSendOutLabs) && encounter.importedSendOutLabs.length > 0);
+
+    return (
+      blockedStatuses.has(status) ||
+      hasSoap ||
+      hasVitals ||
+      hasLabs ||
+      Boolean(encounter.roomNumber) ||
+      Boolean(encounter.assignedStudent) ||
+      Boolean(encounter.assignedUpperLevel)
+    );
+  }
+
+  function assertEncounterCanBeRemovedForVisitConversion(encounter = {}) {
+    if (!encounterHasProtectedClinicalWork(encounter)) return;
+
+    throw new Error(
+      "This visit already has clinical work, room assignment, labs, vitals, or charting. Visit type was not changed because removing that encounter could lose work."
+    );
+  }
+
+  function buildEncounterForVisitType(baseEncounter = {}, updates = {}, visitType) {
+    const isSpecialty = visitType === "specialty_only";
+    const specialtyType =
+      isSpecialty ? updates.specialtyType || baseEncounter.specialtyType || "" : "";
+    const chiefComplaint =
+      updates.chiefComplaint ??
+      (isSpecialty
+        ? specialtyType
+          ? `${specialtyType} Specialty Visit`
+          : "Specialty Visit"
+        : baseEncounter.chiefComplaint || "");
+
+    return {
+      clinicDate:
+        normalizeClinicDate(baseEncounter.clinicDate) ||
+        normalizeClinicDate(baseEncounter.clinic_date) ||
+        formatClinicDate(),
+      createdAt: new Date().toISOString(),
+      dailyNumber: updates.dailyNumber ?? baseEncounter.dailyNumber ?? "",
+      refillNumber: "",
+      newReturning: updates.newReturning ?? baseEncounter.newReturning ?? "Returning",
+      visitLocation: updates.visitLocation ?? baseEncounter.visitLocation ?? "In Clinic",
+      chiefComplaint,
+      notes: updates.notes ?? baseEncounter.notes ?? "",
+      transportation: updates.transportation ?? baseEncounter.transportation ?? "",
+      needsElevator: updates.needsElevator ?? baseEncounter.needsElevator ?? false,
+      spanishSpeaking: updates.spanishSpeaking ?? baseEncounter.spanishSpeaking ?? false,
+      mammogramStatus: updates.mammogramStatus ?? baseEncounter.mammogramStatus ?? "",
+      papStatus: updates.papStatus ?? baseEncounter.papStatus ?? "",
+      fluShot: updates.fluShot ?? baseEncounter.fluShot ?? "",
+      colonoscopyStatus: updates.colonoscopyStatus ?? baseEncounter.colonoscopyStatus ?? "",
+      htn: updates.htn ?? baseEncounter.htn ?? false,
+      dm: updates.dm ?? baseEncounter.dm ?? false,
+      labsLast6Months: updates.labsLast6Months ?? baseEncounter.labsLast6Months ?? "",
+      nicotineUse: updates.nicotineUse ?? baseEncounter.nicotineUse ?? "",
+      nicotineDetails: updates.nicotineDetails ?? baseEncounter.nicotineDetails ?? "",
+      substanceUseConcern:
+        updates.substanceUseConcern ?? baseEncounter.substanceUseConcern ?? "",
+      substanceUseTreatment:
+        updates.substanceUseTreatment ?? baseEncounter.substanceUseTreatment ?? "",
+      substanceUseNotes: updates.substanceUseNotes ?? baseEncounter.substanceUseNotes ?? "",
+      dermatology: updates.dermatology ?? baseEncounter.dermatology ?? "N/A",
+      ophthalmology: updates.ophthalmology ?? baseEncounter.ophthalmology ?? "N/A",
+      optometry: updates.optometry ?? baseEncounter.optometry ?? "N/A",
+      diabeticEyeExamPastYear:
+        updates.diabeticEyeExamPastYear ?? baseEncounter.diabeticEyeExamPastYear ?? "N/A",
+      physicalTherapy: updates.physicalTherapy ?? baseEncounter.physicalTherapy ?? "N/A",
+      mentalHealthCombined:
+        updates.mentalHealthCombined ?? baseEncounter.mentalHealthCombined ?? "N/A",
+      counseling: updates.counseling ?? baseEncounter.counseling ?? "N/A",
+      anyMentalHealthPositive:
+        updates.anyMentalHealthPositive ?? baseEncounter.anyMentalHealthPositive ?? false,
+      visitType,
+      specialtyType,
+      refillMedicationRequest: "",
+      status:
+        updates.status ??
+        (isSpecialty ? "undergrad_complete" : baseEncounter.status || "started"),
+      leadershipIntakeComplete:
+        updates.leadershipIntakeComplete ?? (isSpecialty ? true : false),
+      pharmacyStatus: isSpecialty ? baseEncounter.pharmacyStatus || "waiting" : "",
+    };
+  }
+
+  function buildUpdatesForVisitType(updates = {}, visitType, baseEncounter = {}) {
+    const isSpecialty = visitType === "specialty_only";
+
+    return {
+      ...updates,
+      visitType,
+      specialtyType: isSpecialty
+        ? updates.specialtyType || baseEncounter.specialtyType || ""
+        : "",
+      refillMedicationRequest: "",
+      dualVisit: false,
+      ...(isSpecialty
+        ? {
+          status: updates.status || "undergrad_complete",
+          leadershipIntakeComplete: true,
+        }
+        : {}),
+    };
+  }
+
+  async function applyVisitTypeConversion(patientId, encounterId, updates = {}) {
+    if (!encounterId || !updates || updates.visitType === undefined) {
+      if (encounterId && updates) {
+        await updateEncounterInSupabase(encounterId, updates);
+      }
+      return { selectedEncounterId: encounterId };
+    }
+
+    const patient = patients.find((p) => String(p.id) === String(patientId));
+    const selected =
+      patient?.encounters?.find(
+        (encounter) => String(encounter.id) === String(encounterId)
+      ) ||
+      patients
+        .flatMap((p) => p.encounters || [])
+        .find((encounter) => String(encounter.id) === String(encounterId));
+
+    if (!patient || !selected) {
+      throw new Error("Could not find the encounter to update.");
+    }
+
+    const nextVisitType = updates.visitType || "general";
+
+    if (nextVisitType === "refill_only") {
+      await updateEncounterInSupabase(encounterId, updates);
+      return { selectedEncounterId: encounterId };
+    }
+
+    const selectedKind = getEncounterVisitKind(selected);
+    const existingGeneral =
+      selectedKind === "general" || selectedKind === "both"
+        ? selected
+        : findSameDayEncounter(patient, selected, "general");
+    const existingSpecialty =
+      selectedKind === "specialty" || selectedKind === "both"
+        ? selected
+        : findSameDayEncounter(patient, selected, "specialty_only");
+
+    const wantsGeneral = nextVisitType === "general" || nextVisitType === "both";
+    const wantsSpecialty =
+      nextVisitType === "specialty_only" || nextVisitType === "both";
+    const deleteTargets = [];
+
+    if (!wantsGeneral && existingGeneral) deleteTargets.push(existingGeneral);
+    if (!wantsSpecialty && existingSpecialty) deleteTargets.push(existingSpecialty);
+    deleteTargets.forEach(assertEncounterCanBeRemovedForVisitConversion);
+
+    let selectedEncounterId = encounterId;
+    let generalId = existingGeneral?.id || null;
+    let specialtyId =
+      existingSpecialty && String(existingSpecialty.id) !== String(existingGeneral?.id)
+        ? existingSpecialty.id
+        : null;
+
+    if (wantsGeneral) {
+      const generalUpdates = buildUpdatesForVisitType(updates, "general", selected);
+
+      if (existingGeneral) {
+        await updateEncounterInSupabase(existingGeneral.id, generalUpdates);
+        generalId = existingGeneral.id;
+      } else {
+        const savedGeneral = await createEncounterInSupabase(
+          patientId,
+          buildEncounterForVisitType(selected, updates, "general")
+        );
+        generalId = savedGeneral.id;
+      }
+    }
+
+    if (wantsSpecialty) {
+      const specialtyBase =
+        existingSpecialty && String(existingSpecialty.id) !== String(existingGeneral?.id)
+          ? existingSpecialty
+          : selected;
+      const specialtyUpdates = buildUpdatesForVisitType(
+        updates,
+        "specialty_only",
+        specialtyBase
+      );
+
+      if (
+        existingSpecialty &&
+        String(existingSpecialty.id) !== String(existingGeneral?.id)
+      ) {
+        await updateEncounterInSupabase(existingSpecialty.id, specialtyUpdates);
+        specialtyId = existingSpecialty.id;
+      } else {
+        const savedSpecialty = await createEncounterInSupabase(
+          patientId,
+          buildEncounterForVisitType(selected, updates, "specialty_only")
+        );
+        specialtyId = savedSpecialty.id;
+      }
+    }
+
+    for (const encounter of deleteTargets) {
+      await deleteEncounterInSupabase(encounter.id);
+    }
+
+    if (nextVisitType === "specialty_only") {
+      selectedEncounterId = specialtyId || selectedEncounterId;
+    } else {
+      selectedEncounterId = generalId || selectedEncounterId;
+    }
+
+    return { selectedEncounterId };
+  }
+
 
   function normalizeExtractedDate(value = "") {
     const text = String(value || "").trim();
@@ -4217,7 +4480,8 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
             undergradRegistrationForm.chronicConditionsOther || mrnConflictPatient.chronicConditionsOther,
         });
 
-        await updateEncounterInSupabase(registrationEncounterId, {
+        const { selectedEncounterId: nextSelectedEncounterId } =
+          await applyVisitTypeConversion(mrnConflictPatient.id, registrationEncounterId, {
           patientId: mrnConflictPatient.id,
           status: nextStatus,
           undergradCompletedAt,
@@ -4247,7 +4511,7 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
 
         setSelectedPatientId(mrnConflictPatient.id);
         setDashboardSelectedPatientId(mrnConflictPatient.id);
-        setSelectedEncounterId(registrationEncounterId);
+        setSelectedEncounterId(nextSelectedEncounterId);
         setShowUndergradRegistrationModal(false);
         setRegistrationPatientId(null);
         setRegistrationEncounterId(null);
@@ -4295,7 +4559,8 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
 
       const undergradCompletedAt = encounter.undergradCompletedAt || new Date().toISOString();
 
-      await updateEncounterInSupabase(registrationEncounterId, {
+      const { selectedEncounterId: nextSelectedEncounterId } =
+        await applyVisitTypeConversion(registrationPatientId, registrationEncounterId, {
         status: nextStatus,
         undergradCompletedAt,
         dailyNumber: undergradRegistrationForm.dailyNumber || "",
@@ -4315,30 +4580,9 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
         );
       }
 
-      setPatients((prev) =>
-        prev.map((p) =>
-          p.id === registrationPatientId
-            ? {
-              ...p,
-              ...patientUpdates,
-              encounters: p.encounters.map((e) =>
-                e.id === registrationEncounterId
-                  ? {
-                    ...e,
-                    status: nextStatus,
-                    undergradCompletedAt,
-                    dailyNumber: undergradRegistrationForm.dailyNumber || "",
-                    refillNumber: nextVisitType === "refill_only" ? assignedRefillNumber || "" : "",
-                    visitType: nextVisitType,
-                    specialtyType: nextSpecialtyType,
-                    refillMedicationRequest: nextRefillMedicationRequest,
-                  }
-                  : e
-              ),
-            }
-            : p
-        )
-      );
+      await refreshClinicData();
+      setSelectedPatientId(registrationPatientId);
+      setSelectedEncounterId(nextSelectedEncounterId);
 
       setShowUndergradRegistrationModal(false);
       setRegistrationPatientId(null);
@@ -5366,7 +5610,8 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
 
         const nextStatus = "ready";
 
-        await updateEncounterInSupabase(selectedEncounter.id, {
+        const { selectedEncounterId: nextSelectedEncounterId } =
+          await applyVisitTypeConversion(mrnConflictPatient.id, selectedEncounter.id, {
           patientId: mrnConflictPatient.id,
           chiefComplaint: intakeForm.chiefComplaint,
           notes: intakeForm.notes,
@@ -5431,7 +5676,7 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
 
         setSelectedPatientId(mrnConflictPatient.id);
         setDashboardSelectedPatientId(mrnConflictPatient.id);
-        setSelectedEncounterId(selectedEncounter.id);
+        setSelectedEncounterId(nextSelectedEncounterId);
         setShowIntakeModal(false);
         setIntakeTab(0);
         setIntakeMatchPatientId(null);
@@ -5482,7 +5727,7 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
         console.log("editingPatientId:", editingPatientId);
         console.log("selectedEncounterId:", selectedEncounter.id);
 
-        const savedPatient = await updatePatientInSupabase(editingPatientId, {
+        await updatePatientInSupabase(editingPatientId, {
           firstName: intakeForm.firstName,
           lastName: intakeForm.lastName,
           preferredName: intakeForm.preferredName,
@@ -5496,10 +5741,10 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
           ttuStudent: intakeForm.ttuStudent,
         });
 
-        console.log("savedPatient update worked:", savedPatient);
         const nextStatus = "ready";
 
-        const savedEncounter = await updateEncounterInSupabase(selectedEncounter.id, {
+        const { selectedEncounterId: nextSelectedEncounterId } =
+          await applyVisitTypeConversion(editingPatientId, selectedEncounter.id, {
           chiefComplaint: intakeForm.chiefComplaint,
           notes: intakeForm.notes,
           dailyNumber: intakeForm.dailyNumber,
@@ -5534,65 +5779,10 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
           status: nextStatus,
         });
 
-        console.log("savedEncounter update worked:", savedEncounter);
-
-        setPatients((prev) =>
-          prev.map((patient) =>
-            patient.id === editingPatientId
-              ? {
-                ...patient,
-                ...savedPatient,
-                preferredName: intakeForm.preferredName,
-                last4ssn: intakeForm.last4ssn,
-                age: intakeForm.age,
-                phone: intakeForm.phone,
-                sex: intakeForm.sex,
-                ethnicity: intakeForm.ethnicity,
-                pronouns: intakeForm.pronouns,
-                ttuStudent: intakeForm.ttuStudent,
-                encounters: patient.encounters.map((encounter) =>
-                  encounter.id === selectedEncounter.id
-                    ? {
-                      ...encounter,
-                      status: nextStatus,
-                      leadershipIntakeComplete: true,
-                      dailyNumber: intakeForm.dailyNumber,
-                      newReturning: intakeForm.newReturning,
-                      visitLocation: intakeForm.visitLocation,
-                      chiefComplaint: intakeForm.chiefComplaint,
-                      notes: intakeForm.notes,
-                      transportation: intakeForm.transportation,
-                      needsElevator: intakeForm.needsElevator,
-                      spanishSpeaking: intakeForm.spanishSpeaking,
-                      mammogramStatus: intakeForm.mammogramStatus,
-                      papStatus: intakeForm.papStatus,
-                      fluShot: intakeForm.fluShot,
-                      colonoscopyStatus: intakeForm.colonoscopyStatus,
-                      htn: intakeForm.htn,
-                      dm: intakeForm.dm,
-                      labsLast6Months: intakeForm.labsLast6Months,
-                      nicotineUse: intakeForm.nicotineUse,
-                      nicotineDetails: intakeForm.nicotineDetails,
-                      substanceUseConcern: intakeForm.substanceUseConcern,
-                      substanceUseTreatment: intakeForm.substanceUseTreatment,
-                      substanceUseNotes: intakeForm.substanceUseNotes,
-                      dermatology: intakeForm.dermatology,
-                      ophthalmology: intakeForm.ophthalmology,
-                      optometry: intakeForm.optometry,
-                      diabeticEyeExamPastYear: intakeForm.diabeticEyeExamPastYear,
-                      physicalTherapy: intakeForm.physicalTherapy,
-                      mentalHealthCombined: intakeForm.mentalHealthCombined,
-                      counseling: intakeForm.counseling,
-                      anyMentalHealthPositive: intakeForm.anyMentalHealthPositive,
-                      visitType: intakeForm.visitType,
-                      specialtyType: intakeForm.specialtyType,
-                    }
-                    : encounter
-                ),
-              }
-              : patient
-          )
-        );
+        await refreshClinicData();
+        setSelectedPatientId(editingPatientId);
+        setDashboardSelectedPatientId(editingPatientId);
+        setSelectedEncounterId(nextSelectedEncounterId);
         await createProgramEntriesFromIntake(
           {
             ...selectedPatient,
@@ -5907,38 +6097,22 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
     }
 
     try {
-      const savedPatient = await updatePatientInSupabase(patientId, {
+      await updatePatientInSupabase(patientId, {
         ...updates,
         mrn: trimmedMrn,
       });
 
-      let savedEncounter = null;
+      let nextSelectedEncounterId = encounterId;
 
       if (encounterId && encounterUpdates) {
-        savedEncounter = await updateEncounterInSupabase(encounterId, encounterUpdates);
+        const result = await applyVisitTypeConversion(patientId, encounterId, encounterUpdates);
+        nextSelectedEncounterId = result.selectedEncounterId;
       }
 
-      setPatients((prev) =>
-        prev.map((patient) =>
-          patient.id === patientId
-            ? {
-              ...patient,
-              ...savedPatient,
-              ...updates,
-              mrn: trimmedMrn,
-              encounters: patient.encounters.map((encounter) =>
-                encounter.id === encounterId
-                  ? {
-                    ...encounter,
-                    ...(savedEncounter || {}),
-                    ...(encounterUpdates || {}),
-                  }
-                  : encounter
-              ),
-            }
-            : patient
-        )
-      );
+      await refreshClinicData();
+      setSelectedPatientId(patientId);
+      setDashboardSelectedPatientId(patientId);
+      setSelectedEncounterId(nextSelectedEncounterId || null);
     } catch (error) {
       console.error("Failed to save patient edits:", error);
       showToast({
