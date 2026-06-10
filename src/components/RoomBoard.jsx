@@ -103,19 +103,23 @@ export default function RoomBoard({
   todayStaffRoster,
   onTodayStaffRosterChange,
   onTodayStaffRosterSave,
+  specialtyNames,
+  reservedRooms,
   tonightSpecialtyNames = [],
   tonightReservedRooms = [],
 }) {
+  const activeSpecialtyNames = specialtyNames || tonightSpecialtyNames;
+  const activeReservedRooms = reservedRooms || tonightReservedRooms;
 
   function getReservedSpecialtyForRoom(roomNumber) {
-    return (tonightReservedRooms || []).find(
+    return (activeReservedRooms || []).find(
       (reserved) => String(reserved.roomNumber) === String(roomNumber)
     );
   }
 
   return (
     <div className="space-y-4 p-3 sm:p-4 lg:p-6">
-      {tonightSpecialtyNames.length > 0 && (
+      {activeSpecialtyNames.length > 0 && (
         <div className="rounded-2xl border border-purple-200 bg-purple-50 px-4 py-3 text-sm font-semibold text-purple-800 shadow-sm">
           Tonight’s Specialties: {tonightSpecialtyNames.join(", ")}
         </div>

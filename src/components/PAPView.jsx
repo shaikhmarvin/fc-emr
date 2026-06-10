@@ -27,7 +27,15 @@ function getLivePatientName(entry, patientsById) {
     return `${patient.firstName || ""} ${patient.lastName || ""}`.trim();
   }
 
-  return entry.patientName || "Unknown Patient";
+  if (entry.patientName?.trim()) {
+    return entry.patientName.trim();
+  }
+
+  if (entry.firstName || entry.lastName) {
+    return `${entry.firstName || ""} ${entry.lastName || ""}`.trim();
+  }
+
+  return `MRN ${entry.mrn || "Unknown"}`;
 }
 
 export default function PAPView({
@@ -253,7 +261,7 @@ function savePapDraftValue(entry, field) {
   function handleAddEntry() {
     if (
       !newEntry.patientId ||
-      !getLivePatientName(entry, patientsById) ||
+      !getLivePatientName(newEntry, patientsById) ||
       !newEntry.medication.trim() ||
       !newEntry.company.trim() ||
       !newEntry.assignedLeadership.trim()
@@ -267,7 +275,7 @@ function savePapDraftValue(entry, field) {
     const entry = {
       id: Date.now(),
       patientId: newEntry.patientId,
-      patientName: getLivePatientName(entry, patientsById),
+      patientName: getLivePatientName(newEntry, patientsById),
       mrn: newEntry.mrn,
       phone: newEntry.phone,
       medication: newEntry.medication,
@@ -739,7 +747,7 @@ function savePapDraftValue(entry, field) {
                     className="w-full text-left"
                   >
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
-                      <ReadOnlyField label="Patient" value={getLivePatientName(newEntry, patientsById)} />
+                      <ReadOnlyField label="Patient" value={getLivePatientName(entry, patientsById)} />
                       <ReadOnlyField label="Medication" value={entry.medication || "—"} />
                       <ReadOnlyField label="Company" value={entry.company || "—"} />
                       <ReadOnlyField label="Started Date" value={entry.startedDate || "—"} />

@@ -4,6 +4,7 @@ import {
   ROOM_OPTIONS,
   formatPhone,
 } from "../constants";
+import { supabase } from "../lib/supabase";
 import { fetchProgramSettings, updateProgramSetting } from "../api/programSettings";
 import { createPatientInSupabase } from "../api/patients";
 
@@ -74,6 +75,7 @@ export default function ProgramsView({
   selectedClinicDate,
   isLeadershipView,
   specialtyAccess,
+  onProgramSettingsChange,
 }) {
   const [activeTab, setActiveTab] = useState("Tracker");
 
@@ -261,6 +263,27 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
   }, []);
 
   useEffect(() => {
+    const channel = supabase
+      .channel("program-settings-view-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "program_settings",
+        },
+        () => {
+          loadProgramSettings();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  useEffect(() => {
     if (isLeadershipView) return;
     if (activeTab === "Tracker" || !accessibleProgramTypes.includes(activeTab)) {
       setActiveTab(accessibleProgramTypes[0] || "Tracker");
@@ -272,6 +295,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
     const rows = data || [];
 
     setProgramSettings(rows);
+    onProgramSettingsChange?.(rows);
 
     setNextProgramDates(
       rows.reduce((acc, row) => {

@@ -1041,6 +1041,54 @@ export default function App() {
     loadProgramSettingsForBoard();
   }, [session]);
 
+  useEffect(() => {
+    if (!session) return;
+
+    const channel = supabase
+      .channel("program-settings-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "program_settings",
+        },
+        (payload) => {
+          if (payload.eventType === "DELETE") {
+            setProgramSettings((prev) =>
+              prev.filter(
+                (row) =>
+                  String(row.program_type) !== String(payload.old?.program_type)
+              )
+            );
+            return;
+          }
+
+          const nextRow = payload.new;
+          if (!nextRow?.program_type) return;
+
+          setProgramSettings((prev) => {
+            const exists = prev.some(
+              (row) => String(row.program_type) === String(nextRow.program_type)
+            );
+
+            if (!exists) return [...prev, nextRow];
+
+            return prev.map((row) =>
+              String(row.program_type) === String(nextRow.program_type)
+                ? nextRow
+                : row
+            );
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session]);
+
 
   async function addProgramEntry(entry) {
     setProgramEntries((prev) => [entry, ...prev]);
@@ -3204,6 +3252,23 @@ export default function App() {
   const [specialtyQueueDate, setSpecialtyQueueDate] = useState(getLocalDateInputValue());
   const [queueClinicDate, setQueueClinicDate] = useState(getLocalDateInputValue());
   const [labQueueDate, setLabQueueDate] = useState(getLocalDateInputValue());
+  const boardClinicDate = roomBoardDate || formatClinicDate();
+  const boardSpecialtyPrograms = useMemo(() => {
+    return (programSettings || []).filter(
+      (program) =>
+        program?.next_specialty_date &&
+        normalizeClinicDate(program.next_specialty_date) === boardClinicDate
+    );
+  }, [programSettings, boardClinicDate]);
+  const boardSpecialtyNames = boardSpecialtyPrograms.map(
+    (program) => program.program_type
+  );
+  const boardReservedRooms = boardSpecialtyPrograms.flatMap((program) =>
+    (program.rooms_assigned?.rooms || []).map((roomNumber) => ({
+      roomNumber: String(roomNumber),
+      specialty: program.program_type,
+    }))
+  );
   const [, setNow] = useState(Date.now());
   const selectedPatient = patients.find((p) => p.id === selectedPatientId) || null;
   const selectedEncounter =
@@ -3352,8 +3417,6 @@ export default function App() {
   }, [allEncounterRows, specialtyQueueDate]);
 
   const specialtyRoomRulesForBoard = useMemo(() => {
-    const today = formatClinicDate();
-
     const mapProgramTypeToEncounterType = {
       "Physical Therapy": "pt",
       Dermatology: "dermatology",
@@ -3368,7 +3431,7 @@ export default function App() {
       const encounterType = mapProgramTypeToEncounterType[row.program_type];
       if (!encounterType) return;
 
-      if (row.next_specialty_date !== today) return;
+      if (normalizeClinicDate(row.next_specialty_date) !== boardClinicDate) return;
 
       rules[encounterType] = {
         label: row.program_type,
@@ -3377,7 +3440,7 @@ export default function App() {
     });
 
     return rules;
-  }, [programSettings]);
+  }, [programSettings, boardClinicDate]);
 
   const registrationRows = useMemo(() => {
     return allEncounterRows
@@ -3478,8 +3541,6 @@ export default function App() {
         normalizeClinicDate(encounter.clinicDate) === selectedClinicDate
     );
   }, [allEncounterRows, selectedClinicDate]);
-
-  const boardClinicDate = roomBoardDate || formatClinicDate();
 
   const boardEncounterRows = useMemo(() => {
     return allEncounterRows.filter(
@@ -9115,8 +9176,8 @@ async function markSeenBySocialWork(encounterId) {
               todayStaffRoster={todayStaffRoster}
               onTodayStaffRosterChange={setTodayStaffRoster}
               onTodayStaffRosterSave={handleSaveTodayStaffRoster}
-              tonightSpecialtyNames={tonightSpecialtyNames}
-              tonightReservedRooms={tonightReservedRooms}
+              specialtyNames={boardSpecialtyNames}
+              reservedRooms={boardReservedRooms}
             />
           )}
           {activeView === "formulary" && (
@@ -9285,6 +9346,7 @@ async function markSeenBySocialWork(encounterId) {
               selectedClinicDate={selectedClinicDate}
               isLeadershipView={isLeadershipView}
               specialtyAccess={currentSpecialtyAccess}
+              onProgramSettingsChange={setProgramSettings}
               leadershipOptions={profiles
                 .filter((profile) => profile.role === "leadership")
                 .map((profile) => (profile.full_name || "").trim())
