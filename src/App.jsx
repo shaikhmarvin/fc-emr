@@ -1385,6 +1385,19 @@ export default function App() {
     );
   }, [dashboardSelectedPatient, patients]);
 
+  function findPatientByMrn(mrn, excludePatientId = null) {
+    const normalizedMrn = String(mrn || "").trim().toLowerCase();
+    if (!normalizedMrn) return null;
+
+    return (
+      patients.find(
+        (patient) =>
+          (!excludePatientId || String(patient.id) !== String(excludePatientId)) &&
+          String(patient.mrn || "").trim().toLowerCase() === normalizedMrn
+      ) || null
+    );
+  }
+
 
   function normalizeExtractedDate(value = "") {
     const text = String(value || "").trim();
@@ -4150,6 +4163,115 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
       chronicConditionsOther: undergradRegistrationForm.chronicConditionsOther,
     };
 
+    const mrnConflictPatient = undergradRegistrationForm.mrn.trim()
+      ? findPatientByMrn(undergradRegistrationForm.mrn, registrationPatientId)
+      : null;
+
+    if (mrnConflictPatient) {
+      const confirmed = window.confirm(
+        `MRN ${undergradRegistrationForm.mrn.trim()} already belongs to:\n\n${getFullPatientName(mrnConflictPatient)}\nDOB: ${mrnConflictPatient.dob || "DOB unknown"}\n\nMove this registration visit to that existing chart? The existing chart name, DOB, and MRN will be kept.`
+      );
+
+      if (!confirmed) return;
+
+      try {
+        const currentStatus = encounter.status || "started";
+        const activeRegistrationStatuses = new Set(["started", "undergrad_complete"]);
+        const nextStatus = activeRegistrationStatuses.has(currentStatus)
+          ? encounter.leadershipIntakeComplete
+            ? "ready"
+            : "undergrad_complete"
+          : currentStatus;
+
+        const nextVisitType = undergradRegistrationForm.visitType || encounter.visitType || "general";
+        const nextSpecialtyType =
+          nextVisitType === "both" || nextVisitType === "specialty_only"
+            ? undergradRegistrationForm.specialtyType || ""
+            : "";
+        const nextRefillMedicationRequest =
+          nextVisitType === "refill_only"
+            ? undergradRegistrationForm.refillMedicationRequest || ""
+            : "";
+
+        const undergradCompletedAt = encounter.undergradCompletedAt || new Date().toISOString();
+
+        await updatePatientInSupabase(mrnConflictPatient.id, {
+          last4ssn: mrnConflictPatient.last4ssn || undergradRegistrationForm.last4Ssn,
+          address: undergradRegistrationForm.addressLine1 || mrnConflictPatient.address,
+          city: undergradRegistrationForm.city || mrnConflictPatient.city,
+          state: undergradRegistrationForm.state || mrnConflictPatient.state,
+          zipCode: undergradRegistrationForm.zipCode || mrnConflictPatient.zipCode,
+          emergencyContactName:
+            undergradRegistrationForm.emergencyContactName || mrnConflictPatient.emergencyContactName,
+          emergencyContactRelation:
+            undergradRegistrationForm.emergencyContactRelation || mrnConflictPatient.emergencyContactRelation,
+          emergencyContactPhone:
+            undergradRegistrationForm.emergencyContactPhone || mrnConflictPatient.emergencyContactPhone,
+          incomeRange: undergradRegistrationForm.incomeRange || mrnConflictPatient.incomeRange,
+          spanishOnly: undergradRegistrationForm.spanishOnly || mrnConflictPatient.spanishOnly,
+          chronicConditions:
+            undergradRegistrationForm.chronicConditions?.length > 0
+              ? undergradRegistrationForm.chronicConditions
+              : mrnConflictPatient.chronicConditions,
+          chronicConditionsOther:
+            undergradRegistrationForm.chronicConditionsOther || mrnConflictPatient.chronicConditionsOther,
+        });
+
+        await updateEncounterInSupabase(registrationEncounterId, {
+          patientId: mrnConflictPatient.id,
+          status: nextStatus,
+          undergradCompletedAt,
+          dailyNumber: undergradRegistrationForm.dailyNumber || "",
+          refillNumber: nextVisitType === "refill_only" ? encounter.refillNumber || "" : "",
+          visitType: nextVisitType,
+          specialtyType: nextSpecialtyType,
+          refillMedicationRequest: nextRefillMedicationRequest,
+          dualVisit: nextVisitType === "both",
+        });
+
+        if ((patient.encounters?.length || 0) <= 1) {
+          try {
+            await deletePatientInSupabase(patient.id);
+          } catch (deleteError) {
+            console.warn("Temporary duplicate patient could not be deleted:", deleteError);
+            showToast({
+              title: "Visit moved, cleanup needed",
+              message: "The registration was saved to the existing MRN chart, but the temporary duplicate patient could not be deleted automatically.",
+              type: "warning",
+              duration: 7000,
+            });
+          }
+        }
+
+        await refreshClinicData();
+
+        setSelectedPatientId(mrnConflictPatient.id);
+        setDashboardSelectedPatientId(mrnConflictPatient.id);
+        setSelectedEncounterId(registrationEncounterId);
+        setShowUndergradRegistrationModal(false);
+        setRegistrationPatientId(null);
+        setRegistrationEncounterId(null);
+        setUndergradRegistrationForm(EMPTY_UNDERGRAD_REGISTRATION_FORM);
+
+        showToast({
+          title: "Registration moved to existing chart",
+          message: `MRN ${mrnConflictPatient.mrn} is now using ${getFullPatientName(mrnConflictPatient)}'s chart.`,
+          type: "success",
+          duration: 5000,
+        });
+      } catch (error) {
+        console.error("Failed to move registration to existing MRN chart:", error);
+        showToast({
+          title: "Failed to save registration",
+          message: error.message,
+          type: "error",
+          duration: 5000,
+        });
+      }
+
+      return;
+    }
+
     try {
       await updatePatientInSupabase(registrationPatientId, patientUpdates);
 
@@ -5211,8 +5333,127 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
     if (!intakeForm.firstName || !intakeForm.lastName || !intakeForm.dob || !intakeForm.chiefComplaint) {
       return;
     }
-    if (intakeForm.mrn.trim() && mrnExists(patients, intakeForm.mrn, editingPatientId)) {
-      window.alert("That MRN is already being used by another patient. Please use a different MRN.");
+    const mrnConflictPatient = intakeForm.mrn.trim()
+      ? findPatientByMrn(intakeForm.mrn, editingPatientId)
+      : null;
+
+    if (mrnConflictPatient) {
+      if (!isEditingIntake || !selectedPatient || !selectedEncounter) {
+        window.alert("That MRN is already being used by another patient. Please use the existing chart for this MRN.");
+        return;
+      }
+
+      const confirmed = window.confirm(
+        `MRN ${intakeForm.mrn.trim()} already belongs to:\n\n${getFullPatientName(mrnConflictPatient)}\nDOB: ${mrnConflictPatient.dob || "DOB unknown"}\n\nMove this intake visit to that existing chart and keep the entered intake details? The existing chart name, DOB, and MRN will be kept.`
+      );
+
+      if (!confirmed) return;
+
+      if (isSubmittingIntakeRef.current) return;
+      isSubmittingIntakeRef.current = true;
+      setIsSubmittingIntake(true);
+
+      try {
+        await updatePatientInSupabase(mrnConflictPatient.id, {
+          preferredName: mrnConflictPatient.preferredName || intakeForm.preferredName,
+          last4ssn: mrnConflictPatient.last4ssn || intakeForm.last4ssn,
+          phone: intakeForm.phone || mrnConflictPatient.phone,
+          pronouns: intakeForm.pronouns || mrnConflictPatient.pronouns,
+          ethnicity: intakeForm.ethnicity || mrnConflictPatient.ethnicity,
+          sex: intakeForm.sex || mrnConflictPatient.sex,
+          ttuStudent: intakeForm.ttuStudent || mrnConflictPatient.ttuStudent,
+        });
+
+        const nextStatus = "ready";
+
+        await updateEncounterInSupabase(selectedEncounter.id, {
+          patientId: mrnConflictPatient.id,
+          chiefComplaint: intakeForm.chiefComplaint,
+          notes: intakeForm.notes,
+          dailyNumber: intakeForm.dailyNumber,
+          newReturning: intakeForm.newReturning,
+          visitLocation: intakeForm.visitLocation,
+          transportation: intakeForm.transportation,
+          needsElevator: intakeForm.needsElevator,
+          spanishSpeaking: intakeForm.spanishSpeaking,
+          mammogramStatus: intakeForm.mammogramStatus,
+          colonoscopyStatus: intakeForm.colonoscopyStatus,
+          papStatus: intakeForm.papStatus,
+          fluShot: intakeForm.fluShot,
+          htn: intakeForm.htn,
+          dm: intakeForm.dm,
+          labsLast6Months: intakeForm.labsLast6Months,
+          nicotineUse: intakeForm.nicotineUse,
+          nicotineDetails: intakeForm.nicotineDetails,
+          substanceUseConcern: intakeForm.substanceUseConcern,
+          substanceUseTreatment: intakeForm.substanceUseTreatment,
+          substanceUseNotes: intakeForm.substanceUseNotes,
+          dermatology: intakeForm.dermatology,
+          ophthalmology: intakeForm.ophthalmology,
+          optometry: intakeForm.optometry,
+          diabeticEyeExamPastYear: intakeForm.diabeticEyeExamPastYear,
+          physicalTherapy: intakeForm.physicalTherapy,
+          mentalHealthCombined: intakeForm.mentalHealthCombined,
+          counseling: intakeForm.counseling,
+          anyMentalHealthPositive: intakeForm.anyMentalHealthPositive,
+          visitType: intakeForm.visitType,
+          specialtyType: intakeForm.specialtyType,
+          leadershipIntakeComplete: true,
+          status: nextStatus,
+        });
+
+        await createProgramEntriesFromIntake(mrnConflictPatient, {
+          ...intakeForm,
+          mrn: mrnConflictPatient.mrn,
+          firstName: mrnConflictPatient.firstName,
+          lastName: mrnConflictPatient.lastName,
+          dob: mrnConflictPatient.dob,
+          phone: intakeForm.phone || mrnConflictPatient.phone,
+        });
+
+        const sourceEncounterCount = selectedPatient.encounters?.length || 0;
+
+        if (sourceEncounterCount <= 1) {
+          try {
+            await deletePatientInSupabase(selectedPatient.id);
+          } catch (deleteError) {
+            console.warn("Temporary duplicate patient could not be deleted:", deleteError);
+            showToast({
+              title: "Visit moved, cleanup needed",
+              message: "The intake was saved to the existing MRN chart, but the temporary duplicate patient could not be deleted automatically.",
+              type: "warning",
+              duration: 7000,
+            });
+          }
+        }
+
+        await refreshClinicData();
+
+        setSelectedPatientId(mrnConflictPatient.id);
+        setDashboardSelectedPatientId(mrnConflictPatient.id);
+        setSelectedEncounterId(selectedEncounter.id);
+        setShowIntakeModal(false);
+        setIntakeTab(0);
+        setIntakeMatchPatientId(null);
+        setAutoFilledMatchPatientId(null);
+        setIsEditingIntake(false);
+        setEditingPatientId(null);
+        setActiveView("chart");
+
+        showToast({
+          title: "Intake moved to existing chart",
+          message: `MRN ${mrnConflictPatient.mrn} is now using ${getFullPatientName(mrnConflictPatient)}'s chart.`,
+          type: "success",
+          duration: 5000,
+        });
+      } catch (error) {
+        console.error("Failed to move intake to existing MRN chart:", error);
+        window.alert(`Supabase save error: ${error.message}`);
+      } finally {
+        isSubmittingIntakeRef.current = false;
+        setIsSubmittingIntake(false);
+      }
+
       return;
     }
     const potentialDuplicate = findPotentialDuplicatePatient(

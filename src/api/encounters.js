@@ -224,6 +224,10 @@ export async function assignNextRefillNumberInSupabase(encounterId, clinicDate) 
 export async function updateEncounterInSupabase(encounterId, updates) {
   const payload = {};
 
+  if (updates.patientId !== undefined) {
+    payload.patient_id = updates.patientId;
+  }
+
   if (updates.chiefComplaint !== undefined) {
     payload.chief_complaint = updates.chiefComplaint;
   }
@@ -826,4 +830,3 @@ export async function fetchEncountersByPatient(patientId) {
   if (error) throw error;
   return data ?? [];
 }
-
