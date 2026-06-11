@@ -131,7 +131,6 @@ import {
   mapDbStatusToUi,
   findPotentialDuplicatePatient,
   patientMatchesSearch,
-  mrnExists,
   sortEncountersByDate,
 } from "./utils";
 
@@ -155,6 +154,126 @@ function newReturningBadge(encounter) {
   }
 
   return null;
+}
+
+function PatientMergeComparisonModal({
+  show,
+  sourcePatient,
+  targetPatient,
+  intendedMrn,
+  getFullPatientName,
+  sourceDescription = "This chart will be merged and removed.",
+  targetDescription,
+  mergeSummary = "Merging moves encounters, medications, allergies, refill requests, PAP entries, and specialty tracker entries into the chart being kept.",
+  actionLabel = "Merge Patients",
+  onClose,
+  onMerge,
+}) {
+  if (!show || !sourcePatient || !targetPatient) return null;
+
+  const formatLocation = (patient) =>
+    [patient.city, patient.state, patient.zipCode].filter(Boolean).join(", ") || "—";
+  const formatEmergencyContact = (patient) =>
+    [
+      patient.emergencyContactName,
+      patient.emergencyContactRelation,
+      patient.emergencyContactPhone,
+    ].filter(Boolean).join(" / ") || "—";
+
+  const fields = [
+    ["Name", getFullPatientName(sourcePatient), getFullPatientName(targetPatient)],
+    ["DOB", sourcePatient.dob || "—", targetPatient.dob || "—"],
+    ["MRN", intendedMrn || sourcePatient.mrn || "—", targetPatient.mrn || "—"],
+    ["Phone", sourcePatient.phone || "—", targetPatient.phone || "—"],
+    ["Last 4 SSN", sourcePatient.last4ssn || "—", targetPatient.last4ssn || "—"],
+    ["Address", sourcePatient.address || "—", targetPatient.address || "—"],
+    ["City/State/ZIP", formatLocation(sourcePatient), formatLocation(targetPatient)],
+    ["Emergency Contact", formatEmergencyContact(sourcePatient), formatEmergencyContact(targetPatient)],
+    ["Encounters", String(sourcePatient.encounters?.length || 0), String(targetPatient.encounters?.length || 0)],
+  ];
+
+  return (
+    <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/60 px-4">
+      <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-950">Possible Duplicate Patient</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              MRN {intendedMrn || targetPatient.mrn} already belongs to another chart. Compare the records before merging.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="self-start rounded-lg bg-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-300"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Current Chart</p>
+            <p className="mt-1 text-lg font-semibold text-slate-950">{getFullPatientName(sourcePatient)}</p>
+            <p className="text-sm text-slate-600">{sourceDescription}</p>
+          </div>
+
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Chart To Keep</p>
+            <p className="mt-1 text-lg font-semibold text-slate-950">{getFullPatientName(targetPatient)}</p>
+            <p className="text-sm text-slate-600">{targetDescription || `This chart keeps MRN ${targetPatient.mrn || intendedMrn}.`}</p>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto rounded-xl border border-slate-200">
+          <div className="min-w-[720px]">
+            <div className="grid grid-cols-[140px_1fr_1fr] bg-slate-100 text-xs font-semibold uppercase tracking-wide text-slate-600">
+              <div className="px-3 py-2">Field</div>
+              <div className="border-l border-slate-200 px-3 py-2">Current Chart</div>
+              <div className="border-l border-slate-200 px-3 py-2">Chart To Keep</div>
+            </div>
+
+            {fields.map(([label, sourceValue, targetValue]) => {
+              const differs = String(sourceValue) !== String(targetValue);
+
+              return (
+                <div
+                  key={label}
+                  className={`grid grid-cols-[140px_1fr_1fr] border-t border-slate-200 text-sm ${differs ? "bg-amber-50/50" : "bg-white"}`}
+                >
+                  <div className="px-3 py-2 font-semibold text-slate-700">{label}</div>
+                  <div className="border-l border-slate-200 px-3 py-2 text-slate-900">{sourceValue}</div>
+                  <div className="border-l border-slate-200 px-3 py-2 text-slate-900">{targetValue}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+          {mergeSummary}
+        </div>
+
+        <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-300"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onMerge}
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+          >
+            {actionLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function getDailyVisitNumber(row) {
@@ -681,6 +800,8 @@ export default function App() {
   const isLeadership = userRole === "leadership";
   const [authMode, setAuthMode] = useState("login");
   const [showPatientInfoEditModal, setShowPatientInfoEditModal] = useState(false);
+  const [pendingPatientMerge, setPendingPatientMerge] = useState(null);
+  const [pendingUndergradRegistrationMerge, setPendingUndergradRegistrationMerge] = useState(null);
   const [dashboardSelectedPatientId, setDashboardSelectedPatientId] = useState(null);
   const [formulary, setFormulary] = useState([]);
   const [formularyLoaded, setFormularyLoaded] = useState(false);
@@ -1371,6 +1492,22 @@ export default function App() {
 
   const dashboardSelectedPatient =
     patients.find((p) => p.id === dashboardSelectedPatientId) || null;
+
+  const pendingMergeSourcePatient = pendingPatientMerge
+    ? patients.find((patient) => String(patient.id) === String(pendingPatientMerge.sourcePatientId)) || null
+    : null;
+
+  const pendingMergeTargetPatient = pendingPatientMerge
+    ? patients.find((patient) => String(patient.id) === String(pendingPatientMerge.targetPatientId)) || null
+    : null;
+
+  const pendingUndergradRegistrationSourcePatient = pendingUndergradRegistrationMerge
+    ? patients.find((patient) => String(patient.id) === String(pendingUndergradRegistrationMerge.sourcePatientId)) || null
+    : null;
+
+  const pendingUndergradRegistrationTargetPatient = pendingUndergradRegistrationMerge
+    ? patients.find((patient) => String(patient.id) === String(pendingUndergradRegistrationMerge.targetPatientId)) || null
+    : null;
 
   const duplicateMrnPatientsForSelected = useMemo(() => {
     if (!dashboardSelectedPatient?.mrn) return [];
@@ -4404,6 +4541,114 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
     setShowUndergradRegistrationModal(true);
   }
 
+  async function moveUndergradRegistrationToExistingMrnChart(sourcePatientId, targetPatientId) {
+    const patient = patients.find((p) => String(p.id) === String(sourcePatientId));
+    const encounter = patient?.encounters.find((e) => String(e.id) === String(registrationEncounterId));
+    const mrnConflictPatient = patients.find((p) => String(p.id) === String(targetPatientId));
+
+    if (!patient || !encounter || !mrnConflictPatient) {
+      alert("Could not find both patient records to move this registration.");
+      return;
+    }
+
+    try {
+      const currentStatus = encounter.status || "started";
+      const activeRegistrationStatuses = new Set(["started", "undergrad_complete"]);
+      const nextStatus = activeRegistrationStatuses.has(currentStatus)
+        ? encounter.leadershipIntakeComplete
+          ? "ready"
+          : "undergrad_complete"
+        : currentStatus;
+
+      const nextVisitType = undergradRegistrationForm.visitType || encounter.visitType || "general";
+      const nextSpecialtyType =
+        nextVisitType === "both" || nextVisitType === "specialty_only"
+          ? undergradRegistrationForm.specialtyType || ""
+          : "";
+      const nextRefillMedicationRequest =
+        nextVisitType === "refill_only"
+          ? undergradRegistrationForm.refillMedicationRequest || ""
+          : "";
+
+      const undergradCompletedAt = encounter.undergradCompletedAt || new Date().toISOString();
+
+      await updatePatientInSupabase(mrnConflictPatient.id, {
+        last4ssn: mrnConflictPatient.last4ssn || undergradRegistrationForm.last4Ssn,
+        address: undergradRegistrationForm.addressLine1 || mrnConflictPatient.address,
+        city: undergradRegistrationForm.city || mrnConflictPatient.city,
+        state: undergradRegistrationForm.state || mrnConflictPatient.state,
+        zipCode: undergradRegistrationForm.zipCode || mrnConflictPatient.zipCode,
+        emergencyContactName:
+          undergradRegistrationForm.emergencyContactName || mrnConflictPatient.emergencyContactName,
+        emergencyContactRelation:
+          undergradRegistrationForm.emergencyContactRelation || mrnConflictPatient.emergencyContactRelation,
+        emergencyContactPhone:
+          undergradRegistrationForm.emergencyContactPhone || mrnConflictPatient.emergencyContactPhone,
+        incomeRange: undergradRegistrationForm.incomeRange || mrnConflictPatient.incomeRange,
+        spanishOnly: undergradRegistrationForm.spanishOnly || mrnConflictPatient.spanishOnly,
+        chronicConditions:
+          undergradRegistrationForm.chronicConditions?.length > 0
+            ? undergradRegistrationForm.chronicConditions
+            : mrnConflictPatient.chronicConditions,
+        chronicConditionsOther:
+          undergradRegistrationForm.chronicConditionsOther || mrnConflictPatient.chronicConditionsOther,
+      });
+
+      const { selectedEncounterId: nextSelectedEncounterId } =
+        await applyVisitTypeConversion(mrnConflictPatient.id, registrationEncounterId, {
+        patientId: mrnConflictPatient.id,
+        status: nextStatus,
+        undergradCompletedAt,
+        dailyNumber: undergradRegistrationForm.dailyNumber || "",
+        refillNumber: nextVisitType === "refill_only" ? encounter.refillNumber || "" : "",
+        visitType: nextVisitType,
+        specialtyType: nextSpecialtyType,
+        refillMedicationRequest: nextRefillMedicationRequest,
+        dualVisit: nextVisitType === "both",
+      });
+
+      if ((patient.encounters?.length || 0) <= 1) {
+        try {
+          await deletePatientInSupabase(patient.id);
+        } catch (deleteError) {
+          console.warn("Temporary duplicate patient could not be deleted:", deleteError);
+          showToast({
+            title: "Visit moved, cleanup needed",
+            message: "The registration was saved to the existing MRN chart, but the temporary duplicate patient could not be deleted automatically.",
+            type: "warning",
+            duration: 7000,
+          });
+        }
+      }
+
+      await refreshClinicData();
+
+      setSelectedPatientId(mrnConflictPatient.id);
+      setDashboardSelectedPatientId(mrnConflictPatient.id);
+      setSelectedEncounterId(nextSelectedEncounterId);
+      setShowUndergradRegistrationModal(false);
+      setPendingUndergradRegistrationMerge(null);
+      setRegistrationPatientId(null);
+      setRegistrationEncounterId(null);
+      setUndergradRegistrationForm(EMPTY_UNDERGRAD_REGISTRATION_FORM);
+
+      showToast({
+        title: "Registration moved to existing chart",
+        message: `MRN ${mrnConflictPatient.mrn} is now using ${getFullPatientName(mrnConflictPatient)}'s chart.`,
+        type: "success",
+        duration: 5000,
+      });
+    } catch (error) {
+      console.error("Failed to move registration to existing MRN chart:", error);
+      showToast({
+        title: "Failed to save registration",
+        message: error.message,
+        type: "error",
+        duration: 5000,
+      });
+    }
+  }
+
   async function saveUndergradRegistration() {
     const patient = patients.find((p) => p.id === registrationPatientId);
     const encounter = patient?.encounters.find((e) => e.id === registrationEncounterId);
@@ -4431,108 +4676,11 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
       : null;
 
     if (mrnConflictPatient) {
-      const confirmed = window.confirm(
-        `MRN ${undergradRegistrationForm.mrn.trim()} already belongs to:\n\n${getFullPatientName(mrnConflictPatient)}\nDOB: ${mrnConflictPatient.dob || "DOB unknown"}\n\nMove this registration visit to that existing chart? The existing chart name, DOB, and MRN will be kept.`
-      );
-
-      if (!confirmed) return;
-
-      try {
-        const currentStatus = encounter.status || "started";
-        const activeRegistrationStatuses = new Set(["started", "undergrad_complete"]);
-        const nextStatus = activeRegistrationStatuses.has(currentStatus)
-          ? encounter.leadershipIntakeComplete
-            ? "ready"
-            : "undergrad_complete"
-          : currentStatus;
-
-        const nextVisitType = undergradRegistrationForm.visitType || encounter.visitType || "general";
-        const nextSpecialtyType =
-          nextVisitType === "both" || nextVisitType === "specialty_only"
-            ? undergradRegistrationForm.specialtyType || ""
-            : "";
-        const nextRefillMedicationRequest =
-          nextVisitType === "refill_only"
-            ? undergradRegistrationForm.refillMedicationRequest || ""
-            : "";
-
-        const undergradCompletedAt = encounter.undergradCompletedAt || new Date().toISOString();
-
-        await updatePatientInSupabase(mrnConflictPatient.id, {
-          last4ssn: mrnConflictPatient.last4ssn || undergradRegistrationForm.last4Ssn,
-          address: undergradRegistrationForm.addressLine1 || mrnConflictPatient.address,
-          city: undergradRegistrationForm.city || mrnConflictPatient.city,
-          state: undergradRegistrationForm.state || mrnConflictPatient.state,
-          zipCode: undergradRegistrationForm.zipCode || mrnConflictPatient.zipCode,
-          emergencyContactName:
-            undergradRegistrationForm.emergencyContactName || mrnConflictPatient.emergencyContactName,
-          emergencyContactRelation:
-            undergradRegistrationForm.emergencyContactRelation || mrnConflictPatient.emergencyContactRelation,
-          emergencyContactPhone:
-            undergradRegistrationForm.emergencyContactPhone || mrnConflictPatient.emergencyContactPhone,
-          incomeRange: undergradRegistrationForm.incomeRange || mrnConflictPatient.incomeRange,
-          spanishOnly: undergradRegistrationForm.spanishOnly || mrnConflictPatient.spanishOnly,
-          chronicConditions:
-            undergradRegistrationForm.chronicConditions?.length > 0
-              ? undergradRegistrationForm.chronicConditions
-              : mrnConflictPatient.chronicConditions,
-          chronicConditionsOther:
-            undergradRegistrationForm.chronicConditionsOther || mrnConflictPatient.chronicConditionsOther,
-        });
-
-        const { selectedEncounterId: nextSelectedEncounterId } =
-          await applyVisitTypeConversion(mrnConflictPatient.id, registrationEncounterId, {
-          patientId: mrnConflictPatient.id,
-          status: nextStatus,
-          undergradCompletedAt,
-          dailyNumber: undergradRegistrationForm.dailyNumber || "",
-          refillNumber: nextVisitType === "refill_only" ? encounter.refillNumber || "" : "",
-          visitType: nextVisitType,
-          specialtyType: nextSpecialtyType,
-          refillMedicationRequest: nextRefillMedicationRequest,
-          dualVisit: nextVisitType === "both",
-        });
-
-        if ((patient.encounters?.length || 0) <= 1) {
-          try {
-            await deletePatientInSupabase(patient.id);
-          } catch (deleteError) {
-            console.warn("Temporary duplicate patient could not be deleted:", deleteError);
-            showToast({
-              title: "Visit moved, cleanup needed",
-              message: "The registration was saved to the existing MRN chart, but the temporary duplicate patient could not be deleted automatically.",
-              type: "warning",
-              duration: 7000,
-            });
-          }
-        }
-
-        await refreshClinicData();
-
-        setSelectedPatientId(mrnConflictPatient.id);
-        setDashboardSelectedPatientId(mrnConflictPatient.id);
-        setSelectedEncounterId(nextSelectedEncounterId);
-        setShowUndergradRegistrationModal(false);
-        setRegistrationPatientId(null);
-        setRegistrationEncounterId(null);
-        setUndergradRegistrationForm(EMPTY_UNDERGRAD_REGISTRATION_FORM);
-
-        showToast({
-          title: "Registration moved to existing chart",
-          message: `MRN ${mrnConflictPatient.mrn} is now using ${getFullPatientName(mrnConflictPatient)}'s chart.`,
-          type: "success",
-          duration: 5000,
-        });
-      } catch (error) {
-        console.error("Failed to move registration to existing MRN chart:", error);
-        showToast({
-          title: "Failed to save registration",
-          message: error.message,
-          type: "error",
-          duration: 5000,
-        });
-      }
-
+      setPendingUndergradRegistrationMerge({
+        sourcePatientId: registrationPatientId,
+        targetPatientId: mrnConflictPatient.id,
+        intendedMrn: undergradRegistrationForm.mrn.trim(),
+      });
       return;
     }
 
@@ -6090,10 +6238,15 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
 
   async function saveDashboardPatientEdits(patientId, updates, encounterId = null, encounterUpdates = null) {
     const trimmedMrn = (updates.mrn || "").trim();
+    const mrnConflictPatient = trimmedMrn ? findPatientByMrn(trimmedMrn, patientId) : null;
 
-    if (trimmedMrn && mrnExists(patients, trimmedMrn, patientId)) {
-      alert("That MRN is already being used by another patient. Please use a different MRN.");
-      return;
+    if (mrnConflictPatient) {
+      setPendingPatientMerge({
+        sourcePatientId: patientId,
+        targetPatientId: mrnConflictPatient.id,
+        intendedMrn: trimmedMrn,
+      });
+      return false;
     }
 
     try {
@@ -6121,7 +6274,10 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
         type: "error",
         duration: 5000,
       });
+      return false;
     }
+
+    return true;
   }
 
   function openPatientChart(patientId, encounterId = null) {
@@ -6851,7 +7007,7 @@ async function markSeenBySocialWork(encounterId) {
       roomNumber: String(numericRoom),
     }));
   }
-  async function mergePatientRecordsByMrn(sourcePatientId, targetPatientId) {
+  async function mergePatientRecordsByMrn(sourcePatientId, targetPatientId, options = {}) {
     const sourcePatient = patients.find(
       (patient) => String(patient.id) === String(sourcePatientId)
     );
@@ -6866,19 +7022,30 @@ async function markSeenBySocialWork(encounterId) {
 
     const sourceMrn = String(sourcePatient.mrn || "").trim().toLowerCase();
     const targetMrn = String(targetPatient.mrn || "").trim().toLowerCase();
+    const expectedMrn = String(options.expectedMrn || "").trim().toLowerCase();
+    const sourceMatchesTargetMrn = !!sourceMrn && sourceMrn === targetMrn;
+    const targetMatchesExpectedMrn = !!expectedMrn && expectedMrn === targetMrn;
 
-    if (!sourceMrn || sourceMrn !== targetMrn) {
-      alert("Merge is only allowed when both patient records have the same MRN.");
+    if (!targetMrn || (!sourceMatchesTargetMrn && !targetMatchesExpectedMrn)) {
+      alert("Merge is only allowed when the duplicate record matches the MRN on the chart being kept.");
       return;
     }
 
-    const confirmed = window.confirm(
-      `Merge duplicate MRN records?\n\nKeep: ${getFullPatientName(targetPatient)} (${targetPatient.dob || "DOB unknown"})\nMerge/delete: ${getFullPatientName(sourcePatient)} (${sourcePatient.dob || "DOB unknown"})\nMRN: ${targetPatient.mrn}\n\nThis moves encounters, meds, allergies, refills, PAP, and specialty tracker entries to the kept patient, then deletes the duplicate patient record.`
-    );
+    const confirmed = options.skipConfirm
+      ? true
+      : window.confirm(
+          `Merge duplicate MRN records?\n\nKeep: ${getFullPatientName(targetPatient)} (${targetPatient.dob || "DOB unknown"})\nMerge/delete: ${getFullPatientName(sourcePatient)} (${sourcePatient.dob || "DOB unknown"})\nMRN: ${targetPatient.mrn}\n\nThis moves encounters, meds, allergies, refills, PAP, and specialty tracker entries to the kept patient, then deletes the duplicate patient record.`
+        );
 
     if (!confirmed) return;
 
     try {
+      if (!sourceMatchesTargetMrn && targetMatchesExpectedMrn) {
+        await updatePatientInSupabase(sourcePatientId, {
+          mrn: targetPatient.mrn,
+        });
+      }
+
       await mergePatientsByMrnInSupabase({
         sourcePatientId,
         targetPatientId,
@@ -6892,6 +7059,9 @@ async function markSeenBySocialWork(encounterId) {
       if (String(selectedPatientId) === String(sourcePatientId)) {
         setSelectedEncounterId(null);
       }
+
+      setShowPatientInfoEditModal(false);
+      setPendingPatientMerge(null);
 
       showToast({
         title: "Patient records merged",
@@ -9845,12 +10015,55 @@ async function markSeenBySocialWork(encounterId) {
         setForm={setUndergradRegistrationForm}
         onClose={() => {
           setShowUndergradRegistrationModal(false);
+          setPendingUndergradRegistrationMerge(null);
           setRegistrationPatientId(null);
           setRegistrationEncounterId(null);
           setUndergradRegistrationForm(EMPTY_UNDERGRAD_REGISTRATION_FORM);
         }}
         onSubmit={saveUndergradRegistration}
         tonightSpecialtyNames={tonightSpecialtyNames}
+      />
+
+      <PatientMergeComparisonModal
+        show={!!pendingUndergradRegistrationMerge}
+        sourcePatient={pendingUndergradRegistrationSourcePatient}
+        targetPatient={pendingUndergradRegistrationTargetPatient}
+        intendedMrn={pendingUndergradRegistrationMerge?.intendedMrn || ""}
+        getFullPatientName={getFullPatientName}
+        sourceDescription="This registration visit will be moved from this temporary chart."
+        targetDescription={`This existing chart keeps MRN ${pendingUndergradRegistrationTargetPatient?.mrn || pendingUndergradRegistrationMerge?.intendedMrn || ""}.`}
+        mergeSummary="This moves the current registration visit and saved registration details into the existing MRN chart. The existing chart name, DOB, and MRN will be kept."
+        actionLabel="Move Registration"
+        onClose={() => setPendingUndergradRegistrationMerge(null)}
+        onMerge={() => {
+          if (!pendingUndergradRegistrationMerge) return;
+
+          moveUndergradRegistrationToExistingMrnChart(
+            pendingUndergradRegistrationMerge.sourcePatientId,
+            pendingUndergradRegistrationMerge.targetPatientId
+          );
+        }}
+      />
+
+      <PatientMergeComparisonModal
+        show={!!pendingPatientMerge}
+        sourcePatient={pendingMergeSourcePatient}
+        targetPatient={pendingMergeTargetPatient}
+        intendedMrn={pendingPatientMerge?.intendedMrn || ""}
+        getFullPatientName={getFullPatientName}
+        onClose={() => setPendingPatientMerge(null)}
+        onMerge={() => {
+          if (!pendingPatientMerge) return;
+
+          mergePatientRecordsByMrn(
+            pendingPatientMerge.sourcePatientId,
+            pendingPatientMerge.targetPatientId,
+            {
+              expectedMrn: pendingPatientMerge.intendedMrn,
+              skipConfirm: true,
+            }
+          );
+        }}
       />
 
       <PatientInfoEditModal
@@ -9862,8 +10075,10 @@ async function markSeenBySocialWork(encounterId) {
         canEditEncounterFields={userRole === "undergraduate" || isLeadershipView}
         onClose={() => setShowPatientInfoEditModal(false)}
         onSave={async (patientId, updates, encounterId, encounterUpdates) => {
-          await saveDashboardPatientEdits(patientId, updates, encounterId, encounterUpdates);
-          setShowPatientInfoEditModal(false);
+          const saved = await saveDashboardPatientEdits(patientId, updates, encounterId, encounterUpdates);
+          if (saved) {
+            setShowPatientInfoEditModal(false);
+          }
         }}
       />
     </div>
