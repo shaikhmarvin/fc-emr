@@ -391,6 +391,7 @@ function isIgnoredNarrativeLine(line = "") {
     "this is a continuation of a previous fax",
     "confirmed alert value",
     "result called to and read back by",
+    "previously reported component",
     "result comments",
     "cancelled laboratory orders",
     "department status canceled",
@@ -514,7 +515,15 @@ function isUmcLabText(rawText = "") {
 
   return (
     normalized.includes("umc health system") ||
-    normalized.includes("umc hospital lab")
+    normalized.includes("umc hospital lab") ||
+    normalized.includes("umc mhealth system") ||
+    normalized.includes("resulted by umc hl") ||
+    normalized.includes("umc hl") ||
+    (
+      normalized.includes("umc") &&
+      normalized.includes("mhealth") &&
+      normalized.includes("system")
+    )
   );
 }
 
@@ -1356,9 +1365,7 @@ function isUmcThyroidSingleTestPacket(rawText = "") {
   const normalized = normalizeLine(rawText);
   if (!normalized) return false;
 
-  const hasUmc =
-    normalized.includes("umc health system") ||
-    normalized.includes("umc hospital lab");
+  const hasUmc = isUmcLabText(rawText);
 
   if (!hasUmc) return false;
 
@@ -1622,9 +1629,7 @@ function parseUmcA1cOverride(rawText = "") {
   const normalized = normalizeLine(rawText);
   if (!normalized) return null;
 
-  const hasUmc =
-    normalized.includes("umc health system") ||
-    normalized.includes("umc hospital lab");
+  const hasUmc = isUmcLabText(rawText);
 
   if (!hasUmc || !normalized.includes("hemoglobin a1c")) return null;
 
@@ -1704,9 +1709,7 @@ function parseUmcEgfrOverride(rawText = "") {
   const normalized = normalizeLine(rawText);
   if (!normalized) return null;
 
-  const hasUmc =
-    normalized.includes("umc health system") ||
-    normalized.includes("umc hospital lab");
+  const hasUmc = isUmcLabText(rawText);
 
   if (!hasUmc || !normalized.includes("egfr")) return null;
 
@@ -1794,9 +1797,7 @@ function parseUmcLdlOverride(rawText = "") {
   const normalized = normalizeLine(rawText);
   if (!normalized) return null;
 
-  const hasUmc =
-    normalized.includes("umc health system") ||
-    normalized.includes("umc hospital lab");
+  const hasUmc = isUmcLabText(rawText);
 
   if (!hasUmc || !normalized.includes("ldl calculated")) return null;
 
@@ -1852,13 +1853,118 @@ function parseUmcLdlOverride(rawText = "") {
   return null;
 }
 
+function parseUmcLabelValueOverrides(rawText = "") {
+  const normalized = normalizeLine(rawText);
+  if (!normalized) return [];
+  if (!isUmcLabText(rawText)) return [];
+
+  const lines = String(rawText || "")
+    .split("\n")
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+
+  const configs = [
+    {
+      key: "vitamin_b12",
+      aliases: ["vitamin b 12", "vitamin b12", "vitamin b-12"],
+      maxLookahead: 6,
+    },
+    {
+      key: "total_cholesterol",
+      aliases: ["cholesterol total", "cholesterol, total", "total cholesterol"],
+      maxLookahead: 4,
+    },
+  ];
+
+  function lineMatchesAlias(line = "", aliases = []) {
+    const norm = normalizeLine(line);
+    const compact = normalizeCompact(line);
+
+    return aliases.some((alias) => {
+      const aliasNorm = normalizeLine(alias);
+      const aliasCompact = normalizeCompact(alias);
+      return norm === aliasNorm || compact === aliasCompact;
+    });
+  }
+
+  function findNextValue(labelIndex, lab, maxLookahead) {
+    let sawValueMarker = false;
+
+    function extractOverrideNumbers(raw = "") {
+      const commaAwareMatches =
+        String(raw || "").match(/[<>]?\s*[-+]?\d{1,3}(?:,\d{3})+(?:\.\d+)?/g) || [];
+      if (commaAwareMatches.length > 0) {
+        return commaAwareMatches
+          .map((value) => parseFloat(String(value).replace(/\s+/g, "").replace(/[<>,]/g, "")))
+          .filter((value) => !Number.isNaN(value));
+      }
+
+      return extractAllNumbersFromLine(raw);
+    }
+
+    for (let j = labelIndex + 1; j < Math.min(lines.length, labelIndex + maxLookahead + 1); j += 1) {
+      const raw = lines[j];
+      const norm = normalizeLine(raw);
+
+      if (!norm) continue;
+      if (norm === "value") {
+        sawValueMarker = true;
+        continue;
+      }
+      if (norm === "range") {
+        continue;
+      }
+      if (isUmcColumnBlockNoiseLine(raw) || isIgnoredNarrativeLine(raw)) continue;
+      if (findLabMatch(raw) && extractAllNumbersFromLine(raw).length === 0) break;
+
+      const numbers = extractOverrideNumbers(raw);
+      if (numbers.length === 0) continue;
+
+      for (const number of numbers) {
+        const value = rescueNumericValueByRange(number, lab);
+        if (!valueLooksSuspicious(lab, value)) {
+          return { rawLine: raw, value };
+        }
+      }
+
+      if (!sawValueMarker) break;
+    }
+
+    return null;
+  }
+
+  const overrides = [];
+
+  for (const config of configs) {
+    const lab = findLabByAlias(config.key);
+    if (!lab) continue;
+
+    for (let i = 0; i < lines.length; i += 1) {
+      if (!lineMatchesAlias(lines[i], config.aliases)) continue;
+
+      const found = findNextValue(i, lab, config.maxLookahead);
+      if (!found) continue;
+
+      overrides.push(
+        buildParsedLab(lab, lines[i], found.rawLine, found.value, {
+          parseMethod: "umc_label_value_override",
+          matchIndex: i,
+          valueLineIndex: null,
+          valueSourceLine: found.rawLine,
+        })
+      );
+      break;
+    }
+  }
+
+  return overrides;
+}
+
 function parseUmcDifferentialPercentOverrides(rawText = "") {
   const normalized = normalizeLine(rawText);
   if (!normalized) return [];
 
-  const hasUmc =
-    normalized.includes("umc health system") ||
-    normalized.includes("umc hospital lab");
+  const hasUmc = isUmcLabText(rawText);
 
   if (!hasUmc || !normalized.includes("differential")) return [];
 
@@ -1921,13 +2027,120 @@ function parseUmcDifferentialPercentOverrides(rawText = "") {
   return overrides;
 }
 
+function parseUmcManualDifferentialOverrides(rawText = "") {
+  const normalized = normalizeLine(rawText);
+  if (!normalized) return [];
+  if (!isUmcLabText(rawText) || !normalized.includes("manual differential")) return [];
+
+  const lines = String(rawText || "")
+    .split("\n")
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+
+  const startIndex = lines.findIndex((line) => {
+    const norm = normalizeLine(line);
+    return norm.includes("manual differential") && norm.includes("final result");
+  });
+  if (startIndex < 0) return [];
+
+  let endIndex = lines.findIndex(
+    (line, index) => index > startIndex && /^resulting labs$/i.test(line)
+  );
+  if (endIndex < 0) {
+    endIndex = Math.min(lines.length, startIndex + 80);
+  }
+
+  const section = lines.slice(startIndex, endIndex);
+  const valueIndex = section.findIndex((line) => /^value$/i.test(line));
+  if (valueIndex < 0) return [];
+
+  const entries = [];
+
+  for (let i = valueIndex + 1; i < section.length; i += 1) {
+    const raw = section[i];
+    const norm = normalizeLine(raw);
+
+    if (!norm || norm === "range" || norm === "%") continue;
+    if (/^blood specimen\b/i.test(raw)) break;
+    if (/^(normal|present)$/i.test(raw)) continue;
+    if (/^man\s/i.test(raw) || /^manual\s/i.test(raw) || /^platelet est$/i.test(raw)) continue;
+    if (isUmcColumnBlockNoiseLine(raw) || isIgnoredNarrativeLine(raw)) continue;
+    if (looksLikeRangeOnlyLine(raw) || /[<>].*%/.test(raw)) continue;
+
+    const matches = String(raw).match(/[<>]?\s*[-+]?\d+(?:\.\d+)?/g) || [];
+    if (matches.length !== 1) continue;
+
+    const value = parseFloat(matches[0].replace(/\s+/g, "").replace(/[<>]/g, ""));
+    if (Number.isNaN(value)) continue;
+
+    entries.push({ rawLine: raw, value });
+  }
+
+  const totalCellsIndex = entries.findIndex((entry) => entry.value >= 99 && entry.value <= 200);
+  const percentEntries =
+    totalCellsIndex >= 0 ? entries.slice(0, totalCellsIndex) : entries.slice(0, 8);
+  const absoluteEntries =
+    totalCellsIndex >= 0 ? entries.slice(totalCellsIndex + 1) : entries.slice(8);
+
+  if (percentEntries.length < 6) return [];
+
+  const splitMonocytes =
+    percentEntries.length >= 8 &&
+    Number.isInteger(percentEntries[3]?.value) &&
+    percentEntries[4]?.value > percentEntries[3].value &&
+    percentEntries[4]?.value < percentEntries[3].value + 1;
+
+  const percentMap = splitMonocytes
+    ? [
+        ["segmented neutrophils", "Man Segs", percentEntries[0]],
+        ["lymphocytes", "Man Lymphocytes", percentEntries[2]],
+        ["monocytes", "Man Monocytes", percentEntries[4]],
+        ["eosinophils", "Man Eosinophils", percentEntries[5]],
+        ["basophils", "Man Basophils", percentEntries[6]],
+      ]
+    : [
+        ["segmented neutrophils", "Man Segs", percentEntries[0]],
+        ["lymphocytes", "Man Lymphocytes", percentEntries[2]],
+        ["monocytes", "Man Monocytes", percentEntries[3]],
+        ["eosinophils", "Man Eosinophils", percentEntries[4]],
+        ["basophils", "Man Basophils", percentEntries[5]],
+      ];
+
+  const absoluteMap = [
+    ["anc", "Manual Absolute Neutrophil (ANC)", absoluteEntries[0]],
+    ["absolute lymphocytes", "Man Abs Lymph", absoluteEntries[1]],
+    ["absolute monocytes", "Man Abs Mono", absoluteEntries[2]],
+    ["absolute eosinophils", "Man Abs Eos", absoluteEntries[3]],
+    ["absolute basophils", "Man Abs Baso", absoluteEntries[4]],
+  ];
+
+  const overrides = [];
+
+  for (const [alias, label, entry] of [...percentMap, ...absoluteMap]) {
+    const lab = findLabByAlias(alias);
+    if (!lab || !entry) continue;
+
+    const value = rescueNumericValueByRange(entry.value, lab);
+    if (valueLooksSuspicious(lab, value)) continue;
+
+    overrides.push(
+      buildParsedLab(lab, label, entry.rawLine, value, {
+        parseMethod: "umc_manual_differential_override",
+        matchIndex: startIndex,
+        valueLineIndex: null,
+        valueSourceLine: entry.rawLine,
+      })
+    );
+  }
+
+  return overrides;
+}
+
 function parseUmcHivPage(rawText = "") {
   const normalized = normalizeLine(rawText);
   if (!normalized) return [];
 
-  const hasUmc =
-    normalized.includes("umc health system") ||
-    normalized.includes("umc hospital lab");
+  const hasUmc = isUmcLabText(rawText);
 
   if (!hasUmc || !normalized.includes("hiv screen")) return [];
 
@@ -1993,9 +2206,7 @@ function parseUmcImmunologyRows(rawText = "") {
   const normalized = normalizeLine(rawText);
   if (!normalized) return [];
 
-  const hasUmc =
-    normalized.includes("umc health system") ||
-    normalized.includes("umc hospital lab");
+  const hasUmc = isUmcLabText(rawText);
 
   const hasHepatitisRows =
     normalized.includes("hepatitis a ab igg") ||
@@ -2100,6 +2311,15 @@ function getUmcColumnLabelEntry(line = "") {
   const compact = normalizeCompact(raw);
 
   if (
+    normalized.includes("see values") ||
+    /^\([hla]\)\s*,/i.test(raw) ||
+    /^[hla]\s*,/i.test(raw) ||
+    /\([hla]\).*,/i.test(raw)
+  ) {
+    return null;
+  }
+
+  if (
     compact.includes("rdwsd") ||
     compact === "nrbc" ||
     compact === "nrbcpercent" ||
@@ -2114,12 +2334,15 @@ function getUmcColumnLabelEntry(line = "") {
   }
 
   const stripped = normalized
+    .replace(/\bmanual\b/g, " ")
+    .replace(/\bman\b/g, " ")
+    .replace(/\bautomated\b/g, " ")
     .replace(/\bvalue\b/g, " ")
     .replace(/\brange\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 
-  const lab = findLabMatch(stripped || raw);
+  const lab = findLabMatch(stripped || raw) || findLabMatch(raw);
   if (!lab) return null;
 
   if (extractAllNumbersFromLine(raw).length > 0 && !/a1c|t4|t3|b-?12/i.test(raw)) {
@@ -2178,6 +2401,8 @@ function getUmcColumnValueEntry(line = "", lab = null) {
   }
 
   const value = lab ? rescueNumericValueByRange(numbers[0], lab) : numbers[0];
+  if (lab && valueLooksSuspicious(lab, value)) return null;
+
   return { rawLine: raw, value };
 }
 
@@ -2240,6 +2465,51 @@ function parseUmcColumnValueBlocks(rawText = "") {
     return values;
   }
 
+  function collectAlignedValues(valueIndex, labels) {
+    const values = [];
+    let scanIndex = valueIndex + 1;
+    const maxScan = Math.min(lines.length, valueIndex + 120);
+
+    for (const label of labels) {
+      if (!label?.lab) {
+        values.push(null);
+        continue;
+      }
+
+      let selected = null;
+
+      for (; scanIndex < maxScan; scanIndex += 1) {
+        const raw = lines[scanIndex];
+
+        if (/^blood specimen\b/i.test(raw) || /^resulting labs$/i.test(raw)) break;
+        if (/\bfinal result\b/i.test(raw) && values.filter(Boolean).length > 0) break;
+
+        const matchedLab = findLabMatch(raw);
+        if (
+          matchedLab &&
+          extractAllNumbersFromLine(raw).length === 0 &&
+          !extractCategoricalValue(raw)
+        ) {
+          continue;
+        }
+
+        const entry = getUmcColumnValueEntry(raw, label.lab);
+        if (!entry) continue;
+
+        selected = {
+          ...entry,
+          valueLineIndex: scanIndex,
+        };
+        scanIndex += 1;
+        break;
+      }
+
+      values.push(selected);
+    }
+
+    return values;
+  }
+
   for (let i = 0; i < lines.length; i += 1) {
     if (!/^value$/i.test(lines[i])) continue;
 
@@ -2247,21 +2517,26 @@ function parseUmcColumnValueBlocks(rawText = "") {
     if (labels.length === 0) continue;
 
     const values = collectValues(i, labels);
-    if (values.length === 0) continue;
+    const alignedValues = collectAlignedValues(i, labels);
+    const valuesToUse =
+      alignedValues.filter(Boolean).length > values.length ? alignedValues : values;
+    if (valuesToUse.length === 0) continue;
 
-    const pairCount = Math.min(labels.length, values.length);
+    const pairCount = Math.min(labels.length, valuesToUse.length);
     for (let pairIndex = 0; pairIndex < pairCount; pairIndex += 1) {
       const label = labels[pairIndex];
-      const value = values[pairIndex];
+      const value = valuesToUse[pairIndex];
 
       if (!label?.lab) continue;
+      if (!value) continue;
       if (value.value === null || value.value === undefined || value.value === "") continue;
 
       results.push(
         buildParsedLab(label.lab, label.rawLine, value.rawLine, value.value, {
           parseMethod: "umc_column_value_block",
           matchIndex: i,
-          valueLineIndex: null,
+          valueLineIndex:
+            Number.isInteger(value.valueLineIndex) ? value.valueLineIndex : null,
           valueSourceLine: value.rawLine,
         })
       );
@@ -2275,9 +2550,7 @@ function applyUmcKnownRowOverrides(rawText = "", parsedLabs = []) {
   const normalized = normalizeLine(rawText);
   if (!normalized) return parsedLabs || [];
 
-  const hasUmc =
-    normalized.includes("umc health system") ||
-    normalized.includes("umc hospital lab");
+  const hasUmc = isUmcLabText(rawText);
 
   if (!hasUmc) return parsedLabs || [];
 
@@ -2313,6 +2586,11 @@ function applyUmcKnownRowOverrides(rawText = "", parsedLabs = []) {
     } else {
       nextLabs.push(replacement);
     }
+  }
+
+  function labIsMissing(key) {
+    const existing = nextLabs.find((lab) => lab.key === key);
+    return !existing || existing.missing || existing.value === null || existing.value === undefined || existing.value === "";
   }
 
   function extractNearbyCategorical(anchorLabel, lookahead = 12) {
@@ -2479,6 +2757,101 @@ function applyUmcKnownRowOverrides(rawText = "", parsedLabs = []) {
     return null;
   }
 
+  function repairAppendedCmpChlorideCo2CreatinineRows() {
+    for (let i = 0; i < lines.length; i += 1) {
+      const carbonNorm = normalizeLine(lines[i]);
+      if (!carbonNorm.includes("carbon dioxide")) continue;
+
+      let creatinineIndex = -1;
+      let chlorideIndex = -1;
+      let egfrIndex = -1;
+
+      for (let j = i + 1; j < Math.min(lines.length, i + 14); j += 1) {
+        const norm = normalizeLine(lines[j]);
+        if (creatinineIndex < 0 && norm.includes("creatinine")) {
+          creatinineIndex = j;
+          continue;
+        }
+        if (chlorideIndex < 0 && norm === "chloride") {
+          chlorideIndex = j;
+          continue;
+        }
+        if (norm === "egfr") {
+          egfrIndex = j;
+          break;
+        }
+      }
+
+      if (creatinineIndex < 0 || chlorideIndex < 0 || egfrIndex < 0) continue;
+
+      const candidates = [];
+      for (let j = chlorideIndex + 1; j < egfrIndex; j += 1) {
+        const raw = lines[j];
+        if (looksLikeRangeOnlyLine(raw) || isIgnoredNarrativeLine(raw)) continue;
+        for (const value of extractAllNumbersFromLine(raw)) {
+          candidates.push({ rawLine: raw, value });
+        }
+      }
+
+      const chloride = candidates.find((entry) => entry.value >= 90 && entry.value <= 120);
+      const co2 = candidates.find((entry) => entry.value >= 10 && entry.value <= 40);
+      const creatinine = candidates.find((entry) => entry.value >= 0.2 && entry.value <= 15);
+
+      if (chloride) upsertLab("Chloride", chloride.value, chloride.rawLine);
+      if (co2) upsertLab("Carbon Dioxide", co2.value, co2.rawLine);
+      if (creatinine) upsertLab("Creatinine", creatinine.value, creatinine.rawLine);
+      return;
+    }
+  }
+
+  function repairSplitCbcPlateletMpvRows() {
+    if (!labIsMissing("platelets") && !labIsMissing("mpv")) return;
+
+    for (let i = 0; i < lines.length; i += 1) {
+      if (normalizeLine(lines[i]) !== "platelet") continue;
+
+      const mpvIndex = lines
+        .slice(i + 1, Math.min(lines.length, i + 5))
+        .findIndex((line) => normalizeLine(line) === "mpv");
+
+      if (mpvIndex < 0) continue;
+
+      const scanStart = i + 1 + mpvIndex;
+      const scanEnd = Math.min(lines.length, scanStart + 20);
+      const candidates = [];
+
+      for (let j = scanStart + 1; j < scanEnd; j += 1) {
+        const raw = lines[j];
+        const norm = normalizeLine(raw);
+
+        if (norm.includes("automated absolute")) break;
+        if (isUmcColumnBlockNoiseLine(raw) || isIgnoredNarrativeLine(raw)) continue;
+        if (looksLikeRangeOnlyLine(raw)) continue;
+
+        for (const value of extractAllNumbersFromLine(raw)) {
+          candidates.push({ rawLine: raw, value });
+        }
+      }
+
+      const platelet = candidates.find(
+        (entry) => entry.value >= 50 && entry.value <= 2000 && /\([HL]\)/i.test(entry.rawLine)
+      );
+      const mpv = candidates.find(
+        (entry) => entry.value >= 3 && entry.value <= 20 && /\([HL]\)/i.test(entry.rawLine)
+      );
+
+      if (platelet && labIsMissing("platelets")) {
+        upsertLab("Platelet", platelet.value, platelet.rawLine);
+      }
+
+      if (mpv && labIsMissing("mpv")) {
+        upsertLab("MPV", mpv.value, mpv.rawLine);
+      }
+
+      return;
+    }
+  }
+
   const hivResult = extractNearbyCategorical("HIV Screen", 12);
   if (hivResult) upsertLab("HIV Screen", hivResult.value, hivResult.rawLine);
 
@@ -2503,6 +2876,9 @@ function applyUmcKnownRowOverrides(rawText = "", parsedLabs = []) {
   const chlorideResult = extractForwardNumericByRange("Chloride Level", 14);
   if (chlorideResult) upsertLab("Chloride Level", chlorideResult.value, "Chloride Level");
 
+  repairAppendedCmpChlorideCo2CreatinineRows();
+  repairSplitCbcPlateletMpvRows();
+
   // Fix: "Anion Gap without Potassium" broken row
   const anionGapResult = extractForwardNumericByRange("Anion Gap", 20);
 
@@ -2524,6 +2900,8 @@ function mergeBrokenLabelLines(lines = []) {
       current &&
       next &&
       current.length < 25 &&
+      !/^man\s+/i.test(current) &&
+      !/^man\s+/i.test(next) &&
       !extractAllNumbersFromLine(current).length &&
       !extractCategoricalValue(current) &&
       !isHeaderLine(current)
@@ -2815,9 +3193,19 @@ if (bestCandidate) {
     deduped = upsertOverrideLab(deduped, ldlOverride);
   }
 
+  const labelValueOverrides = parseUmcLabelValueOverrides(rawText);
+  for (const overrideLab of labelValueOverrides) {
+    deduped = upsertOverrideLab(deduped, overrideLab);
+  }
+
   // Differential % override
   const differentialOverrides = parseUmcDifferentialPercentOverrides(rawText);
   for (const overrideLab of differentialOverrides) {
+    deduped = upsertOverrideLab(deduped, overrideLab);
+  }
+
+  const manualDifferentialOverrides = parseUmcManualDifferentialOverrides(rawText);
+  for (const overrideLab of manualDifferentialOverrides) {
     deduped = upsertOverrideLab(deduped, overrideLab);
   }
 

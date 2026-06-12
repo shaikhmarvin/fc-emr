@@ -569,6 +569,9 @@ function computeLabCounts(labs = []) {
   let missing_count = 0;
   let autofilled_count = 0;
   let needs_review_count = 0;
+  let valued_count = 0;
+  let suspicious_count = 0;
+  let duplicate_count = 0;
 
   labs.forEach((lab) => {
     const isMissing = lab.missing === true || lab.value == null || lab.value === "";
@@ -580,14 +583,22 @@ function computeLabCounts(labs = []) {
       lab.duplicateType === "recent";
 
     if (isMissing) missing_count++;
+    if (!isMissing) valued_count++;
     if (isAutofilled) autofilled_count++;
+    if (isSuspicious) suspicious_count++;
+    if (lab.duplicateType) duplicate_count++;
     if (isSuspicious || isMissing) needs_review_count++;
   });
 
   return {
+    total_count: labs.length,
+    valued_count,
     missing_count,
     autofilled_count,
+    suspicious_count,
+    duplicate_count,
     needs_review_count,
+    fill_percent: labs.length ? Math.round((valued_count / labs.length) * 100) : 0,
   };
 }
 
@@ -1435,6 +1446,7 @@ export default function App() {
   const [isSubmittingIntake, setIsSubmittingIntake] = useState(false);
   const isSubmittingIntakeRef = useRef(false);
   const [labImportRawText, setLabImportRawText] = useState("");
+  const [labImportDebugSnapshot, setLabImportDebugSnapshot] = useState(null);
   const [labImportPacket, setLabImportPacket] = useState(null);
   const [labImportPackets, setLabImportPackets] = useState([]);
   const [selectedLabImportPacketId, setSelectedLabImportPacketId] = useState(null);
@@ -2651,6 +2663,191 @@ export default function App() {
     return mergeDuplicatePacketsByPatientDobAndType(builtPackets);
   }
 
+  function buildIndexedLines(text = "") {
+    return String(text || "")
+      .split("\n")
+      .map((line, index) => ({
+        index,
+        text: String(line || ""),
+      }));
+  }
+
+  function summarizeParseMethods(labs = []) {
+    return (labs || []).reduce((summary, lab) => {
+      const method = lab?.debugMeta?.parseMethod || "unknown";
+      summary[method] = (summary[method] || 0) + 1;
+      return summary;
+    }, {});
+  }
+
+  function summarizeLabForDebug(lab = {}) {
+    return {
+      key: lab.key || "",
+      displayName: lab.displayName || "",
+      group: lab.group || "",
+      value: lab.value ?? null,
+      rawLine: lab.rawLine || "",
+      confidence: lab.confidence || "",
+      suspicious: !!lab.suspicious,
+      missing: !!lab.missing,
+      autoFilled: !!lab.autoFilled,
+      expectedRangeText: lab.expectedRangeText || "",
+      duplicateType: lab.duplicateType || null,
+      duplicateInfo: lab.duplicateInfo || null,
+      debugMeta: {
+        parseMethod: lab.debugMeta?.parseMethod || null,
+        matchIndex:
+          Number.isInteger(lab.debugMeta?.matchIndex)
+            ? lab.debugMeta.matchIndex
+            : null,
+        valueLineIndex:
+          Number.isInteger(lab.debugMeta?.valueLineIndex)
+            ? lab.debugMeta.valueLineIndex
+            : null,
+        valueSourceLine: lab.debugMeta?.valueSourceLine || "",
+        candidateNumbers: Array.isArray(lab.debugMeta?.candidateNumbers)
+          ? lab.debugMeta.candidateNumbers
+          : [],
+        debugCandidates: Array.isArray(lab.debugMeta?.debugCandidates)
+          ? lab.debugMeta.debugCandidates
+          : [],
+        rangeUsed: lab.debugMeta?.rangeUsed || "",
+      },
+    };
+  }
+
+  function summarizePacketForDebug(packet = {}) {
+    const labs = (packet.labs || []).map(summarizeLabForDebug);
+    const counts = computeLabCounts(labs);
+    const categorized = categorizeLabsForExport(labs);
+    const missingLabs = labs.filter((lab) => lab.missing || lab.autoFilled);
+
+    return {
+      packetId: packet.packetId || "",
+      extractedPatientName: packet.extractedPatientName || "",
+      extractedDob: packet.extractedDob || "",
+      collectedDate: packet.collectedDate || "",
+      packetType: packet.packetType || "unknown",
+      reviewStatus: packet.reviewStatus || "unsaved",
+      matchStatus: packet.matchStatus || "unresolved",
+      unresolvedReason: packet.unresolvedReason || "",
+      lineCount: String(packet.rawText || packet.sourceRawText || "").split("\n").filter(Boolean).length,
+      labCount: labs.length,
+      counts,
+      parseMethods: summarizeParseMethods(labs),
+      missingLabs: missingLabs.map((lab) => ({
+        key: lab.key,
+        displayName: lab.displayName,
+        group: lab.group,
+        autoFilled: lab.autoFilled,
+        rawLine: lab.rawLine,
+        parseMethod: lab.debugMeta?.parseMethod || null,
+      })),
+      trueMissingLabs: categorized.trueMissingLabs.map((lab) => lab.displayName || lab.key),
+      panelPlaceholders: categorized.panelPlaceholders.map((lab) => lab.displayName || lab.key),
+      suspiciousLabs: categorized.suspiciousLabs.map((lab) => lab.displayName || lab.key),
+    };
+  }
+
+  function buildLabImportDebugSnapshot({
+    source = "unknown",
+    originalText = "",
+    cleanedText = "",
+    ocrTexts = [],
+    file = null,
+    packets = [],
+  } = {}) {
+    const initialChunks = splitBulkLabTextIntoPackets(cleanedText);
+    const mergedChunks = mergeConsecutivePacketsForSamePatient(initialChunks);
+    const packetSummaries = (packets || []).map(summarizePacketForDebug);
+    const normalizeDebugText = (value = "") => String(value || "").replace(/\s+/g, " ").trim();
+    const parsedPacketTexts = (packets || [])
+      .map((packet) => normalizeDebugText(packet.sourceRawText || packet.rawText || ""))
+      .filter(Boolean);
+    const chunkWasKept = (chunkText = "") => {
+      const normalizedChunk = normalizeDebugText(chunkText);
+      if (!normalizedChunk) return false;
+      return parsedPacketTexts.some(
+        (packetText) =>
+          packetText === normalizedChunk ||
+          packetText.includes(normalizedChunk) ||
+          normalizedChunk.includes(packetText)
+      );
+    };
+
+    return {
+      createdAt: new Date().toISOString(),
+      source,
+      file: file
+        ? {
+            name: file.name || "",
+            type: file.type || "",
+            size: file.size || 0,
+            lastModified: file.lastModified || null,
+          }
+        : null,
+      ocr: {
+        pageCount: Array.isArray(ocrTexts) ? ocrTexts.length : 0,
+        compiledText: Array.isArray(ocrTexts) ? ocrTexts.join("\n\n").trim() : "",
+        pages: Array.isArray(ocrTexts)
+          ? ocrTexts.map((text, index) => ({
+              page: index + 1,
+              charCount: String(text || "").length,
+              lineCount: String(text || "").split("\n").filter(Boolean).length,
+              text: String(text || ""),
+              indexedLines: buildIndexedLines(text || ""),
+            }))
+          : [],
+      },
+      text: {
+        originalCharCount: String(originalText || "").length,
+        cleanedCharCount: String(cleanedText || "").length,
+        originalText: originalText || "",
+        cleanedText: cleanedText || "",
+        indexedOriginalLines: buildIndexedLines(originalText || ""),
+        indexedCleanedLines: buildIndexedLines(cleanedText || ""),
+      },
+      packetization: {
+        initialChunkCount: initialChunks.length,
+        mergedChunkCount: mergedChunks.length,
+        parsedPacketCount: packetSummaries.length,
+        initialChunks: initialChunks.map((chunk, index) => ({
+          chunkId: chunk.packetId || `chunk-${index + 1}`,
+          lineCount: String(chunk.rawText || "").split("\n").filter(Boolean).length,
+          charCount: String(chunk.rawText || "").length,
+          classifiedType: classifyLabPacket(chunk.rawText || ""),
+          extractedPatientName: formatPatientName(
+            extractPatientNameFromLabTextFromParser(chunk.rawText || "") ||
+              extractPatientNameFromLabText(chunk.rawText || "")
+          ),
+          extractedDob: extractDobFromLabText(chunk.rawText || ""),
+          collectedDate: extractCollectedDateFromLabText(chunk.rawText || ""),
+          rawText: chunk.rawText || "",
+          indexedLines: buildIndexedLines(chunk.rawText || ""),
+        })),
+        mergedChunks: mergedChunks.map((chunk, index) => {
+          const packetId = chunk.packetId || `packet-${index + 1}`;
+          return {
+            packetId,
+            keptAfterParsing: chunkWasKept(chunk.rawText || ""),
+            lineCount: String(chunk.rawText || "").split("\n").filter(Boolean).length,
+            charCount: String(chunk.rawText || "").length,
+            classifiedType: classifyLabPacket(chunk.rawText || ""),
+            extractedPatientName: formatPatientName(
+              extractPatientNameFromLabTextFromParser(chunk.rawText || "") ||
+                extractPatientNameFromLabText(chunk.rawText || "")
+            ),
+            extractedDob: extractDobFromLabText(chunk.rawText || ""),
+            collectedDate: extractCollectedDateFromLabText(chunk.rawText || ""),
+            rawText: chunk.rawText || "",
+            indexedLines: buildIndexedLines(chunk.rawText || ""),
+          };
+        }),
+      },
+      packetSummary: packetSummaries,
+    };
+  }
+
   function mergeConsecutivePacketsForSamePatient(chunks = []) {
     if (!Array.isArray(chunks) || chunks.length <= 1) return chunks;
 
@@ -2877,6 +3074,7 @@ export default function App() {
         setLabImportPackets([]);
         setLabImportPacket(null);
         setSelectedLabImportPacketId(null);
+        setLabImportDebugSnapshot(null);
         return;
       }
 
@@ -3089,7 +3287,8 @@ export default function App() {
     }
 
     try {
-      const cleanedText = cleanOcrLabText(labImportRawText);
+      const originalText = labImportRawText;
+      const cleanedText = cleanOcrLabText(originalText);
       setLabImportRawText(cleanedText);
 
       const packets = buildBulkLabImportPacketsFromText(cleanedText);
@@ -3102,6 +3301,15 @@ export default function App() {
         });
         return;
       }
+
+      setLabImportDebugSnapshot(
+        buildLabImportDebugSnapshot({
+          source: "manual",
+          originalText,
+          cleanedText,
+          packets,
+        })
+      );
 
       const batchId = await createSharedLabImportBatchWithPackets(packets, "manual");
 
@@ -3199,6 +3407,17 @@ export default function App() {
       if (!packets || packets.length === 0) {
         throw new Error("OCR worked, but no labs were detected from the extracted text.");
       }
+
+      setLabImportDebugSnapshot(
+        buildLabImportDebugSnapshot({
+          source: "google_ocr",
+          originalText: combinedText,
+          cleanedText,
+          ocrTexts,
+          file,
+          packets,
+        })
+      );
 
       const batchId = await createSharedLabImportBatchWithPackets(packets, "google_ocr");
 
@@ -3334,78 +3553,44 @@ export default function App() {
     try {
       const packets = labImportPackets || [];
 
-      function buildIndexedLines(text = "") {
-        return String(text || "")
-          .split("\n")
-          .map((line, index) => ({
-            index,
-            text: String(line || ""),
-          }));
-      }
+      const currentPacketSummary = packets.map(summarizePacketForDebug);
+      const allCurrentLabs = packets.flatMap((packet) => packet.labs || []);
+      const currentCounts = computeLabCounts(allCurrentLabs);
 
       const exportData = {
+        schema: "lab-import-debug-v2",
         timestamp: new Date().toISOString(),
-        rawText: labImportRawText || "",
-        indexedRawTextLines: buildIndexedLines(labImportRawText || ""),
-        packetCount: packets.length,
-
-        packetSummary: packets.map((packet) => {
-          const packetLabs = packet.labs || [];
-          const counts = computeLabCounts(packetLabs);
-
-          return {
-            packetId: packet.packetId,
-            extractedPatientName: packet.extractedPatientName || "",
-            extractedDob: packet.extractedDob || "",
-            collectedDate: packet.collectedDate || "",
-            packetType: packet.packetType || "unknown",
-            reviewStatus: packet.reviewStatus || "unsaved",
-            labCount: packetLabs.length,
-            suspiciousCount: packetLabs.filter((lab) => !!lab?.suspicious).length,
-            missingCount: counts.missing_count,
-            autoFilledCount: counts.autofilled_count,
-            needsReviewCount: counts.needs_review_count,
-          };
-        }),
+        overview: {
+          activeBatchId: activeLabImportBatchId || null,
+          selectedPacketId: selectedLabImportPacketId || null,
+          packetCount: packets.length,
+          totalLabCount: allCurrentLabs.length,
+          currentCounts,
+          packetsNeedingReview: currentPacketSummary.filter(
+            (packet) => packet.counts.needs_review_count > 0 || packet.matchStatus !== "matched"
+          ).length,
+          packetsWithNoLabs: currentPacketSummary.filter((packet) => packet.labCount === 0).length,
+        },
+        importSnapshot: labImportDebugSnapshot || null,
+        currentText: {
+          rawText: labImportRawText || "",
+          indexedRawTextLines: buildIndexedLines(labImportRawText || ""),
+        },
+        packetSummary: currentPacketSummary,
+        missingLabsByPacket: currentPacketSummary.map((packet) => ({
+          packetId: packet.packetId,
+          extractedPatientName: packet.extractedPatientName,
+          missingLabs: packet.missingLabs,
+          trueMissingLabs: packet.trueMissingLabs,
+          panelPlaceholders: packet.panelPlaceholders,
+        })),
 
         packets: packets.map((packet) => {
-          const finalLabs = (packet.labs || []).map((lab) => ({
-            key: lab.key || "",
-            displayName: lab.displayName || "",
-            group: lab.group || "",
-            value: lab.value ?? null,
-            rawLine: lab.rawLine || "",
-            confidence: lab.confidence || "",
-            suspicious: !!lab.suspicious,
-            missing: !!lab.missing,
-            autoFilled: !!lab.autoFilled,
-            expectedRangeText: lab.expectedRangeText || "",
-            duplicateType: lab.duplicateType || null,
-            duplicateInfo: lab.duplicateInfo || null,
-
-            debugMeta: {
-              parseMethod: lab.debugMeta?.parseMethod || null,
-              matchIndex:
-                Number.isInteger(lab.debugMeta?.matchIndex)
-                  ? lab.debugMeta.matchIndex
-                  : null,
-              valueLineIndex:
-                Number.isInteger(lab.debugMeta?.valueLineIndex)
-                  ? lab.debugMeta.valueLineIndex
-                  : null,
-              valueSourceLine: lab.debugMeta?.valueSourceLine || "",
-              candidateNumbers: Array.isArray(lab.debugMeta?.candidateNumbers)
-                ? lab.debugMeta.candidateNumbers
-                : [],
-              debugCandidates: Array.isArray(lab.debugMeta?.debugCandidates)
-                ? lab.debugMeta.debugCandidates
-                : [],
-              rangeUsed: lab.debugMeta?.rangeUsed || "",
-            },
-          }));
+          const finalLabs = (packet.labs || []).map(summarizeLabForDebug);
 
           const counts = computeLabCounts(finalLabs);
           const categorized = categorizeLabsForExport(finalLabs);
+          const parseMethods = summarizeParseMethods(finalLabs);
 
           const parsingFails = finalLabs.filter(
             (lab) =>
@@ -3422,9 +3607,14 @@ export default function App() {
 
             summary: {
               total_labs: finalLabs.length,
+              valued_count: counts.valued_count,
               missing_count: counts.missing_count,
               autofilled_count: counts.autofilled_count,
+              suspicious_count: counts.suspicious_count,
+              duplicate_count: counts.duplicate_count,
               needs_review_count: counts.needs_review_count,
+              fill_percent: counts.fill_percent,
+              parseMethods,
             },
 
             categorized: {
@@ -3453,6 +3643,7 @@ export default function App() {
 
             finalLabs,
             parsingFails,
+            missingLabs: finalLabs.filter((lab) => lab.missing || lab.autoFilled),
 
             finalLabSummary: finalLabs.map((lab) => ({
               name: lab.displayName,
