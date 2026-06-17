@@ -104,11 +104,12 @@ export default function ProgramsView({
     patient: "",
     dob: "",
     programType: "",
+    sortBy: "created_desc",
   });
 
   const [specialtyFilters, setSpecialtyFilters] = useState(
     PROGRAM_TYPES.reduce((acc, type) => {
-      acc[type] = { patient: "", dob: "", status: "All" };
+      acc[type] = { patient: "", dob: "", status: "All", sortBy: "status" };
       return acc;
     }, {})
   );
@@ -331,7 +332,11 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
 
         return hasProgramAccess && matchesPatient && matchesDob && matchesProgram;
       })
-      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+      .sort((a, b) => {
+        const aTime = getCreatedTime(a);
+        const bTime = getCreatedTime(b);
+        return filters.sortBy === "created_asc" ? aTime - bTime : bTime - aTime;
+      });
   }, [programEntries, filters, accessibleProgramTypes, isLeadershipView]);
 
   const specialtyEntries = useMemo(() => {
@@ -648,6 +653,11 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
     });
 
     return `${datePart} ${timePart}`;
+  }
+
+  function getCreatedTime(entry) {
+    const time = new Date(entry?.createdAt || 0).getTime();
+    return Number.isNaN(time) ? 0 : time;
   }
 
   async function handleCreateHistoricalPatient() {
@@ -1000,7 +1010,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
         )}
 
         <Card>
-          <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-4">
+          <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-5">
             <Field label="Search Patient">
               <input
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -1039,10 +1049,28 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
               </select>
             </Field>
 
+            <Field label="Sort">
+              <select
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                value={filters.sortBy}
+                onChange={(e) =>
+                  setFilters((prev) => ({ ...prev, sortBy: e.target.value }))
+                }
+              >
+                <option value="created_desc">Created newest first</option>
+                <option value="created_asc">Created oldest first</option>
+              </select>
+            </Field>
+
             <div className="flex items-end">
               <button
                 onClick={() =>
-                  setFilters({ patient: "", dob: "", programType: "" })
+                  setFilters({
+                    patient: "",
+                    dob: "",
+                    programType: "",
+                    sortBy: "created_desc",
+                  })
                 }
                 className="w-full rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200"
               >
@@ -1076,10 +1104,14 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                       }
                       className="w-full text-left"
                     >
-                      <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
                         <ReadOnlyField label="Patient" value={entry.patientName} />
                         <ReadOnlyField label="Phone" value={entry.phone || "—"} />
                         <ReadOnlyField label="Program" value={entry.programType} />
+                        <ReadOnlyField
+                          label="Created"
+                          value={formatDisplayDate(entry.createdAt)}
+                        />
 
                         <div>
                           <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -1101,6 +1133,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                           <ReadOnlyField label="MRN" value={entry.mrn || "—"} />
                           <ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} />
+                          <ReadOnlyField label="Created" value={formatDisplayDate(entry.createdAt)} />
                           <ReadOnlyField
                             label="Last Contact Attempt"
                             value={
@@ -1298,6 +1331,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
       patient: "",
       dob: "",
       status: "All",
+      sortBy: "status",
     };
 
     const sortReferralList = (list) => {
@@ -1312,6 +1346,14 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
       };
 
       return [...list].sort((a, b) => {
+        if (currentFilters.sortBy === "created_desc") {
+          return getCreatedTime(b) - getCreatedTime(a);
+        }
+
+        if (currentFilters.sortBy === "created_asc") {
+          return getCreatedTime(a) - getCreatedTime(b);
+        }
+
         const aRank = statusRank[a.status] ?? 50;
         const bRank = statusRank[b.status] ?? 50;
 
@@ -1449,7 +1491,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
               {programType} Tracking
             </h3>
 
-            <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-4">
               <Field label="Search Patient">
                 <input
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -1483,12 +1525,37 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                 />
               </Field>
 
+              <Field label="Sort">
+                <select
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={specialtyFilters[programType]?.sortBy || "status"}
+                  onChange={(e) =>
+                    setSpecialtyFilters((prev) => ({
+                      ...prev,
+                      [programType]: {
+                        ...prev[programType],
+                        sortBy: e.target.value,
+                      },
+                    }))
+                  }
+                >
+                  <option value="status">Status, then created newest</option>
+                  <option value="created_desc">Created newest first</option>
+                  <option value="created_asc">Created oldest first</option>
+                </select>
+              </Field>
+
               <div className="flex items-end">
                 <button
                   onClick={() =>
                     setSpecialtyFilters((prev) => ({
                       ...prev,
-                      [programType]: { patient: "", dob: "" },
+                      [programType]: {
+                        patient: "",
+                        dob: "",
+                        status: "All",
+                        sortBy: "status",
+                      },
                     }))
                   }
                   className="w-full rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200"
@@ -1522,9 +1589,10 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                         }
                         className="w-full text-left"
                       >
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
                           <ReadOnlyField label="Patient" value={entry.patientName} />
                           <ReadOnlyField label="Phone" value={entry.phone || "—"} />
+                          <ReadOnlyField label="Created" value={formatDisplayDate(entry.createdAt)} />
                           <div>
                             <label className="mb-1 block text-sm font-medium text-slate-700">
                               Status
@@ -1540,6 +1608,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                           <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                             <ReadOnlyField label="MRN" value={entry.mrn || "—"} />
                             <ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} />
+                            <ReadOnlyField label="Created" value={formatDisplayDate(entry.createdAt)} />
                             <ReadOnlyField
                               label="Last Contact Attempt"
                               value={
@@ -1844,7 +1913,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
               </p>
             </div>
           </div>
-          <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-4">
+          <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-5">
             <Field label="Search Patient">
               <input
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -1901,12 +1970,37 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
               </select>
             </Field>
 
+            <Field label="Sort">
+              <select
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                value={specialtyFilters[programType]?.sortBy || "status"}
+                onChange={(e) =>
+                  setSpecialtyFilters((prev) => ({
+                    ...prev,
+                    [programType]: {
+                      ...prev[programType],
+                      sortBy: e.target.value,
+                    },
+                  }))
+                }
+              >
+                <option value="status">Status, then created newest</option>
+                <option value="created_desc">Created newest first</option>
+                <option value="created_asc">Created oldest first</option>
+              </select>
+            </Field>
+
             <div className="flex items-end">
               <button
                 onClick={() =>
                   setSpecialtyFilters((prev) => ({
                     ...prev,
-                    [programType]: { patient: "", dob: "", status: "All" },
+                    [programType]: {
+                      patient: "",
+                      dob: "",
+                      status: "All",
+                      sortBy: "status",
+                    },
                   }))
                 }
                 className="w-full rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200"
@@ -1949,12 +2043,16 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                           <ReadOnlyField label="Phone" value={entry.phone || "—"} />
                         </div>
 
-                        <div className="md:col-span-2">
+                        <div className="md:col-span-1">
                           <ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} />
                         </div>
 
-                        <div className="md:col-span-2">
+                        <div className="md:col-span-1">
                           <ReadOnlyField label="MRN" value={entry.mrn || "—"} />
+                        </div>
+
+                        <div className="md:col-span-2">
+                          <ReadOnlyField label="Created" value={formatDisplayDate(entry.createdAt)} />
                         </div>
 
                         <div className="md:col-span-1">
@@ -1975,6 +2073,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                           <ReadOnlyField label="MRN" value={entry.mrn || "—"} />
                           <ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} />
+                          <ReadOnlyField label="Created" value={formatDisplayDate(entry.createdAt)} />
                           <ReadOnlyField
                             label="Last Contact Attempt"
                             value={

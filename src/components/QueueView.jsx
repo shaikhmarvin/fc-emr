@@ -357,13 +357,20 @@ const canMarkSeenBySocialWork =
     encounter?.socialWorkSeen === true ||
     encounter?.socialWorkSeen === "true" ||
     intakeData?.socialWorkSeen === true ||
-    intakeData?.socialWorkSeen === "true"
+    intakeData?.socialWorkSeen === "true" ||
+    intakeData?.social_work_seen === true ||
+    intakeData?.social_work_seen === "true"
   );
 }
 
   function getSocialWorkSeenAt(encounter) {
     const intakeData = encounter?.intakeData || encounter?.intake_data || {};
-    return encounter?.socialWorkSeenAt || intakeData?.socialWorkSeenAt || "";
+    return (
+      encounter?.socialWorkSeenAt ||
+      intakeData?.socialWorkSeenAt ||
+      intakeData?.social_work_seen_at ||
+      ""
+    );
   }
 
   function isPatientOnActivePap(patient) {

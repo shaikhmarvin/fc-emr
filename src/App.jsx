@@ -4295,7 +4295,14 @@ export default function App() {
 
   const autoSocialWorkSeenCount = visibleEncounterRows.filter(({ encounter }) => {
     const intakeData = encounter?.intakeData || encounter?.intake_data || {};
-    return encounter?.socialWorkSeen === true || intakeData?.socialWorkSeen === true;
+    return (
+      encounter?.socialWorkSeen === true ||
+      encounter?.socialWorkSeen === "true" ||
+      intakeData?.socialWorkSeen === true ||
+      intakeData?.socialWorkSeen === "true" ||
+      intakeData?.social_work_seen === true ||
+      intakeData?.social_work_seen === "true"
+    );
   }).length;
 
   const clinicSummaryStorageKey = selectedClinicDate
@@ -4472,9 +4479,7 @@ ptCount: String(specialtyCounts.pt || 0),
 dermatologyCount: String(specialtyCounts.dermatology || 0),
 ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
 
-      socialWorkCount:
-        prev.socialWorkCount ||
-        String(autoSocialWorkSeenCount || 0),
+      socialWorkCount: String(autoSocialWorkSeenCount || 0),
     }));
   }, [
     autoRefillPatientCount,
@@ -5776,9 +5781,20 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
     setShowIntakeModal(true);
   }
 
-  function buildProgramEntriesFromIntake(patient, intakeForm, coordinatorName = "") {
+  function buildProgramEntriesFromIntake(
+    patient,
+    intakeForm,
+    coordinatorName = "",
+    sourceEncounter = null
+  ) {
     const entries = [];
-    const createdAt = new Date().toISOString();
+    const requestedAt =
+      sourceEncounter?.createdAt ||
+      sourceEncounter?.created_at ||
+      (sourceEncounter?.clinicDate || sourceEncounter?.clinic_date
+        ? `${sourceEncounter.clinicDate || sourceEncounter.clinic_date}T00:00:00.000Z`
+        : "");
+    const createdAt = requestedAt || new Date().toISOString();
 
     function hasText(value) {
       return typeof value === "string" && value.trim() !== "" && value.trim() !== "N/A";
@@ -5870,11 +5886,16 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
     return entries;
   }
 
-  async function createProgramEntriesFromIntake(patient, intakeForm) {
+  async function createProgramEntriesFromIntake(patient, intakeForm, sourceEncounter = null) {
     const coordinatorName =
       profiles.find((profile) => profile.id === session?.user?.id)?.full_name || "";
 
-    const entries = buildProgramEntriesFromIntake(patient, intakeForm, coordinatorName);
+    const entries = buildProgramEntriesFromIntake(
+      patient,
+      intakeForm,
+      coordinatorName,
+      sourceEncounter
+    );
 
     if (entries.length === 0) return;
 
@@ -5993,7 +6014,7 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
           lastName: mrnConflictPatient.lastName,
           dob: mrnConflictPatient.dob,
           phone: intakeForm.phone || mrnConflictPatient.phone,
-        });
+        }, selectedEncounter);
 
         const sourceEncounterCount = selectedPatient.encounters?.length || 0;
 
@@ -6131,7 +6152,8 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
             dob: intakeForm.dob,
             phone: intakeForm.phone,
           },
-          intakeForm
+          intakeForm,
+          selectedEncounter
         );
 
         setShowIntakeModal(false);
@@ -6269,7 +6291,8 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
             dob: intakeForm.dob,
             phone: intakeForm.phone,
           },
-          intakeForm
+          intakeForm,
+          hydratedEncounter
         );
       } catch (error) {
         console.error("Failed to create duplicate-patient encounter:", error);
@@ -6378,7 +6401,11 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
         setPatients((prev) => [hydratedPatient, ...prev]);
         setSelectedPatientId(hydratedPatient.id);
         setSelectedEncounterId(savedEncounter.id);
-        await createProgramEntriesFromIntake(hydratedPatient, intakeForm);
+        await createProgramEntriesFromIntake(
+          hydratedPatient,
+          intakeForm,
+          hydratedPatient.encounters?.[0] || savedEncounter
+        );
       } catch (error) {
         console.error("Supabase save error:", error);
         window.alert(`Supabase save error: ${error.message}`);
@@ -6811,20 +6838,11 @@ async function markSeenBySocialWork(encounterId) {
   };
 
   try {
-    const { data, error } = await supabase
-      .from("encounters")
-      .update({ intake_data: nextIntakeData })
-      .eq("id", encounterId)
-      .select("id, intake_data")
-      .maybeSingle();
-
-    if (error) throw error;
-
-    if (!data) {
-      throw new Error(
-        "Supabase did not return the updated encounter. This may be an RLS/policy issue."
-      );
-    }
+    const data = await updateEncounterInSupabase(encounterId, {
+      socialWorkSeen: true,
+      socialWorkSeenAt: seenAt,
+      socialWorkSeenBy: session.user.id,
+    });
 
     setPatients((prev) =>
       prev.map((patient) => ({
@@ -6836,8 +6854,8 @@ async function markSeenBySocialWork(encounterId) {
                 socialWorkSeen: true,
                 socialWorkSeenAt: seenAt,
                 socialWorkSeenBy: session.user.id,
-                intakeData: data.intake_data || nextIntakeData,
-                intake_data: data.intake_data || nextIntakeData,
+                intakeData: data?.intake_data || nextIntakeData,
+                intake_data: data?.intake_data || nextIntakeData,
               }
             : encounter
         ),
