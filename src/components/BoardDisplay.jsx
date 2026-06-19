@@ -78,6 +78,7 @@ export default function BoardDisplay({
   todayStaffRoster,
   selectedClinicDate,
   tonightReservedRooms = [],
+  boardMessage = null,
 }) {
   const [now, setNow] = useState(new Date());
 
@@ -292,6 +293,19 @@ export default function BoardDisplay({
             );
           })()}
         </div>
+
+        {boardMessage?.body ? (
+          <div className="mb-2 shrink-0 rounded-xl border border-cyan-200 bg-cyan-100 px-4 py-2 text-center shadow">
+            {boardMessage.title ? (
+              <p className="text-sm font-black uppercase tracking-wide text-cyan-950 xl:text-base">
+                {boardMessage.title}
+              </p>
+            ) : null}
+            <p className="whitespace-pre-wrap text-base font-extrabold leading-tight text-cyan-950 xl:text-xl">
+              {boardMessage.body}
+            </p>
+          </div>
+        ) : null}
 
         <div className="mb-2 shrink-0 rounded-lg border border-amber-300 bg-amber-100 px-3 py-1.5 text-center shadow">
           <p className="text-base font-extrabold text-amber-950 xl:text-lg">

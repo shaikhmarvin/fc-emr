@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./lib/supabase";
 import { createPatientInSupabase, updatePatientInSupabase, mergePatientsByMrnInSupabase } from "./api/patients";
 import {
@@ -38,6 +38,13 @@ import {
   fetchClinicResourceSettings,
   updateClinicResourceSetting,
 } from "./api/clinicResourceSettings";
+import {
+  clearActiveBoardMessage,
+  deleteBoardMessageTemplate,
+  displayBoardMessage,
+  fetchBoardMessages,
+  saveBoardMessageTemplate,
+} from "./api/boardMessages";
 import ToastStack from "./components/ToastStack";
 import { canStartIntake, canManageRoomBoard, canEditFormulary, canPrescribe, canChart, canUseLabQueue, } from "./utils/permissions";
 import { fetchProfiles, updateProfileRole, updateProfileDetails } from "./api/profiles";
@@ -69,6 +76,7 @@ import FormularyView from "./components/FormularyView";
 import AppSidebar from "./components/AppSidebar";
 import UserManagementView from "./components/UserManagementView";
 import AppHeader from "./components/AppHeader";
+import StickyNotesModal from "./components/StickyNotesModal";
 import DashboardView from "./components/DashboardView";
 import ClinicSummaryView from "./components/ClinicSummaryView";
 import ProgramsView from "./components/ProgramsView";
@@ -1079,6 +1087,8 @@ export default function App() {
   const [programSettings, setProgramSettings] = useState([]);
   const [clinicResourceSettings, setClinicResourceSettings] = useState([]);
   const [clinicResourceSettingsLoaded, setClinicResourceSettingsLoaded] = useState(false);
+  const [activeBoardMessage, setActiveBoardMessage] = useState(null);
+  const [savedBoardMessages, setSavedBoardMessages] = useState([]);
   const todayIso = formatClinicDate();
 
   const tonightSpecialtyPrograms = useMemo(() => {
@@ -1125,6 +1135,52 @@ export default function App() {
 
     loadClinicResourceSettings();
   }, [session, clinicResourceSettingsLoaded]);
+
+  const loadBoardMessages = useCallback(async () => {
+    if (!session) return;
+
+    try {
+      const result = await fetchBoardMessages();
+      setActiveBoardMessage(result.activeMessage);
+      setSavedBoardMessages(result.savedMessages);
+    } catch (error) {
+      console.error("Failed to load board messages:", error);
+    }
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) return;
+
+    loadBoardMessages();
+
+    const refreshFromOtherTab = (event) => {
+      if (event.key !== "clinic-board-message-refresh") return;
+      loadBoardMessages();
+    };
+
+    window.addEventListener("storage", refreshFromOtherTab);
+
+    const channel = supabase
+      .channel("clinic_board_messages_realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "clinic_board_messages" },
+        () => {
+          loadBoardMessages();
+        }
+      )
+      .subscribe();
+
+    const fallbackInterval = window.setInterval(() => {
+      loadBoardMessages();
+    }, 10000);
+
+    return () => {
+      window.removeEventListener("storage", refreshFromOtherTab);
+      window.clearInterval(fallbackInterval);
+      supabase.removeChannel(channel);
+    };
+  }, [session, loadBoardMessages]);
 
   useEffect(() => {
     if (!session || papLoaded) return;
@@ -1462,6 +1518,8 @@ export default function App() {
     new URLSearchParams(window.location.search).get("display") === "board";
   const [selectedPatientId, setSelectedPatientId] = useState(null);
   const [selectedEncounterId, setSelectedEncounterId] = useState(null);
+  const [showStickyNotesModal, setShowStickyNotesModal] = useState(false);
+  const [stickyNotesInitialPatientId, setStickyNotesInitialPatientId] = useState("");
   const [todayStaffRoster, setTodayStaffRoster] = useState({
     attendings: "",
     residents: "",
@@ -4204,6 +4262,55 @@ export default function App() {
     }
   }
 
+  function notifyBoardMessageTabs() {
+    try {
+      window.localStorage.setItem(
+        "clinic-board-message-refresh",
+        String(Date.now())
+      );
+    } catch (error) {
+      console.error("Failed to notify board message tabs:", error);
+    }
+  }
+
+  async function handleDisplayBoardMessage(message) {
+    const saved = await displayBoardMessage({
+      ...message,
+      userId: session?.user?.id || null,
+    });
+
+    setActiveBoardMessage(saved);
+    notifyBoardMessageTabs();
+    await loadBoardMessages();
+  }
+
+  async function handleClearBoardMessage() {
+    await clearActiveBoardMessage();
+    setActiveBoardMessage(null);
+    notifyBoardMessageTabs();
+    await loadBoardMessages();
+  }
+
+  async function handleSaveBoardMessageTemplate(message) {
+    const saved = await saveBoardMessageTemplate({
+      ...message,
+      userId: session?.user?.id || null,
+    });
+
+    setSavedBoardMessages((prev) => [saved, ...prev]);
+    notifyBoardMessageTabs();
+    await loadBoardMessages();
+  }
+
+  async function handleDeleteBoardMessageTemplate(messageId) {
+    await deleteBoardMessageTemplate(messageId);
+    setSavedBoardMessages((prev) =>
+      prev.filter((message) => message.id !== messageId)
+    );
+    notifyBoardMessageTabs();
+    await loadBoardMessages();
+  }
+
 
   const filteredPatients = patients.filter((patient) =>
     patientMatchesSearch(patient, debouncedSearchForm)
@@ -6532,6 +6639,12 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
     setShowMedicationModal(false);
     setActiveView("chart");
   }
+
+  function openStickyNotes(patientId = "") {
+    setStickyNotesInitialPatientId(patientId || "");
+    setShowStickyNotesModal(true);
+  }
+
   async function startNewEncounter() {
     if (!selectedPatient) return;
     if (!(userRole === "leadership" || userRole === "undergraduate")) return;
@@ -9607,6 +9720,7 @@ async function markSeenBySocialWork(encounterId) {
         selectedClinicDate={boardClinicDate}
         tonightSpecialtyNames={tonightSpecialtyNames}
         tonightReservedRooms={tonightReservedRooms}
+        boardMessage={activeBoardMessage}
 
       />
     );
@@ -9642,16 +9756,9 @@ async function markSeenBySocialWork(encounterId) {
           user={session?.user}
           userRole={userRole}
           handleResetSession={handleResetSession}
-          isLeadershipView={isLeadershipView}
-          setIsLeadershipView={setIsLeadershipView}
-          setIsEditingIntake={setIsEditingIntake}
-          setEditingPatientId={setEditingPatientId}
-          setIntakeForm={setIntakeForm}
-          setIntakeTab={setIntakeTab}
-          setShowIntakeModal={setShowIntakeModal}
-          EMPTY_FORM={EMPTY_FORM}
           sidebarOpen={sidebarOpen}
           setSidebarOpen={setSidebarOpen}
+          onOpenStickyNotes={openStickyNotes}
         />
 
         {activeView === "lab-import" && (
@@ -9972,6 +10079,12 @@ async function markSeenBySocialWork(encounterId) {
               onTodayStaffRosterSave={handleSaveTodayStaffRoster}
               specialtyNames={boardSpecialtyNames}
               reservedRooms={boardReservedRooms}
+              boardMessage={activeBoardMessage}
+              savedBoardMessages={savedBoardMessages}
+              onDisplayBoardMessage={handleDisplayBoardMessage}
+              onClearBoardMessage={handleClearBoardMessage}
+              onSaveBoardMessageTemplate={handleSaveBoardMessageTemplate}
+              onDeleteBoardMessageTemplate={handleDeleteBoardMessageTemplate}
             />
           )}
           {activeView === "formulary" && (
@@ -10106,6 +10219,7 @@ async function markSeenBySocialWork(encounterId) {
               refillRequests={refillRequests}
               profileNameMap={profileNameMap}
               setSkipUpperLevelApproval={setSkipUpperLevelApproval}
+              onOpenStickyNotes={openStickyNotes}
             />
           )}
 
@@ -10198,6 +10312,15 @@ async function markSeenBySocialWork(encounterId) {
         setEditingAllergyId={setEditingAllergyId}
         addOrUpdateAllergy={addOrUpdateAllergy}
         EMPTY_ALLERGY={EMPTY_ALLERGY}
+      />
+
+      <StickyNotesModal
+        show={showStickyNotesModal}
+        onClose={() => setShowStickyNotesModal(false)}
+        currentUserId={session?.user?.id || null}
+        patients={patients}
+        initialPatientId={stickyNotesInitialPatientId}
+        onOpenPatientChart={openPatientChart}
       />
 
       <IntakeModal

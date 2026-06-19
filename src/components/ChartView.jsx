@@ -99,6 +99,7 @@ export default function ChartView({
   refillRequests,
   profileNameMap,
   setSkipUpperLevelApproval,
+  onOpenStickyNotes,
 }) {
 
 
@@ -1387,6 +1388,14 @@ function getSelectedRoomOptionClass() {
             Edit Patient Info
           </button>
         )}
+
+        <button
+          type="button"
+          onClick={() => onOpenStickyNotes?.(selectedPatient.id)}
+          className="rounded-lg bg-yellow-400 px-4 py-2 font-medium text-slate-900 hover:bg-yellow-300"
+        >
+          Patient Sticky Note
+        </button>
 
         {canStartEncounter ? (
           <button
@@ -3249,4 +3258,3 @@ function getSelectedRoomOptionClass() {
     </div>
   )
 }
-

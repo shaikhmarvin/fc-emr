@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { getStatusLabel } from "../utils";
 import { VISIT_TYPE_BADGE_STYLES, getEncounterVisitTypeKey } from "../constants";
 
@@ -107,9 +108,33 @@ export default function RoomBoard({
   reservedRooms,
   tonightSpecialtyNames = [],
   tonightReservedRooms = [],
+  boardMessage = null,
+  savedBoardMessages = [],
+  onDisplayBoardMessage,
+  onClearBoardMessage,
+  onSaveBoardMessageTemplate,
+  onDeleteBoardMessageTemplate,
 }) {
+  const [messageDraft, setMessageDraft] = useState({
+    title: "",
+    body: "",
+  });
+  const [selectedSavedMessageId, setSelectedSavedMessageId] = useState("");
+  const [messageBusy, setMessageBusy] = useState(false);
+  const [messageStatus, setMessageStatus] = useState("");
+  const [boardMessageExpanded, setBoardMessageExpanded] = useState(false);
+
   const activeSpecialtyNames = specialtyNames || tonightSpecialtyNames;
   const activeReservedRooms = reservedRooms || tonightReservedRooms;
+
+  useEffect(() => {
+    if (!boardMessage) return;
+
+    setMessageDraft({
+      title: boardMessage.title || "",
+      body: boardMessage.body || "",
+    });
+  }, [boardMessage]);
 
   function getReservedSpecialtyForRoom(roomNumber) {
     return (activeReservedRooms || []).find(
@@ -223,6 +248,227 @@ export default function RoomBoard({
               </label>
             ))}
           </div>
+        </div>
+      )}
+
+      {isLeadershipView && (
+        <div className="rounded-2xl bg-white p-3 shadow">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <button
+              type="button"
+              onClick={() => setBoardMessageExpanded((value) => !value)}
+              className="min-w-0 flex-1 text-left"
+            >
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Board Message
+              </p>
+              <p className="truncate text-sm text-slate-700">
+                {boardMessage?.body
+                  ? `${boardMessage.title ? `${boardMessage.title}: ` : ""}${boardMessage.body}`
+                  : "No message currently showing."}
+              </p>
+            </button>
+
+            <div className="flex flex-wrap gap-2">
+              {boardMessage?.body ? (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setMessageBusy(true);
+                    setMessageStatus("");
+                    try {
+                      await onClearBoardMessage?.();
+                      setMessageStatus("Message cleared.");
+                    } catch (error) {
+                      console.error("Failed to clear board message:", error);
+                      setMessageStatus(`Could not clear message: ${error.message}`);
+                    } finally {
+                      setMessageBusy(false);
+                    }
+                  }}
+                  disabled={messageBusy}
+                  className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Clear Message
+                </button>
+              ) : null}
+
+              <button
+                type="button"
+                onClick={() => setBoardMessageExpanded((value) => !value)}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                {boardMessageExpanded ? "Collapse" : "Expand"}
+              </button>
+            </div>
+          </div>
+
+          {messageStatus ? (
+            <p className="mt-2 text-sm text-slate-600">{messageStatus}</p>
+          ) : null}
+
+          {boardMessageExpanded && (
+          <div className="mt-3 grid grid-cols-1 gap-3 border-t border-slate-200 pt-3 lg:grid-cols-[1fr_1fr]">
+            <div className="space-y-2">
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Message Title
+                </span>
+                <input
+                  value={messageDraft.title}
+                  onChange={(event) =>
+                    setMessageDraft((prev) => ({ ...prev, title: event.target.value }))
+                  }
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  placeholder="Optional title"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Message
+                </span>
+                <textarea
+                  value={messageDraft.body}
+                  onChange={(event) =>
+                    setMessageDraft((prev) => ({ ...prev, body: event.target.value }))
+                  }
+                  className="mt-1 h-24 w-full resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  placeholder="Example: Please return all charts to leadership before leaving."
+                />
+              </label>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setMessageBusy(true);
+                    setMessageStatus("");
+                    try {
+                      await onDisplayBoardMessage?.(messageDraft);
+                      setMessageStatus("Message displayed.");
+                    } catch (error) {
+                      console.error("Failed to display board message:", error);
+                      setMessageStatus(`Could not display message: ${error.message}`);
+                    } finally {
+                      setMessageBusy(false);
+                    }
+                  }}
+                  disabled={messageBusy || !messageDraft.body.trim()}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Display Message
+                </button>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setMessageBusy(true);
+                    setMessageStatus("");
+                    try {
+                      await onSaveBoardMessageTemplate?.(messageDraft);
+                      setMessageStatus("Saved for reuse.");
+                    } catch (error) {
+                      console.error("Failed to save board message:", error);
+                      setMessageStatus(`Could not save message: ${error.message}`);
+                    } finally {
+                      setMessageBusy(false);
+                    }
+                  }}
+                  disabled={messageBusy || !messageDraft.body.trim()}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Save for Reuse
+                </button>
+              </div>
+
+            </div>
+
+            <div className="space-y-2">
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Reuse Saved Message
+                </span>
+                <select
+                  value={selectedSavedMessageId}
+                  onChange={(event) => {
+                    const messageId = event.target.value;
+                    setSelectedSavedMessageId(messageId);
+                    const saved = savedBoardMessages.find((message) => message.id === messageId);
+                    if (saved) {
+                      setMessageDraft({
+                        title: saved.title || "",
+                        body: saved.body || "",
+                      });
+                    }
+                  }}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                >
+                  <option value="">Choose a saved message</option>
+                  {savedBoardMessages.map((message) => (
+                    <option key={message.id} value={message.id}>
+                      {message.title || message.body.slice(0, 80)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {selectedSavedMessageId ? (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setMessageBusy(true);
+                      setMessageStatus("");
+                      try {
+                        await onDisplayBoardMessage?.(messageDraft);
+                        setMessageStatus("Saved message displayed.");
+                      } catch (error) {
+                        console.error("Failed to display saved board message:", error);
+                        setMessageStatus(`Could not display saved message: ${error.message}`);
+                      } finally {
+                        setMessageBusy(false);
+                      }
+                    }}
+                    disabled={messageBusy || !messageDraft.body.trim()}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Display Saved Message
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!window.confirm("Delete this saved board message?")) return;
+                      setMessageBusy(true);
+                      setMessageStatus("");
+                      try {
+                        await onDeleteBoardMessageTemplate?.(selectedSavedMessageId);
+                        setSelectedSavedMessageId("");
+                        setMessageStatus("Saved message deleted.");
+                      } catch (error) {
+                        console.error("Failed to delete saved board message:", error);
+                        setMessageStatus(`Could not delete saved message: ${error.message}`);
+                      } finally {
+                        setMessageBusy(false);
+                      }
+                    }}
+                    disabled={messageBusy}
+                    className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Delete Saved
+                  </button>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-slate-300 px-3 py-6 text-center text-sm text-slate-500">
+                  {savedBoardMessages.length === 0
+                    ? "No saved messages yet."
+                    : "Pick a saved message to reuse it."}
+                </div>
+              )}
+            </div>
+          </div>
+          )}
         </div>
       )}
 

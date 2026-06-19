@@ -1,5 +1,3 @@
-import { formatDate } from "../utils";
-
 export default function AppHeader({
   activeView,
   selectedPatient,
@@ -8,15 +6,9 @@ export default function AppHeader({
   user,
   userRole,
   handleResetSession,
-  isLeadershipView,
-  setIsEditingIntake,
-  setEditingPatientId,
-  setIntakeForm,
-  setIntakeTab,
-  setShowIntakeModal,
-  EMPTY_FORM,
   sidebarOpen,
   setSidebarOpen,
+  onOpenStickyNotes,
 }) {
   return (
   <div className="sticky top-0 z-40 border-b bg-white shadow-sm">
@@ -86,6 +78,14 @@ export default function AppHeader({
             🖥️ Open Display Board
           </button>
         )}
+
+        <button
+          type="button"
+          onClick={() => onOpenStickyNotes?.()}
+          className="rounded-lg bg-yellow-400 px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-yellow-300"
+        >
+          Sticky Notes
+        </button>
 
         <button
           onClick={() => {
