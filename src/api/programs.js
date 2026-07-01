@@ -33,6 +33,16 @@ export async function fetchProgramEntries() {
   return (data || []).map(mapProgramRow);
 }
 
+export async function resetPhysicalTherapyStatusesForMonthEnd() {
+  const { data, error } = await supabase.rpc(
+    "reset_physical_therapy_statuses_for_month_end"
+  );
+
+  if (error) throw error;
+
+  return Array.isArray(data) ? data[0] : data;
+}
+
 export async function createProgramEntryInSupabase(entry) {
   const payload = {
     id: entry.id,

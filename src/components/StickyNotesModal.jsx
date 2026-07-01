@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createStickyNoteInSupabase,
   deleteStickyNoteInSupabase,
@@ -63,6 +63,7 @@ export default function StickyNotesModal({
   const [showPatientOptions, setShowPatientOptions] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState(null);
   const [form, setForm] = useState(EMPTY_NOTE_FORM);
+  const initializedOpenKeyRef = useRef("");
 
   const patientById = useMemo(() => {
     const map = new Map();
@@ -152,11 +153,23 @@ export default function StickyNotesModal({
   }, [patientById]);
 
   useEffect(() => {
+    if (!show) {
+      initializedOpenKeyRef.current = "";
+      return;
+    }
+
+    const openKey = String(initialPatientId || "");
+    if (initializedOpenKeyRef.current === openKey) return;
+
+    initializedOpenKeyRef.current = openKey;
+    resetForm(initialPatientId || "");
+  }, [show, initialPatientId, resetForm]);
+
+  useEffect(() => {
     if (!show) return;
 
-    resetForm(initialPatientId || "");
     loadNotes();
-  }, [show, initialPatientId, currentUserId, loadNotes, resetForm]);
+  }, [show, loadNotes]);
 
   async function saveNote() {
     const title = form.title.trim();

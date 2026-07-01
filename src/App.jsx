@@ -84,6 +84,7 @@ import { fetchProgramSettings } from "./api/programSettings";
 import PAPView from "./components/PAPView";
 import {
   fetchProgramEntries,
+  resetPhysicalTherapyStatusesForMonthEnd,
   createProgramEntryInSupabase,
   updateProgramEntryInSupabase,
   deleteProgramEntryInSupabase,
@@ -1203,6 +1204,12 @@ export default function App() {
 
     async function loadProgramEntries() {
       try {
+        try {
+          await resetPhysicalTherapyStatusesForMonthEnd();
+        } catch (resetError) {
+          console.error("Failed to run PT month-end status reset:", resetError);
+        }
+
         const rows = await fetchProgramEntries();
         setProgramEntries(rows);
         setProgramsLoaded(true);
@@ -1306,6 +1313,28 @@ export default function App() {
 
     try {
       const saved = await updateProgramEntryInSupabase(entryId, { [field]: value });
+
+      setProgramEntries((prev) =>
+        prev.map((entry) => (entry.id === entryId ? saved : entry))
+      );
+    } catch (error) {
+      console.error("Failed to update program entry:", error);
+      alert(`Failed to update program entry: ${error.message}`);
+      setProgramEntries(previousEntries);
+    }
+  }
+
+  async function updateProgramEntryFields(entryId, updates) {
+    const previousEntries = [...programEntries];
+
+    setProgramEntries((prev) =>
+      prev.map((entry) =>
+        entry.id === entryId ? { ...entry, ...updates } : entry
+      )
+    );
+
+    try {
+      const saved = await updateProgramEntryInSupabase(entryId, updates);
 
       setProgramEntries((prev) =>
         prev.map((entry) => (entry.id === entryId ? saved : entry))
@@ -10249,6 +10278,7 @@ async function markSeenBySocialWork(encounterId) {
               programEntries={programEntries}
               addProgramEntry={addProgramEntry}
               updateProgramEntry={updateProgramEntry}
+              updateProgramEntryFields={updateProgramEntryFields}
               removeProgramEntry={removeProgramEntry}
               patients={patients}
               selectedClinicDate={selectedClinicDate}
