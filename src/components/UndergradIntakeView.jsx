@@ -76,7 +76,7 @@ function FiredPatientStartModal({
             Fired patient alert
           </p>
           <h2 className="mt-1 text-3xl font-black text-red-950">
-            Do not start unless leadership approved
+            Review this fired patient before continuing
           </h2>
         </div>
 
@@ -110,7 +110,7 @@ function FiredPatientStartModal({
 
           <div className="rounded-xl border-2 border-red-500 bg-red-100 px-4 py-3">
             <p className="text-base font-black">
-              Confirm with leadership before continuing. Starting this encounter will let the fired patient into the clinic flow.
+              Make sure you reviewed the fired status and reason. Starting this encounter will let the fired patient into the clinic flow.
             </p>
           </div>
         </div>
@@ -131,7 +131,7 @@ function FiredPatientStartModal({
             disabled={isSubmitting}
             className="rounded-lg bg-red-700 px-4 py-2 text-sm font-black text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isSubmitting ? "Starting..." : "Leadership Approved - Start Encounter"}
+            {isSubmitting ? "Starting..." : "I Reviewed This - Start Encounter"}
           </button>
         </div>
       </div>
@@ -637,7 +637,7 @@ export default function UndergradIntakeView({
             {matchedPatientFired && (
               <div className="mb-3 rounded-xl border-2 border-red-600 bg-red-100 px-4 py-3">
                 <p className="text-lg font-black uppercase tracking-wide text-red-950">
-                  Fired patient - stop and get leadership approval
+                  Fired patient - review before continuing
                 </p>
                 <div className="mt-2 grid gap-2 text-sm font-semibold text-red-950 sm:grid-cols-2">
                   <p>
@@ -651,7 +651,7 @@ export default function UndergradIntakeView({
                   </p>
                 </div>
                 <p className="mt-2 text-sm font-bold text-red-900">
-                  Do not start this encounter unless leadership tells you to continue.
+                  Confirm you have reviewed the fired status and reason before starting this encounter.
                 </p>
               </div>
             )}
@@ -725,7 +725,7 @@ export default function UndergradIntakeView({
                             {patient.firedReason || "No reason entered."}
                           </div>
                           <div className="mt-2 font-black uppercase tracking-wide">
-                            Stop and ask leadership before continuing.
+                            Review fired status before continuing.
                           </div>
                         </div>
                       )}
@@ -765,7 +765,7 @@ export default function UndergradIntakeView({
                       }`}
                     >
                       {patient.fired
-                        ? "Use Fired Patient - Leadership Approval Needed"
+                        ? "Use Fired Patient - Review Required"
                         : "Use This Patient"}
                     </button>
                   </div>
@@ -789,7 +789,7 @@ export default function UndergradIntakeView({
               </p>
             </div>
             <p className="mt-3 text-base font-extrabold">
-              Stop intake and ask leadership before starting this encounter.
+              Review the fired status and reason before starting this encounter.
             </p>
             <p className="mt-1 text-xs font-semibold text-red-900">
               If you click Start Encounter, a full-screen confirmation will appear.

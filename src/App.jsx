@@ -1999,6 +1999,10 @@ export default function App() {
     new URLSearchParams(window.location.search).get("display") === "board";
   const [selectedPatientId, setSelectedPatientId] = useState(null);
   const [selectedEncounterId, setSelectedEncounterId] = useState(null);
+  const dashboardScrollYRef = useRef(
+    Number(window.sessionStorage.getItem("dashboard-scroll-y")) || 0
+  );
+  const shouldRestoreDashboardScrollRef = useRef(false);
   const [showStickyNotesModal, setShowStickyNotesModal] = useState(false);
   const [stickyNotesInitialPatientId, setStickyNotesInitialPatientId] = useState("");
   const [todayStaffRoster, setTodayStaffRoster] = useState({
@@ -2012,6 +2016,39 @@ export default function App() {
     session,
     userRole,
   });
+
+  function rememberDashboardScrollPosition() {
+    if (activeView !== "dashboard") return;
+
+    const scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+    dashboardScrollYRef.current = scrollY;
+    window.sessionStorage.setItem("dashboard-scroll-y", String(scrollY));
+  }
+
+  function returnToDashboard() {
+    shouldRestoreDashboardScrollRef.current = true;
+    setActiveView("dashboard");
+  }
+
+  useEffect(() => {
+    if (activeView !== "dashboard") return;
+    if (!shouldRestoreDashboardScrollRef.current) return;
+
+    const restoreScroll = () => {
+      window.scrollTo({
+        top: dashboardScrollYRef.current || 0,
+        left: 0,
+        behavior: "auto",
+      });
+      shouldRestoreDashboardScrollRef.current = false;
+    };
+
+    const firstFrame = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(restoreScroll);
+    });
+
+    return () => window.cancelAnimationFrame(firstFrame);
+  }, [activeView]);
 
 
 
@@ -7095,6 +7132,8 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
     const patient = patients.find((p) => p.id === patientId);
     if (!patient) return;
 
+    rememberDashboardScrollPosition();
+
     let encounter = null;
 
     if (encounterId) {
@@ -10667,7 +10706,7 @@ async function markSeenBySocialWork(encounterId) {
               selectedEncounter={selectedEncounter}
               selectedEncounterId={selectedEncounterId}
               normalizeClinicDate={normalizeClinicDate}
-              setActiveView={setActiveView}
+              onBackToPatients={returnToDashboard}
               startNewEncounter={startNewEncounter}
               deleteEncounter={deleteEncounter}
               canStartEncounter={userRole === "leadership" || userRole === "undergraduate"}

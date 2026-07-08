@@ -10,7 +10,7 @@ export default function ChartView({
   selectedEncounter,
   selectedEncounterId,
   normalizeClinicDate,
-  setActiveView,
+  onBackToPatients,
   startNewEncounter,
   deleteEncounter,
   canStartEncounter,
@@ -1295,7 +1295,7 @@ function getSelectedRoomOptionClass() {
   return (
     <div className="space-y-4 p-3 sm:p-4 lg:space-y-6 lg:p-6">
       <button
-        onClick={() => setActiveView("dashboard")}
+        onClick={onBackToPatients}
         className="text-blue-600 hover:underline"
       >
         ← Back to Patients
