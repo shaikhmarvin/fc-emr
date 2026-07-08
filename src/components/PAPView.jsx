@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const PAP_STATUSES = [
   "Pending Application",
@@ -12,12 +12,62 @@ const PAP_STATUSES = [
   "Completed",
 ];
 
+const ADD_PAP_DRAFT_STORAGE_KEY = "pap-add-entry-draft";
+const EDIT_PAP_DRAFT_STORAGE_KEY = "pap-edit-entry-drafts";
+
 function getTodayInputValue() {
   const date = new Date();
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function getEmptyPapEntryDraft() {
+  return {
+    patientId: "",
+    patientName: "",
+    mrn: "",
+    phone: "",
+    medication: "",
+    company: "",
+    status: "Pending Application",
+    startedDate: getTodayInputValue(),
+    assignedLeadership: "",
+    approvalUntilDate: "",
+    nextFollowUpDate: "",
+    nextRefillDate: "",
+    denialReason: "",
+    discontinuedReason: "",
+    prescriptionChangeNotes: "",
+    todoNotes: "",
+    generalNotes: "",
+  };
+}
+
+function getSavedPapEntryDraft() {
+  try {
+    const saved = window.sessionStorage.getItem(ADD_PAP_DRAFT_STORAGE_KEY);
+    if (!saved) return getEmptyPapEntryDraft();
+
+    return {
+      ...getEmptyPapEntryDraft(),
+      ...JSON.parse(saved),
+    };
+  } catch (error) {
+    console.error("Failed to restore PAP draft:", error);
+    return getEmptyPapEntryDraft();
+  }
+}
+
+function getSavedPapEditDrafts() {
+  try {
+    const saved = window.sessionStorage.getItem(EDIT_PAP_DRAFT_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : {};
+  } catch (error) {
+    console.error("Failed to restore PAP edit drafts:", error);
+    return {};
+  }
 }
 
 function getLivePatientName(entry, patientsById) {
@@ -69,29 +119,39 @@ export default function PAPView({
 
   const [expandedEntryIds, setExpandedEntryIds] = useState([]);
 
-  const [papDrafts, setPapDrafts] = useState({});
+  const [papDrafts, setPapDrafts] = useState(getSavedPapEditDrafts);
 
   const [showAddPapEntry, setShowAddPapEntry] = useState(false);
+  const [isAddingPapEntry, setIsAddingPapEntry] = useState(false);
 
-  const [newEntry, setNewEntry] = useState({
-    patientId: "",
-    patientName: "",
-    mrn: "",
-    phone: "",
-    medication: "",
-    company: "",
-    status: "Pending Application",
-    startedDate: getTodayInputValue(),
-    assignedLeadership: "",
-    approvalUntilDate: "",
-    nextFollowUpDate: "",
-    nextRefillDate: "",
-    denialReason: "",
-    discontinuedReason: "",
-    prescriptionChangeNotes: "",
-    todoNotes: "",
-    generalNotes: "",
-  });
+  const [newEntry, setNewEntry] = useState(getSavedPapEntryDraft);
+
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(
+        ADD_PAP_DRAFT_STORAGE_KEY,
+        JSON.stringify(newEntry)
+      );
+    } catch (error) {
+      console.error("Failed to save PAP draft:", error);
+    }
+  }, [newEntry]);
+
+  useEffect(() => {
+    try {
+      if (Object.keys(papDrafts).length === 0) {
+        window.sessionStorage.removeItem(EDIT_PAP_DRAFT_STORAGE_KEY);
+        return;
+      }
+
+      window.sessionStorage.setItem(
+        EDIT_PAP_DRAFT_STORAGE_KEY,
+        JSON.stringify(papDrafts)
+      );
+    } catch (error) {
+      console.error("Failed to save PAP edit drafts:", error);
+    }
+  }, [papDrafts]);
 
   const showNewApprovalFields = newEntry.status === "Approved";
 
@@ -126,26 +186,6 @@ function setPapDraftValue(entryId, field, value) {
       [field]: value,
     },
   }));
-}
-
-function clearPapDraftValue(entryId, field) {
-  setPapDrafts((prev) => {
-    if (!prev[entryId]) return prev;
-
-    const nextEntryDraft = { ...prev[entryId] };
-    delete nextEntryDraft[field];
-
-    if (Object.keys(nextEntryDraft).length === 0) {
-      const next = { ...prev };
-      delete next[entryId];
-      return next;
-    }
-
-    return {
-      ...prev,
-      [entryId]: nextEntryDraft,
-    };
-  });
 }
 
 function savePapDraftValue(entry, field) {
@@ -232,7 +272,7 @@ function savePapDraftValue(entry, field) {
         const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime();
         return bTime - aTime;
       });
-  }, [papEntries, filters, listSearch]);
+  }, [papEntries, filters, listSearch, patientsById]);
 
   const papCounts = useMemo(() => {
     return {
@@ -258,7 +298,7 @@ function savePapDraftValue(entry, field) {
     setPatientSearch({ name: "", mrn: "", dob: "" });
   }
 
-  function handleAddEntry() {
+  async function handleAddEntry() {
     if (
       !newEntry.patientId ||
       !getLivePatientName(newEntry, patientsById) ||
@@ -272,8 +312,9 @@ function savePapDraftValue(entry, field) {
       return;
     }
 
+    setIsAddingPapEntry(true);
+
     const entry = {
-      id: Date.now(),
       patientId: newEntry.patientId,
       patientName: getLivePatientName(newEntry, patientsById),
       mrn: newEntry.mrn,
@@ -295,27 +336,16 @@ function savePapDraftValue(entry, field) {
       updatedAt: new Date().toISOString(),
     };
 
-    addPapEntry(entry);
+    try {
+      const saved = await addPapEntry(entry);
+      if (!saved) return;
 
-    setNewEntry({
-      patientId: "",
-      patientName: "",
-      mrn: "",
-      phone: "",
-      medication: "",
-      company: "",
-      status: "Pending Application",
-      startedDate: getTodayInputValue(),
-      assignedLeadership: "",
-      approvalUntilDate: "",
-      nextFollowUpDate: "",
-      nextRefillDate: "",
-      denialReason: "",
-      discontinuedReason: "",
-      prescriptionChangeNotes: "",
-      todoNotes: "",
-      generalNotes: "",
-    });
+      const emptyDraft = getEmptyPapEntryDraft();
+      setNewEntry(emptyDraft);
+      window.sessionStorage.removeItem(ADD_PAP_DRAFT_STORAGE_KEY);
+    } finally {
+      setIsAddingPapEntry(false);
+    }
   }
 
   function handleDeleteEntry(entryId) {
@@ -648,14 +678,16 @@ function savePapDraftValue(entry, field) {
         <div className="mt-4 flex gap-2">
           <button
             onClick={handleAddEntry}
+            disabled={isAddingPapEntry}
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
           >
-            Add PAP Entry
+            {isAddingPapEntry ? "Saving..." : "Add PAP Entry"}
           </button>
 
           <button
             type="button"
             onClick={() => setShowAddPapEntry(false)}
+            disabled={isAddingPapEntry}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             Cancel

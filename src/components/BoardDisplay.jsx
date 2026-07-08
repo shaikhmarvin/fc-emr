@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { formatDate, getStatusLabel } from "../utils";
 import { getClinicAlert } from "../utils/clinicAlerts";
 import { VISIT_TYPE_BADGE_STYLES, getEncounterVisitTypeKey } from "../constants";
@@ -10,6 +10,8 @@ const WIFI_PASSWORD = "StarToast76"; // CHANGE THIS
 const QR_SRC = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(
   CLINIC_URL
 )}`;
+
+const MIN_AUTO_FIT_SCALE = 0.68;
 
 function isVisibleOnBoard(encounter) {
   if (!encounter) return false;
@@ -81,6 +83,10 @@ export default function BoardDisplay({
   boardMessage = null,
 }) {
   const [now, setNow] = useState(new Date());
+  const viewportRef = useRef(null);
+  const contentRef = useRef(null);
+  const fitFrameRef = useRef(null);
+  const [autoFitScale, setAutoFitScale] = useState(1);
 
   const [boardZoom, setBoardZoom] = useState(() => {
     const savedZoom = Number(window.localStorage.getItem("board-display-zoom"));
@@ -120,7 +126,8 @@ export default function BoardDisplay({
     };
   }, []);
 
-  const boardScale = (boardZoom / 100) * browserZoomCompensation;
+  const manualBoardScale = (boardZoom / 100) * browserZoomCompensation;
+  const boardScale = manualBoardScale * autoFitScale;
 
   const roster = useMemo(
     () =>
@@ -132,15 +139,79 @@ export default function BoardDisplay({
     [todayStaffRoster]
   );
 
+  const clinicDateLabel = selectedClinicDate
+    ? new Date(`${selectedClinicDate}T12:00:00`).toLocaleDateString()
+    : "";
+
   function getReservedSpecialtyForRoom(roomNumber) {
     return (tonightReservedRooms || []).find(
       (reserved) => String(reserved.roomNumber) === String(roomNumber)
     );
   }
 
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    const content = contentRef.current;
+    if (!viewport || !content) return undefined;
+
+    const updateFit = () => {
+      if (fitFrameRef.current) {
+        window.cancelAnimationFrame(fitFrameRef.current);
+      }
+
+      fitFrameRef.current = window.requestAnimationFrame(() => {
+        const viewportWidth = viewport.clientWidth;
+        const viewportHeight = viewport.clientHeight;
+        if (!viewportWidth || !viewportHeight) return;
+
+        const scaledContentWidth = content.scrollWidth * manualBoardScale;
+        const scaledContentHeight = content.scrollHeight * manualBoardScale;
+        if (!scaledContentWidth || !scaledContentHeight) return;
+
+        const nextScale = Math.max(
+          MIN_AUTO_FIT_SCALE,
+          Math.min(
+            1,
+            viewportWidth / scaledContentWidth,
+            viewportHeight / scaledContentHeight
+          )
+        );
+
+        setAutoFitScale((currentScale) =>
+          Math.abs(currentScale - nextScale) > 0.01 ? nextScale : currentScale
+        );
+      });
+    };
+
+    updateFit();
+
+    const resizeObserver = new ResizeObserver(updateFit);
+    resizeObserver.observe(viewport);
+    resizeObserver.observe(content);
+    window.addEventListener("resize", updateFit);
+
+    return () => {
+      if (fitFrameRef.current) {
+        window.cancelAnimationFrame(fitFrameRef.current);
+      }
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateFit);
+    };
+  }, [
+    ROOM_OPTIONS,
+    allEncounterRows,
+    boardMessage,
+    manualBoardScale,
+    roster.attendings,
+    roster.residents,
+    roster.upperLevels,
+    tonightReservedRooms,
+  ]);
+
   return (
-    <div className="h-screen overflow-hidden bg-slate-900">
+    <div ref={viewportRef} className="h-screen overflow-hidden bg-slate-900">
       <div
+        ref={contentRef}
         className="flex h-full flex-col p-2 text-white xl:p-3"
         style={{
           transform: `scale(${boardScale})`,
@@ -159,6 +230,11 @@ export default function BoardDisplay({
                 <p className="text-[0.7rem] font-semibold leading-tight text-slate-300 xl:text-xs">
                   Live Display
                 </p>
+                {clinicDateLabel ? (
+                  <p className="text-[0.65rem] font-bold leading-tight text-slate-400 xl:text-[0.7rem]">
+                    Clinic Date: {clinicDateLabel}
+                  </p>
+                ) : null}
               </div>
 
               <div className="flex shrink-0 items-center gap-1 rounded-xl border border-slate-600 bg-slate-800/55 px-2 py-1.5 shadow">
@@ -182,6 +258,14 @@ export default function BoardDisplay({
                 >
                   +
                 </button>
+                {autoFitScale < 0.99 ? (
+                  <span
+                    className="rounded bg-slate-900/80 px-1.5 py-0.5 text-[10px] font-bold text-cyan-200"
+                    title="The board is automatically fitting itself to this screen."
+                  >
+                    Fit {Math.round(autoFitScale * 100)}%
+                  </span>
+                ) : null}
               </div>
 
               {(roster.attendings || roster.residents || roster.upperLevels) && (
@@ -350,7 +434,7 @@ export default function BoardDisplay({
               return (
                 <div
                   key={room.number}
-                  className={`flex min-h-[145px] flex-col overflow-hidden rounded-2xl border p-2.5 shadow xl:min-h-[158px] xl:p-3 ${
+                  className={`flex min-h-[145px] flex-col rounded-2xl border p-2.5 shadow xl:min-h-[158px] xl:p-3 ${
                     occupied
                       ? primaryEncounter.status === "roomed"
                         ? "border-green-300 bg-green-100 text-slate-900"

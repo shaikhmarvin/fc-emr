@@ -279,3 +279,88 @@ export async function mergePatientsByMrnInSupabase({ sourcePatientId, targetPati
   if (error) throw error;
   return data;
 }
+
+export async function mergePatientsInSupabase({
+  sourcePatientId,
+  targetPatientId,
+  targetPatientUpdates = {},
+}) {
+  if (!sourcePatientId || !targetPatientId) {
+    throw new Error("Both source and target patient IDs are required for merge.");
+  }
+
+  if (String(sourcePatientId) === String(targetPatientId)) {
+    throw new Error("Cannot merge a patient into itself.");
+  }
+
+  if (Object.keys(targetPatientUpdates).length > 0) {
+    await updatePatientInSupabase(targetPatientId, targetPatientUpdates);
+  }
+
+  const tablesToMove = [
+    "encounters",
+    "medications",
+    "allergies",
+    "refill_requests",
+    "pap_entries",
+    "program_entries",
+    "sticky_notes",
+  ];
+
+  for (const tableName of tablesToMove) {
+    const { error } = await supabase
+      .from(tableName)
+      .update({ patient_id: targetPatientId })
+      .eq("patient_id", sourcePatientId);
+
+    if (error) throw error;
+  }
+
+  if (
+    targetPatientUpdates.firstName !== undefined ||
+    targetPatientUpdates.lastName !== undefined ||
+    targetPatientUpdates.dob !== undefined ||
+    targetPatientUpdates.mrn !== undefined ||
+    targetPatientUpdates.phone !== undefined
+  ) {
+    const patientName = `${targetPatientUpdates.firstName || ""} ${
+      targetPatientUpdates.lastName || ""
+    }`.trim();
+
+    const sharedTrackerSnapshotUpdates = {};
+    if (patientName) sharedTrackerSnapshotUpdates.patient_name = patientName;
+    if (targetPatientUpdates.mrn !== undefined) {
+      sharedTrackerSnapshotUpdates.mrn = targetPatientUpdates.mrn || "";
+    }
+    if (targetPatientUpdates.phone !== undefined) {
+      sharedTrackerSnapshotUpdates.phone = targetPatientUpdates.phone || "";
+    }
+
+    if (Object.keys(sharedTrackerSnapshotUpdates).length > 0) {
+      const { error: papError } = await supabase
+        .from("pap_entries")
+        .update(sharedTrackerSnapshotUpdates)
+        .eq("patient_id", targetPatientId);
+
+      if (papError) throw papError;
+    }
+
+    const programSnapshotUpdates = { ...sharedTrackerSnapshotUpdates };
+    if (targetPatientUpdates.dob !== undefined) {
+      programSnapshotUpdates.dob = targetPatientUpdates.dob || "";
+    }
+
+    if (Object.keys(programSnapshotUpdates).length > 0) {
+      const { error: programError } = await supabase
+        .from("program_entries")
+        .update(programSnapshotUpdates)
+        .eq("patient_id", targetPatientId);
+
+      if (programError) throw programError;
+    }
+  }
+
+  await deletePatientInSupabase(sourcePatientId);
+
+  return { sourcePatientId, targetPatientId };
+}

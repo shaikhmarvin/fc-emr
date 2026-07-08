@@ -23,6 +23,8 @@ export default function DashboardView({
   dashboardSelectedPatient,
   duplicateMrnPatientsForSelected = [],
   mergePatientRecordsByMrn,
+  wideMergeCandidateCount = 0,
+  onOpenWideMergeReview,
   selectedClinicDate,
   setSelectedClinicDate,
   filteredVisiblePatients,
@@ -941,6 +943,17 @@ export default function DashboardView({
 
           {(canEditUndergradFields || canEditAllPatientFields) && (
             <div className="flex flex-col gap-2 sm:flex-row">
+              {canDeletePatient && (
+                <button
+                  type="button"
+                  onClick={onOpenWideMergeReview}
+                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                >
+                  Review EMR Merges
+                  {wideMergeCandidateCount > 0 ? ` (${wideMergeCandidateCount})` : ""}
+                </button>
+              )}
+
               <button
                 onClick={openPatientEditModal}
                 className="rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-900"

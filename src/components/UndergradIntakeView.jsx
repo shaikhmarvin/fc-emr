@@ -59,6 +59,86 @@ function namePartMatchesPrefix(inputName = "", patientName = "") {
   );
 }
 
+function FiredPatientStartModal({
+  show,
+  patient,
+  isSubmitting,
+  onClose,
+  onConfirm,
+}) {
+  if (!show || !patient) return null;
+
+  return (
+    <div className="fixed inset-0 z-[140] flex items-center justify-center bg-red-950/80 px-4 py-6">
+      <div className="w-full max-w-2xl rounded-2xl border-4 border-red-600 bg-white shadow-2xl">
+        <div className="border-b-4 border-red-600 bg-red-100 px-6 py-5">
+          <p className="text-sm font-black uppercase tracking-wide text-red-800">
+            Fired patient alert
+          </p>
+          <h2 className="mt-1 text-3xl font-black text-red-950">
+            Do not start unless leadership approved
+          </h2>
+        </div>
+
+        <div className="space-y-4 px-6 py-5 text-red-950">
+          <div>
+            <p className="text-sm font-bold uppercase tracking-wide text-red-700">
+              Patient
+            </p>
+            <p className="text-2xl font-black">{getPatientFullName(patient)}</p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-red-700">
+                Fired Date
+              </p>
+              <p className="mt-1 text-lg font-extrabold">
+                {patient.firedAt ? formatDisplayDate(patient.firedAt) : "Unknown"}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-red-700">
+                Reason
+              </p>
+              <p className="mt-1 text-lg font-extrabold">
+                {patient.firedReason || "No reason entered."}
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border-2 border-red-500 bg-red-100 px-4 py-3">
+            <p className="text-base font-black">
+              Confirm with leadership before continuing. Starting this encounter will let the fired patient into the clinic flow.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 border-t bg-slate-50 px-6 py-4 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSubmitting}
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Cancel - Do Not Start
+          </button>
+
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={isSubmitting}
+            className="rounded-lg bg-red-700 px-4 py-2 text-sm font-black text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isSubmitting ? "Starting..." : "Leadership Approved - Start Encounter"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function namesAreCompatible(inputName = "", patientName = "") {
   return (
     namesAreSimilar(inputName, patientName) ||
@@ -68,10 +148,6 @@ function namesAreCompatible(inputName = "", patientName = "") {
 
 function normalizeDateString(value = "") {
   return String(value).replace(/\D/g, "").slice(0, 8);
-}
-
-function onlyDigits(value = "") {
-  return String(value).replace(/\D/g, "");
 }
 
 function levenshteinDistance(a = "", b = "") {
@@ -167,49 +243,6 @@ function getLastSeenLabel(patient) {
   return latest ? formatDisplayDate(latest) : "No prior visits listed";
 }
 
-function getTodayClinicDate() {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function getNextRefillNumber(patients = []) {
-  const todayClinicDate = getTodayClinicDate();
-
-  const highestRefillNumber = (patients || []).reduce((highest, patient) => {
-    const encounters = Array.isArray(patient?.encounters) ? patient.encounters : [];
-
-    encounters.forEach((encounter) => {
-      const encounterClinicDate = encounter?.clinicDate || encounter?.clinic_date || "";
-      const visitType = encounter?.visitType || encounter?.visit_type || "";
-
-      if (encounterClinicDate !== todayClinicDate || visitType !== "refill_only") return;
-
-      const rawRefillNumber =
-        encounter?.refillNumber ??
-        encounter?.refill_number ??
-        encounter?.intakeData?.refillNumber ??
-        encounter?.intake_data?.refillNumber ??
-        encounter?.intakeData?.refill_number ??
-        encounter?.intake_data?.refill_number ??
-        "";
-
-      const numericRefillNumber = Number(String(rawRefillNumber).replace(/\D/g, ""));
-
-      if (Number.isFinite(numericRefillNumber) && numericRefillNumber > highest) {
-        highest = numericRefillNumber;
-      }
-    });
-
-    return highest;
-  }, 0);
-
-  return String(highestRefillNumber + 1);
-}
-
-
 function getMatchLevel(score) {
   if (score >= 10) return { label: "High match", className: "bg-emerald-100 text-emerald-800 border-emerald-200" };
   if (score >= 7) return { label: "Possible match", className: "bg-amber-100 text-amber-800 border-amber-200" };
@@ -240,9 +273,6 @@ function buildPatientMatchCandidates(patients = [], form = {}) {
       const patientFirst = patient.firstName || "";
       const patientLast = patient.lastName || "";
       const patientDob = patient.dob || "";
-
-      const firstDistance = levenshteinDistance(firstName, patientFirst);
-      const lastDistance = levenshteinDistance(lastName, patientLast);
 
       const firstExact = normalizeNamePart(firstName) === normalizeNamePart(patientFirst);
       const lastExact = normalizeNamePart(lastName) === normalizeNamePart(patientLast);
@@ -416,6 +446,7 @@ export default function UndergradIntakeView({
   const [form, setForm] = useState(EMPTY_FORM);
   const [matchPatientId, setMatchPatientId] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showFiredPatientModal, setShowFiredPatientModal] = useState(false);
 
   function handleChange(key, value) {
     // Keep the existing-patient link when undergrad adds updateable details
@@ -447,25 +478,6 @@ export default function UndergradIntakeView({
       }
 
       return nextForm;
-    });
-  }
-
-  function handleConditionToggle(condition) {
-    setForm((prev) => {
-      const alreadySelected = prev.chronicConditions.includes(condition);
-
-      const nextConditions = alreadySelected
-        ? prev.chronicConditions.filter((item) => item !== condition)
-        : [...prev.chronicConditions, condition];
-
-      return {
-        ...prev,
-        chronicConditions: nextConditions,
-        chronicConditionsOther:
-          condition === "Other" || nextConditions.includes("Other")
-            ? prev.chronicConditionsOther
-            : "",
-      };
     });
   }
 
@@ -537,29 +549,8 @@ export default function UndergradIntakeView({
     }));
   }
 
-  async function handleSubmit() {
+  async function submitEncounterAfterFiredReview() {
     if (isSubmitting) return;
-
-    if (
-      (form.visitType === "both" || form.visitType === "specialty_only") &&
-      !form.specialtyType
-    ) {
-      alert("Please select a specialty before starting the encounter.");
-      return;
-    }
-
-    if (matchedPatientFired) {
-      const firedDateLabel = matchedPatient?.firedAt
-        ? formatDisplayDate(matchedPatient.firedAt)
-        : "an unknown date";
-      const firedReasonLabel = matchedPatient?.firedReason || "No reason entered.";
-
-      const shouldContinue = window.confirm(
-        `This patient is marked as fired.\n\nFired on: ${firedDateLabel}\nReason: ${firedReasonLabel}\n\nDo you still want to start the encounter?`
-      );
-
-      if (!shouldContinue) return;
-    }
 
     const payload = {
       ...form,
@@ -585,13 +576,41 @@ export default function UndergradIntakeView({
 
       setForm(EMPTY_FORM);
       setMatchPatientId(null);
+      setShowFiredPatientModal(false);
     } finally {
       setIsSubmitting(false);
     }
   }
 
+  async function handleSubmit() {
+    if (isSubmitting) return;
+
+    if (
+      (form.visitType === "both" || form.visitType === "specialty_only") &&
+      !form.specialtyType
+    ) {
+      alert("Please select a specialty before starting the encounter.");
+      return;
+    }
+
+    if (matchedPatientFired) {
+      setShowFiredPatientModal(true);
+      return;
+    }
+
+    await submitEncounterAfterFiredReview();
+  }
+
   return (
     <div className="min-h-screen bg-slate-100 p-4 md:p-6">
+      <FiredPatientStartModal
+        show={showFiredPatientModal}
+        patient={matchedPatient}
+        isSubmitting={isSubmitting}
+        onClose={() => setShowFiredPatientModal(false)}
+        onConfirm={submitEncounterAfterFiredReview}
+      />
+
       <div className="mx-auto max-w-6xl space-y-6">
         <div className="rounded-2xl bg-white p-5 shadow-sm md:p-6">
           <h1 className="text-2xl font-bold text-slate-900">
@@ -608,18 +627,53 @@ export default function UndergradIntakeView({
         </div>
 
         {matchedPatient && (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          <div
+            className={`rounded-xl border px-4 py-3 text-sm shadow-sm ${
+              matchedPatientFired
+                ? "border-red-500 bg-red-50 text-red-950 ring-4 ring-red-200"
+                : "border-emerald-200 bg-emerald-50 text-emerald-900"
+            }`}
+          >
+            {matchedPatientFired && (
+              <div className="mb-3 rounded-xl border-2 border-red-600 bg-red-100 px-4 py-3">
+                <p className="text-lg font-black uppercase tracking-wide text-red-950">
+                  Fired patient - stop and get leadership approval
+                </p>
+                <div className="mt-2 grid gap-2 text-sm font-semibold text-red-950 sm:grid-cols-2">
+                  <p>
+                    Fired date:{" "}
+                    {matchedPatient?.firedAt
+                      ? formatDisplayDate(matchedPatient.firedAt)
+                      : "Unknown"}
+                  </p>
+                  <p>
+                    Reason: {matchedPatient?.firedReason || "No reason entered."}
+                  </p>
+                </div>
+                <p className="mt-2 text-sm font-bold text-red-900">
+                  Do not start this encounter unless leadership tells you to continue.
+                </p>
+              </div>
+            )}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="font-semibold">Matched to existing patient: {getPatientFullName(matchedPatient)}</p>
-                <p className="mt-1 text-xs text-emerald-800">
+                <p
+                  className={`mt-1 text-xs ${
+                    matchedPatientFired ? "text-red-900" : "text-emerald-800"
+                  }`}
+                >
                   This encounter will attach to the existing chart. Full name and DOB were filled from the saved patient record.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={handleClearMatch}
-                className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+                className={`rounded-lg border bg-white px-3 py-2 text-xs font-semibold ${
+                  matchedPatientFired
+                    ? "border-red-400 text-red-800 hover:bg-red-100"
+                    : "border-emerald-300 text-emerald-800 hover:bg-emerald-100"
+                }`}
               >
                 Clear match / create new
               </button>
@@ -643,7 +697,11 @@ export default function UndergradIntakeView({
                 return (
                   <div
                     key={patient.id}
-                    className="rounded-xl border border-amber-200 bg-white p-4 shadow-sm"
+                    className={`rounded-xl border p-4 shadow-sm ${
+                      patient.fired
+                        ? "border-red-500 bg-red-50 ring-4 ring-red-100"
+                        : "border-amber-200 bg-white"
+                    }`}
                   >
                     <div className="mb-3 flex flex-wrap items-center gap-2">
                       <span className={`rounded-full border px-2.5 py-1 text-xs font-bold uppercase tracking-wide ${level.className}`}>
@@ -653,10 +711,10 @@ export default function UndergradIntakeView({
                         Last seen: {getLastSeenLabel(patient)}
                       </span>
                       {patient.fired && (
-                        <div className="w-full rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+                        <div className="w-full rounded-xl border-2 border-red-600 bg-red-100 px-4 py-3 text-sm text-red-950">
                           <div className="mb-1 flex flex-wrap items-center gap-2">
-                            <span className="rounded-full bg-rose-100 px-2 py-0.5 font-bold uppercase tracking-wide text-rose-700">
-                              Fired
+                            <span className="rounded-full bg-red-700 px-3 py-1 font-black uppercase tracking-wide text-white">
+                              Fired patient
                             </span>
                             <span className="font-semibold">
                               Date: {patient.firedAt ? formatDisplayDate(patient.firedAt) : "Unknown"}
@@ -665,6 +723,9 @@ export default function UndergradIntakeView({
                           <div>
                             <span className="font-semibold">Reason:</span>{" "}
                             {patient.firedReason || "No reason entered."}
+                          </div>
+                          <div className="mt-2 font-black uppercase tracking-wide">
+                            Stop and ask leadership before continuing.
                           </div>
                         </div>
                       )}
@@ -697,9 +758,15 @@ export default function UndergradIntakeView({
                     <button
                       type="button"
                       onClick={() => handleSelectMatch(patient)}
-                      className="mt-4 w-full rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
+                      className={`mt-4 w-full rounded-lg px-4 py-2 text-sm font-semibold text-white ${
+                        patient.fired
+                          ? "bg-red-700 hover:bg-red-800"
+                          : "bg-amber-700 hover:bg-amber-800"
+                      }`}
                     >
-                      Use This Patient
+                      {patient.fired
+                        ? "Use Fired Patient - Leadership Approval Needed"
+                        : "Use This Patient"}
                     </button>
                   </div>
                 );
@@ -709,20 +776,23 @@ export default function UndergradIntakeView({
         )}
 
         {matchedPatientFired && (
-          <div className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900 shadow-sm">
-            <p className="font-semibold">Warning: this patient has been marked as fired.</p>
+          <div className="rounded-2xl border-4 border-red-600 bg-red-100 px-5 py-4 text-sm text-red-950 shadow-lg">
+            <p className="text-xl font-black uppercase tracking-wide">Fired patient warning</p>
             <div className="mt-1 grid gap-1 sm:grid-cols-2">
               <p>
-                <span className="font-medium">Date:</span>{" "}
+                <span className="font-bold">Fired date:</span>{" "}
                 {matchedPatient?.firedAt ? formatDisplayDate(matchedPatient.firedAt) : "—"}
               </p>
               <p>
-                <span className="font-medium">Reason:</span>{" "}
+                <span className="font-bold">Reason:</span>{" "}
                 {matchedPatient?.firedReason || "—"}
               </p>
             </div>
-            <p className="mt-2 text-xs text-rose-800">
-              You will be asked to confirm before starting the encounter.
+            <p className="mt-3 text-base font-extrabold">
+              Stop intake and ask leadership before starting this encounter.
+            </p>
+            <p className="mt-1 text-xs font-semibold text-red-900">
+              If you click Start Encounter, a full-screen confirmation will appear.
             </p>
           </div>
         )}
@@ -990,9 +1060,17 @@ export default function UndergradIntakeView({
             <button
               onClick={handleSubmit}
               disabled={isSubmitting}
-              className="rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60"
+              className={`rounded-lg px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60 ${
+                matchedPatientFired
+                  ? "bg-red-800 ring-4 ring-red-300 hover:bg-red-900"
+                  : "bg-red-700 hover:bg-red-800"
+              }`}
             >
-              {isSubmitting ? "Starting..." : "Start Encounter"}
+              {isSubmitting
+                ? "Starting..."
+                : matchedPatientFired
+                  ? "Start Fired Patient Encounter"
+                  : "Start Encounter"}
             </button>
           </div>
         </div>

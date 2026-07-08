@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./lib/supabase";
-import { createPatientInSupabase, updatePatientInSupabase, mergePatientsByMrnInSupabase } from "./api/patients";
+import { createPatientInSupabase, updatePatientInSupabase, mergePatientsByMrnInSupabase, mergePatientsInSupabase } from "./api/patients";
 import {
   parseLabsFromText,
   extractPatientNameFromLabText as extractPatientNameFromLabTextFromParser,
@@ -278,6 +278,461 @@ function PatientMergeComparisonModal({
             className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
           >
             {actionLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const WIDE_MERGE_REVIEW_FIELDS = [
+  { key: "firstName", label: "First Name" },
+  { key: "lastName", label: "Last Name" },
+  { key: "preferredName", label: "Preferred Name" },
+  { key: "dob", label: "DOB" },
+  { key: "mrn", label: "MRN" },
+  { key: "phone", label: "Phone" },
+  { key: "last4ssn", label: "Last 4 SSN" },
+  { key: "sex", label: "Sex" },
+  { key: "ethnicity", label: "Ethnicity" },
+  { key: "address", label: "Address" },
+  { key: "city", label: "City" },
+  { key: "state", label: "State" },
+  { key: "zipCode", label: "ZIP" },
+  { key: "emergencyContactName", label: "Emergency Contact Name" },
+  { key: "emergencyContactRelation", label: "Emergency Contact Relation" },
+  { key: "emergencyContactPhone", label: "Emergency Contact Phone" },
+  { key: "incomeRange", label: "Income Range" },
+  { key: "spanishOnly", label: "Spanish Only" },
+  { key: "ttuStudent", label: "TTU Student", type: "boolean" },
+  { key: "fired", label: "Fired", type: "boolean" },
+  { key: "firedAt", label: "Fired Date" },
+  { key: "firedReason", label: "Fired Reason" },
+];
+
+function getMergeFieldValue(patient, field) {
+  const value = patient?.[field.key];
+  if (field.type === "boolean") return value ? "Yes" : "No";
+  if (Array.isArray(value)) return value.join(", ");
+  return value || "";
+}
+
+function getMergeUpdateValue(field, value) {
+  if (field.type === "boolean") {
+    return String(value || "").toLowerCase() === "yes";
+  }
+  return value || "";
+}
+
+function normalizePatientMergeText(value = "") {
+  return String(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function getPatientMergeName(patient) {
+  return `${patient?.firstName || ""} ${patient?.lastName || ""}`.trim();
+}
+
+function mergeNameDistance(left = "", right = "") {
+  const a = normalizePatientMergeText(left);
+  const b = normalizePatientMergeText(right);
+
+  if (!a) return b.length;
+  if (!b) return a.length;
+
+  const dp = Array.from({ length: a.length + 1 }, () =>
+    Array(b.length + 1).fill(0)
+  );
+
+  for (let i = 0; i <= a.length; i += 1) dp[i][0] = i;
+  for (let j = 0; j <= b.length; j += 1) dp[0][j] = j;
+
+  for (let i = 1; i <= a.length; i += 1) {
+    for (let j = 1; j <= b.length; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost
+      );
+    }
+  }
+
+  return dp[a.length][b.length];
+}
+
+function patientsLookMergeSimilar(left, right) {
+  const leftName = getPatientMergeName(left);
+  const rightName = getPatientMergeName(right);
+  const leftFull = normalizePatientMergeText(leftName);
+  const rightFull = normalizePatientMergeText(rightName);
+  const leftFirst = normalizePatientMergeText(left?.firstName);
+  const rightFirst = normalizePatientMergeText(right?.firstName);
+  const leftLast = normalizePatientMergeText(left?.lastName);
+  const rightLast = normalizePatientMergeText(right?.lastName);
+  const leftMrn = String(left?.mrn || "").trim().toLowerCase();
+  const rightMrn = String(right?.mrn || "").trim().toLowerCase();
+
+  if (leftMrn && rightMrn && leftMrn === rightMrn) {
+    return { matches: true, reason: "same MRN" };
+  }
+
+  if (leftFull && leftFull === rightFull) {
+    return { matches: true, reason: "same normalized name" };
+  }
+
+  if (
+    leftLast &&
+    rightLast &&
+    leftLast === rightLast &&
+    leftFirst &&
+    rightFirst &&
+    (leftFirst[0] === rightFirst[0] ||
+      leftFirst.startsWith(rightFirst) ||
+      rightFirst.startsWith(leftFirst))
+  ) {
+    return { matches: true, reason: "same DOB and compatible first/last name" };
+  }
+
+  const distance = mergeNameDistance(leftName, rightName);
+  const maxLength = Math.max(leftFull.length, rightFull.length);
+  if (maxLength >= 5 && distance <= (maxLength <= 8 ? 1 : 2)) {
+    return { matches: true, reason: "same DOB and similar name spelling" };
+  }
+
+  return { matches: false, reason: "" };
+}
+
+function buildWideMergeCandidates(patients = []) {
+  const candidates = [];
+
+  for (let i = 0; i < patients.length; i += 1) {
+    for (let j = i + 1; j < patients.length; j += 1) {
+      const patientA = patients[i];
+      const patientB = patients[j];
+      const dobA = String(patientA?.dob || "").trim();
+      const dobB = String(patientB?.dob || "").trim();
+
+      if (!dobA || !dobB || dobA !== dobB) continue;
+
+      const match = patientsLookMergeSimilar(patientA, patientB);
+      if (!match.matches) continue;
+
+      candidates.push({
+        id: `${patientA.id}-${patientB.id}`,
+        patientA,
+        patientB,
+        reason: match.reason,
+      });
+    }
+  }
+
+  return candidates.sort((left, right) => {
+    const leftCount =
+      (left.patientA.encounters?.length || 0) +
+      (left.patientB.encounters?.length || 0);
+    const rightCount =
+      (right.patientA.encounters?.length || 0) +
+      (right.patientB.encounters?.length || 0);
+    return rightCount - leftCount;
+  });
+}
+
+function getPatientMergeCountLabel(patient) {
+  const encounterCount = patient?.encounters?.length || 0;
+  const medicationCount = patient?.medicationList?.length || 0;
+  const allergyCount = patient?.allergyList?.length || 0;
+  return `${encounterCount} encounters, ${medicationCount} meds, ${allergyCount} allergies`;
+}
+
+function WidePatientMergeReviewModal({
+  show,
+  candidates,
+  getFullPatientName,
+  onClose,
+  onMerge,
+}) {
+  const [selectedCandidateId, setSelectedCandidateId] = useState("");
+  const selectedCandidate =
+    candidates.find((candidate) => candidate.id === selectedCandidateId) ||
+    candidates[0] ||
+    null;
+
+  const defaultKeepId = selectedCandidate
+    ? (selectedCandidate.patientA.encounters?.length || 0) >=
+      (selectedCandidate.patientB.encounters?.length || 0)
+      ? selectedCandidate.patientA.id
+      : selectedCandidate.patientB.id
+    : "";
+
+  const [keepPatientId, setKeepPatientId] = useState(defaultKeepId);
+  const [fieldValues, setFieldValues] = useState({});
+  const [isMerging, setIsMerging] = useState(false);
+
+  const keepPatient =
+    selectedCandidate?.patientA.id === keepPatientId
+      ? selectedCandidate?.patientA
+      : selectedCandidate?.patientB;
+  const mergePatient =
+    selectedCandidate?.patientA.id === keepPatientId
+      ? selectedCandidate?.patientB
+      : selectedCandidate?.patientA;
+
+  useEffect(() => {
+    if (!show || !selectedCandidate) return;
+
+    const nextKeepId =
+      (selectedCandidate.patientA.encounters?.length || 0) >=
+      (selectedCandidate.patientB.encounters?.length || 0)
+        ? selectedCandidate.patientA.id
+        : selectedCandidate.patientB.id;
+
+    setKeepPatientId(nextKeepId);
+  }, [selectedCandidateId, selectedCandidate, show]);
+
+  useEffect(() => {
+    if (!show || !keepPatient || !mergePatient) return;
+
+    const nextValues = {};
+    WIDE_MERGE_REVIEW_FIELDS.forEach((field) => {
+      const keepValue = getMergeFieldValue(keepPatient, field);
+      const mergeValue = getMergeFieldValue(mergePatient, field);
+      nextValues[field.key] = keepValue || mergeValue;
+    });
+    setFieldValues(nextValues);
+  }, [show, keepPatient, mergePatient]);
+
+  if (!show) return null;
+
+  async function handleMerge() {
+    if (!keepPatient || !mergePatient) return;
+
+    const updates = {};
+    WIDE_MERGE_REVIEW_FIELDS.forEach((field) => {
+      updates[field.key] = getMergeUpdateValue(field, fieldValues[field.key]);
+    });
+
+    setIsMerging(true);
+    try {
+      await onMerge({
+        sourcePatientId: mergePatient.id,
+        targetPatientId: keepPatient.id,
+        updates,
+      });
+    } finally {
+      setIsMerging(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[145] flex items-center justify-center bg-slate-950/70 px-4 py-6">
+      <div className="flex max-h-[94vh] w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="border-b px-6 py-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-slate-950">
+                EMR-Wide Duplicate Review
+              </h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Review likely duplicates by same DOB and same/similar names. Choose the chart to keep, then confirm the final patient information.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isMerging}
+              className="self-start rounded-lg bg-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-300 disabled:opacity-60"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+
+        {candidates.length === 0 ? (
+          <div className="p-6 text-sm text-slate-600">
+            No likely duplicates found from the currently loaded patient records.
+          </div>
+        ) : (
+          <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[340px_1fr]">
+            <div className="min-h-0 overflow-y-auto border-b bg-slate-50 p-4 lg:border-b-0 lg:border-r">
+              <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">
+                Likely duplicate pairs ({candidates.length})
+              </p>
+              <div className="space-y-2">
+                {candidates.map((candidate) => (
+                  <button
+                    key={candidate.id}
+                    type="button"
+                    onClick={() => setSelectedCandidateId(candidate.id)}
+                    className={`w-full rounded-xl border px-3 py-3 text-left text-sm ${
+                      selectedCandidate?.id === candidate.id
+                        ? "border-blue-400 bg-blue-50"
+                        : "border-slate-200 bg-white hover:bg-slate-100"
+                    }`}
+                  >
+                    <div className="font-semibold text-slate-950">
+                      {getFullPatientName(candidate.patientA)}
+                    </div>
+                    <div className="font-semibold text-slate-950">
+                      {getFullPatientName(candidate.patientB)}
+                    </div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      DOB {candidate.patientA.dob || "unknown"} - {candidate.reason}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {selectedCandidate && keepPatient && mergePatient && (
+              <div className="min-h-0 overflow-y-auto p-5">
+                <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                  {[selectedCandidate.patientA, selectedCandidate.patientB].map((patient) => {
+                    const isKeep = String(patient.id) === String(keepPatientId);
+                    return (
+                      <button
+                        key={patient.id}
+                        type="button"
+                        onClick={() => setKeepPatientId(patient.id)}
+                        className={`rounded-xl border p-4 text-left ${
+                          isKeep
+                            ? "border-emerald-400 bg-emerald-50"
+                            : "border-slate-200 bg-white hover:bg-slate-50"
+                        }`}
+                      >
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                          {isKeep ? "Chart To Keep" : "Will Merge Into Kept Chart"}
+                        </p>
+                        <p className="mt-1 text-lg font-semibold text-slate-950">
+                          {getFullPatientName(patient)}
+                        </p>
+                        <p className="text-sm text-slate-600">
+                          DOB {patient.dob || "-"} - MRN {patient.mrn || "-"}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {getPatientMergeCountLabel(patient)}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                  This will move encounters, medications, allergies, refill requests, PAP entries, program entries, and sticky notes from the duplicate chart into the kept chart, then remove the duplicate chart.
+                </div>
+
+                <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+                  <div className="min-w-[900px]">
+                    <div className="grid grid-cols-[170px_1fr_1fr_1.1fr] bg-slate-100 text-xs font-bold uppercase tracking-wide text-slate-600">
+                      <div className="px-3 py-2">Field</div>
+                      <div className="border-l px-3 py-2">Kept Chart</div>
+                      <div className="border-l px-3 py-2">Merging Chart</div>
+                      <div className="border-l px-3 py-2">Final Value</div>
+                    </div>
+                    {WIDE_MERGE_REVIEW_FIELDS.map((field) => {
+                      const keepValue = getMergeFieldValue(keepPatient, field);
+                      const mergeValue = getMergeFieldValue(mergePatient, field);
+                      const differs = keepValue !== mergeValue;
+
+                      return (
+                        <div
+                          key={field.key}
+                          className={`grid grid-cols-[170px_1fr_1fr_1.1fr] border-t text-sm ${
+                            differs ? "bg-amber-50/60" : "bg-white"
+                          }`}
+                        >
+                          <div className="px-3 py-2 font-semibold text-slate-700">
+                            {field.label}
+                          </div>
+                          <div className="border-l px-3 py-2 text-slate-900">
+                            {keepValue || "-"}
+                          </div>
+                          <div className="border-l px-3 py-2 text-slate-900">
+                            {mergeValue || "-"}
+                          </div>
+                          <div className="border-l px-3 py-2">
+                            {field.type === "boolean" ? (
+                              <select
+                                value={fieldValues[field.key] || "No"}
+                                onChange={(event) =>
+                                  setFieldValues((prev) => ({
+                                    ...prev,
+                                    [field.key]: event.target.value,
+                                  }))
+                                }
+                                className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                              >
+                                <option value="No">No</option>
+                                <option value="Yes">Yes</option>
+                              </select>
+                            ) : (
+                              <input
+                                value={fieldValues[field.key] || ""}
+                                onChange={(event) =>
+                                  setFieldValues((prev) => ({
+                                    ...prev,
+                                    [field.key]: event.target.value,
+                                  }))
+                                }
+                                className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                              />
+                            )}
+                            {differs && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setFieldValues((prev) => ({
+                                      ...prev,
+                                      [field.key]: keepValue,
+                                    }))
+                                  }
+                                  className="rounded bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-200"
+                                >
+                                  Use kept
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setFieldValues((prev) => ({
+                                      ...prev,
+                                      [field.key]: mergeValue,
+                                    }))
+                                  }
+                                  className="rounded bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-200"
+                                >
+                                  Use merging
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex flex-col gap-3 border-t bg-slate-50 px-6 py-4 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isMerging}
+            className="rounded-lg bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-300 disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleMerge}
+            disabled={!selectedCandidate || isMerging}
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isMerging ? "Merging..." : "Merge Reviewed Records"}
           </button>
         </div>
       </div>
@@ -822,6 +1277,7 @@ export default function App() {
   const [showPatientInfoEditModal, setShowPatientInfoEditModal] = useState(false);
   const [pendingPatientMerge, setPendingPatientMerge] = useState(null);
   const [pendingUndergradRegistrationMerge, setPendingUndergradRegistrationMerge] = useState(null);
+  const [showWideMergeReview, setShowWideMergeReview] = useState(false);
   const [dashboardSelectedPatientId, setDashboardSelectedPatientId] = useState(null);
   const [formulary, setFormulary] = useState([]);
   const [formularyLoaded, setFormularyLoaded] = useState(false);
@@ -1361,19 +1817,15 @@ export default function App() {
   }
 
   async function addPapEntry(entry) {
-    setPapEntries((prev) => [entry, ...prev]);
-
     try {
       const saved = await createPapEntryInSupabase(entry);
 
-      setPapEntries((prev) =>
-        prev.map((item) => (item.id === entry.id ? saved : item))
-      );
+      setPapEntries((prev) => [saved, ...prev]);
+      return saved;
     } catch (error) {
       console.error("Failed to create PAP entry:", error);
       alert(`Failed to save PAP entry: ${error.message}`);
-
-      setPapEntries((prev) => prev.filter((item) => item.id !== entry.id));
+      return null;
     }
   }
 
@@ -1620,6 +2072,11 @@ export default function App() {
         String(patient.mrn || "").trim().toLowerCase() === selectedMrn
     );
   }, [dashboardSelectedPatient, patients]);
+
+  const wideMergeCandidates = useMemo(
+    () => buildWideMergeCandidates(patients),
+    [patients]
+  );
 
   function findPatientByMrn(mrn, excludePatientId = null) {
     const normalizedMrn = String(mrn || "").trim().toLowerCase();
@@ -7426,6 +7883,55 @@ async function markSeenBySocialWork(encounterId) {
     }
   }
 
+  async function mergeReviewedPatientRecords({ sourcePatientId, targetPatientId, updates }) {
+    const sourcePatient = patients.find(
+      (patient) => String(patient.id) === String(sourcePatientId)
+    );
+    const targetPatient = patients.find(
+      (patient) => String(patient.id) === String(targetPatientId)
+    );
+
+    if (!sourcePatient || !targetPatient) {
+      alert("Could not find both patient records to merge.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Merge reviewed duplicate records?\n\nKeep: ${getFullPatientName(targetPatient)} (${targetPatient.dob || "DOB unknown"})\nMerge/remove: ${getFullPatientName(sourcePatient)} (${sourcePatient.dob || "DOB unknown"})\n\nThis cannot be undone from the app.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      await mergePatientsInSupabase({
+        sourcePatientId,
+        targetPatientId,
+        targetPatientUpdates: updates,
+      });
+
+      await refreshClinicData();
+
+      setDashboardSelectedPatientId(targetPatientId);
+      setSelectedPatientId(targetPatientId);
+
+      if (String(selectedPatientId) === String(sourcePatientId)) {
+        setSelectedEncounterId(null);
+      }
+
+      setShowWideMergeReview(false);
+
+      showToast({
+        title: "Patient records merged",
+        message: `${getFullPatientName(sourcePatient)} was merged into ${getFullPatientName(targetPatient)}.`,
+        type: "success",
+        duration: 5000,
+      });
+    } catch (error) {
+      console.error("Reviewed patient merge failed:", error);
+      alert(error.message || "Failed to merge patient records.");
+    }
+  }
+
   async function deletePatientCompletely(patientId) {
     const patientToDelete = patients.find(
       (patient) => String(patient.id) === String(patientId)
@@ -9879,6 +10385,8 @@ async function markSeenBySocialWork(encounterId) {
               dashboardSelectedPatient={dashboardSelectedPatient}
               duplicateMrnPatientsForSelected={duplicateMrnPatientsForSelected}
               mergePatientRecordsByMrn={mergePatientRecordsByMrn}
+              wideMergeCandidateCount={wideMergeCandidates.length}
+              onOpenWideMergeReview={() => setShowWideMergeReview(true)}
               selectedClinicDate={selectedClinicDate}
               setSelectedClinicDate={setSelectedClinicDate}
               filteredVisiblePatients={filteredVisiblePatients}
@@ -10426,6 +10934,14 @@ async function markSeenBySocialWork(encounterId) {
             }
           );
         }}
+      />
+
+      <WidePatientMergeReviewModal
+        show={showWideMergeReview}
+        candidates={wideMergeCandidates}
+        getFullPatientName={getFullPatientName}
+        onClose={() => setShowWideMergeReview(false)}
+        onMerge={mergeReviewedPatientRecords}
       />
 
       <PatientInfoEditModal
