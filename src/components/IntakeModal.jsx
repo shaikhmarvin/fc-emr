@@ -142,7 +142,7 @@ function getOpenProgramEntry(programType) {
   });
 }
 
-function ExistingProgramWarning({ programType }) {
+function renderExistingProgramWarning(programType) {
   const entry = getOpenProgramEntry(programType);
   if (!entry) return null;
 
@@ -475,7 +475,7 @@ function ExistingProgramWarning({ programType }) {
                         <option>UTD</option>
                         <option>N/A</option>
                       </select>
-                      <ExistingProgramWarning programType="Mammogram" />
+                      {renderExistingProgramWarning("Mammogram")}
                     </Field>
                   )}
 
@@ -529,7 +529,7 @@ function ExistingProgramWarning({ programType }) {
       <option>UTD</option>
       <option>N/A</option>
     </select>
-    <ExistingProgramWarning programType="Colonoscopy" />
+    {renderExistingProgramWarning("Colonoscopy")}
   </Field>
 )}
 
@@ -665,7 +665,7 @@ function ExistingProgramWarning({ programType }) {
                         )
                       }
                     />
-                    <ExistingProgramWarning programType="Dermatology" />
+                    {renderExistingProgramWarning("Dermatology")}
                   </Field>
 
                   <Field label="Ophthalmology">
@@ -686,7 +686,7 @@ function ExistingProgramWarning({ programType }) {
                         )
                       }
                     />
-                    <ExistingProgramWarning programType="Ophthalmology" />
+                    {renderExistingProgramWarning("Ophthalmology")}
                   </Field>
 
                   <Field label="Optometry">
@@ -705,7 +705,7 @@ function ExistingProgramWarning({ programType }) {
                         )
                       }
                     />
-                    <ExistingProgramWarning programType="Optometry" />
+                    {renderExistingProgramWarning("Optometry")}
                   </Field>
 
                   <Field label="Diabetic Eye Exam in Past Year">
@@ -745,7 +745,7 @@ function ExistingProgramWarning({ programType }) {
                         )
                       }
                     />
-                    <ExistingProgramWarning programType="Physical Therapy" />
+                    {renderExistingProgramWarning("Physical Therapy")}
                   </Field>
 
                   <Field label="Mental Health Screening / Medications">
@@ -766,7 +766,7 @@ function ExistingProgramWarning({ programType }) {
                         )
                       }
                     />
-                    <ExistingProgramWarning programType="Mental Health" />
+                    {renderExistingProgramWarning("Mental Health")}
                   </Field>
 
                   {showCounselingService && (
@@ -786,7 +786,7 @@ function ExistingProgramWarning({ programType }) {
                           )
                         }
                       />
-                      <ExistingProgramWarning programType="Counseling" />
+                      {renderExistingProgramWarning("Counseling")}
                     </Field>
                   )}
 

@@ -26,12 +26,21 @@ export async function signUp(email, password, profileData) {
     full_name: profileData.full_name || "",
     classification: profileData.classification || null,
     role: profileData.role || null,
+    specialty_access:
+      profileData.role === "physical_therapy" ? ["Physical Therapy"] : [],
     approval_status: profileData.approval_status || "pending",
     signature_pin_set: false,
     signature_pin_hash: null,
   });
 
-  if (profileError) throw profileError;
+  if (profileError) {
+    const profileSetupError = new Error(
+      `The login account was created, but its clinic profile could not be saved: ${profileError.message}`
+    );
+    profileSetupError.code = profileError.code;
+    profileSetupError.accountCreated = true;
+    throw profileSetupError;
+  }
 
   if (profileData.role === "attending" && profileData.signature_pin) {
     let session = data.session;

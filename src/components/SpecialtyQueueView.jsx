@@ -284,17 +284,20 @@ export default function SpecialtyQueueView({
     formatDate,
     isLeadershipView,
     dualVisitBadge,
+    lockedSpecialty = "",
 
 }) {
 
-    const [selectedSpecialty, setSelectedSpecialty] = useState("");
+    const [selectedSpecialty, setSelectedSpecialty] = useState(lockedSpecialty);
 
     const [search, setSearch] = useState("");
     const today = new Date().toISOString().slice(0, 10);
     const effectiveClinicDate = selectedClinicDate || today;
 
     const ptRows = specialtyEncounterRows.filter(
-        ({ encounter }) => encounter.specialtyType === "pt"
+        ({ encounter }) => ["pt", "physical_therapy", "physical therapy"].includes(
+            String(encounter.specialtyType || "").toLowerCase()
+        )
     );
 
     const dermRows = specialtyEncounterRows.filter(
@@ -323,10 +326,12 @@ export default function SpecialtyQueueView({
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                     <div>
                         <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">
-                            Specialty Queue
+                            {lockedSpecialty === "pt" ? "Physical Therapy Queue" : "Specialty Queue"}
                         </h1>
                         <p className="mt-1 text-sm text-slate-600">
-                            Specialty-only and general + specialty patients.
+                            {lockedSpecialty === "pt"
+                                ? "Patients with a Physical Therapy visit on the selected clinic date."
+                                : "Specialty-only and general + specialty patients."}
                         </p>
                     </div>
 
@@ -398,12 +403,12 @@ export default function SpecialtyQueueView({
             )}
             {!isLeadershipView && selectedSpecialty && (
                 <div className="space-y-4">
-                    <button
+                    {!lockedSpecialty ? <button
                         onClick={() => setSelectedSpecialty("")}
                         className="text-sm font-medium text-blue-600 hover:underline"
                     >
                         ← Back to Specialties
-                    </button>
+                    </button> : null}
 
                     {selectedSpecialty === "pt" && (
                         <SpecialtyTable

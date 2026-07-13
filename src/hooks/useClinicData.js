@@ -3,9 +3,10 @@ import { supabase } from "../lib/supabase";
 import { fetchEncounters, fetchMedications } from "../api/encounters";
 import { fetchPatients } from "../api/patients";
 import { fetchAllergies } from "../api/allergies";
+import { fetchSocialWorkNotes } from "../api/socialWorkNotes";
 import { mapDbStatusToUi } from "../utils";
 
-function buildPatientMap(patientsData, encountersData, medicationsData, allergiesData) {
+function buildPatientMap(patientsData, encountersData, medicationsData, allergiesData, socialWorkNotesData) {
   const patientMap = {};
 
   patientsData.forEach((patient) => {
@@ -14,6 +15,7 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
       encounters: [],
       allergyList: [],
       medicationList: [],
+      socialWorkNotes: [],
     };
   });
 
@@ -96,6 +98,8 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
       assignedUpperLevel: encounter.assigned_upper_level || "",
       roomNumber: encounter.room || "",
       notes: encounter.notes || "",
+      noteType: encounter.note_type || "medical",
+      groupNote: encounter.group_note || "",
       inHouseLabs: encounter.in_house_labs || {},
       sendOutLabs: encounter.send_out_labs || {},
       importedSendOutLabs:
@@ -118,6 +122,12 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
       upperLevelSignedAt: encounter.upper_level_signed_at || null,
       attendingSignedBy: encounter.attending_signed_by || null,
       attendingSignedAt: encounter.attending_signed_at || null,
+      attendingSignatureData: encounter.attending_signature_data_url || "",
+      disciplineNoteStatus: encounter.discipline_note_status || "draft",
+      disciplineSignedBy: encounter.discipline_signed_by || null,
+      disciplineSignedAt: encounter.discipline_signed_at || null,
+      disciplineSignerName: encounter.discipline_signer_name || "",
+      disciplineSignatureData: encounter.discipline_signature_data_url || "",
       visitType,
       specialtyType,
       dualVisit,
@@ -193,6 +203,12 @@ socialWorkSeenBy:
     });
   });
 
+  socialWorkNotesData.forEach((note) => {
+    const patient = patientMap[note.patientId];
+    if (!patient) return;
+    patient.socialWorkNotes.push(note);
+  });
+
   return Object.values(patientMap);
 }
 
@@ -215,10 +231,11 @@ export function useClinicData({ authReady, session, userRole }) {
     inFlightRef.current = true;
 
     try {
-      const [patientsData, encountersData] =
+      const [patientsData, encountersData, socialWorkNotesData] =
         await Promise.all([
           fetchPatients(),
           fetchEncounters(),
+          fetchSocialWorkNotes(),
         ]);
 
       const activePatientIds = [
@@ -239,7 +256,8 @@ export function useClinicData({ authReady, session, userRole }) {
           patientsData,
           encountersData,
           medicationsData,
-          allergiesData
+          allergiesData,
+          socialWorkNotesData
         )
       );
     } catch (error) {
@@ -280,6 +298,11 @@ export function useClinicData({ authReady, session, userRole }) {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "encounters" },
+        triggerReload
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "social_work_notes" },
         triggerReload
       )
       .subscribe();

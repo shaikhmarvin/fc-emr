@@ -1,10 +1,281 @@
 import { getStatusClasses, getStatusLabel } from "../utils";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import OphthalmologySoapForm from "./OphthalmologySoapForm";
-import { downloadEncounterPdf } from "../utils/pdfGenerator";
 import logo from "../assets/free-clinic-logo.png";
 import { getClinicAlert } from "../utils/clinicAlerts";
 import { VISIT_TYPE_BADGE_STYLES, getEncounterVisitTypeKey } from "../constants";
+
+const NOTE_TYPE_META = {
+  medical: { label: "Medical", dot: "bg-blue-500", active: "border-blue-400 bg-blue-50 ring-blue-100" },
+  ophthalmology: { label: "Ophthalmology", dot: "bg-violet-500", active: "border-violet-400 bg-violet-50 ring-violet-100" },
+  social_work: { label: "Social Work", dot: "bg-amber-500", active: "border-amber-400 bg-amber-50 ring-amber-100" },
+  physical_therapy: { label: "Physical Therapy", dot: "bg-emerald-500", active: "border-emerald-400 bg-emerald-50 ring-emerald-100" },
+};
+
+function getNoteTypeMeta(encounter) {
+  const inferredType = encounter?.noteType ||
+    (encounter?.specialtyType === "ophthalmology" ? "ophthalmology" : "medical");
+  return NOTE_TYPE_META[inferredType] || NOTE_TYPE_META.medical;
+}
+
+function GroupNoteChart({
+  patient,
+  encounter,
+  encounterId,
+  encounters,
+  groupType,
+  canCreate,
+  onCreate,
+  onSave,
+  socialWorkNotes,
+  onSaveSocialWorkNote,
+  onCompleteSocialWorkNote,
+  onCompletePhysicalTherapyNote,
+  canCompletePhysicalTherapy,
+  onExportPdf,
+  onOpenEncounter,
+  onBack,
+  getFullPatientName,
+  normalizeClinicDate,
+}) {
+  const initialSocialWorkNote = groupType === "social_work"
+    ? (socialWorkNotes || []).find((note) => note.status === "draft") || (socialWorkNotes || [])[0]
+    : null;
+  const [activeSocialWorkNoteId, setActiveSocialWorkNoteId] = useState(initialSocialWorkNote?.id || null);
+  const [noteDraft, setNoteDraft] = useState(
+    groupType === "social_work" ? initialSocialWorkNote?.noteText || "" : encounter?.groupNote || ""
+  );
+  const [saving, setSaving] = useState(false);
+  const normalizedSpecialtyType = String(encounter?.specialtyType || "").toLowerCase();
+  const isCurrentGroupEncounter = encounter?.noteType === groupType || (
+    groupType === "physical_therapy" &&
+    ["pt", "physical_therapy", "physical therapy"].includes(normalizedSpecialtyType)
+  );
+  const meta = NOTE_TYPE_META[groupType];
+  const isPhysicalTherapyCompleted =
+    groupType === "physical_therapy" && encounter?.disciplineNoteStatus === "completed";
+
+  async function saveNote() {
+    setSaving(true);
+    try {
+      if (groupType === "social_work") {
+        const saved = await onSaveSocialWorkNote(noteDraft, activeSocialWorkNoteId);
+        if (saved?.id) setActiveSocialWorkNoteId(saved.id);
+      } else {
+        await onSave(noteDraft);
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  useEffect(() => {
+    if (saving) return undefined;
+
+    const activeSocialWorkNote = (socialWorkNotes || []).find(
+      (note) => note.id === activeSocialWorkNoteId
+    );
+    const shouldAutosaveSocialWork =
+      groupType === "social_work" &&
+      activeSocialWorkNote?.status !== "completed" &&
+      (activeSocialWorkNote
+        ? noteDraft !== (activeSocialWorkNote.noteText || "")
+        : Boolean(noteDraft.trim()));
+    const shouldAutosavePt =
+      groupType === "physical_therapy" &&
+      isCurrentGroupEncounter &&
+      !isPhysicalTherapyCompleted &&
+      noteDraft !== (encounter?.groupNote || "");
+
+    if (!shouldAutosaveSocialWork && !shouldAutosavePt) return undefined;
+
+    const timeout = window.setTimeout(async () => {
+      setSaving(true);
+      try {
+        if (shouldAutosaveSocialWork) {
+          const saved = await onSaveSocialWorkNote(noteDraft, activeSocialWorkNoteId, false);
+          if (saved?.id) setActiveSocialWorkNoteId(saved.id);
+        } else {
+          await onSave(noteDraft, false);
+        }
+      } finally {
+        setSaving(false);
+      }
+    }, 1500);
+
+    return () => window.clearTimeout(timeout);
+  }, [
+    activeSocialWorkNoteId,
+    encounter?.groupNote,
+    groupType,
+    isCurrentGroupEncounter,
+    isPhysicalTherapyCompleted,
+    noteDraft,
+    onSave,
+    onSaveSocialWorkNote,
+    saving,
+    socialWorkNotes,
+  ]);
+
+  async function completePhysicalTherapyNote() {
+    if (!encounter?.id || !noteDraft.trim() || isPhysicalTherapyCompleted) return;
+    const confirmed = window.confirm(
+      "Complete and sign this Physical Therapy note? The note will become read-only and your saved signature will be attached."
+    );
+    if (!confirmed) return;
+
+    setSaving(true);
+    try {
+      if (noteDraft !== (encounter.groupNote || "")) {
+        const saved = await onSave(noteDraft, false);
+        if (!saved) return;
+      }
+      await onCompletePhysicalTherapyNote(encounter.id);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (groupType === "social_work") {
+    const notes = socialWorkNotes || [];
+    const activeNote = notes.find((note) => note.id === activeSocialWorkNoteId) || null;
+    const isCompleted = activeNote?.status === "completed";
+
+    async function completeActiveNote() {
+      if (!activeNote?.id) return;
+      const confirmed = window.confirm(
+        "Complete this Social Work note? Completed notes become read-only and remain in the patient chart."
+      );
+      if (!confirmed) return;
+      setSaving(true);
+      try {
+        if (noteDraft !== activeNote.noteText) {
+          await onSaveSocialWorkNote(noteDraft, activeNote.id, false);
+        }
+        await onCompleteSocialWorkNote(
+          activeNote.id,
+          patient.id,
+          encounter?.id || activeNote.encounterId || null
+        );
+      } finally {
+        setSaving(false);
+      }
+    }
+
+    return (
+      <div className="space-y-4 p-3 sm:p-4 lg:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <button type="button" onClick={onBack} className="text-sm font-medium text-blue-700 hover:underline">Back to queue</button>
+            <h2 className="mt-2 text-2xl font-semibold text-slate-900">{getFullPatientName(patient)}</h2>
+            <p className="text-sm text-slate-500">MRN {patient.mrn || "—"}</p>
+          </div>
+          <span className="rounded-full bg-amber-500 px-3 py-1 text-sm font-semibold text-white">Social Work Notes</span>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
+          <div className="rounded-2xl bg-white p-5 shadow">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">{activeNote ? (isCompleted ? "Completed note" : "Draft note") : "New Social Work note"}</h3>
+                <p className="text-sm text-slate-500">Notes are stored on the patient chart and autosave after you pause typing.</p>
+              </div>
+              <button type="button" onClick={() => { setActiveSocialWorkNoteId(null); setNoteDraft(""); }} className="rounded-lg border border-amber-300 px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-50">New Note</button>
+            </div>
+            <textarea value={noteDraft} onChange={(event) => setNoteDraft(event.target.value)} readOnly={isCompleted} className="mt-4 min-h-[420px] w-full rounded-xl border border-slate-300 p-4 text-base leading-7 read-only:bg-slate-50 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200" placeholder="Write the Social Work note here..." />
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              {!isCompleted && activeNote ? <button type="button" onClick={completeActiveNote} disabled={!noteDraft.trim() || saving} className="rounded-lg bg-amber-600 px-5 py-2.5 font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50">Complete Note</button> : null}
+              {!isCompleted ? <button type="button" onClick={saveNote} disabled={saving || !noteDraft.trim()} className="rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white disabled:opacity-50">{saving ? "Saving..." : "Save Draft"}</button> : null}
+            </div>
+          </div>
+
+          <div className="rounded-2xl bg-white p-4 shadow">
+            <h3 className="font-semibold text-slate-900">Social Work Note History</h3>
+            <p className="mt-1 text-xs text-slate-500">Separated by date and time</p>
+            <div className="mt-3 max-h-[620px] space-y-2 overflow-y-auto">
+              {notes.length === 0 ? <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-500">No Social Work notes yet.</p> : notes.map((note) => (
+                <button key={note.id} type="button" onClick={() => { setActiveSocialWorkNoteId(note.id); setNoteDraft(note.noteText); }} className={`w-full rounded-xl border p-3 text-left ${activeSocialWorkNoteId === note.id ? "border-amber-400 bg-amber-50 ring-2 ring-amber-100" : "border-slate-200 hover:bg-slate-50"}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-semibold text-slate-800">{new Date(note.createdAt).toLocaleString()}</p>
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${note.status === "completed" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{note.status === "completed" ? "Completed" : "Draft"}</span>
+                  </div>
+                  <p className="mt-2 line-clamp-3 whitespace-pre-wrap text-sm text-slate-600">{note.noteText}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 p-3 sm:p-4 lg:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <button type="button" onClick={onBack} className="text-sm font-medium text-blue-700 hover:underline">Back to queue</button>
+          <h2 className="mt-2 text-2xl font-semibold text-slate-900">{getFullPatientName(patient)}</h2>
+          <p className="text-sm text-slate-500">MRN {patient.mrn || "—"}</p>
+        </div>
+        <span className={`rounded-full px-3 py-1 text-sm font-semibold text-white ${meta.dot}`}>{meta.label} Charting</span>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="rounded-2xl bg-white p-5 shadow">
+          {!isCurrentGroupEncounter ? (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+              <h3 className="text-lg font-semibold text-slate-900">Start a separate {meta.label} encounter</h3>
+              <p className="mt-2 text-sm text-slate-600">This keeps discipline-specific notes separate from medical medications, allergies, labs, and SOAP documentation.</p>
+              {canCreate ? (
+                <button type="button" onClick={() => onCreate(groupType)} className="mt-4 rounded-lg bg-slate-900 px-4 py-2 font-semibold text-white">Start {meta.label} Note</button>
+              ) : <p className="mt-3 text-sm text-red-600">Your account does not have permission to create this note type.</p>}
+            </div>
+          ) : (
+            <div>
+              <label htmlFor="group-note" className="block text-sm font-semibold text-slate-800">{meta.label} Note</label>
+              <p className="mt-1 text-sm text-slate-500">Free-text discipline note. Autosaves after you pause typing; medical chart sections are intentionally hidden.</p>
+              <textarea id="group-note" value={noteDraft} onChange={(event) => setNoteDraft(event.target.value)} readOnly={isPhysicalTherapyCompleted} className="mt-4 min-h-[420px] w-full rounded-xl border border-slate-300 p-4 text-base leading-7 read-only:bg-slate-50 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200" placeholder={`Write the ${meta.label.toLowerCase()} note here...`} />
+              {isPhysicalTherapyCompleted ? (
+                <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                  <p className="font-semibold text-emerald-900">Electronically signed by {encounter.disciplineSignerName || "Physical Therapist"}</p>
+                  <p className="text-sm text-emerald-800">{encounter.disciplineSignedAt ? new Date(encounter.disciplineSignedAt).toLocaleString() : "Completion time unavailable"}</p>
+                  {encounter.disciplineSignatureData ? <img src={encounter.disciplineSignatureData} alt="Physical therapist drawn signature" className="mt-3 h-20 max-w-full object-contain object-left" /> : null}
+                </div>
+              ) : null}
+              <div className="mt-4 flex flex-wrap justify-end gap-2">
+                {isPhysicalTherapyCompleted ? <button type="button" onClick={onExportPdf} className="rounded-lg border border-emerald-600 px-5 py-2.5 font-semibold text-emerald-800">Export Signed PDF</button> : null}
+                {!isPhysicalTherapyCompleted && canCompletePhysicalTherapy ? <button type="button" onClick={completePhysicalTherapyNote} disabled={saving || !noteDraft.trim()} className="rounded-lg bg-emerald-700 px-5 py-2.5 font-semibold text-white disabled:opacity-50">Complete Note</button> : null}
+                {!isPhysicalTherapyCompleted ? <button type="button" onClick={saveNote} disabled={saving} className="rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white disabled:opacity-50">{saving ? "Saving..." : "Save Note"}</button> : null}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-2xl bg-white p-4 shadow">
+          <h3 className="font-semibold text-slate-900">Visit Timeline</h3>
+          <div className="mt-3 max-h-[620px] space-y-2 overflow-y-auto">
+            {encounters.map((item, index) => {
+              const itemMeta = getNoteTypeMeta(item);
+              return (
+                <button key={item.id} type="button" onClick={() => onOpenEncounter(patient.id, item.id)} className={`w-full rounded-xl border p-3 text-left ${encounterId === item.id ? `${itemMeta.active} ring-2` : "border-slate-200 hover:bg-slate-50"}`}>
+                  <div className="flex gap-2">
+                    <span className={`mt-1.5 h-3 w-3 shrink-0 rounded-full ${itemMeta.dot}`} />
+                    <div>
+                      <p className="font-semibold text-slate-800">{itemMeta.label} · Encounter #{encounters.length - index}</p>
+                      <p className="text-xs text-slate-500">{normalizeClinicDate ? normalizeClinicDate(item.clinicDate) : item.clinicDate}</p>
+                      <p className="mt-1 line-clamp-2 text-sm text-slate-600">{item.groupNote || item.chiefComplaint || "No note entered"}</p>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ChartView({
   selectedPatient,
   selectedEncounter,
@@ -100,6 +371,15 @@ export default function ChartView({
   profileNameMap,
   setSkipUpperLevelApproval,
   onOpenStickyNotes,
+  userRole,
+  medicalSoapEnabled,
+  canCreatePhysicalTherapyNote,
+  onStartGroupNote,
+  onSaveGroupNote,
+  onSaveSocialWorkNote,
+  onCompleteSocialWorkNote,
+  onCompletePhysicalTherapyNote,
+  attendingSignatureData,
 }) {
 
 
@@ -827,10 +1107,13 @@ function formatLabDateTime(value) {
   const [showSendOutLabs, setShowSendOutLabs] = useState(false);
   const [showSignModal, setShowSignModal] = useState(false);
   const [showAudit, setShowAudit] = useState(false);
+  const [showSocialWorkNotes, setShowSocialWorkNotes] = useState(false);
   const [selectedAttendingId, setSelectedAttendingId] = useState("");
   const [openAssignmentMenu, setOpenAssignmentMenu] = useState(null);
   const [attendingPin, setAttendingPin] = useState("");
-  const [chiefComplaintDraft, setChiefComplaintDraft] = useState("");
+  const [chiefComplaintDraft, setChiefComplaintDraft] = useState(
+    selectedEncounter?.chiefComplaint || ""
+  );
   const [labFilter, setLabFilter] = useState("all");
 
   useEffect(() => {
@@ -1082,6 +1365,7 @@ function formatLabDateTime(value) {
   async function handleExportEncounterPdf() {
     if (!selectedPatient || !selectedEncounter) return;
 
+    const { downloadEncounterPdf } = await import("../utils/pdfGenerator");
     await downloadEncounterPdf({
       patient: selectedPatient,
       encounter: selectedEncounter,
@@ -1091,12 +1375,11 @@ function formatLabDateTime(value) {
       soapAuthorName,
       upperLevelSignerName,
       attendingSignerName,
+      attendingSignatureData,
     });
   }
 
-  if (!selectedPatient) return null;
-
-  const sortedEncounters = [...selectedPatient.encounters].sort((a, b) => {
+  const sortedEncounters = [...(selectedPatient?.encounters || [])].sort((a, b) => {
     const aTime = new Date(a.createdAt || a.clinicDate || 0).getTime();
     const bTime = new Date(b.createdAt || b.clinicDate || 0).getTime();
     return bTime - aTime;
@@ -1288,9 +1571,40 @@ function getSelectedRoomOptionClass() {
     }`
     : "";
 
-  useEffect(() => {
-    setChiefComplaintDraft(selectedEncounter?.chiefComplaint || "");
-  }, [selectedEncounter?.id, selectedEncounter?.chiefComplaint]);
+  if (!selectedPatient) return null;
+
+  const groupChartType = userRole === "social_work"
+    ? "social_work"
+    : userRole === "physical_therapy"
+      ? "physical_therapy"
+    : (["social_work", "physical_therapy"].includes(selectedEncounter?.noteType)
+        ? selectedEncounter.noteType
+        : null);
+
+  if (groupChartType) {
+    return (
+      <GroupNoteChart
+        patient={selectedPatient}
+        encounter={selectedEncounter}
+        encounterId={selectedEncounterId}
+        encounters={sortedEncounters}
+        groupType={groupChartType}
+        canCreate={groupChartType === "social_work" ? (userRole === "social_work" || isLeadershipView) : canCreatePhysicalTherapyNote}
+        onCreate={onStartGroupNote}
+        onSave={onSaveGroupNote}
+        socialWorkNotes={selectedPatient.socialWorkNotes || []}
+        onSaveSocialWorkNote={onSaveSocialWorkNote}
+        onCompleteSocialWorkNote={onCompleteSocialWorkNote}
+        onCompletePhysicalTherapyNote={onCompletePhysicalTherapyNote}
+        canCompletePhysicalTherapy={userRole === "physical_therapy"}
+        onExportPdf={handleExportEncounterPdf}
+        onOpenEncounter={openPatientChart}
+        onBack={onBackToPatients}
+        getFullPatientName={getFullPatientName}
+        normalizeClinicDate={normalizeClinicDate}
+      />
+    );
+  }
 
   return (
     <div className="space-y-4 p-3 sm:p-4 lg:space-y-6 lg:p-6">
@@ -1397,6 +1711,14 @@ function getSelectedRoomOptionClass() {
           Patient Sticky Note
         </button>
 
+        <button
+          type="button"
+          onClick={() => setShowSocialWorkNotes((current) => !current)}
+          className="rounded-lg bg-amber-500 px-4 py-2 font-medium text-white hover:bg-amber-600"
+        >
+          Social Work Notes ({(selectedPatient.socialWorkNotes || []).length})
+        </button>
+
         {canStartEncounter ? (
           <button
             onClick={startNewEncounter}
@@ -1405,7 +1727,42 @@ function getSelectedRoomOptionClass() {
             Start New Encounter
           </button>
         ) : null}
+
+        {canCreatePhysicalTherapyNote ? (
+          <button
+            type="button"
+            onClick={() => onStartGroupNote?.("physical_therapy")}
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700"
+          >
+            Start PT Note
+          </button>
+        ) : null}
       </div>
+
+      {showSocialWorkNotes ? (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="font-semibold text-slate-900">Social Work Note History</h3>
+              <p className="text-sm text-slate-600">Patient-level notes separated by date and time.</p>
+            </div>
+            <button type="button" onClick={() => setShowSocialWorkNotes(false)} className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm font-semibold text-amber-900">Close</button>
+          </div>
+          <div className="mt-3 space-y-3">
+            {(selectedPatient.socialWorkNotes || []).length === 0 ? (
+              <p className="rounded-lg bg-white p-3 text-sm text-slate-500">No Social Work notes have been added.</p>
+            ) : (selectedPatient.socialWorkNotes || []).map((note) => (
+              <article key={note.id} className="rounded-xl border border-amber-100 bg-white p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <time className="text-sm font-semibold text-slate-800">{new Date(note.createdAt).toLocaleString()}</time>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${note.status === "completed" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{note.status === "completed" ? "Completed" : "Draft"}</span>
+                </div>
+                <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">{note.noteText}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {specialtyBadgeText && (
   <div
@@ -1443,22 +1800,24 @@ function getSelectedRoomOptionClass() {
 
           {showTimeline && (
             <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1 lg:max-h-[560px]">
-              {sortedEncounters.map((encounter, index) => (
+              {sortedEncounters.map((encounter, index) => {
+                const noteMeta = getNoteTypeMeta(encounter);
+                return (
                 <button
                   key={encounter.id}
                   onClick={() => openPatientChart(selectedPatient.id, encounter.id)}
                   className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${selectedEncounterId === encounter.id
-                    ? "border-blue-400 bg-blue-50 ring-2 ring-blue-100"
+                    ? `${noteMeta.active} ring-2`
                     : "border-slate-200 bg-white hover:bg-slate-50"
                     }`}
                 >
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex gap-3">
-                      <div className="mt-1 h-3 w-3 shrink-0 rounded-full bg-blue-500" />
+                      <div className={`mt-1 h-3 w-3 shrink-0 rounded-full ${noteMeta.dot}`} />
 
                       <div className="space-y-0.5">
                         <p className="font-semibold text-slate-800">
-                          Encounter #{selectedPatient.encounters.length - index}
+                          {noteMeta.label} · Encounter #{selectedPatient.encounters.length - index}
                         </p>
 
                         <p className="text-sm text-slate-500">
@@ -1521,7 +1880,8 @@ function getSelectedRoomOptionClass() {
                     </div>
                   </div>
                 </button>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -3107,9 +3467,58 @@ function getSelectedRoomOptionClass() {
 
 
 
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
-            SOAP note workflow is temporarily hidden for trial runs.
-          </div>
+          {medicalSoapEnabled ? (
+            <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900">
+                    {selectedEncounter?.noteType === "ophthalmology" || selectedEncounter?.specialtyType === "ophthalmology"
+                      ? "Ophthalmology Note"
+                      : "Medical SOAP Note"}
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">Author: {soapAuthorName || "Not assigned"} · Autosaves after you pause typing</p>
+                </div>
+                <span className={`rounded-full px-3 py-1 text-xs font-semibold ${soapStatusInfo.color}`}>{soapStatusInfo.label}</span>
+              </div>
+
+              <div className="mt-5">
+                {selectedEncounter?.noteType === "ophthalmology" || selectedEncounter?.specialtyType === "ophthalmology" ? (
+                  <OphthalmologySoapForm soapDraft={soapDraft} updateSoapDraftField={updateSoapDraftField} isSoapLocked={isSoapLocked} />
+                ) : (
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    {[
+                      ["soapSubjective", "Subjective"],
+                      ["soapObjective", "Objective"],
+                      ["soapAssessment", "Assessment"],
+                      ["soapPlan", "Plan"],
+                    ].map(([field, label]) => (
+                      <div key={field}>
+                        <label className="mb-1 block text-sm font-semibold text-slate-700">{label}</label>
+                        <textarea value={soapDraft?.[field] || ""} onChange={(event) => updateSoapDraftField(field, event.target.value)} disabled={isSoapLocked} className="min-h-[150px] w-full rounded-xl border border-slate-300 p-3 text-sm leading-6 disabled:bg-slate-100" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {soapUiMessage ? <p className="mt-3 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700">{soapUiMessage}</p> : null}
+
+              <div className="mt-5 flex flex-wrap gap-2">
+                <button type="button" onClick={handleExportEncounterPdf} className="rounded-lg border border-slate-400 px-4 py-2 font-semibold text-slate-700">Export PDF</button>
+                {!isSoapLocked ? <button type="button" onClick={saveSoapNote} disabled={soapBusy} className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white disabled:opacity-50">Save Draft</button> : null}
+                {canSubmitForUpperLevel ? <button type="button" onClick={submitSoapForUpperLevel} disabled={soapBusy} className="rounded-lg bg-violet-600 px-4 py-2 font-semibold text-white disabled:opacity-50">Submit to Upper Level</button> : null}
+                {canSubmitForAttending ? <button type="button" onClick={submitSoapForAttending} disabled={soapBusy} className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white disabled:opacity-50">Submit to Attending</button> : null}
+                {canSignAsUpperLevel ? <button type="button" onClick={signSoapAsUpperLevel} disabled={soapBusy} className="rounded-lg bg-purple-700 px-4 py-2 font-semibold text-white disabled:opacity-50">Upper-Level Sign</button> : null}
+                {canSignAsAttending ? <button type="button" onClick={signSoapAsAttending} disabled={soapBusy} className="rounded-lg bg-emerald-700 px-4 py-2 font-semibold text-white disabled:opacity-50">Attending Sign</button> : null}
+                {isLeadershipView && activeAttendings?.length ? <button type="button" onClick={() => setShowSignModal(true)} disabled={soapBusy} className="rounded-lg border border-emerald-700 px-4 py-2 font-semibold text-emerald-800 disabled:opacity-50">Sign with Attending PIN</button> : null}
+                {canReopenSoap ? <button type="button" onClick={reopenSoapNote} disabled={soapBusy} className="rounded-lg border border-amber-500 px-4 py-2 font-semibold text-amber-800 disabled:opacity-50">Reopen Note</button> : null}
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+              Medical SOAP charting is turned off by leadership. Social Work and Physical Therapy notes remain available as separate encounters.
+            </div>
+          )}
 
           <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
             <button
@@ -3164,7 +3573,7 @@ function getSelectedRoomOptionClass() {
           </div>
         </>
       )}
-      {false && showSignModal && (
+      {medicalSoapEnabled && showSignModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
             <h3 className="text-lg font-semibold text-slate-900">

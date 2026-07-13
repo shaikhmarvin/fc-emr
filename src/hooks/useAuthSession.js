@@ -106,7 +106,11 @@ export function useAuthSession() {
       setAuthPinConfirm("");
     } catch (error) {
       console.error(error);
-      setAuthMessage(`Signup failed: ${error.message}`);
+      setAuthMessage(
+        error.accountCreated
+          ? `${error.message} Do not sign up again; contact leadership to finish the profile setup.`
+          : `Signup failed: ${error.message}`
+      );
     } finally {
       setAuthLoading(false);
     }

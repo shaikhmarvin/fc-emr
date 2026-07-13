@@ -6,11 +6,6 @@ import {
   extractPatientNameFromLabText as extractPatientNameFromLabTextFromParser,
   formatPatientName,
 } from "./lib/labParser";
-import * as pdfjsLib from "pdfjs-dist";
-import pdfjsWorker from "pdfjs-dist/build/pdf.worker?url";
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
-
 window.testLabParser = parseLabsFromText;
 import LabImportView from "./components/LabImportView";
 import LabQueueView from "./components/LabQueueView";
@@ -27,6 +22,7 @@ import {
   approveRefillRequestInSupabase,
   deleteRefillRequestInSupabase,
   deleteRefillRequestsForPatient,
+  completePhysicalTherapyNoteInSupabase,
 } from "./api/encounters";
 import {
   fetchStaffRoster,
@@ -47,12 +43,18 @@ import {
 } from "./api/boardMessages";
 import ToastStack from "./components/ToastStack";
 import { canStartIntake, canManageRoomBoard, canEditFormulary, canPrescribe, canChart, canUseLabQueue, } from "./utils/permissions";
-import { fetchProfiles, updateProfileRole, updateProfileDetails } from "./api/profiles";
+import { fetchProfiles, updateProfileRole, updateProfileDetails, saveClinicalSignature } from "./api/profiles";
+import { fetchChartingSettings, setMedicalSoapEnabled } from "./api/chartingSettings";
+import {
+  saveSocialWorkNote as saveSocialWorkNoteInSupabase,
+  completeSocialWorkNote as completeSocialWorkNoteInSupabase,
+} from "./api/socialWorkNotes";
 import { createAuditLog, fetchAuditLogForEncounter } from "./api/audit";
 import { sendPasswordReset } from "./api/auth";
 import PatientSearch from "./components/PatientSearch";
 import PatientTable from "./components/PatientTable";
 import PatientInfoEditModal from "./components/PatientInfoEditModal";
+import SignaturePadModal from "./components/SignaturePadModal";
 import { deletePatientInSupabase } from "./api/patients";
 import QueueView from "./components/QueueView";
 import RoomBoard from "./components/RoomBoard";
@@ -97,18 +99,6 @@ import {
   deletePapEntryInSupabase,
   deletePapEntriesForPatient,
 } from "./api/pap";
-import {
-  Document,
-  Packer,
-  Paragraph,
-  TextRun,
-  Table,
-  TableRow,
-  TableCell,
-  WidthType,
-  AlignmentType,
-} from "docx";
-import { saveAs } from "file-saver";
 import {
   ROOM_OPTIONS,
   EMPTY_FORM,
@@ -1487,6 +1477,11 @@ export default function App() {
       return;
     }
 
+    if (userRole === "physical_therapy") {
+      setActiveView("specialty-queue");
+      return;
+    }
+
     if (userRole === "lab") {
       setActiveView("lab-queue");
       return;
@@ -1660,10 +1655,12 @@ export default function App() {
 
     async function loadProgramEntries() {
       try {
-        try {
-          await resetPhysicalTherapyStatusesForMonthEnd();
-        } catch (resetError) {
-          console.error("Failed to run PT month-end status reset:", resetError);
+        if (userRole === "leadership") {
+          try {
+            await resetPhysicalTherapyStatusesForMonthEnd();
+          } catch (resetError) {
+            console.error("Failed to run PT month-end status reset:", resetError);
+          }
         }
 
         const rows = await fetchProgramEntries();
@@ -1675,7 +1672,7 @@ export default function App() {
     }
 
     loadProgramEntries();
-  }, [session, programsLoaded]);
+  }, [session, programsLoaded, userRole]);
 
   useEffect(() => {
     if (!session) return;
@@ -2028,6 +2025,20 @@ export default function App() {
   function returnToDashboard() {
     shouldRestoreDashboardScrollRef.current = true;
     setActiveView("dashboard");
+  }
+
+  function returnFromPatientChart() {
+    if (userRole === "social_work") {
+      setActiveView("queue");
+      return;
+    }
+
+    if (userRole === "physical_therapy") {
+      setActiveView("specialty-queue");
+      return;
+    }
+
+    returnToDashboard();
   }
 
   useEffect(() => {
@@ -3927,6 +3938,11 @@ export default function App() {
   }
 
   async function convertPdfToBase64Images(file) {
+    const [pdfjsLib, workerModule] = await Promise.all([
+      import("pdfjs-dist"),
+      import("pdfjs-dist/build/pdf.worker?url"),
+    ]);
+    pdfjsLib.GlobalWorkerOptions.workerSrc = workerModule.default;
     const arrayBuffer = await file.arrayBuffer();
 
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -4333,6 +4349,7 @@ export default function App() {
     patients.find((p) => p.id === intakeMatchPatientId) || null;
 
   const [soapBusy, setSoapBusy] = useState(false);
+  const soapAutosaveInFlightRef = useRef(false);
   const [soapUiMessage, setSoapUiMessage] = useState("");
   const EMPTY_OPHTHO_NOTE = {
     hpi: "",
@@ -4599,6 +4616,20 @@ export default function App() {
         const bTime = new Date(b.encounter.createdAt || 0).getTime();
         return aTime - bTime;
       });
+  }, [allEncounterRows, specialtyQueueDate]);
+
+  const physicalTherapyEncounterRows = useMemo(() => {
+    const clinicDate = specialtyQueueDate || formatClinicDate();
+    return allEncounterRows
+      .filter(({ encounter }) => {
+        const specialtyType = String(encounter?.specialtyType || "").toLowerCase();
+        return (
+          normalizeClinicDate(encounter?.clinicDate) === clinicDate &&
+          ["pt", "physical_therapy", "physical therapy"].includes(specialtyType) &&
+          encounter?.status !== "cancelled"
+        );
+      })
+      .sort((a, b) => new Date(a.encounter?.createdAt || 0) - new Date(b.encounter?.createdAt || 0));
   }, [allEncounterRows, specialtyQueueDate]);
 
   const specialtyRoomRulesForBoard = useMemo(() => {
@@ -4973,6 +5004,67 @@ export default function App() {
   const [editingProfileNameId, setEditingProfileNameId] = useState(null);
   const [editingProfileNameValue, setEditingProfileNameValue] = useState("");
   const [showOnlyActiveToday, setShowOnlyActiveToday] = useState(false);
+  const [medicalSoapEnabled, setMedicalSoapEnabledState] = useState(false);
+  const [chartingSettingsBusy, setChartingSettingsBusy] = useState(false);
+  const [signatureProfile, setSignatureProfile] = useState(null);
+  const [signatureSaving, setSignatureSaving] = useState(false);
+
+  useEffect(() => {
+    if (!session) return;
+    fetchChartingSettings()
+      .then((settings) => setMedicalSoapEnabledState(settings.medicalSoapEnabled))
+      .catch((error) => {
+        console.error("Failed to load charting settings:", error);
+        setMedicalSoapEnabledState(false);
+      });
+  }, [session]);
+
+  async function toggleMedicalSoap() {
+    if (!isLeadershipView || chartingSettingsBusy) return;
+    const nextEnabled = !medicalSoapEnabled;
+    try {
+      setChartingSettingsBusy(true);
+      await setMedicalSoapEnabled(nextEnabled);
+      setMedicalSoapEnabledState(nextEnabled);
+      showToast({
+        title: nextEnabled ? "Medical SOAP enabled" : "Medical SOAP disabled",
+        message: nextEnabled
+          ? "The medical SOAP workflow is now available in patient charts."
+          : "Medical SOAP is hidden. Discipline-specific notes remain available.",
+        tone: nextEnabled ? "success" : "info",
+      });
+    } catch (error) {
+      console.error("Failed to update charting settings:", error);
+      showToast({ title: "Charting setting not saved", message: error.message, tone: "error" });
+    } finally {
+      setChartingSettingsBusy(false);
+    }
+  }
+
+  function openSignatureManager(profile = null) {
+    const target = profile || profiles.find((item) => item.id === session?.user?.id);
+    if (["attending", "physical_therapy"].includes(target?.role)) setSignatureProfile(target);
+  }
+
+  async function handleSaveClinicalSignature(signatureDataUrl) {
+    if (!signatureProfile?.id) return;
+    try {
+      setSignatureSaving(true);
+      await saveClinicalSignature(signatureProfile.id, signatureDataUrl);
+      setProfiles((prev) => prev.map((profile) =>
+        profile.id === signatureProfile.id
+          ? { ...profile, signature_data_url: signatureDataUrl, signature_updated_at: new Date().toISOString() }
+          : profile
+      ));
+      setSignatureProfile(null);
+      showToast({ title: "Signature saved", message: "The signature will be included on signed PDF notes.", tone: "success" });
+    } catch (error) {
+      console.error("Failed to save clinical signature:", error);
+      showToast({ title: "Signature not saved", message: error.message, tone: "error" });
+    } finally {
+      setSignatureSaving(false);
+    }
+  }
 
   function dateKeyFromTimestamp(value) {
     if (!value) return "";
@@ -5130,10 +5222,14 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
 
   const currentSpecialtyAccess = useMemo(() => {
     const value = currentUserProfile?.specialty_access;
-    if (Array.isArray(value)) return value;
-    if (typeof value === "string" && value.trim()) return [value.trim()];
-    return [];
-  }, [currentUserProfile]);
+    const access = Array.isArray(value)
+      ? value
+      : (typeof value === "string" && value.trim() ? [value.trim()] : []);
+    if (userRole === "physical_therapy" && !access.includes("Physical Therapy")) {
+      return [...access, "Physical Therapy"];
+    }
+    return access;
+  }, [currentUserProfile, userRole]);
 
   const canUseOphthoQueueTools = currentSpecialtyAccess.includes("Ophthalmology");
   const canUseWholeClinicQueueTools = canUseOphthoQueueTools || userRole === "social_work";
@@ -5668,6 +5764,10 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
 
   const attendingSignerName = selectedEncounter?.attendingSignedBy
     ? profileNameMap[selectedEncounter.attendingSignedBy] || "Unknown User"
+    : "";
+
+  const attendingSignatureData = selectedEncounter?.attendingSignedBy
+    ? selectedEncounter.attendingSignatureData || profiles.find((profile) => profile.id === selectedEncounter.attendingSignedBy)?.signature_data_url || ""
     : "";
 
 
@@ -6222,6 +6322,7 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
     userRole === "student" ||
     userRole === "upper_level" ||
     userRole === "attending" ||
+    userRole === "physical_therapy" ||
     currentSpecialtyAccess.length > 0;
 
   async function handleChangeProfileRole(
@@ -6240,6 +6341,17 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
       nextClassification !== null
         ? nextClassification
         : currentProfile?.classification ?? null;
+    const effectiveExtraUpdates = effectiveRole === "physical_therapy"
+      ? {
+          ...extraUpdates,
+          specialty_access: Array.from(new Set([
+            ...(Array.isArray(currentProfile?.specialty_access)
+              ? currentProfile.specialty_access
+              : []),
+            "Physical Therapy",
+          ])),
+        }
+      : extraUpdates;
 
     if (profileId === currentUserId && effectiveRole !== "leadership") {
       setProfilesMessage("You cannot remove your own leadership role.");
@@ -6255,7 +6367,7 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
             ...profile,
             role: effectiveRole,
             classification: effectiveClassification,
-            ...extraUpdates,
+            ...effectiveExtraUpdates,
           }
           : profile
       )
@@ -6265,11 +6377,11 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
       setSavingProfileId(profileId);
       setProfilesMessage("");
 
-      if (Object.keys(extraUpdates).length > 0) {
+      if (Object.keys(effectiveExtraUpdates).length > 0) {
         await updateProfileDetails(profileId, {
           role: effectiveRole,
           classification: effectiveClassification,
-          ...extraUpdates,
+          ...effectiveExtraUpdates,
         });
       } else {
         await updateProfileRole(profileId, effectiveRole, effectiveClassification);
@@ -7255,6 +7367,196 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
     } catch (error) {
       console.error("Failed to start new encounter:", error);
       window.alert(`Supabase save error: ${error.message}`);
+    }
+  }
+
+  async function startGroupNoteEncounter(noteType) {
+    if (!selectedPatient) return;
+    const allowed =
+      (noteType === "physical_therapy" &&
+        (userRole === "physical_therapy" ||
+          isLeadershipView ||
+          currentSpecialtyAccess.includes("Physical Therapy")));
+    if (!allowed) return;
+
+    const label = "Physical Therapy";
+    const newEncounter = {
+      clinicDate: formatClinicDate(),
+      createdAt: new Date().toISOString(),
+      newReturning: "Returning",
+      visitLocation: "In Clinic",
+      visitType: "specialty_only",
+      specialtyType: noteType,
+      chiefComplaint: `${label} note`,
+      notes: "",
+      noteType,
+      groupNote: "",
+      status: "started",
+      roomNumber: "",
+      soapStatus: "draft",
+    };
+
+    try {
+      const savedEncounter = await createEncounterInSupabase(selectedPatient.id, newEncounter);
+      const hydratedEncounter = {
+        ...newEncounter,
+        id: savedEncounter.id,
+        clinicDate: savedEncounter.clinic_date || newEncounter.clinicDate,
+        createdAt: savedEncounter.created_at || newEncounter.createdAt,
+        status: mapDbStatusToUi(savedEncounter.status),
+      };
+      setPatients((prev) => prev.map((patient) =>
+        patient.id === selectedPatient.id
+          ? { ...patient, encounters: [hydratedEncounter, ...patient.encounters] }
+          : patient
+      ));
+      setSelectedEncounterId(savedEncounter.id);
+      showToast({ title: `${label} note started`, message: "This is a separate discipline-specific encounter.", tone: "success" });
+    } catch (error) {
+      console.error(`Failed to start ${label} note:`, error);
+      showToast({ title: `Could not start ${label} note`, message: error.message, tone: "error" });
+    }
+  }
+
+  async function savePatientSocialWorkNote(noteText, noteId = null, showConfirmation = true) {
+    if (!selectedPatient || (!noteId && !noteText.trim())) return null;
+
+    try {
+      const savedNote = await saveSocialWorkNoteInSupabase({
+        id: noteId,
+        patientId: selectedPatient.id,
+        encounterId: selectedEncounter?.id || null,
+        noteText: noteText.trim(),
+        authorId: session?.user?.id || null,
+        authorRole: userRole,
+      });
+
+      setPatients((prev) => prev.map((patient) => {
+        if (patient.id !== selectedPatient.id) return patient;
+        const existing = patient.socialWorkNotes || [];
+        const nextNotes = noteId
+          ? existing.map((note) => note.id === savedNote.id ? savedNote : note)
+          : [savedNote, ...existing];
+        return { ...patient, socialWorkNotes: nextNotes };
+      }));
+      if (showConfirmation) {
+        showToast({ title: "Social Work note saved", message: "The draft was saved to the patient chart.", tone: "success" });
+      }
+      return savedNote;
+    } catch (error) {
+      console.error("Failed to save Social Work note:", error);
+      showToast({ title: "Note not saved", message: error.message, tone: "error" });
+      return null;
+    }
+  }
+
+  async function completePatientSocialWorkNote(
+    noteId,
+    patientId = selectedPatient?.id,
+    encounterId = selectedEncounter?.id
+  ) {
+    if (!noteId || !patientId) return false;
+
+    try {
+      const completedNote = await completeSocialWorkNoteInSupabase(noteId);
+      setPatients((prev) => prev.map((patient) =>
+        patient.id === patientId
+          ? {
+              ...patient,
+              socialWorkNotes: (patient.socialWorkNotes || []).map((note) =>
+                note.id === completedNote.id ? completedNote : note
+              ),
+            }
+          : patient
+      ));
+      showToast({ title: "Social Work note completed", message: "The note is now read-only in the patient chart.", tone: "success" });
+      if (encounterId) {
+        await markSeenBySocialWork(encounterId);
+      } else {
+        await refreshClinicData?.();
+      }
+      return true;
+    } catch (error) {
+      console.error("Failed to complete Social Work note:", error);
+      showToast({ title: "Could not complete note", message: error.message, tone: "error" });
+      return false;
+    }
+  }
+
+  async function saveGroupNote(noteText, showConfirmation = true) {
+    if (!selectedPatient || !selectedEncounter?.id) return false;
+    const isPhysicalTherapyEncounter = ["pt", "physical_therapy", "physical therapy"].includes(
+      String(selectedEncounter.specialtyType || "").toLowerCase()
+    );
+    const noteType = isPhysicalTherapyEncounter
+      ? "physical_therapy"
+      : selectedEncounter.noteType;
+    try {
+      await updateEncounterInSupabase(selectedEncounter.id, {
+        groupNote: noteText,
+        noteType,
+        soapAuthorId: selectedEncounter.soapAuthorId || session?.user?.id || null,
+        soapAuthorRole: selectedEncounter.soapAuthorRole || userRole || "",
+      });
+      setPatients((prev) => prev.map((patient) =>
+        patient.id === selectedPatient.id
+          ? {
+              ...patient,
+              encounters: patient.encounters.map((encounter) =>
+                encounter.id === selectedEncounter.id
+                  ? {
+                      ...encounter,
+                      groupNote: noteText,
+                      noteType,
+                      soapAuthorId: encounter.soapAuthorId || session?.user?.id || null,
+                      soapAuthorRole: encounter.soapAuthorRole || userRole || "",
+                      soapSavedAt: new Date().toLocaleString(),
+                    }
+                  : encounter
+              ),
+            }
+          : patient
+      ));
+      await logAuditEvent("group_note_saved", { noteType });
+      if (showConfirmation) {
+        showToast({ title: "Note saved", message: "The discipline-specific encounter has been updated.", tone: "success" });
+      }
+      return true;
+    } catch (error) {
+      console.error("Failed to save group note:", error);
+      showToast({ title: "Note not saved", message: error.message, tone: "error" });
+      return false;
+    }
+  }
+
+  async function completePhysicalTherapyNote(encounterId) {
+    if (!selectedPatient || !encounterId) return false;
+
+    try {
+      const completedEncounter = await completePhysicalTherapyNoteInSupabase(encounterId);
+      setPatients((prev) => prev.map((patient) =>
+        patient.id === selectedPatient.id
+          ? {
+              ...patient,
+              encounters: patient.encounters.map((encounter) =>
+                encounter.id === encounterId ? { ...encounter, ...completedEncounter } : encounter
+              ),
+            }
+          : patient
+      ));
+      await logAuditEvent("physical_therapy_note_completed", {
+        signedAt: completedEncounter.disciplineSignedAt,
+      });
+      showToast({
+        title: "Physical Therapy note completed",
+        message: "The note is locked and both signatures were attached.",
+        tone: "success",
+      });
+      return true;
+    } catch (error) {
+      console.error("Failed to complete Physical Therapy note:", error);
+      showToast({ title: "Could not complete PT note", message: error.message, tone: "error" });
+      return false;
     }
   }
 
@@ -9111,6 +9413,53 @@ async function markSeenBySocialWork(encounterId) {
     }
   }
 
+  useEffect(() => {
+    if (
+      activeView !== "chart" ||
+      !medicalSoapEnabled ||
+      !selectedEncounter?.id ||
+      soapDraft.encounterId !== selectedEncounter.id ||
+      selectedEncounter.soapStatus === "signed" ||
+      ["social_work", "physical_therapy"].includes(selectedEncounter.noteType) ||
+      soapBusy ||
+      soapAutosaveInFlightRef.current
+    ) {
+      return undefined;
+    }
+
+    const isOphthoEncounter =
+      selectedEncounter.noteType === "ophthalmology" ||
+      selectedEncounter.specialtyType === "ophthalmology";
+    const isDirty = isOphthoEncounter
+      ? JSON.stringify(soapDraft.ophthalmologyNote || {}) !==
+          JSON.stringify(selectedEncounter.ophthalmologyNote || {}) ||
+        (soapDraft.notes || "") !== (selectedEncounter.notes || "")
+      : (soapDraft.soapSubjective || "") !== (selectedEncounter.soapSubjective || "") ||
+        (soapDraft.soapObjective || "") !== (selectedEncounter.soapObjective || "") ||
+        (soapDraft.soapAssessment || "") !== (selectedEncounter.soapAssessment || "") ||
+        (soapDraft.soapPlan || "") !== (selectedEncounter.soapPlan || "") ||
+        (soapDraft.notes || "") !== (selectedEncounter.notes || "");
+
+    if (!isDirty) return undefined;
+
+    const timeout = window.setTimeout(async () => {
+      soapAutosaveInFlightRef.current = true;
+      try {
+        await saveSoapNote(false);
+      } finally {
+        soapAutosaveInFlightRef.current = false;
+      }
+    }, 1500);
+
+    return () => window.clearTimeout(timeout);
+  }, [
+    activeView,
+    medicalSoapEnabled,
+    selectedEncounter,
+    soapBusy,
+    soapDraft,
+  ]);
+
   async function submitSoapForUpperLevel() {
     if (!selectedPatient || !selectedEncounter || !session?.user?.id || !userRole) return;
 
@@ -9443,6 +9792,7 @@ async function markSeenBySocialWork(encounterId) {
     const authorId = selectedEncounter.soapAuthorId || session.user.id;
     const authorRole = selectedEncounter.soapAuthorRole || userRole;
     const signedAt = new Date().toISOString();
+    const signatureSnapshot = profiles.find((profile) => profile.id === session.user.id)?.signature_data_url || "";
 
     try {
       setSoapBusy(true);
@@ -9458,6 +9808,7 @@ async function markSeenBySocialWork(encounterId) {
         soapAuthorRole: authorRole,
         attendingSignedBy: session.user.id,
         attendingSignedAt: signedAt,
+        attendingSignatureData: signatureSnapshot,
         soapStatus: "signed",
         status: "done",
         ophthalmologyNote:
@@ -9489,6 +9840,7 @@ async function markSeenBySocialWork(encounterId) {
                     status: "done",
                     attendingSignedBy: session.user.id,
                     attendingSignedAt: signedAt,
+                    attendingSignatureData: signatureSnapshot,
                     soapSavedAt: new Date().toLocaleString(),
                   }
                   : encounter
@@ -9560,6 +9912,7 @@ async function markSeenBySocialWork(encounterId) {
       const authorId = selectedEncounter.soapAuthorId || session?.user?.id;
       const authorRole = selectedEncounter.soapAuthorRole || userRole;
       const signedAt = new Date().toISOString();
+      const signatureSnapshot = attending.signature_data_url || "";
 
       setSoapBusy(true);
       setSoapUiMessage("Saving...");
@@ -9574,6 +9927,7 @@ async function markSeenBySocialWork(encounterId) {
         soapAuthorRole: authorRole,
         attendingSignedBy: attending.id,
         attendingSignedAt: signedAt,
+        attendingSignatureData: signatureSnapshot,
         soapStatus: "signed",
         status: "done",
         ophthalmologyNote:
@@ -9603,6 +9957,7 @@ async function markSeenBySocialWork(encounterId) {
                     soapAuthorRole: authorRole,
                     attendingSignedBy: attending.id,
                     attendingSignedAt: signedAt,
+                    attendingSignatureData: signatureSnapshot,
                     soapStatus: "signed",
                     status: "done",
                     soapSavedAt: new Date().toLocaleString(),
@@ -9651,6 +10006,7 @@ async function markSeenBySocialWork(encounterId) {
       await updateEncounterInSupabase(selectedEncounter.id, {
         attendingSignedBy: null,
         attendingSignedAt: null,
+        attendingSignatureData: null,
         soapStatus: "awaiting_attending",
       });
 
@@ -9665,6 +10021,7 @@ async function markSeenBySocialWork(encounterId) {
                     ...encounter,
                     attendingSignedBy: null,
                     attendingSignedAt: null,
+                    attendingSignatureData: "",
                     soapStatus: "awaiting_attending",
                   }
                   : encounter
@@ -9688,6 +10045,22 @@ async function markSeenBySocialWork(encounterId) {
 
 
   async function exportClinicSummaryToWord() {
+    const [docxModule, fileSaverModule] = await Promise.all([
+      import("docx"),
+      import("file-saver"),
+    ]);
+    const {
+      Document,
+      Packer,
+      Paragraph,
+      TextRun,
+      Table,
+      TableRow,
+      TableCell,
+      WidthType,
+      AlignmentType,
+    } = docxModule;
+    const { saveAs } = fileSaverModule;
     const clinicDateLabel = selectedClinicDate || formatClinicDate();
 
     const rowsForDate = summaryPatientRows.filter(
@@ -10119,7 +10492,9 @@ async function markSeenBySocialWork(encounterId) {
 
             <div className="mb-6 flex rounded-xl bg-slate-100 p-1">
               <button
+                type="button"
                 onClick={() => setAuthMode("login")}
+                aria-pressed={authMode === "login"}
                 className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium ${authMode === "login"
                   ? "bg-white text-slate-900 shadow-sm"
                   : "text-slate-600"
@@ -10128,7 +10503,9 @@ async function markSeenBySocialWork(encounterId) {
                 Log In
               </button>
               <button
+                type="button"
                 onClick={() => setAuthMode("signup")}
+                aria-pressed={authMode === "signup"}
                 className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium ${authMode === "signup"
                   ? "bg-white text-slate-900 shadow-sm"
                   : "text-slate-600"
@@ -10141,28 +10518,46 @@ async function markSeenBySocialWork(encounterId) {
             <div className="space-y-4">
               {authMode === "signup" ? (
                 <>
-                  <input
-                    className="w-full rounded-lg border px-3 py-3 text-sm"
-                    placeholder="Full name"
-                    value={authFullName}
-                    onChange={(e) => setAuthFullName(e.target.value)}
-                  />
+                  <div>
+                    <label htmlFor="auth-full-name" className="mb-1 block text-sm font-medium text-slate-700">
+                      Full name
+                    </label>
+                    <input
+                      id="auth-full-name"
+                      name="fullName"
+                      autoComplete="name"
+                      className="w-full rounded-lg border px-3 py-3 text-sm"
+                      value={authFullName}
+                      onChange={(e) => setAuthFullName(e.target.value)}
+                    />
+                  </div>
 
-                  <select
-                    className="w-full rounded-lg border px-3 py-3 text-sm"
-                    value={authRole}
-                    onChange={(e) => setAuthRole(e.target.value)}
-                  >
-                    <option value="">Select role</option>
-                    <option value="student">Student</option>
-                    <option value="upper_level">Upper Level</option>
-                    <option value="attending">Attending</option>
-                    <option value="leadership">Leadership</option>
-                    <option value="undergraduate">Undergraduate</option>
-                    <option value="pharmacy">Pharmacy</option>
-                    <option value="lab">Lab</option>
-                    <option value="social_work">Social Work</option>
-                  </select>
+                  <div>
+                    <label htmlFor="auth-role" className="mb-1 block text-sm font-medium text-slate-700">
+                      Requested role
+                    </label>
+                    <select
+                      id="auth-role"
+                      name="role"
+                      className="w-full rounded-lg border px-3 py-3 text-sm"
+                      value={authRole}
+                      onChange={(e) => setAuthRole(e.target.value)}
+                    >
+                      <option value="">Select role</option>
+                      <option value="student">Student</option>
+                      <option value="upper_level">Upper Level</option>
+                      <option value="attending">Attending</option>
+                      <option value="leadership">Leadership</option>
+                      <option value="undergraduate">Undergraduate</option>
+                      <option value="pharmacy">Pharmacy</option>
+                      <option value="lab">Lab</option>
+                      <option value="social_work">Social Work</option>
+                      <option value="physical_therapy">Physical Therapy</option>
+                    </select>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Access begins after leadership verifies and approves this request.
+                    </p>
+                  </div>
 
                   {authRole === "student" || authRole === "upper_level" ? (
                     <select
@@ -10218,25 +10613,41 @@ async function markSeenBySocialWork(encounterId) {
                 </>
               ) : null}
               <form
+                className="space-y-4"
                 onSubmit={(e) => {
                   e.preventDefault();
                   authMode === "login" ? handleSignIn() : handleSignUp();
                 }}
               >
-                <input
-                  className="w-full rounded-lg border px-3 py-3 text-sm"
-                  placeholder="Email"
-                  value={authEmail}
-                  onChange={(e) => setAuthEmail(e.target.value)}
-                />
+                <div>
+                  <label htmlFor="auth-email" className="mb-1 block text-sm font-medium text-slate-700">
+                    Email
+                  </label>
+                  <input
+                    id="auth-email"
+                    name="email"
+                    type="email"
+                    autoComplete="email"
+                    className="w-full rounded-lg border px-3 py-3 text-sm"
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                  />
+                </div>
 
-                <input
-                  className="w-full rounded-lg border px-3 py-3 text-sm"
-                  placeholder="Password"
-                  type="password"
-                  value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
-                />
+                <div>
+                  <label htmlFor="auth-password" className="mb-1 block text-sm font-medium text-slate-700">
+                    Password
+                  </label>
+                  <input
+                    id="auth-password"
+                    name="password"
+                    className="w-full rounded-lg border px-3 py-3 text-sm"
+                    type="password"
+                    autoComplete={authMode === "login" ? "current-password" : "new-password"}
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                  />
+                </div>
 
                 {authMessage ? (
                   <div className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700">
@@ -10247,7 +10658,6 @@ async function markSeenBySocialWork(encounterId) {
                 {authMode === "login" ? (
                   <button
                     type="submit"
-                    onClick={handleSignIn}
                     disabled={authLoading}
                     className="w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
@@ -10256,7 +10666,6 @@ async function markSeenBySocialWork(encounterId) {
                 ) : (
                   <button
                     type="submit"
-                    onClick={handleSignUp}
                     disabled={authLoading}
                     className="w-full rounded-lg bg-slate-800 px-4 py-3 text-sm font-medium text-white hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
                   >
@@ -10333,6 +10742,10 @@ async function markSeenBySocialWork(encounterId) {
           sidebarOpen={sidebarOpen}
           setSidebarOpen={setSidebarOpen}
           onOpenStickyNotes={openStickyNotes}
+          medicalSoapEnabled={medicalSoapEnabled}
+          chartingSettingsBusy={chartingSettingsBusy}
+          onToggleMedicalSoap={toggleMedicalSoap}
+          onManageSignature={() => openSignatureManager()}
         />
 
         {activeView === "lab-import" && (
@@ -10437,6 +10850,7 @@ async function markSeenBySocialWork(encounterId) {
               openPatientFromFilteredView={openPatientFromFilteredView}
               getFullPatientName={getFullPatientName}
               finalizeClinicDay={finalizeClinicDay}
+              profiles={profiles}
             />
           )}
 
@@ -10595,6 +11009,7 @@ async function markSeenBySocialWork(encounterId) {
               onClearPharmacyStatus={clearPharmacyStatus}
               onMarkMedicationsPickedUp={markMedicationsPickedUp}
               onMarkSeenBySocialWork={markSeenBySocialWork}
+              onCompleteSocialWorkNote={completePatientSocialWorkNote}
               refillRequests={refillRequests}
               canRefill={canRefill}
               patients={patients}
@@ -10612,12 +11027,17 @@ async function markSeenBySocialWork(encounterId) {
 
           {activeView === "specialty-queue" && canAccessSpecialtyQueue && (
             <SpecialtyQueueView
-              specialtyEncounterRows={specialtyEncounterRows}
+              specialtyEncounterRows={
+                userRole === "physical_therapy"
+                  ? physicalTherapyEncounterRows
+                  : specialtyEncounterRows
+              }
               openPatientChart={openPatientChart}
               getFullPatientName={getFullPatientName}
               formatDate={formatDate}
               isLeadershipView={isLeadershipView}
               dualVisitBadge={dualVisitBadge}
+              lockedSpecialty={userRole === "physical_therapy" ? "pt" : ""}
               selectedClinicDate={specialtyQueueDate}
               setSelectedClinicDate={setSpecialtyQueueDate}
             />
@@ -10679,6 +11099,7 @@ async function markSeenBySocialWork(encounterId) {
           {activeView === "users" && isLeadershipView && (
             <UserManagementView
               profiles={filteredProfiles}
+              signatureProfiles={profiles}
               loadingProfiles={loadingProfiles}
               savingProfileId={savingProfileId}
               onChangeRole={handleChangeProfileRole}
@@ -10697,16 +11118,18 @@ async function markSeenBySocialWork(encounterId) {
               onApproveUser={handleApproveUser}
               onDeleteUser={handleDeleteUser}
               onResetPassword={handleResetUserPassword}
+              onManageSignature={openSignatureManager}
             />
           )}
 
           {activeView === "chart" && selectedPatient && (
             <ChartView
+              key={`${selectedPatient.id}:${selectedEncounterId || ""}`}
               selectedPatient={selectedPatient}
               selectedEncounter={selectedEncounter}
               selectedEncounterId={selectedEncounterId}
               normalizeClinicDate={normalizeClinicDate}
-              onBackToPatients={returnToDashboard}
+              onBackToPatients={returnFromPatientChart}
               startNewEncounter={startNewEncounter}
               deleteEncounter={deleteEncounter}
               canStartEncounter={userRole === "leadership" || userRole === "undergraduate"}
@@ -10796,6 +11219,19 @@ async function markSeenBySocialWork(encounterId) {
               profileNameMap={profileNameMap}
               setSkipUpperLevelApproval={setSkipUpperLevelApproval}
               onOpenStickyNotes={openStickyNotes}
+              userRole={userRole}
+              medicalSoapEnabled={medicalSoapEnabled}
+              canCreatePhysicalTherapyNote={
+                userRole === "physical_therapy" ||
+                isLeadershipView ||
+                currentSpecialtyAccess.includes("Physical Therapy")
+              }
+              onStartGroupNote={startGroupNoteEncounter}
+              onSaveGroupNote={saveGroupNote}
+              onCompletePhysicalTherapyNote={completePhysicalTherapyNote}
+              onSaveSocialWorkNote={savePatientSocialWorkNote}
+              onCompleteSocialWorkNote={completePatientSocialWorkNote}
+              attendingSignatureData={attendingSignatureData}
             />
           )}
 
@@ -10983,21 +11419,34 @@ async function markSeenBySocialWork(encounterId) {
         onMerge={mergeReviewedPatientRecords}
       />
 
-      <PatientInfoEditModal
-        show={showPatientInfoEditModal}
-        patient={dashboardSelectedPatient || selectedPatient}
-        selectedEncounter={selectedEncounter}
-        canEditUndergradFields={userRole === "undergraduate" || isLeadershipView}
-        canEditAllPatientFields={isLeadershipView}
-        canEditEncounterFields={userRole === "undergraduate" || isLeadershipView}
-        onClose={() => setShowPatientInfoEditModal(false)}
-        onSave={async (patientId, updates, encounterId, encounterUpdates) => {
-          const saved = await saveDashboardPatientEdits(patientId, updates, encounterId, encounterUpdates);
-          if (saved) {
-            setShowPatientInfoEditModal(false);
-          }
-        }}
-      />
+      {showPatientInfoEditModal && (dashboardSelectedPatient || selectedPatient) ? (
+        <PatientInfoEditModal
+          key={`${(dashboardSelectedPatient || selectedPatient).id}:${selectedEncounter?.id || ""}`}
+          show={showPatientInfoEditModal}
+          patient={dashboardSelectedPatient || selectedPatient}
+          selectedEncounter={selectedEncounter}
+          canEditUndergradFields={userRole === "undergraduate" || isLeadershipView}
+          canEditAllPatientFields={isLeadershipView}
+          canEditEncounterFields={userRole === "undergraduate" || isLeadershipView}
+          onClose={() => setShowPatientInfoEditModal(false)}
+          onSave={async (patientId, updates, encounterId, encounterUpdates) => {
+            const saved = await saveDashboardPatientEdits(patientId, updates, encounterId, encounterUpdates);
+            if (saved) {
+              setShowPatientInfoEditModal(false);
+            }
+          }}
+        />
+      ) : null}
+
+      {signatureProfile ? (
+        <SignaturePadModal
+          open
+          profile={signatureProfile}
+          saving={signatureSaving}
+          onClose={() => setSignatureProfile(null)}
+          onSave={handleSaveClinicalSignature}
+        />
+      ) : null}
     </div>
   );
 }

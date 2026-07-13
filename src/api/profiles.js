@@ -3,12 +3,21 @@ import { supabase } from "../lib/supabase";
 export async function fetchProfiles() {
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, full_name, role, classification, email, approval_status, approved_by, approved_at, created_at, last_seen_at, signature_pin_set, can_refill, specialty_access")
+    .select("id, full_name, role, classification, email, approval_status, approved_by, approved_at, created_at, last_seen_at, signature_pin_set, signature_data_url, signature_updated_at, signature_updated_by, can_refill, specialty_access")
     .order("last_seen_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false });
 
   if (error) throw error;
   return data ?? [];
+}
+
+export async function saveClinicalSignature(profileId, signatureDataUrl) {
+  const { error } = await supabase.rpc("set_clinical_signature", {
+    target_user_id: profileId,
+    signature_data: signatureDataUrl || null,
+  });
+
+  if (error) throw error;
 }
 
 export async function updateProfileRole(profileId, role, classification = null) {

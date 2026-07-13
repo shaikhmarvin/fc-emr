@@ -9,6 +9,10 @@ export default function AppHeader({
   sidebarOpen,
   setSidebarOpen,
   onOpenStickyNotes,
+  medicalSoapEnabled,
+  chartingSettingsBusy,
+  onToggleMedicalSoap,
+  onManageSignature,
 }) {
   return (
   <div className="sticky top-0 z-40 border-b bg-white shadow-sm">
@@ -68,6 +72,15 @@ export default function AppHeader({
         </div>
 
         {userRole === "leadership" && (
+          <>
+          <button
+            type="button"
+            onClick={onToggleMedicalSoap}
+            disabled={chartingSettingsBusy}
+            className={`rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${medicalSoapEnabled ? "bg-emerald-600 hover:bg-emerald-700" : "bg-slate-600 hover:bg-slate-700"}`}
+          >
+            Medical SOAP: {medicalSoapEnabled ? "On" : "Off"}
+          </button>
           <button
             onClick={() => {
               const url = `${window.location.origin}${window.location.pathname}?display=board`;
@@ -77,7 +90,14 @@ export default function AppHeader({
           >
             🖥️ Open Display Board
           </button>
+          </>
         )}
+
+        {["attending", "physical_therapy"].includes(userRole) ? (
+          <button type="button" onClick={onManageSignature} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">
+            My Signature
+          </button>
+        ) : null}
 
         <button
           type="button"

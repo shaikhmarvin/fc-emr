@@ -1,5 +1,13 @@
 import logo from "../assets/free-clinic-logo.png";
 
+function SectionLabel({ children }) {
+  return (
+    <p className="px-2 pt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+      {children}
+    </p>
+  );
+}
+
 export default function AppSidebar({
   activeView,
   setActiveView,
@@ -31,14 +39,6 @@ export default function AppSidebar({
         ? "bg-slate-900 text-white shadow-sm"
         : "text-slate-700 hover:bg-slate-100",
     ].join(" ");
-  }
-
-  function SectionLabel({ children }) {
-    return (
-      <p className="px-2 pt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-        {children}
-      </p>
-    );
   }
 
   return (
@@ -91,6 +91,28 @@ export default function AppSidebar({
               >
                 Social Work Queue
               </button>
+            </div>
+          ) : userRole === "physical_therapy" ? (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <SectionLabel>Workflow</SectionLabel>
+                <button
+                  onClick={() => handleViewChange("specialty-queue")}
+                  className={getNavItemClass("specialty-queue")}
+                >
+                  Physical Therapy Queue
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                <SectionLabel>Clinical</SectionLabel>
+                <button
+                  onClick={() => handleViewChange("programs")}
+                  className={getNavItemClass("programs")}
+                >
+                  Physical Therapy Tracker
+                </button>
+              </div>
             </div>
           ) : userRole === "pharmacy" ? (
             <div className="space-y-2">

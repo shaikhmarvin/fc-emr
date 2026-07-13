@@ -31,6 +31,8 @@ function mapEncounterRow(row) {
     status: mapDbStatusToUi(row.status),
     roomNumber: row.room || "",
     notes: row.notes || "",
+    noteType: row.note_type || "medical",
+    groupNote: row.group_note || "",
     undergradCompletedAt: row.undergrad_completed_at || null,
     leadershipIntakeCompletedAt:
   row.leadership_intake_completed_at || null,
@@ -105,6 +107,12 @@ function mapEncounterRow(row) {
     upperLevelSignedAt: row.upper_level_signed_at || null,
     attendingSignedBy: row.attending_signed_by || null,
     attendingSignedAt: row.attending_signed_at || null,
+    attendingSignatureData: row.attending_signature_data_url || "",
+    disciplineNoteStatus: row.discipline_note_status || "draft",
+    disciplineSignedBy: row.discipline_signed_by || null,
+    disciplineSignedAt: row.discipline_signed_at || null,
+    disciplineSignerName: row.discipline_signer_name || "",
+    disciplineSignatureData: row.discipline_signature_data_url || "",
     skipUpperLevel: row.skip_upper_level ?? false,
     skipUpperLevelBy: row.skip_upper_level_by || null,
     skipUpperLevelAt: row.skip_upper_level_at || null,
@@ -129,6 +137,15 @@ export async function fetchEncounters() {
   if (error) throw error;
 
   return data ?? [];
+}
+
+export async function completePhysicalTherapyNoteInSupabase(encounterId) {
+  const { data, error } = await supabase.rpc("complete_physical_therapy_note", {
+    target_encounter_id: encounterId,
+  });
+
+  if (error) throw error;
+  return mapEncounterRow(data);
 }
 
 function buildIntakeData(encounter) {
@@ -178,6 +195,8 @@ export async function createEncounterInSupabase(patientId, encounter) {
     status: mapUiStatusToDb(encounter.status || "Waiting"),
     room: encounter.roomNumber || "",
     notes: encounter.notes || "",
+    note_type: encounter.noteType || (encounter.specialtyType === "ophthalmology" ? "ophthalmology" : "medical"),
+    group_note: encounter.groupNote || "",
     intake_data: buildIntakeData(encounter),
     leadership_intake_complete: encounter.leadershipIntakeComplete ?? false,
     hpi: encounter.soapSubjective || "",
@@ -197,6 +216,7 @@ export async function createEncounterInSupabase(patientId, encounter) {
     lab_unable_at: encounter.labUnableAt || null,
     lab_note: encounter.labNote || "",
     ophthalmology_note: encounter.ophthalmologyNote || null,
+    attending_signature_data_url: encounter.attendingSignatureData || null,
   };
 
   const { data, error } = await supabase
@@ -254,6 +274,14 @@ export async function updateEncounterInSupabase(encounterId, updates) {
 
   if (updates.notes !== undefined) {
     payload.notes = updates.notes;
+  }
+
+  if (updates.noteType !== undefined) {
+    payload.note_type = updates.noteType || "medical";
+  }
+
+  if (updates.groupNote !== undefined) {
+    payload.group_note = updates.groupNote || "";
   }
 
   if (updates.undergradCompletedAt !== undefined) {
@@ -375,6 +403,10 @@ export async function updateEncounterInSupabase(encounterId, updates) {
 
   if (updates.attendingSignedAt !== undefined) {
     payload.attending_signed_at = updates.attendingSignedAt;
+  }
+
+  if (updates.attendingSignatureData !== undefined) {
+    payload.attending_signature_data_url = updates.attendingSignatureData || null;
   }
 
   if (updates.skipUpperLevel !== undefined) {

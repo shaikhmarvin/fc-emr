@@ -12,8 +12,6 @@ export default function MedicationModal({
   EMPTY_MEDICATION,
   isRefillRequestMode,
 }) {
-  if (!showMedicationModal || !selectedPatient) return null;
-
   const primaryInputRef = useRef(null);
 
   useEffect(() => {
@@ -127,6 +125,8 @@ const baseDate = rawStartDate
     { label: "1 Month", days: 30 },
     { label: "3 Months", days: 90 },
   ];
+
+  if (!showMedicationModal || !selectedPatient) return null;
 
   const showSupplyTools =
     Boolean(newMedication.frequency) &&

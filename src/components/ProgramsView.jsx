@@ -553,7 +553,6 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
       return;
     }
 
-    const config = getProgramConfig(entry.programType);
     const conflict = programEntries.some(
       (item) =>
         item.id !== entry.id &&
@@ -659,47 +658,6 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
     const time = new Date(entry?.createdAt || 0).getTime();
     return Number.isNaN(time) ? 0 : time;
   }
-
-  async function handleCreateHistoricalPatient() {
-  if (
-    !manualPatient.firstName.trim() ||
-    !manualPatient.lastName.trim() ||
-    !manualPatient.dob ||
-    !manualPatient.phone.trim() ||
-    !manualPatient.mrn.trim()
-  ) {
-    alert("Please fill out all patient fields.");
-    return;
-  }
-
-  try {
-    setSavingManualPatient(true);
-
-    const createdPatient = await createPatientInSupabase({
-      firstName: manualPatient.firstName,
-      lastName: manualPatient.lastName,
-      dob: manualPatient.dob,
-      phone: manualPatient.phone,
-      mrn: manualPatient.mrn,
-      intakeStatus: "historical-specialty",
-    });
-
-    handleSelectPatient(createdPatient);
-
-    setManualPatient({
-      firstName: "",
-      lastName: "",
-      dob: "",
-      phone: "",
-      mrn: "",
-    });
-  } catch (error) {
-    console.error(error);
-    alert("Failed creating patient.");
-  } finally {
-    setSavingManualPatient(false);
-  }
-}
 
   function renderTracker() {
     return (

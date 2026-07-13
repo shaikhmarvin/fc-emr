@@ -61,6 +61,30 @@ function getDailyCardNumber(patient, encounter) {
   );
 }
 
+function getPatientAge(patient) {
+  if (patient?.age !== undefined && patient?.age !== null && patient.age !== "") {
+    return patient.age;
+  }
+
+  if (!patient?.dob) return "";
+
+  const birthDate = new Date(patient.dob);
+  if (Number.isNaN(birthDate.getTime())) return "";
+
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+
+  if (
+    monthDiff < 0 ||
+    (monthDiff === 0 && today.getDate() < birthDate.getDate())
+  ) {
+    age -= 1;
+  }
+
+  return age >= 0 ? String(age) : "";
+}
+
 
 export default function RegistrationView({
   registrationRows,
@@ -308,7 +332,7 @@ export default function RegistrationView({
                 <div>
   <div className="flex flex-wrap items-center gap-2">
     <h2 className="text-lg font-semibold text-slate-900">
-      {getFullPatientName(patient)}
+      {getFullPatientName(patient)}{getPatientAge(patient) ? ` (${getPatientAge(patient)})` : ""}
     </h2>
     {getRegistrationStatusBadge(encounter.status)}
     {newReturningBadge?.(encounter)}

@@ -51,8 +51,6 @@ export default function UndergradRegistrationModal({
   onSubmit,
   tonightSpecialtyNames = [],
 }) {
-  if (!show) return null;
-
   const [stateSearch, setStateSearch] = useState("");
   const [showStateDropdown, setShowStateDropdown] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -66,6 +64,8 @@ export default function UndergradRegistrationModal({
       state.toLowerCase().includes(query)
     );
   }, [stateSearch]);
+
+  if (!show) return null;
 
   function handleChange(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));

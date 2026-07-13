@@ -29,7 +29,8 @@ export function canChart(role) {
     role === "upper_level" ||
     role === "attending" ||
     role === "leadership" ||
-    role === "social_work"
+    role === "social_work" ||
+    role === "physical_therapy"
   );
 }
 

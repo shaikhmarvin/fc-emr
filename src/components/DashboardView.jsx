@@ -1,7 +1,6 @@
 import { useState } from "react";
 import PatientSearch from "./PatientSearch";
 import PatientTable from "./PatientTable";
-import { downloadSignedEncountersZip } from "../utils/pdfGenerator";
 import logo from "../assets/free-clinic-logo.png";
 import { formatDate } from "../utils";
 import {
@@ -36,6 +35,7 @@ export default function DashboardView({
   openPatientFromFilteredView,
   getFullPatientName,
   finalizeClinicDay,
+  profiles = [],
 }) {
 
   const pendingLabEncounters = allEncounterRows.filter(
@@ -77,8 +77,12 @@ export default function DashboardView({
           encounter.clinicDate === selectedClinicDate &&
           (encounter.soapStatus === "signed" || !!encounter.attendingSignedAt)
         );
-      });
+      }).map((row) => ({
+        ...row,
+        attendingSignatureData: profiles.find((profile) => profile.id === row.encounter?.attendingSignedBy)?.signature_data_url || "",
+      }));
 
+      const { downloadSignedEncountersZip } = await import("../utils/pdfGenerator");
       await downloadSignedEncountersZip({
         rows: rowsForExport,
         logoSrc: logo,

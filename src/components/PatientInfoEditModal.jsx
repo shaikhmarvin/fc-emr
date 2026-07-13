@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 const EMPTY_FORM = {
   firstName: "",
@@ -46,6 +46,44 @@ const CHRONIC_CONDITION_OPTIONS = [
   "Other",
 ];
 
+function createForm(patient, selectedEncounter) {
+  return {
+    ...EMPTY_FORM,
+    firstName: patient?.firstName || "",
+    lastName: patient?.lastName || "",
+    preferredName: patient?.preferredName || "",
+    dob: patient?.dob || "",
+    mrn: patient?.mrn || "",
+    phone: patient?.phone || "",
+    pronouns: patient?.pronouns || "",
+    ethnicity: patient?.ethnicity || "",
+    sex: patient?.sex || "",
+    ttuStudent: patient?.ttuStudent || false,
+    last4ssn: patient?.last4ssn || "",
+    address: patient?.address || "",
+    city: patient?.city || "",
+    state: patient?.state || "",
+    zipCode: patient?.zipCode || "",
+    emergencyContactName: patient?.emergencyContactName || "",
+    emergencyContactRelation: patient?.emergencyContactRelation || "",
+    emergencyContactPhone: patient?.emergencyContactPhone || "",
+    incomeRange: patient?.incomeRange || "",
+    spanishOnly: patient?.spanishOnly || "",
+    chronicConditions: patient?.chronicConditions || [],
+    chronicConditionsOther: patient?.chronicConditionsOther || "",
+    fired: patient?.fired || false,
+    firedReason: patient?.firedReason || "",
+    firedAt: patient?.firedAt || "",
+    encounterDailyNumber: selectedEncounter?.dailyNumber || "",
+    encounterNewReturning: selectedEncounter?.newReturning || "",
+    encounterVisitType: selectedEncounter?.visitType || "general",
+    encounterSpecialtyType: selectedEncounter?.specialtyType || "",
+    encounterRefillMedicationRequest: selectedEncounter?.refillMedicationRequest || "",
+    encounterChiefComplaint: selectedEncounter?.chiefComplaint || "",
+    encounterNotes: selectedEncounter?.notes || "",
+  };
+}
+
 function FieldLabel({ children }) {
   return <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">{children}</label>;
 }
@@ -80,46 +118,7 @@ export default function PatientInfoEditModal({
   onClose,
   onSave,
 }) {
-  const [form, setForm] = useState(EMPTY_FORM);
-
-  useEffect(() => {
-    if (!show || !patient?.id) return;
-
-    setForm({
-      firstName: patient.firstName || "",
-      lastName: patient.lastName || "",
-      preferredName: patient.preferredName || "",
-      dob: patient.dob || "",
-      mrn: patient.mrn || "",
-      phone: patient.phone || "",
-      pronouns: patient.pronouns || "",
-      ethnicity: patient.ethnicity || "",
-      sex: patient.sex || "",
-      ttuStudent: patient.ttuStudent || false,
-      last4ssn: patient.last4ssn || "",
-      address: patient.address || "",
-      city: patient.city || "",
-      state: patient.state || "",
-      zipCode: patient.zipCode || "",
-      emergencyContactName: patient.emergencyContactName || "",
-      emergencyContactRelation: patient.emergencyContactRelation || "",
-      emergencyContactPhone: patient.emergencyContactPhone || "",
-      incomeRange: patient.incomeRange || "",
-      spanishOnly: patient.spanishOnly || "",
-      chronicConditions: patient.chronicConditions || [],
-      chronicConditionsOther: patient.chronicConditionsOther || "",
-      fired: patient.fired || false,
-      firedReason: patient.firedReason || "",
-      firedAt: patient.firedAt || "",
-      encounterDailyNumber: selectedEncounter?.dailyNumber || "",
-      encounterNewReturning: selectedEncounter?.newReturning || "",
-      encounterVisitType: selectedEncounter?.visitType || "general",
-      encounterSpecialtyType: selectedEncounter?.specialtyType || "",
-      encounterRefillMedicationRequest: selectedEncounter?.refillMedicationRequest || "",
-      encounterChiefComplaint: selectedEncounter?.chiefComplaint || "",
-      encounterNotes: selectedEncounter?.notes || "",
-    });
-  }, [show, patient?.id, selectedEncounter?.id]);
+  const [form, setForm] = useState(() => createForm(patient, selectedEncounter));
 
   const visibleFields = useMemo(() => {
     if (canEditAllPatientFields) {

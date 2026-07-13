@@ -4,7 +4,6 @@ logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-<<<<<<< HEAD
 pnpm-debug.log*
 lerna-debug.log*
 
@@ -24,7 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 .env
-=======
 lerna-debug.log*
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
@@ -158,4 +156,7 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
->>>>>>> d6f9dd34626d5b6e4211f3f7ef921d19c50d3155
+
+# Local snapshots and ad-hoc backups
+src.zip
+full-backup-*.sql

@@ -1,5 +1,3 @@
-import { useEffect, useState } from "react";
-
 const EMPTY_OPHTHO_NOTE = {
   hpi: "",
   ocularHistory: "",
@@ -24,14 +22,10 @@ export default function OphthalmologySoapForm({
   updateSoapDraftField,
   isSoapLocked,
 }) {
-  const [ophthoForm, setOphthoForm] = useState(EMPTY_OPHTHO_NOTE);
-
-  useEffect(() => {
-    setOphthoForm({
-      ...EMPTY_OPHTHO_NOTE,
-      ...(soapDraft?.ophthalmologyNote || {}),
-    });
-  }, [soapDraft?.ophthalmologyNote]);
+  const ophthoForm = {
+    ...EMPTY_OPHTHO_NOTE,
+    ...(soapDraft?.ophthalmologyNote || {}),
+  };
 
   function updateField(field, value) {
     const next = {
@@ -39,7 +33,6 @@ export default function OphthalmologySoapForm({
       [field]: value,
     };
 
-    setOphthoForm(next);
     updateSoapDraftField("ophthalmologyNote", next);
   }
 

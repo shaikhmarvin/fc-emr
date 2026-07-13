@@ -514,12 +514,16 @@ async function buildEncounterPdfDoc({
   soapAuthorName,
   upperLevelSignerName,
   attendingSignerName,
+  attendingSignatureData,
 }) {
   const doc = new jsPDF({ unit: "mm", format: "letter" });
   const margin = 14;
   const patientName = fullNameFromPatient(patient, getFullPatientName);
   const narrative = getEncounterNarrative(encounter);
-  const isSigned = encounter?.soapStatus === "signed";
+  const isPhysicalTherapyNote = encounter?.noteType === "physical_therapy";
+  const isPhysicalTherapySigned =
+    isPhysicalTherapyNote && encounter?.disciplineNoteStatus === "completed";
+  const isSigned = encounter?.soapStatus === "signed" || isPhysicalTherapySigned;
 
   let y = await addLogo(doc, logoSrc, margin);
 
@@ -546,19 +550,59 @@ async function buildEncounterPdfDoc({
   );
   y += 6;
 
-  y = drawWrappedLine(doc, "Medications", condensedMedicationList(sortedMedications), margin, y, 180, { labelWidth: 24, fontSize: 10, lineHeight: 4.5 });
-  y = drawWrappedLine(doc, "Allergies", condensedAllergyList(patient?.allergies || []), margin, y, 180, { labelWidth: 24, fontSize: 10, lineHeight: 4.5 });
-  y = drawWrappedLine(doc, "Vitals", latestVitalsSummary(encounter), margin, y, 180, { labelWidth: 24, fontSize: 10, lineHeight: 4.5 });
-  y += 2;
+  const isGroupNote = ["social_work", "physical_therapy"].includes(encounter?.noteType);
+  if (isGroupNote) {
+    const noteLabel = encounter.noteType === "social_work" ? "Social Work Note" : "Physical Therapy Note";
+    y = drawSection(doc, noteLabel, normalizeText(encounter?.groupNote), y, { margin });
+  } else {
+    y = drawWrappedLine(doc, "Medications", condensedMedicationList(sortedMedications), margin, y, 180, { labelWidth: 24, fontSize: 10, lineHeight: 4.5 });
+    y = drawWrappedLine(doc, "Allergies", condensedAllergyList(patient?.allergies || []), margin, y, 180, { labelWidth: 24, fontSize: 10, lineHeight: 4.5 });
+    y = drawWrappedLine(doc, "Vitals", latestVitalsSummary(encounter), margin, y, 180, { labelWidth: 24, fontSize: 10, lineHeight: 4.5 });
+    y += 2;
 
-  y = drawSection(doc, "Chief Complaint", narrative.chiefComplaint, y, { margin });
-  y = drawSection(doc, "Subjective", narrative.subjective, y, { margin });
-  y = drawSection(doc, "Objective", narrative.objective, y, { margin });
-  y = drawSection(doc, "Assessment", narrative.assessment, y, { margin });
-  y = drawSection(doc, "Plan", narrative.plan, y, { margin });
+    y = drawSection(doc, "Chief Complaint", narrative.chiefComplaint, y, { margin });
+    y = drawSection(doc, "Subjective", narrative.subjective, y, { margin });
+    y = drawSection(doc, "Objective", narrative.objective, y, { margin });
+    y = drawSection(doc, "Assessment", narrative.assessment, y, { margin });
+    y = drawSection(doc, "Plan", narrative.plan, y, { margin });
+  }
 
-  const signaturesLine = `Student: ${normalizeText(soapAuthorName)} | Upper Level: ${isSigned ? normalizeText(upperLevelSignerName) : "Pending"} | Attending: ${isSigned ? normalizeText(attendingSignerName) : "Pending"}`;
-  y = drawWrappedLine(doc, "Signatures", signaturesLine, margin, y, 180, { labelWidth: 20, fontSize: 10, lineHeight: 4.5 });
+  const signaturesLine = isPhysicalTherapyNote
+    ? `Physical Therapist: ${normalizeText(encounter?.disciplineSignerName || soapAuthorName)} | Electronically signed: ${normalizeText(encounter?.disciplineSignedAt ? new Date(encounter.disciplineSignedAt).toLocaleString() : "Pending")}`
+    : `Student: ${normalizeText(soapAuthorName)} | Upper Level: ${isSigned ? normalizeText(upperLevelSignerName) : "Pending"} | Attending: ${isSigned ? normalizeText(attendingSignerName) : "Pending"}`;
+  y = drawWrappedLine(doc, isPhysicalTherapyNote ? "Electronic Signature" : "Signatures", signaturesLine, margin, y, 180, { labelWidth: isPhysicalTherapyNote ? 34 : 20, fontSize: 10, lineHeight: 4.5 });
+
+  if (isPhysicalTherapySigned && encounter?.disciplineSignatureData) {
+    try {
+      if (y > 245) {
+        doc.addPage();
+        y = margin;
+      }
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.text("Physical therapist drawn signature", margin, y + 4);
+      doc.addImage(encounter.disciplineSignatureData, "PNG", margin, y + 7, 52, 20, undefined, "FAST");
+      y += 30;
+    } catch (error) {
+      console.error("Unable to add Physical Therapy signature to PDF:", error);
+    }
+  }
+
+  if (!isPhysicalTherapyNote && isSigned && attendingSignatureData) {
+    try {
+      if (y > 245) {
+        doc.addPage();
+        y = margin;
+      }
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.text("Attending electronic signature", margin, y + 4);
+      doc.addImage(attendingSignatureData, "PNG", margin, y + 7, 52, 20, undefined, "FAST");
+      y += 30;
+    } catch (error) {
+      console.error("Unable to add attending signature to PDF:", error);
+    }
+  }
 
   const labRows = inHouseLabRows(encounter);
   const nursingNotes = inHouseNursingNotes(encounter);
@@ -610,6 +654,8 @@ export async function downloadSignedEncountersZip({ rows, logoSrc, getFullPatien
     const upperLevelSignerName = row?.upperLevelSignerName || encounter?.upperLevelSignerName || "—";
     const attendingSignerName = row?.attendingSignerName || encounter?.attendingSignerName || "—";
 
+    const attendingSignatureData = row?.attendingSignatureData || encounter?.attendingSignatureData || "";
+
     const doc = await buildEncounterPdfDoc({
       patient,
       encounter,
@@ -619,6 +665,7 @@ export async function downloadSignedEncountersZip({ rows, logoSrc, getFullPatien
       soapAuthorName,
       upperLevelSignerName,
       attendingSignerName,
+      attendingSignatureData,
     });
 
     const patientName = fullNameFromPatient(patient, getFullPatientName).split(/\s+/);

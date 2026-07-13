@@ -31,6 +31,7 @@ export default function QueueView({
   onClearPharmacyStatus,
   onMarkMedicationsPickedUp,
   onMarkSeenBySocialWork,
+  onCompleteSocialWorkNote,
   refillRequests,
   canRefill,
   patients,
@@ -59,6 +60,32 @@ export default function QueueView({
   const [directApproveBusyId, setDirectApproveBusyId] = useState(null);
   const [deleteRefillBusyId, setDeleteRefillBusyId] = useState(null);
   const [assignmentBusyId, setAssignmentBusyId] = useState(null);
+  const [completingSocialWorkNoteId, setCompletingSocialWorkNoteId] = useState(null);
+
+  function getDraftSocialWorkNote(patient) {
+    return (patient?.socialWorkNotes || []).find((note) => note.status === "draft") || null;
+  }
+
+  async function confirmCompleteSocialWorkNote(patient, encounter) {
+    const draftNote = getDraftSocialWorkNote(patient);
+    if (!draftNote || completingSocialWorkNoteId) return;
+
+    const confirmed = window.confirm(
+      "Complete this Social Work note? Completed notes become read-only and remain in the patient chart."
+    );
+    if (!confirmed) return;
+
+    try {
+      setCompletingSocialWorkNoteId(draftNote.id);
+      await onCompleteSocialWorkNote?.(
+        draftNote.id,
+        patient.id,
+        draftNote.encounterId || encounter?.id || null
+      );
+    } finally {
+      setCompletingSocialWorkNoteId(null);
+    }
+  }
 
   function getDraftValue(encounter, field) {
     return queueAssignmentDrafts[encounter.id]?.[field] ?? encounter[field] ?? "";
@@ -112,16 +139,32 @@ export default function QueueView({
   function getFullQueuePatientName(patient) {
     const first = patient?.firstName?.trim() || "";
     const last = patient?.lastName?.trim() || "";
+    const preferred = String(
+      patient?.preferredName || patient?.preferred_name || ""
+    ).trim();
 
     if (!first && !last) {
       return (
-        patient?.preferredName ||
+        preferred ||
         patient?.name ||
         "Patient"
       );
     }
 
-    return `${first} ${last}`.trim();
+    const fullName = `${first} ${last}`.trim();
+    const normalizedPreferred = preferred.toLowerCase();
+
+    if (
+      preferred &&
+      normalizedPreferred !== first.toLowerCase() &&
+      normalizedPreferred !== fullName.toLowerCase()
+    ) {
+      if (first && last) return `${first} (${preferred}) ${last}`;
+      if (first) return `${first} (${preferred})`;
+      return `(${preferred}) ${last}`.trim();
+    }
+
+    return fullName;
   }
 
 
@@ -1343,7 +1386,6 @@ const canMarkSeenBySocialWork =
                       : ""}
                     {getFullQueuePatientName(patient)} ({patient.age})
                   </p>
-
                   <span
                     className={`rounded-full border px-2 py-0.5 text-xs ${getStatusClasses(encounter.status)}`}
                   >
@@ -1431,6 +1473,19 @@ const canMarkSeenBySocialWork =
                     className="mt-2 min-h-[40px] rounded-lg bg-teal-600 px-3 py-2 text-sm font-bold text-white hover:bg-teal-700"
                   >
                     Mark Seen by Social Work
+                  </button>
+                )}
+
+                {canMarkSeenBySocialWork && getDraftSocialWorkNote(patient) && (
+                  <button
+                    type="button"
+                    onClick={() => confirmCompleteSocialWorkNote(patient, encounter)}
+                    disabled={completingSocialWorkNoteId === getDraftSocialWorkNote(patient)?.id}
+                    className="mt-2 min-h-[40px] rounded-lg bg-amber-600 px-3 py-2 text-sm font-bold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {completingSocialWorkNoteId === getDraftSocialWorkNote(patient)?.id
+                      ? "Completing..."
+                      : "Complete Note"}
                   </button>
                 )}
 
