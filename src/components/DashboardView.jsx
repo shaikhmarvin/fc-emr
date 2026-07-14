@@ -68,19 +68,63 @@ export default function DashboardView({
     try {
       setExportingRecords(true);
 
-      const rowsForExport = allEncounterRows.filter(({ encounter }) => {
+      const toLocalDateKey = (value) => {
+        if (!value) return "";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+      };
+
+      const signedEncounterRows = allEncounterRows.filter(({ encounter }) => {
         if (!encounter) return false;
+        const isCompletedPhysicalTherapy =
+          encounter.noteType === "physical_therapy" &&
+          encounter.disciplineNoteStatus === "completed";
+        const isSignedMedical =
+          encounter.soapStatus === "signed" || !!encounter.attendingSignedAt;
         if (!selectedClinicDate) {
-          return encounter.soapStatus === "signed" || !!encounter.attendingSignedAt;
+          return isSignedMedical || isCompletedPhysicalTherapy;
         }
         return (
           encounter.clinicDate === selectedClinicDate &&
-          (encounter.soapStatus === "signed" || !!encounter.attendingSignedAt)
+          (isSignedMedical || isCompletedPhysicalTherapy)
         );
       }).map((row) => ({
         ...row,
         attendingSignatureData: profiles.find((profile) => profile.id === row.encounter?.attendingSignedBy)?.signature_data_url || "",
       }));
+
+      const uniquePatients = new Map();
+      allEncounterRows.forEach(({ patient }) => {
+        if (patient?.id && !uniquePatients.has(patient.id)) uniquePatients.set(patient.id, patient);
+      });
+
+      const completedSocialWorkRows = [...uniquePatients.values()].flatMap((patient) =>
+        (patient.socialWorkNotes || [])
+          .filter((note) => {
+            if (note.status !== "completed") return false;
+            if (!selectedClinicDate) return true;
+            return toLocalDateKey(note.completedAt || note.createdAt) === selectedClinicDate;
+          })
+          .map((note) => ({
+            patient,
+            encounter: {
+              id: `social-${note.id}`,
+              clinicDate: toLocalDateKey(note.completedAt || note.createdAt),
+              createdAt: note.createdAt,
+              noteType: "social_work",
+              groupNote: note.noteText,
+              disciplineNoteStatus: "completed",
+              disciplineSignedAt: note.completedAt || note.updatedAt || note.createdAt,
+            },
+            sortedMedications: [],
+          }))
+      );
+
+      const rowsForExport = [...signedEncounterRows, ...completedSocialWorkRows];
 
       const { downloadSignedEncountersZip } = await import("../utils/pdfGenerator");
       await downloadSignedEncountersZip({
@@ -814,7 +858,7 @@ export default function DashboardView({
                 ? "Exporting..."
                 : selectedClinicDate
                   ? "Export Records for Selected Date"
-                  : "Export Signed Records"}
+                  : "Export Completed Records"}
             </button>
           )}
         </div>

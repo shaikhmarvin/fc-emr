@@ -521,9 +521,15 @@ async function buildEncounterPdfDoc({
   const patientName = fullNameFromPatient(patient, getFullPatientName);
   const narrative = getEncounterNarrative(encounter);
   const isPhysicalTherapyNote = encounter?.noteType === "physical_therapy";
+  const isSocialWorkNote = encounter?.noteType === "social_work";
   const isPhysicalTherapySigned =
     isPhysicalTherapyNote && encounter?.disciplineNoteStatus === "completed";
-  const isSigned = encounter?.soapStatus === "signed" || isPhysicalTherapySigned;
+  const isSocialWorkCompleted =
+    isSocialWorkNote && encounter?.disciplineNoteStatus === "completed";
+  const isSigned =
+    encounter?.soapStatus === "signed" ||
+    isPhysicalTherapySigned ||
+    isSocialWorkCompleted;
 
   let y = await addLogo(doc, logoSrc, margin);
 
@@ -569,8 +575,18 @@ async function buildEncounterPdfDoc({
 
   const signaturesLine = isPhysicalTherapyNote
     ? `Physical Therapist: ${normalizeText(encounter?.disciplineSignerName || soapAuthorName)} | Electronically signed: ${normalizeText(encounter?.disciplineSignedAt ? new Date(encounter.disciplineSignedAt).toLocaleString() : "Pending")}`
-    : `Student: ${normalizeText(soapAuthorName)} | Upper Level: ${isSigned ? normalizeText(upperLevelSignerName) : "Pending"} | Attending: ${isSigned ? normalizeText(attendingSignerName) : "Pending"}`;
-  y = drawWrappedLine(doc, isPhysicalTherapyNote ? "Electronic Signature" : "Signatures", signaturesLine, margin, y, 180, { labelWidth: isPhysicalTherapyNote ? 34 : 20, fontSize: 10, lineHeight: 4.5 });
+    : isSocialWorkNote
+      ? `Completed: ${normalizeText(encounter?.disciplineSignedAt ? new Date(encounter.disciplineSignedAt).toLocaleString() : "Completed")}`
+      : `Student: ${normalizeText(soapAuthorName)} | Upper Level: ${isSigned ? normalizeText(upperLevelSignerName) : "Pending"} | Attending: ${isSigned ? normalizeText(attendingSignerName) : "Pending"}`;
+  y = drawWrappedLine(
+    doc,
+    isPhysicalTherapyNote ? "Electronic Signature" : (isSocialWorkNote ? "Note Status" : "Signatures"),
+    signaturesLine,
+    margin,
+    y,
+    180,
+    { labelWidth: isPhysicalTherapyNote ? 34 : 20, fontSize: 10, lineHeight: 4.5 }
+  );
 
   if (isPhysicalTherapySigned && encounter?.disciplineSignatureData) {
     try {
@@ -606,7 +622,7 @@ async function buildEncounterPdfDoc({
 
   const labRows = inHouseLabRows(encounter);
   const nursingNotes = inHouseNursingNotes(encounter);
-  if (labRows.length || nursingNotes) {
+  if (!isGroupNote && (labRows.length || nursingNotes)) {
     doc.addPage();
     y = await addLogo(doc, logoSrc, margin);
     doc.setFont("helvetica", "bold");
@@ -626,9 +642,11 @@ async function buildEncounterPdfDoc({
     }
   }
 
-  doc.addPage();
-  y = await addLogo(doc, logoSrc, margin);
-  drawMedicationReconciliationPage(doc, sortedMedications, encounter, patientName, y, margin);
+  if (!isGroupNote) {
+    doc.addPage();
+    y = await addLogo(doc, logoSrc, margin);
+    drawMedicationReconciliationPage(doc, sortedMedications, encounter, patientName, y, margin);
+  }
 
   return doc;
 }
@@ -639,7 +657,12 @@ export async function downloadEncounterPdf(args) {
   const firstName = cleanFilePart(patientName.slice(0, -1).join("_") || patientName[0]);
   const lastName = cleanFilePart(patientName[patientName.length - 1]);
   const clinicDate = cleanFilePart(formatDate(args.encounter?.clinicDate || args.encounter?.createdAt));
-  const filename = `${clinicDate}_${lastName}_${firstName}.pdf`;
+  const recordType = args.encounter?.noteType === "social_work"
+    ? "Social_Work"
+    : args.encounter?.noteType === "physical_therapy"
+      ? "Physical_Therapy"
+      : "Medical";
+  const filename = `${clinicDate}_${lastName}_${firstName}_${recordType}.pdf`;
   doc.save(filename);
 }
 
@@ -672,7 +695,13 @@ export async function downloadSignedEncountersZip({ rows, logoSrc, getFullPatien
     const firstName = cleanFilePart(patientName.slice(0, -1).join("_") || patientName[0]);
     const lastName = cleanFilePart(patientName[patientName.length - 1]);
     const clinicDate = cleanFilePart(formatDate(encounter?.clinicDate || encounter?.createdAt));
-    const filename = `${clinicDate}_${lastName}_${firstName}.pdf`;
+    const recordType = encounter?.noteType === "social_work"
+      ? "Social_Work"
+      : encounter?.noteType === "physical_therapy"
+        ? "Physical_Therapy"
+        : "Medical";
+    const recordId = cleanFilePart(String(encounter?.id || "record").slice(-8));
+    const filename = `${clinicDate}_${lastName}_${firstName}_${recordType}_${recordId}.pdf`;
 
     zip.file(filename, doc.output("arraybuffer"));
   }

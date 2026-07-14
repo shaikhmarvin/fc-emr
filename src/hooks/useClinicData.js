@@ -128,6 +128,7 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
       disciplineSignedAt: encounter.discipline_signed_at || null,
       disciplineSignerName: encounter.discipline_signer_name || "",
       disciplineSignatureData: encounter.discipline_signature_data_url || "",
+      workflowVersion: Number(encounter.workflow_version || 0),
       visitType,
       specialtyType,
       dualVisit,

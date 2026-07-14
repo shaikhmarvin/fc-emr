@@ -1176,6 +1176,34 @@ export default function App() {
   } = useAuthSession();
 
   useEffect(() => {
+    const lastButtonActivation = new WeakMap();
+    const repeatClickBufferMs = 900;
+
+    function preventRapidRepeatButtonClick(event) {
+      const button = event.target instanceof Element
+        ? event.target.closest("button")
+        : null;
+      if (!button || button.disabled) return;
+
+      const now = performance.now();
+      const lastActivatedAt = lastButtonActivation.get(button);
+      if (lastActivatedAt !== undefined && now - lastActivatedAt < repeatClickBufferMs) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation?.();
+        return;
+      }
+
+      lastButtonActivation.set(button, now);
+    }
+
+    document.addEventListener("click", preventRapidRepeatButtonClick, true);
+    return () => {
+      document.removeEventListener("click", preventRapidRepeatButtonClick, true);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!session?.user?.id) return;
 
     async function updateLastSeen() {
@@ -1316,14 +1344,14 @@ export default function App() {
   function canAttendingSignSoap(role, encounter) {
     if (!encounter) return false;
 
-    const allowedRole =
-      role === "student" ||
-      role === "upper_level" ||
-      role === "leadership" ||
-      role === "attending";
+    if (role !== "attending" || !!encounter.attendingSignedAt) return false;
 
-    if (!allowedRole || !!encounter.attendingSignedAt) return false;
+    return encounter.soapStatus === "awaiting_attending";
+  }
 
+  function canUseAttendingPin(role, encounter) {
+    if (!encounter || !!encounter.attendingSignedAt) return false;
+    if (!["student", "upper_level", "leadership"].includes(role)) return false;
     return encounter.soapStatus === "awaiting_attending";
   }
 
@@ -4528,6 +4556,7 @@ export default function App() {
 
   const canSignAsUpperLevel = canUpperLevelSignSoap(userRole, selectedEncounter);
   const canSignAsAttending = canAttendingSignSoap(userRole, selectedEncounter);
+  const canSignWithAttendingPin = canUseAttendingPin(userRole, selectedEncounter);
   const canSubmitForUpperLevel = canSubmitSoapForUpperLevel(
     userRole,
     selectedEncounter
@@ -4536,7 +4565,9 @@ export default function App() {
     userRole,
     selectedEncounter
   );
-  const canReopenSoap = userRole === "attending" && selectedEncounter?.soapStatus === "signed";
+  const canReopenSoap =
+    ["attending", "leadership"].includes(userRole) &&
+    selectedEncounter?.soapStatus === "signed";
   useEffect(() => {
     const interval = setInterval(() => {
       setNow(Date.now());
@@ -7375,7 +7406,6 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
     const allowed =
       (noteType === "physical_therapy" &&
         (userRole === "physical_therapy" ||
-          isLeadershipView ||
           currentSpecialtyAccess.includes("Physical Therapy")));
     if (!allowed) return;
 
@@ -9460,6 +9490,32 @@ async function markSeenBySocialWork(encounterId) {
     soapDraft,
   ]);
 
+  async function updateEncounterWorkflowSafely(encounterId, updates, expectedSoapStatus) {
+    try {
+      const updated = await updateEncounterInSupabase(encounterId, updates, {
+        expectedWorkflowVersion: selectedEncounter?.workflowVersion ?? 0,
+        expectedSoapStatus,
+      });
+
+      setPatients((prev) => prev.map((patient) => ({
+        ...patient,
+        encounters: patient.encounters.map((encounter) =>
+          encounter.id === encounterId
+            ? { ...encounter, workflowVersion: Number(updated.workflow_version || 0) }
+            : encounter
+        ),
+      })));
+      return updated;
+    } catch (error) {
+      if (error.code === "WORKFLOW_CONFLICT") {
+        await refreshClinicData?.();
+        setSelectedPatientId(selectedPatient?.id || null);
+        setSelectedEncounterId(encounterId);
+      }
+      throw error;
+    }
+  }
+
   async function submitSoapForUpperLevel() {
     if (!selectedPatient || !selectedEncounter || !session?.user?.id || !userRole) return;
 
@@ -9476,7 +9532,7 @@ async function markSeenBySocialWork(encounterId) {
       setSoapBusy(true);
       setSoapUiMessage("Saving...");
 
-      await updateEncounterInSupabase(selectedEncounter.id, {
+      await updateEncounterWorkflowSafely(selectedEncounter.id, {
         soapSubjective: soapDraft.soapSubjective || "",
         soapObjective: soapDraft.soapObjective || "",
         soapAssessment: soapDraft.soapAssessment || "",
@@ -9492,7 +9548,7 @@ async function markSeenBySocialWork(encounterId) {
               ...(soapDraft.ophthalmologyNote || {}),
             }
             : null,
-      });
+      }, selectedEncounter.soapStatus || "draft");
 
       setPatients((prev) =>
         prev.map((patient) =>
@@ -9548,7 +9604,7 @@ async function markSeenBySocialWork(encounterId) {
       setSoapBusy(true);
       setSoapUiMessage("Saving...");
 
-      await updateEncounterInSupabase(selectedEncounter.id, {
+      await updateEncounterWorkflowSafely(selectedEncounter.id, {
         soapSubjective: soapDraft.soapSubjective || "",
         soapObjective: soapDraft.soapObjective || "",
         soapAssessment: soapDraft.soapAssessment || "",
@@ -9564,7 +9620,7 @@ async function markSeenBySocialWork(encounterId) {
               ...(soapDraft.ophthalmologyNote || {}),
             }
             : null,
-      });
+      }, selectedEncounter.soapStatus || "draft");
 
       setPatients((prev) =>
         prev.map((patient) =>
@@ -9623,7 +9679,7 @@ async function markSeenBySocialWork(encounterId) {
       setSoapBusy(true);
       setSoapUiMessage("Saving...");
 
-      await updateEncounterInSupabase(selectedEncounter.id, {
+      await updateEncounterWorkflowSafely(selectedEncounter.id, {
         soapSubjective: soapDraft.soapSubjective || "",
         soapObjective: soapDraft.soapObjective || "",
         soapAssessment: soapDraft.soapAssessment || "",
@@ -9641,7 +9697,7 @@ async function markSeenBySocialWork(encounterId) {
               ...(soapDraft.ophthalmologyNote || {}),
             }
             : null,
-      });
+      }, "awaiting_upper");
 
       setPatients((prev) =>
         prev.map((patient) =>
@@ -9716,12 +9772,12 @@ async function markSeenBySocialWork(encounterId) {
     try {
       const nowIso = new Date().toISOString();
 
-      await updateEncounterInSupabase(selectedEncounter.id, {
+      await updateEncounterWorkflowSafely(selectedEncounter.id, {
         skipUpperLevel: enabled,
         skipUpperLevelBy: enabled ? session.user.id : null,
         skipUpperLevelAt: enabled ? nowIso : null,
         soapStatus: toSoapStatus,
-      });
+      }, fromSoapStatus);
 
       setPatients((prev) =>
         prev.map((patient) =>
@@ -9798,7 +9854,7 @@ async function markSeenBySocialWork(encounterId) {
       setSoapBusy(true);
       setSoapUiMessage("Saving...");
 
-      await updateEncounterInSupabase(selectedEncounter.id, {
+      await updateEncounterWorkflowSafely(selectedEncounter.id, {
         soapSubjective: soapDraft.soapSubjective || "",
         soapObjective: soapDraft.soapObjective || "",
         soapAssessment: soapDraft.soapAssessment || "",
@@ -9818,7 +9874,7 @@ async function markSeenBySocialWork(encounterId) {
               ...(soapDraft.ophthalmologyNote || {}),
             }
             : null,
-      });
+      }, "awaiting_attending");
 
       setPatients((prev) =>
         prev.map((patient) =>
@@ -9867,6 +9923,7 @@ async function markSeenBySocialWork(encounterId) {
 
   async function signSoapAsAttendingWithPin(attendingId, pin) {
     if (!selectedPatient || !selectedEncounter) return false;
+    if (!canSignWithAttendingPin) return false;
     if (!attendingId || pin.length !== 4) return false;
 
     const missingFields = getMissingSoapFields(soapDraft);
@@ -9917,7 +9974,7 @@ async function markSeenBySocialWork(encounterId) {
       setSoapBusy(true);
       setSoapUiMessage("Saving...");
 
-      await updateEncounterInSupabase(selectedEncounter.id, {
+      await updateEncounterWorkflowSafely(selectedEncounter.id, {
         soapSubjective: soapDraft.soapSubjective || "",
         soapObjective: soapDraft.soapObjective || "",
         soapAssessment: soapDraft.soapAssessment || "",
@@ -9937,7 +9994,7 @@ async function markSeenBySocialWork(encounterId) {
               ...(soapDraft.ophthalmologyNote || {}),
             }
             : null,
-      });
+      }, "awaiting_attending");
 
       setPatients((prev) =>
         prev.map((patient) =>
@@ -10003,12 +10060,12 @@ async function markSeenBySocialWork(encounterId) {
       setSoapBusy(true);
       setSoapUiMessage("Reopening...");
 
-      await updateEncounterInSupabase(selectedEncounter.id, {
+      await updateEncounterWorkflowSafely(selectedEncounter.id, {
         attendingSignedBy: null,
         attendingSignedAt: null,
         attendingSignatureData: null,
         soapStatus: "awaiting_attending",
-      });
+      }, "signed");
 
       setPatients((prev) =>
         prev.map((patient) =>
@@ -11189,6 +11246,7 @@ async function markSeenBySocialWork(encounterId) {
               soapStatus={selectedEncounter?.soapStatus || "draft"}
               canSignAsUpperLevel={canSignAsUpperLevel}
               canSignAsAttending={canSignAsAttending}
+              canSignWithAttendingPin={canSignWithAttendingPin}
               signSoapAsUpperLevel={signSoapAsUpperLevel}
               signSoapAsAttending={signSoapAsAttending}
               canSubmitForUpperLevel={canSubmitForUpperLevel}
@@ -11223,7 +11281,6 @@ async function markSeenBySocialWork(encounterId) {
               medicalSoapEnabled={medicalSoapEnabled}
               canCreatePhysicalTherapyNote={
                 userRole === "physical_therapy" ||
-                isLeadershipView ||
                 currentSpecialtyAccess.includes("Physical Therapy")
               }
               onStartGroupNote={startGroupNoteEncounter}

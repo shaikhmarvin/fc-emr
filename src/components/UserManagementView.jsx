@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { getRoleFromClassification } from "../utils/permissions";
 
 const SPECIALTY_ACCESS_OPTIONS = [
@@ -36,6 +37,8 @@ export default function UserManagementView({
   onResetPassword,
   onManageSignature,
 }) {
+  const [showSignatureManagement, setShowSignatureManagement] = useState(false);
+
   return (
     <div className="p-3 md:p-6">
       <div className="rounded-2xl bg-white p-4 shadow-sm md:p-6">
@@ -66,11 +69,22 @@ export default function UserManagementView({
         ) : null}
 
         <div className="mb-5 rounded-xl border border-blue-200 bg-blue-50 p-4">
-          <h3 className="font-semibold text-slate-900">Clinical PDF Signatures</h3>
-          <p className="mt-1 text-sm text-slate-600">
-            Leadership can capture a saved signature for attending and Physical Therapy accounts on any touch-enabled device.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setShowSignatureManagement((current) => !current)}
+            aria-expanded={showSignatureManagement}
+            className="flex w-full items-center justify-between gap-3 text-left"
+          >
+            <span className="font-semibold text-slate-900">Clinical PDF Signatures</span>
+            <span className="text-sm font-semibold text-blue-800">
+              {showSignatureManagement ? "Collapse" : "Manage signatures"}
+            </span>
+          </button>
+          {showSignatureManagement ? <>
+            <p className="mt-2 text-sm text-slate-600">
+              Leadership can capture a saved signature for attending and Physical Therapy accounts on any touch-enabled device.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
             {signatureProfiles.filter((profile) => ["attending", "physical_therapy"].includes(profile.role)).map((profile) => (
               <button
                 key={profile.id}
@@ -84,7 +98,8 @@ export default function UserManagementView({
             {signatureProfiles.every((profile) => !["attending", "physical_therapy"].includes(profile.role)) ? (
               <span className="text-sm text-slate-500">No attending or Physical Therapy accounts are available.</span>
             ) : null}
-          </div>
+            </div>
+          </> : null}
         </div>
 
         <div className="mb-4 space-y-3">

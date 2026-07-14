@@ -33,6 +33,7 @@ function GroupNoteChart({
   onCompletePhysicalTherapyNote,
   canCompletePhysicalTherapy,
   onExportPdf,
+  onExportSocialWorkPdf,
   onOpenEncounter,
   onBack,
   getFullPatientName,
@@ -184,6 +185,7 @@ function GroupNoteChart({
             </div>
             <textarea value={noteDraft} onChange={(event) => setNoteDraft(event.target.value)} readOnly={isCompleted} className="mt-4 min-h-[420px] w-full rounded-xl border border-slate-300 p-4 text-base leading-7 read-only:bg-slate-50 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200" placeholder="Write the Social Work note here..." />
             <div className="mt-4 flex flex-wrap justify-end gap-2">
+              {isCompleted ? <button type="button" onClick={() => onExportSocialWorkPdf(activeNote)} className="rounded-lg border border-amber-500 px-5 py-2.5 font-semibold text-amber-800">Export Completed PDF</button> : null}
               {!isCompleted && activeNote ? <button type="button" onClick={completeActiveNote} disabled={!noteDraft.trim() || saving} className="rounded-lg bg-amber-600 px-5 py-2.5 font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50">Complete Note</button> : null}
               {!isCompleted ? <button type="button" onClick={saveNote} disabled={saving || !noteDraft.trim()} className="rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white disabled:opacity-50">{saving ? "Saving..." : "Save Draft"}</button> : null}
             </div>
@@ -339,6 +341,7 @@ export default function ChartView({
   soapStatus,
   canSignAsUpperLevel,
   canSignAsAttending,
+  canSignWithAttendingPin,
   signSoapAsUpperLevel,
   signSoapAsAttending,
   canSubmitForUpperLevel,
@@ -1379,6 +1382,31 @@ function formatLabDateTime(value) {
     });
   }
 
+  async function handleExportSocialWorkPdf(note) {
+    if (!selectedPatient || !note || note.status !== "completed") return;
+
+    const { downloadEncounterPdf } = await import("../utils/pdfGenerator");
+    await downloadEncounterPdf({
+      patient: selectedPatient,
+      encounter: {
+        id: `social-${note.id}`,
+        clinicDate: note.completedAt || note.createdAt,
+        createdAt: note.createdAt,
+        noteType: "social_work",
+        groupNote: note.noteText,
+        disciplineNoteStatus: "completed",
+        disciplineSignedAt: note.completedAt || note.updatedAt || note.createdAt,
+      },
+      sortedMedications: [],
+      logoSrc: logo,
+      getFullPatientName,
+      soapAuthorName: "Social Work",
+      upperLevelSignerName: "",
+      attendingSignerName: "",
+      attendingSignatureData: "",
+    });
+  }
+
   const sortedEncounters = [...(selectedPatient?.encounters || [])].sort((a, b) => {
     const aTime = new Date(a.createdAt || a.clinicDate || 0).getTime();
     const bTime = new Date(b.createdAt || b.clinicDate || 0).getTime();
@@ -1598,6 +1626,7 @@ function getSelectedRoomOptionClass() {
         onCompletePhysicalTherapyNote={onCompletePhysicalTherapyNote}
         canCompletePhysicalTherapy={userRole === "physical_therapy"}
         onExportPdf={handleExportEncounterPdf}
+        onExportSocialWorkPdf={handleExportSocialWorkPdf}
         onOpenEncounter={openPatientChart}
         onBack={onBackToPatients}
         getFullPatientName={getFullPatientName}
@@ -3510,7 +3539,7 @@ function getSelectedRoomOptionClass() {
                 {canSubmitForAttending ? <button type="button" onClick={submitSoapForAttending} disabled={soapBusy} className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white disabled:opacity-50">Submit to Attending</button> : null}
                 {canSignAsUpperLevel ? <button type="button" onClick={signSoapAsUpperLevel} disabled={soapBusy} className="rounded-lg bg-purple-700 px-4 py-2 font-semibold text-white disabled:opacity-50">Upper-Level Sign</button> : null}
                 {canSignAsAttending ? <button type="button" onClick={signSoapAsAttending} disabled={soapBusy} className="rounded-lg bg-emerald-700 px-4 py-2 font-semibold text-white disabled:opacity-50">Attending Sign</button> : null}
-                {isLeadershipView && activeAttendings?.length ? <button type="button" onClick={() => setShowSignModal(true)} disabled={soapBusy} className="rounded-lg border border-emerald-700 px-4 py-2 font-semibold text-emerald-800 disabled:opacity-50">Sign with Attending PIN</button> : null}
+                {canSignWithAttendingPin && activeAttendings?.length ? <button type="button" onClick={() => setShowSignModal(true)} disabled={soapBusy} className="rounded-lg border border-emerald-700 px-4 py-2 font-semibold text-emerald-800 disabled:opacity-50">Attending Sign with PIN</button> : null}
                 {canReopenSoap ? <button type="button" onClick={reopenSoapNote} disabled={soapBusy} className="rounded-lg border border-amber-500 px-4 py-2 font-semibold text-amber-800 disabled:opacity-50">Reopen Note</button> : null}
               </div>
             </div>

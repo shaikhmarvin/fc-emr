@@ -113,6 +113,7 @@ function mapEncounterRow(row) {
     disciplineSignedAt: row.discipline_signed_at || null,
     disciplineSignerName: row.discipline_signer_name || "",
     disciplineSignatureData: row.discipline_signature_data_url || "",
+    workflowVersion: Number(row.workflow_version || 0),
     skipUpperLevel: row.skip_upper_level ?? false,
     skipUpperLevelBy: row.skip_upper_level_by || null,
     skipUpperLevelAt: row.skip_upper_level_at || null,
@@ -241,7 +242,7 @@ export async function assignNextRefillNumberInSupabase(encounterId, clinicDate) 
   return data;
 }
 
-export async function updateEncounterInSupabase(encounterId, updates) {
+export async function updateEncounterInSupabase(encounterId, updates, conditions = {}) {
   const payload = {};
 
   if (updates.patientId !== undefined) {
@@ -601,14 +602,37 @@ export async function updateEncounterInSupabase(encounterId, updates) {
   if (Object.keys(payload).length === 0) {
     throw new Error("No encounter fields were provided for update.");
   }
-  const { data, error } = await supabase
+  let query = supabase
     .from("encounters")
     .update(payload)
-    .eq("id", encounterId)
-    .select()
-    .single();
+    .eq("id", encounterId);
+
+  if (conditions.expectedWorkflowVersion !== undefined) {
+    query = query.eq("workflow_version", conditions.expectedWorkflowVersion);
+  }
+
+  if (conditions.expectedSoapStatus !== undefined) {
+    query = query.eq("soap_status", conditions.expectedSoapStatus);
+  }
+
+  const { data, error } = await query.select().maybeSingle();
 
   if (error) throw error;
+
+  if (!data) {
+    if (
+      conditions.expectedWorkflowVersion !== undefined ||
+      conditions.expectedSoapStatus !== undefined
+    ) {
+      const conflict = new Error(
+        "This chart changed on another device. It has been refreshed; review the current status before trying again."
+      );
+      conflict.code = "WORKFLOW_CONFLICT";
+      throw conflict;
+    }
+
+    throw new Error("The encounter could not be updated. Refresh the chart and try again.");
+  }
 
   return data;
 }
