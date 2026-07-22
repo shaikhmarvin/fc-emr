@@ -11395,6 +11395,8 @@ async function markSeenBySocialWork(encounterId) {
         patients={patients}
         initialPatientId={stickyNotesInitialPatientId}
         onOpenPatientChart={openPatientChart}
+        profileNameMap={profileNameMap}
+        userProfiles={profiles}
       />
 
       <IntakeModal

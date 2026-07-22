@@ -3,6 +3,7 @@ import {
   createStickyNoteInSupabase,
   deleteStickyNoteInSupabase,
   fetchStickyNotes,
+  shareStickyNoteCopies,
   updateStickyNoteInSupabase,
 } from "../api/stickyNotes";
 import { formatDate, getFullPatientName } from "../utils";
@@ -53,6 +54,8 @@ export default function StickyNotesModal({
   patients,
   initialPatientId,
   onOpenPatientChart,
+  profileNameMap,
+  userProfiles,
 }) {
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -63,6 +66,10 @@ export default function StickyNotesModal({
   const [showPatientOptions, setShowPatientOptions] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState(null);
   const [form, setForm] = useState(EMPTY_NOTE_FORM);
+  const [sharingNote, setSharingNote] = useState(null);
+  const [shareRecipientIds, setShareRecipientIds] = useState([]);
+  const [shareUserSearch, setShareUserSearch] = useState("");
+  const [sharing, setSharing] = useState(false);
   const initializedOpenKeyRef = useRef("");
 
   const patientById = useMemo(() => {
@@ -250,6 +257,72 @@ export default function StickyNotesModal({
     setShowPatientOptions(false);
   }
 
+  const shareableUsers = useMemo(
+    () =>
+      (userProfiles || [])
+        .filter((profile) => {
+          const id = profile?.id || profile?.user_id;
+          return id && String(id) !== String(currentUserId);
+        })
+        .map((profile) => {
+          const id = profile.id || profile.user_id;
+          return {
+            id,
+            name:
+              profileNameMap?.[id] ||
+              profile.fullName ||
+              profile.full_name ||
+              profile.displayName ||
+              profile.display_name ||
+              profile.email ||
+              "Clinic user",
+          };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [currentUserId, profileNameMap, userProfiles]
+  );
+
+  const filteredShareableUsers = useMemo(() => {
+    const query = normalize(shareUserSearch);
+    if (!query) return shareableUsers;
+
+    return shareableUsers.filter((user) => normalize(user.name).includes(query));
+  }, [shareUserSearch, shareableUsers]);
+
+  function openShareCopies(note) {
+    setSharingNote(note);
+    setShareRecipientIds([]);
+    setShareUserSearch("");
+    setMessage("");
+  }
+
+  function toggleShareRecipient(userId) {
+    setShareRecipientIds((prev) =>
+      prev.includes(userId)
+        ? prev.filter((id) => id !== userId)
+        : [...prev, userId]
+    );
+  }
+
+  async function shareCopies() {
+    if (!sharingNote || shareRecipientIds.length === 0) return;
+    try {
+      setSharing(true);
+      await shareStickyNoteCopies(sharingNote.id, shareRecipientIds);
+      setSharingNote(null);
+      setShareRecipientIds([]);
+      setShareUserSearch("");
+      setMessage(
+        `Independent ${shareRecipientIds.length === 1 ? "copy was" : "copies were"} shared successfully.`
+      );
+    } catch (error) {
+      console.error("Failed to share sticky-note copies:", error);
+      setMessage(`Failed to share note: ${error.message}`);
+    } finally {
+      setSharing(false);
+    }
+  }
+
   if (!show) return null;
 
   return (
@@ -259,7 +332,7 @@ export default function StickyNotesModal({
           <div>
             <h2 className="text-xl font-semibold text-slate-900">Sticky Notes</h2>
             <p className="text-sm text-slate-500">
-              Private to your account. Attach notes to a patient when useful.
+              Private notes that can be copied to specific clinic users.
             </p>
           </div>
 
@@ -444,6 +517,8 @@ export default function StickyNotesModal({
                 <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
                   {filteredNotes.map((note) => {
                     const patient = note.patientId ? patientById.get(String(note.patientId)) : null;
+                    const isOwner = String(note.userId) === String(currentUserId);
+                    const authorName = profileNameMap?.[note.userId] || "Another clinic user";
 
                     return (
                       <div
@@ -465,6 +540,13 @@ export default function StickyNotesModal({
                         </div>
 
                         <div className="mt-4 space-y-1 text-xs text-slate-600">
+                          <p className="font-medium">
+                            {note.sharedFromUserId
+                              ? `Independent copy from ${profileNameMap?.[note.sharedFromUserId] || "another clinic user"}`
+                              : isOwner
+                                ? "Your original note"
+                                : `By ${authorName}`}
+                          </p>
                           {patient ? (
                             <button
                               type="button"
@@ -482,7 +564,8 @@ export default function StickyNotesModal({
                           </p>
                         </div>
 
-                        <div className="mt-4 flex gap-2">
+                        {isOwner ? (
+                          <div className="mt-4 flex flex-wrap gap-2">
                           <button
                             type="button"
                             onClick={() => startEdit(note)}
@@ -497,7 +580,15 @@ export default function StickyNotesModal({
                           >
                             Delete
                           </button>
-                        </div>
+                          <button
+                            type="button"
+                            onClick={() => openShareCopies(note)}
+                            className="rounded-lg border border-blue-200 bg-white/70 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-white"
+                          >
+                            Share Copy
+                          </button>
+                          </div>
+                        ) : null}
                       </div>
                     );
                   })}
@@ -507,6 +598,65 @@ export default function StickyNotesModal({
           </div>
         </div>
       </div>
+
+      {sharingNote ? (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/50 px-4 py-6">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+            <h3 className="text-lg font-semibold text-slate-950">Share Independent Copies</h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Each selected user receives their own editable copy. Their changes will not affect your note or anyone else’s copy.
+            </p>
+
+            <input
+              type="search"
+              value={shareUserSearch}
+              onChange={(event) => setShareUserSearch(event.target.value)}
+              placeholder="Search users by name"
+              autoFocus
+              className="mt-4 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+            />
+
+            <div className="mt-3 max-h-72 space-y-2 overflow-y-auto rounded-xl border border-slate-200 p-2">
+              {shareableUsers.length === 0 ? (
+                <p className="px-2 py-4 text-center text-sm text-slate-500">No other clinic users are available.</p>
+              ) : filteredShareableUsers.length === 0 ? (
+                <p className="px-2 py-4 text-center text-sm text-slate-500">No users match that search.</p>
+              ) : (
+                filteredShareableUsers.map((user) => (
+                  <label key={user.id} className="flex items-center gap-3 rounded-lg px-2 py-2 text-sm hover:bg-slate-50">
+                    <input
+                      type="checkbox"
+                      checked={shareRecipientIds.includes(user.id)}
+                      onChange={() => toggleShareRecipient(user.id)}
+                      className="h-4 w-4 rounded border-slate-300"
+                    />
+                    <span className="font-medium text-slate-800">{user.name}</span>
+                  </label>
+                ))
+              )}
+            </div>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setSharingNote(null)}
+                disabled={sharing}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={shareCopies}
+                disabled={sharing || shareRecipientIds.length === 0}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {sharing ? "Sharing..." : `Share ${shareRecipientIds.length || ""} ${shareRecipientIds.length === 1 ? "Copy" : "Copies"}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

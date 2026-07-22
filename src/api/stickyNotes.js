@@ -8,6 +8,8 @@ function mapStickyNote(row) {
     title: row.title || "",
     body: row.body || "",
     color: row.color || "yellow",
+    sharedFromUserId: row.shared_from_user_id || null,
+    sharedFromNoteId: row.shared_from_note_id || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -78,6 +80,17 @@ export async function updateStickyNoteInSupabase(noteId, updates) {
 
   if (error) throw error;
   return mapStickyNote(data);
+}
+
+export async function shareStickyNoteCopies(noteId, recipientUserIds) {
+  const recipients = [...new Set((recipientUserIds || []).filter(Boolean))];
+  const { data, error } = await supabase.rpc("share_sticky_note_copies", {
+    source_note_id: noteId,
+    recipient_user_ids: recipients,
+  });
+
+  if (error) throw error;
+  return (data || []).map(mapStickyNote);
 }
 
 export async function deleteStickyNoteInSupabase(noteId) {
