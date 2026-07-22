@@ -963,7 +963,7 @@ function pharmacyStatusBadge(encounter) {
   if (encounter?.pharmacyStatus === "no_meds_needed") {
     return (
       <span className="rounded-full bg-zinc-100 px-2 py-1 text-xs font-semibold text-zinc-700">
-        No Medications Needed
+        No Medications This Visit
       </span>
     );
   }
@@ -7780,6 +7780,18 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
     refreshClinicData?.();
   }
 
+  async function markNoMedicationsPrescribed(encounterId) {
+    if (userRole !== "leadership" || !session?.user?.id) return;
+
+    await applyEncounterTransition(encounterId, {
+      pharmacyStatus: "no_meds_needed",
+      pharmacyNotifiedAt: new Date().toISOString(),
+      pharmacyNotifiedBy: session.user.id,
+    });
+
+    refreshClinicData?.();
+  }
+
 async function markSeenBySocialWork(encounterId) {
   if (!session?.user?.id) {
     alert("Unable to mark seen: no signed-in user found.");
@@ -7865,12 +7877,8 @@ async function markSeenBySocialWork(encounterId) {
             finalizedAt,
         };
 
-        if (isRefillOnly(encounter)) {
-          if (pharmacyStatus === "meds_ready" || pharmacyStatus === "patient_sent") {
-            updates.pharmacyStatus = "meds_not_picked_up";
-          } else if (!pharmacyStatus || pharmacyStatus === "waiting") {
-            updates.pharmacyStatus = "no_meds_needed";
-          }
+        if (isRefillOnly(encounter) && pharmacyStatus !== "picked_up") {
+          updates.pharmacyStatus = "meds_not_picked_up";
         }
 
         return updateEncounterInSupabase(encounter.id, updates);
@@ -7890,13 +7898,8 @@ async function markSeenBySocialWork(encounterId) {
               doneAt: encounter.doneAt || finalizedAt,
               visitCompletedAt: encounter.visitCompletedAt || finalizedAt,
               ...(((encounter.visitType || encounter.visit_type) === "refill_only" &&
-                (encounter.pharmacyStatus === "meds_ready" ||
-                  encounter.pharmacyStatus === "patient_sent"))
+                (encounter.pharmacyStatus || encounter.pharmacy_status) !== "picked_up")
                 ? { pharmacyStatus: "meds_not_picked_up" }
-                : {}),
-              ...(((encounter.visitType || encounter.visit_type) === "refill_only" &&
-                (!encounter.pharmacyStatus || encounter.pharmacyStatus === "waiting"))
-                ? { pharmacyStatus: "no_meds_needed" }
                 : {}),
             }
             : encounter
@@ -11065,6 +11068,7 @@ async function markSeenBySocialWork(encounterId) {
               onMarkPatientSentToPharmacy={markPatientSentToPharmacy}
               onClearPharmacyStatus={clearPharmacyStatus}
               onMarkMedicationsPickedUp={markMedicationsPickedUp}
+              onMarkNoMedicationsPrescribed={markNoMedicationsPrescribed}
               onMarkSeenBySocialWork={markSeenBySocialWork}
               onCompleteSocialWorkNote={completePatientSocialWorkNote}
               refillRequests={refillRequests}

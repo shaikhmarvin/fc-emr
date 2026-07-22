@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { formatDate, getStatusClasses, getStatusLabel } from "../utils";
 import { VISIT_TYPE_BADGE_STYLES, getEncounterVisitTypeKey } from "../constants";
 export default function QueueView({
@@ -30,6 +30,7 @@ export default function QueueView({
   onMarkPatientSentToPharmacy,
   onClearPharmacyStatus,
   onMarkMedicationsPickedUp,
+  onMarkNoMedicationsPrescribed,
   onMarkSeenBySocialWork,
   onCompleteSocialWorkNote,
   refillRequests,
@@ -61,6 +62,22 @@ export default function QueueView({
   const [deleteRefillBusyId, setDeleteRefillBusyId] = useState(null);
   const [assignmentBusyId, setAssignmentBusyId] = useState(null);
   const [completingSocialWorkNoteId, setCompletingSocialWorkNoteId] = useState(null);
+  const refillPrintStorageKey = `pharmacy-refill-print:${selectedClinicDate || "undated"}`;
+  const [lastRefillPrintAt, setLastRefillPrintAt] = useState(() => {
+    try {
+      return window.localStorage.getItem(refillPrintStorageKey) || "";
+    } catch {
+      return "";
+    }
+  });
+
+  useEffect(() => {
+    try {
+      setLastRefillPrintAt(window.localStorage.getItem(refillPrintStorageKey) || "");
+    } catch {
+      setLastRefillPrintAt("");
+    }
+  }, [refillPrintStorageKey]);
 
   function getDraftSocialWorkNote(patient) {
     return (patient?.socialWorkNotes || []).find((note) => note.status === "draft") || null;
@@ -301,7 +318,7 @@ const canMarkSeenBySocialWork =
     if (status === "no_meds_needed") {
       return (
         <span className="rounded-full border border-slate-300 bg-slate-100 px-3 py-1 text-xs font-extrabold uppercase tracking-wide text-slate-700 shadow-sm">
-          NO MEDS NEEDED
+          NO MEDICATIONS THIS VISIT
         </span>
       );
     }
@@ -392,6 +409,145 @@ const canMarkSeenBySocialWork =
       intakeData?.refill_number ||
       ""
     );
+  }
+
+  function getEncounterCreatedAt(encounter) {
+    return encounter?.createdAt || encounter?.created_at || "";
+  }
+
+  function getPrintedPickupCheckbox(encounter) {
+    const status = encounter?.pharmacyStatus || encounter?.pharmacy_status || "";
+    return `<span class="paper-checkbox${status === "picked_up" ? " checked" : ""}"></span>`;
+  }
+
+  function getEmptyPrintedCheckbox() {
+    return '<span class="paper-checkbox"></span>';
+  }
+
+  function escapePrintHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function printPharmacyQueue({ newRefillsOnly = false } = {}) {
+    const allRows = (waitingEncounterRows || []).filter(({ encounter }) => {
+      const status = encounter?.pharmacyStatus || encounter?.pharmacy_status || "";
+      return status !== "no_meds_needed";
+    });
+    const refillRows = allRows.filter(({ encounter }) => isRefillOnlyEncounter(encounter));
+    const specialtyRows = allRows.filter(({ encounter }) => isSpecialtyOnlyEncounter(encounter));
+    const generalRows = allRows.filter(
+      ({ encounter }) =>
+        !isRefillOnlyEncounter(encounter) && !isSpecialtyOnlyEncounter(encounter)
+    );
+    const lastPrintedMs = lastRefillPrintAt ? new Date(lastRefillPrintAt).getTime() : 0;
+    const refillRowsToPrint = newRefillsOnly
+      ? refillRows.filter(({ encounter }) => {
+          const createdMs = new Date(getEncounterCreatedAt(encounter)).getTime();
+          return Number.isFinite(createdMs) && createdMs > lastPrintedMs;
+        })
+      : refillRows;
+
+    if (newRefillsOnly && refillRowsToPrint.length === 0) {
+      window.alert("There are no new refill patients since the last pharmacy print.");
+      return;
+    }
+
+    const sortByNumberThenName = (rows, numberGetter) =>
+      [...rows].sort((a, b) => {
+        const aNumber = Number(numberGetter(a.patient, a.encounter));
+        const bNumber = Number(numberGetter(b.patient, b.encounter));
+        if (Number.isFinite(aNumber) && Number.isFinite(bNumber) && aNumber !== bNumber) {
+          return aNumber - bNumber;
+        }
+        return getFullQueuePatientName(a.patient).localeCompare(
+          getFullQueuePatientName(b.patient)
+        );
+      });
+
+    const clinicTable = (title, rows) => `
+      <section>
+        <h2>${escapePrintHtml(title)} <span>(${rows.length})</span></h2>
+        <table>
+          <thead><tr><th class="number">Daily #</th><th>Patient Name</th><th>DOB</th><th class="age">Age</th><th class="check">Prescription Filled</th><th class="check">Medication Picked Up</th></tr></thead>
+          <tbody>${
+            rows.length
+              ? sortByNumberThenName(rows, getDailyCardNumber)
+                  .map(({ patient, encounter }) => `<tr><td class="number-cell">${escapePrintHtml(getDailyCardNumber(patient, encounter) || "—")}</td><td class="patient-cell">${escapePrintHtml(getFullQueuePatientName(patient))}</td><td>${escapePrintHtml(formatDate(patient.dob))}</td><td class="age-cell">${escapePrintHtml(patient.age || "—")}</td><td class="checkbox">${getEmptyPrintedCheckbox()}</td><td class="checkbox">${getPrintedPickupCheckbox(encounter)}</td></tr>`)
+                  .join("")
+              : '<tr><td colspan="6" class="empty">No patients</td></tr>'
+          }</tbody>
+        </table>
+      </section>`;
+
+    const refillTable = (rows) => `
+      <section>
+        <h2>${newRefillsOnly ? "New Refill Addendum" : "Refill Requests"} <span>(${rows.length})</span></h2>
+        <table>
+          <thead><tr><th class="number">Refill #</th><th>Patient Name</th><th>DOB</th><th class="age">Age</th><th class="medications">Medications Requested by Patient</th><th class="check">Prescription Filled</th><th class="check">Medication Picked Up</th></tr></thead>
+          <tbody>${
+            rows.length
+              ? sortByNumberThenName(rows, (_patient, encounter) => getRefillNumber(encounter))
+                  .map(({ patient, encounter }) => `<tr><td class="number-cell">${escapePrintHtml(getRefillNumber(encounter) || "—")}</td><td class="patient-cell">${escapePrintHtml(getFullQueuePatientName(patient))}</td><td>${escapePrintHtml(formatDate(patient.dob))}</td><td class="age-cell">${escapePrintHtml(patient.age || "—")}</td><td>${escapePrintHtml(getRefillMedicationRequest(encounter) || "—")}</td><td class="checkbox">${getEmptyPrintedCheckbox()}</td><td class="checkbox">${getPrintedPickupCheckbox(encounter)}</td></tr>`)
+                  .join("")
+              : '<tr><td colspan="7" class="empty">No refill patients</td></tr>'
+          }</tbody>
+        </table>
+      </section>`;
+
+    const printedAt = new Date();
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      window.alert("The print window was blocked. Allow pop-ups for this site and try again.");
+      return;
+    }
+    printWindow.opener = null;
+
+    printWindow.document.write(`<!doctype html><html><head><title>Pharmacy Queue</title><style>
+      @page { size: landscape; margin: 0.35in; }
+      * { box-sizing: border-box; }
+      body { margin: 0; color: #111827; font-family: Arial, sans-serif; font-size: 9.5pt; }
+      header { display: flex; justify-content: space-between; align-items: end; border-bottom: 2px solid #111827; padding-bottom: 8px; }
+      h1 { margin: 0; font-size: 20pt; }
+      h2 { margin: 16px 0 6px; font-size: 13pt; }
+      h2 span, .meta { color: #475569; font-weight: normal; }
+      section + section { break-before: page; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      thead { display: table-header-group; }
+      th, td { border: 1px solid #475569; padding: 7px 6px; text-align: left; vertical-align: middle; overflow-wrap: anywhere; }
+      th { background: #dbe4ee !important; font-size: 8pt; line-height: 1.2; text-transform: uppercase; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      tr { break-inside: avoid; }
+      tbody tr:nth-child(even) { background: #f8fafc; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .number { width: 7%; } .age { width: 5%; } .check { width: 12%; } .medications { width: 27%; }
+      .number-cell, .age-cell { text-align: center; font-weight: bold; }
+      .patient-cell { font-weight: bold; }
+      .checkbox { text-align: center; }
+      .paper-checkbox { position: relative; display: inline-block; width: 19px; height: 19px; border: 2px solid #111827; border-radius: 2px; }
+      .paper-checkbox.checked::after { content: ""; position: absolute; left: 5px; top: 1px; width: 5px; height: 11px; border: solid #111827; border-width: 0 3px 3px 0; transform: rotate(45deg); }
+      .empty { text-align: center; color: #64748b; padding: 14px; }
+      .notice { margin-top: 5px; font-size: 8.5pt; font-style: italic; }
+    </style></head><body>
+      <header><div><h1>${newRefillsOnly ? "Pharmacy Queue — Refill Addendum" : "Pharmacy Queue"}</h1><div class="meta">Clinic date: ${escapePrintHtml(formatDate(selectedClinicDate))}</div></div><div class="meta">Printed: ${escapePrintHtml(printedAt.toLocaleString())}</div></header>
+      ${newRefillsOnly ? "" : clinicTable("General Clinic", generalRows)}
+      ${newRefillsOnly ? "" : clinicTable("Specialty Clinic", specialtyRows)}
+      ${refillTable(refillRowsToPrint)}
+      <div class="notice">“Medications Requested by Patient” reflects the patient’s report and is not a verified prescription.</div>
+    </body></html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+
+    const timestamp = printedAt.toISOString();
+    try {
+      window.localStorage.setItem(refillPrintStorageKey, timestamp);
+    } catch {
+      // Printing still works if browser storage is unavailable.
+    }
+    setLastRefillPrintAt(timestamp);
   }
 
   function isSeenBySocialWork(encounter) {
@@ -837,6 +993,21 @@ const canMarkSeenBySocialWork =
     return true;
   }
 
+  async function confirmNoMedicationsPrescribed(encounter) {
+    if (!encounter?.id) return;
+    const confirmed = window.confirm(
+      "Confirm that no medications were prescribed during this visit? This patient will be cleared from the active pharmacy queue."
+    );
+    if (!confirmed) return;
+
+    try {
+      await onMarkNoMedicationsPrescribed?.(encounter.id);
+    } catch (error) {
+      console.error("Failed to clear pharmacy medications:", error);
+      window.alert(error?.message || "Unable to update the pharmacy status.");
+    }
+  }
+
   const pharmacyRows = (waitingEncounterRows || []).filter(
     ({ patient, encounter }) =>
       rowMatchesQueueSearch(patient, encounter) &&
@@ -966,8 +1137,34 @@ const canMarkSeenBySocialWork =
                 <option value="all">All medication statuses</option>
                 <option value="waiting">Waiting / Not Ready</option>
                 <option value="ready">Medications Ready</option>
-                <option value="picked_up">Medications Picked Up</option>
+                <option value="picked_up">Completed / Cleared</option>
               </select>
+
+              {["leadership", "undergraduate"].includes(userRole) && (
+                <>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() => printPharmacyQueue()}
+                      className="min-h-[44px] rounded-lg bg-slate-900 px-3 py-2 text-sm font-bold text-white hover:bg-slate-800"
+                    >
+                      Print Full Queue
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => printPharmacyQueue({ newRefillsOnly: true })}
+                      className="min-h-[44px] rounded-lg bg-purple-700 px-3 py-2 text-sm font-bold text-white hover:bg-purple-800"
+                    >
+                      Print New Refills
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-600">
+                    {lastRefillPrintAt
+                      ? `Refill cutoff: ${new Date(lastRefillPrintAt).toLocaleString()}`
+                      : "No refill list has been printed for this date yet."}
+                  </p>
+                </>
+              )}
             </div>
           </div>
 
@@ -1060,6 +1257,19 @@ const canMarkSeenBySocialWork =
                         Medications Picked Up
                       </button>
                     )}
+
+                    {userRole === "leadership" &&
+                      !["picked_up", "no_meds_needed"].includes(
+                        encounter?.pharmacyStatus || encounter?.pharmacy_status
+                      ) && (
+                        <button
+                          type="button"
+                          onClick={() => confirmNoMedicationsPrescribed(encounter)}
+                          className="mt-2 min-h-[44px] w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm font-bold text-slate-800 hover:bg-slate-200"
+                        >
+                          No Medications Prescribed This Visit
+                        </button>
+                      )}
 
                     {encounter?.pharmacyStatus === "picked_up" && (
                       <div className="mt-2 rounded-lg bg-slate-100 px-3 py-2 text-center text-sm font-bold text-slate-700">
