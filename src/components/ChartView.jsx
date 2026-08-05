@@ -388,6 +388,8 @@ export default function ChartView({
 
   function formatAuditAction(action) {
     switch (action) {
+      case "patient_checked_in":
+        return "Patient checked in";
       case "soap_saved":
         return "SOAP note saved";
       case "soap_submitted_upper":
@@ -1111,6 +1113,7 @@ function formatLabDateTime(value) {
   const [showSignModal, setShowSignModal] = useState(false);
   const [showAudit, setShowAudit] = useState(false);
   const [showSocialWorkNotes, setShowSocialWorkNotes] = useState(false);
+  const [showFiredStartWarning, setShowFiredStartWarning] = useState(false);
   const [selectedAttendingId, setSelectedAttendingId] = useState("");
   const [openAssignmentMenu, setOpenAssignmentMenu] = useState(null);
   const [attendingPin, setAttendingPin] = useState("");
@@ -1637,6 +1640,62 @@ function getSelectedRoomOptionClass() {
 
   return (
     <div className="space-y-4 p-3 sm:p-4 lg:space-y-6 lg:p-6">
+      {showFiredStartWarning && selectedPatient.fired ? (
+        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-red-950/85 px-4 py-6">
+          <div className="w-full max-w-2xl rounded-2xl border-4 border-red-600 bg-white shadow-2xl">
+            <div className="animate-pulse border-b-4 border-red-600 bg-red-100 px-6 py-5 text-red-950">
+              <p className="text-sm font-black uppercase tracking-widest text-red-800">
+                Fired patient — do not start routinely
+              </p>
+              <h2 className="mt-1 text-3xl font-black">
+                Confirm before starting this encounter
+              </h2>
+            </div>
+
+            <div className="space-y-4 px-6 py-5 text-red-950">
+              <p className="text-2xl font-black">{getFullPatientName(selectedPatient)}</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border-2 border-red-300 bg-red-50 px-4 py-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-red-700">Fired date</p>
+                  <p className="mt-1 text-lg font-extrabold">
+                    {selectedPatient.firedAt ? formatDate(selectedPatient.firedAt) : "Unknown"}
+                  </p>
+                </div>
+                <div className="rounded-xl border-2 border-red-300 bg-red-50 px-4 py-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-red-700">Reason</p>
+                  <p className="mt-1 text-lg font-extrabold">
+                    {selectedPatient.firedReason || "No reason entered."}
+                  </p>
+                </div>
+              </div>
+              <p className="animate-pulse rounded-xl border-2 border-red-600 bg-red-100 px-4 py-3 text-lg font-black">
+                Starting this encounter will return a fired patient to the active clinic workflow.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-3 border-t bg-slate-50 px-6 py-4 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setShowFiredStartWarning(false)}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800 hover:bg-slate-100"
+              >
+                Cancel — Do Not Start
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowFiredStartWarning(false);
+                  startNewEncounter();
+                }}
+                className="rounded-lg bg-red-700 px-4 py-2 text-sm font-black text-white hover:bg-red-800"
+              >
+                I Reviewed This — Start Encounter
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <button
         onClick={onBackToPatients}
         className="text-blue-600 hover:underline"
@@ -1750,10 +1809,20 @@ function getSelectedRoomOptionClass() {
 
         {canStartEncounter ? (
           <button
-            onClick={startNewEncounter}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+            onClick={() => {
+              if (selectedPatient.fired) {
+                setShowFiredStartWarning(true);
+                return;
+              }
+              startNewEncounter();
+            }}
+            className={`rounded-lg px-4 py-2 text-white ${
+              selectedPatient.fired
+                ? "animate-pulse bg-red-700 font-bold hover:bg-red-800"
+                : "bg-blue-600 hover:bg-blue-700"
+            }`}
           >
-            Start New Encounter
+            {selectedPatient.fired ? "Warning: Start Fired Patient Encounter" : "Start New Encounter"}
           </button>
         ) : null}
 
@@ -2631,6 +2700,7 @@ function getSelectedRoomOptionClass() {
             </div>
           </div>
 
+          {isLeadershipView ? (
           <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <h3 className="text-lg font-semibold">Vitals</h3>
@@ -2876,6 +2946,7 @@ function getSelectedRoomOptionClass() {
               )}
             </div>
           </div>
+          ) : null}
 
 
           <div className="rounded-2xl bg-white p-4 shadow sm:p-6">

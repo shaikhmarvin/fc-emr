@@ -211,6 +211,12 @@ const canMarkSeenBySocialWork =
     return value === true || value === "true" || value === "Yes";
   }
 
+  function hasBusPriority(encounter) {
+    const intakeData = encounter?.intakeData || encounter?.intake_data || {};
+    const transportation = encounter?.transportation ?? intakeData?.transportation;
+    return String(transportation || "").trim().toLowerCase() === "bus/public transport";
+  }
+
   function isPatientOnOphthoList(patient, encounter) {
     return (programEntries || []).some((entry) => {
       if (entry.programType !== "Ophthalmology") return false;
@@ -1064,6 +1070,14 @@ const canMarkSeenBySocialWork =
       }
     }
 
+    // Bus riders have a time-sensitive transportation constraint, so this must
+    // take precedence over assignment, visit-state, and specialty priorities.
+    if (!isPharmacyQueueMode) {
+      const aHasBusPriority = hasBusPriority(a.encounter);
+      const bHasBusPriority = hasBusPriority(b.encounter);
+      if (aHasBusPriority !== bHasBusPriority) return aHasBusPriority ? -1 : 1;
+    }
+
     if (canUseOphthoQueueTools && ophthoPriorityView) {
       const scoreDiff = getOphthoPriorityScore(b) - getOphthoPriorityScore(a);
       if (scoreDiff !== 0) return scoreDiff;
@@ -1259,6 +1273,7 @@ const canMarkSeenBySocialWork =
                     )}
 
                     {userRole === "leadership" &&
+                      !isRefillOnlyEncounter(encounter) &&
                       !["picked_up", "no_meds_needed"].includes(
                         encounter?.pharmacyStatus || encounter?.pharmacy_status
                       ) && (

@@ -70,7 +70,7 @@ function FiredPatientStartModal({
 
   return (
     <div className="fixed inset-0 z-[140] flex items-center justify-center bg-red-950/80 px-4 py-6">
-      <div className="w-full max-w-2xl rounded-2xl border-4 border-red-600 bg-white shadow-2xl">
+      <div className="w-full max-w-2xl animate-pulse rounded-2xl border-4 border-red-600 bg-white shadow-2xl">
         <div className="border-b-4 border-red-600 bg-red-100 px-6 py-5">
           <p className="text-sm font-black uppercase tracking-wide text-red-800">
             Fired patient alert

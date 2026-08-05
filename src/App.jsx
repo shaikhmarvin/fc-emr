@@ -1429,6 +1429,11 @@ export default function App() {
   }
 
   async function loadAuditLog() {
+    if (!isLeadershipView) {
+      setAuditEntries([]);
+      return;
+    }
+
     if (!selectedEncounter?.id) {
       setAuditEntries([]);
       return;
@@ -4547,12 +4552,12 @@ export default function App() {
   }, [selectedEncounter?.id]);
 
   useEffect(() => {
-    if (selectedEncounter?.id) {
+    if (isLeadershipView && selectedEncounter?.id) {
       loadAuditLog();
     } else {
       setAuditEntries([]);
     }
-  }, [selectedEncounter?.id]);
+  }, [selectedEncounter?.id, isLeadershipView]);
 
   const canSignAsUpperLevel = canUpperLevelSignSoap(userRole, selectedEncounter);
   const canSignAsAttending = canAttendingSignSoap(userRole, selectedEncounter);
@@ -5301,6 +5306,7 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
   async function handleUndergradStartEncounter(data) {
     try {
       let targetPatient = null;
+      const createdEncounters = [];
 
       if (data.matchedPatientId) {
         const existingPatient = patients.find((p) => p.id === data.matchedPatientId);
@@ -5402,7 +5408,14 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
         };
 
         savedEncounter = await createEncounterInSupabase(targetPatient.id, generalEncounter);
-        await createEncounterInSupabase(targetPatient.id, specialtyEncounter);
+        const savedSpecialtyEncounter = await createEncounterInSupabase(
+          targetPatient.id,
+          specialtyEncounter
+        );
+        createdEncounters.push(
+          { encounter: savedEncounter, visitType: "general" },
+          { encounter: savedSpecialtyEncounter, visitType: "specialty_only" }
+        );
       } else {
         const isRefillOnly = data.visitType === "refill_only";
         const isSpecialtyOnly = data.visitType === "specialty_only";
@@ -5424,6 +5437,10 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
         };
 
         savedEncounter = await createEncounterInSupabase(targetPatient.id, singleEncounter);
+        createdEncounters.push({
+          encounter: savedEncounter,
+          visitType: singleEncounter.visitType,
+        });
 
         if (isRefillOnly && savedEncounter?.id) {
           await assignNextRefillNumberInSupabase(
@@ -5431,6 +5448,30 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
             savedEncounter.clinic_date || singleEncounter.clinicDate
           );
         }
+      }
+
+      if (userRole === "undergraduate") {
+        await Promise.all(
+          createdEncounters.map(async ({ encounter: createdEncounter, visitType }) => {
+            if (!createdEncounter?.id) return;
+
+            try {
+              await createAuditLog({
+                encounterId: createdEncounter.id,
+                patientId: targetPatient.id,
+                actorUserId: session?.user?.id || null,
+                actorName:
+                  profileNameMap[session?.user?.id] || authFullName || "Unknown Undergraduate",
+                actorRole: userRole,
+                action: "patient_checked_in",
+                details: { visitType },
+              });
+            } catch (auditError) {
+              // Check-in should still succeed if audit logging is temporarily unavailable.
+              console.error("Failed to record undergraduate check-in audit:", auditError);
+            }
+          })
+        );
       }
 
       await refreshClinicData();
@@ -7858,35 +7899,14 @@ async function markSeenBySocialWork(encounterId) {
     if (rows.length === 0) return;
 
     const finalizedAt = new Date().toISOString();
+    const finalizedIds = new Set(rows.map(({ encounter }) => String(encounter.id)));
 
     function isRefillOnly(encounter) {
       return (encounter?.visitType || encounter?.visit_type) === "refill_only";
     }
 
-    await Promise.all(
-      rows.map(({ encounter }) => {
-        const pharmacyStatus =
-          encounter.pharmacyStatus || encounter.pharmacy_status || "";
-
-        const updates = {
-          status: "done",
-          doneAt: encounter.doneAt || encounter.done_at || finalizedAt,
-          visitCompletedAt:
-            encounter.visitCompletedAt ||
-            encounter.visit_completed_at ||
-            finalizedAt,
-        };
-
-        if (isRefillOnly(encounter) && pharmacyStatus !== "picked_up") {
-          updates.pharmacyStatus = "meds_not_picked_up";
-        }
-
-        return updateEncounterInSupabase(encounter.id, updates);
-      })
-    );
-
-    const finalizedIds = new Set(rows.map(({ encounter }) => String(encounter.id)));
-
+    // Push the final status into the UI immediately. The database writes below
+    // then persist the same values and realtime keeps other open devices synced.
     setPatients((prev) =>
       prev.map((patient) => ({
         ...patient,
@@ -7907,7 +7927,34 @@ async function markSeenBySocialWork(encounterId) {
       }))
     );
 
-    refreshClinicData?.();
+    try {
+      await Promise.all(
+        rows.map(({ encounter }) => {
+          const pharmacyStatus =
+            encounter.pharmacyStatus || encounter.pharmacy_status || "";
+
+          const updates = {
+            status: "done",
+            doneAt: encounter.doneAt || encounter.done_at || finalizedAt,
+            visitCompletedAt:
+              encounter.visitCompletedAt ||
+              encounter.visit_completed_at ||
+              finalizedAt,
+          };
+
+          if (isRefillOnly(encounter) && pharmacyStatus !== "picked_up") {
+            updates.pharmacyStatus = "meds_not_picked_up";
+          }
+
+          return updateEncounterInSupabase(encounter.id, updates);
+        })
+      );
+
+      await refreshClinicData?.();
+    } catch (error) {
+      await refreshClinicData?.();
+      throw error;
+    }
   }
 
   async function clearPharmacyStatus(encounterId) {
@@ -11317,24 +11364,26 @@ async function markSeenBySocialWork(encounterId) {
             />
           )}
 
-          {activeView === "programs" && canAccessPrograms && (
-            <ProgramsView
-              programEntries={programEntries}
-              addProgramEntry={addProgramEntry}
-              updateProgramEntry={updateProgramEntry}
-              updateProgramEntryFields={updateProgramEntryFields}
-              removeProgramEntry={removeProgramEntry}
-              patients={patients}
-              selectedClinicDate={selectedClinicDate}
-              isLeadershipView={isLeadershipView}
-              specialtyAccess={currentSpecialtyAccess}
-              onProgramSettingsChange={setProgramSettings}
-              leadershipOptions={profiles
-                .filter((profile) => profile.role === "leadership")
-                .map((profile) => (profile.full_name || "").trim())
-                .filter(Boolean)
-                .sort((a, b) => a.localeCompare(b))}
-            />
+          {canAccessPrograms && (
+            <div className={activeView === "programs" ? "" : "hidden"}>
+              <ProgramsView
+                programEntries={programEntries}
+                addProgramEntry={addProgramEntry}
+                updateProgramEntry={updateProgramEntry}
+                updateProgramEntryFields={updateProgramEntryFields}
+                removeProgramEntry={removeProgramEntry}
+                patients={patients}
+                selectedClinicDate={selectedClinicDate}
+                isLeadershipView={isLeadershipView}
+                specialtyAccess={currentSpecialtyAccess}
+                onProgramSettingsChange={setProgramSettings}
+                leadershipOptions={profiles
+                  .filter((profile) => profile.role === "leadership")
+                  .map((profile) => (profile.full_name || "").trim())
+                  .filter(Boolean)
+                  .sort((a, b) => a.localeCompare(b))}
+              />
+            </div>
           )}
 
           {activeView === "pap" && isLeadershipView && (
