@@ -1,5 +1,5 @@
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const ETHNICITY_OPTIONS = [
   "Hispanic or Latino",
@@ -509,6 +509,19 @@ export default function UndergradIntakeView({
     if (matchPatientId) return [];
     return buildPatientMatchCandidates(patients || [], form);
   }, [patients, form, matchPatientId]);
+
+  useEffect(() => {
+    if (matchPatientId || matchCandidates.length === 0) return;
+
+    const [bestMatch, secondMatch] = matchCandidates;
+    const isUnambiguousHighMatch =
+      bestMatch.score >= 14 &&
+      (!secondMatch || bestMatch.score - secondMatch.score >= 3);
+
+    if (isUnambiguousHighMatch) {
+      handleSelectMatch(bestMatch.patient);
+    }
+  }, [matchCandidates, matchPatientId]);
 
   function handleSelectMatch(patient) {
     if (!patient) return;

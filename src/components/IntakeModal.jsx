@@ -212,8 +212,8 @@ function renderExistingProgramWarning(programType) {
               </p>
 
               <p className="mt-1 text-sm text-amber-800">
-                Review the possible match below. Stable patient information will only be
-                filled in after you click the button.
+                A high-confidence match was found. Stable patient information was filled
+                automatically; verify it before continuing.
               </p>
 
               <div className="mt-3 rounded-lg border border-amber-300 bg-amber-100 px-3 py-2">

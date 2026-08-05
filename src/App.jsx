@@ -1668,6 +1668,7 @@ export default function App() {
     ms34Names: "",
     ms12Names: "",
   });
+  const [summaryClinicDate, setSummaryClinicDate] = useState(formatClinicDate());
 
   const [summaryRefreshStatus, setSummaryRefreshStatus] = useState("");
   const [programEntries, setProgramEntries] = useState([]);
@@ -2029,7 +2030,7 @@ export default function App() {
     loadRefillRequests();
   }, [session]);
 
-  async function syncClinicSummaryStaffRoster(clinicDate = selectedClinicDate) {
+  async function syncClinicSummaryStaffRoster(clinicDate = summaryClinicDate) {
     if (!clinicDate) return;
 
     const roster = await fetchStaffRoster(clinicDate);
@@ -4548,19 +4549,26 @@ export default function App() {
       return;
     }
 
-    const possibleMatch = findPotentialDuplicatePatient(
-      patients,
-      intakeForm.firstName,
-      intakeForm.lastName,
-      intakeForm.dob,
-      intakeForm.last4ssn,
-      editingPatientId
+    const strongMatches = patients.filter((patient) =>
+      findPotentialDuplicatePatient(
+        [patient],
+        intakeForm.firstName,
+        intakeForm.lastName,
+        intakeForm.dob,
+        intakeForm.last4ssn,
+        editingPatientId
+      )
     );
+    const possibleMatch = strongMatches.length === 1 ? strongMatches[0] : null;
 
     const nextMatchId = possibleMatch ? possibleMatch.id : null;
 
     if (nextMatchId !== intakeMatchPatientId) {
       setIntakeMatchPatientId(nextMatchId);
+    }
+
+    if (possibleMatch && autoFilledMatchPatientId !== possibleMatch.id) {
+      applyPatientToIntake(possibleMatch);
     }
 
     if (
@@ -4912,9 +4920,18 @@ export default function App() {
     );
   }, [allEncounterRows, selectedClinicDate]);
 
+  const summaryEncounterRows = useMemo(() => {
+    if (!summaryClinicDate) return allEncounterRows;
+
+    return allEncounterRows.filter(
+      ({ encounter }) =>
+        normalizeClinicDate(encounter.clinicDate) === summaryClinicDate
+    );
+  }, [allEncounterRows, summaryClinicDate]);
+
   const autoMs12Names = useMemo(
-    () => buildAssignedStudentSummary(visibleEncounterRows),
-    [visibleEncounterRows]
+    () => buildAssignedStudentSummary(summaryEncounterRows),
+    [summaryEncounterRows]
   );
 
   const boardEncounterRows = useMemo(() => {
@@ -5052,7 +5069,7 @@ export default function App() {
 
     const rowMap = new Map();
 
-    visibleEncounterRows.forEach((row) => {
+    summaryEncounterRows.forEach((row) => {
       const encounter = row.encounter || {};
       const visitType = encounter.visitType;
       const leadershipCompleted =
@@ -5097,7 +5114,7 @@ export default function App() {
     });
 
     return Array.from(rowMap.values());
-  }, [visibleEncounterRows]);
+  }, [summaryEncounterRows]);
 
   const newPatientCount = summaryPatientRows.filter(
     ({ encounter }) => encounter.newReturning === "New"
@@ -5109,11 +5126,11 @@ export default function App() {
 
   const totalPatientCount = summaryPatientRows.length;
 
-  const autoLwobsCount = visibleEncounterRows.filter(
+  const autoLwobsCount = summaryEncounterRows.filter(
     ({ encounter }) => String(encounter.status || "").toLowerCase() === "cancelled"
   ).length;
 
-  const autoSocialWorkSeenCount = visibleEncounterRows.filter(({ encounter }) => {
+  const autoSocialWorkSeenCount = summaryEncounterRows.filter(({ encounter }) => {
     const intakeData = encounter?.intakeData || encounter?.intake_data || {};
     return (
       encounter?.socialWorkSeen === true ||
@@ -5139,11 +5156,11 @@ export default function App() {
 
   const autoLabsCount = useMemo(() => {
     const patientIds = new Set();
-    visibleEncounterRows.forEach(({ patient, encounter }) => {
+    summaryEncounterRows.forEach(({ patient, encounter }) => {
       if (encounterHasRecordedLabs(encounter)) patientIds.add(String(patient.id));
     });
     return patientIds.size;
-  }, [visibleEncounterRows]);
+  }, [summaryEncounterRows]);
 
   const autoZoomCount = summaryPatientRows.filter(({ encounter }) =>
     String(encounter.visitLocation || encounter.visit_location || "")
@@ -5159,8 +5176,8 @@ export default function App() {
       .includes("phone")
   ).length;
 
-  const clinicSummaryStorageKey = selectedClinicDate
-    ? `clinic-summary-${selectedClinicDate}`
+  const clinicSummaryStorageKey = summaryClinicDate
+    ? `clinic-summary-${summaryClinicDate}`
     : "";
 
   useEffect(() => {
@@ -5181,12 +5198,12 @@ export default function App() {
   }, [clinicSummaryStorageKey]);
 
   useEffect(() => {
-    if (!session || !selectedClinicDate) return;
+    if (!session || !summaryClinicDate) return;
 
     let cancelled = false;
 
     async function loadSummaryRoster() {
-      const roster = await fetchStaffRoster(selectedClinicDate);
+      const roster = await fetchStaffRoster(summaryClinicDate);
       if (cancelled) return;
 
       setClinicSummary((prev) => ({
@@ -5200,14 +5217,14 @@ export default function App() {
     loadSummaryRoster();
 
     const channel = supabase
-      .channel(`clinic-summary-staff-roster-${selectedClinicDate}`)
+      .channel(`clinic-summary-staff-roster-${summaryClinicDate}`)
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "clinic_staff_roster",
-          filter: `clinic_date=eq.${selectedClinicDate}`,
+          filter: `clinic_date=eq.${summaryClinicDate}`,
         },
         loadSummaryRoster
       )
@@ -5217,7 +5234,7 @@ export default function App() {
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [session, selectedClinicDate]);
+  }, [session, summaryClinicDate]);
 
   useEffect(() => {
     if (!clinicSummaryStorageKey) return;
@@ -5326,7 +5343,7 @@ export default function App() {
     const patientIds = new Set();
     patients.forEach((patient) => {
       patient.encounters.forEach((encounter) => {
-        if (encounter.clinicDate !== selectedClinicDate) return;
+        if (normalizeClinicDate(encounter.clinicDate) !== summaryClinicDate) return;
         if (encounter.visitType !== "refill_only") return;
 
         patientIds.add(String(patient.id));
@@ -5338,7 +5355,7 @@ export default function App() {
       if (status !== "approved") return;
       if (!request.patient_id) return;
       if (!request.approved_by || !request.approved_at) return;
-      if (dateKeyFromTimestamp(request.approved_at) !== selectedClinicDate) return;
+      if (dateKeyFromTimestamp(request.approved_at) !== summaryClinicDate) return;
 
       const requester = profileById.get(String(request.requested_by));
       const approver = profileById.get(String(request.approved_by));
@@ -5354,7 +5371,7 @@ export default function App() {
     });
 
     return patientIds.size;
-  }, [patients, refillRequests, profileById, selectedClinicDate]);
+  }, [patients, refillRequests, profileById, summaryClinicDate]);
 
   const specialtyCounts = useMemo(() => {
     const counts = {
@@ -5368,7 +5385,7 @@ export default function App() {
 
     patients.forEach((patient) => {
       const encountersForDate = (patient.encounters || []).filter(
-        (encounter) => normalizeClinicDate(encounter.clinicDate) === selectedClinicDate
+        (encounter) => normalizeClinicDate(encounter.clinicDate) === summaryClinicDate
       );
 
       encountersForDate.forEach((encounter) => {
@@ -5416,7 +5433,7 @@ export default function App() {
       addiction: formatSpecialtyCount(counts.addiction),
       social_work: formatSpecialtyCount(counts.social_work),
     };
-  }, [patients, selectedClinicDate]);
+  }, [patients, summaryClinicDate]);
 
   function applyAutoClinicNumbers() {
     setClinicSummary((prev) => ({
@@ -6444,13 +6461,10 @@ export default function App() {
     });
   }
 
-  function applyMatchedPatientToIntake() {
-    if (!intakeMatchPatientId) return;
-
-    const matchedPatient = patients.find((p) => p.id === intakeMatchPatientId);
+  function applyPatientToIntake(matchedPatient) {
     if (!matchedPatient) return;
 
-    setAutoFilledMatchPatientId(intakeMatchPatientId);
+    setAutoFilledMatchPatientId(matchedPatient.id);
 
     setIntakeForm((prev) => ({
       ...prev,
@@ -6464,10 +6478,17 @@ export default function App() {
       pronouns: prev.pronouns || matchedPatient.pronouns || "",
       ethnicity: prev.ethnicity || matchedPatient.ethnicity || "",
       sex: prev.sex || matchedPatient.sex || "",
+      newReturning: "Returning",
+      ttuStudent: prev.ttuStudent || matchedPatient.ttuStudent || false,
       over65:
         prev.over65 ||
         (matchedPatient.age ? Number(matchedPatient.age) > 65 : false),
     }));
+  }
+
+  function applyMatchedPatientToIntake() {
+    if (!intakeMatchPatientId) return;
+    applyPatientToIntake(patients.find((p) => p.id === intakeMatchPatientId));
   }
 
   function isToday(dateString) {
@@ -10350,12 +10371,12 @@ async function markSeenBySocialWork(encounterId) {
       AlignmentType,
     } = docxModule;
     const { saveAs } = fileSaverModule;
-    const clinicDateLabel = selectedClinicDate || formatClinicDate();
+    const clinicDateLabel = summaryClinicDate || formatClinicDate();
 
     const rowsForDate = summaryPatientRows.filter(
       ({ encounter }) =>
-        !selectedClinicDate ||
-        normalizeClinicDate(encounter.clinicDate) === selectedClinicDate
+        !summaryClinicDate ||
+        normalizeClinicDate(encounter.clinicDate) === summaryClinicDate
     );
 
     const returningRows = rowsForDate.filter(
@@ -11529,8 +11550,8 @@ async function markSeenBySocialWork(encounterId) {
 
           {activeView === "summary" && isLeadershipView && (
             <ClinicSummaryView
-              selectedClinicDate={selectedClinicDate}
-              setSelectedClinicDate={setSelectedClinicDate}
+              selectedClinicDate={summaryClinicDate}
+              setSelectedClinicDate={setSummaryClinicDate}
               clinicSummary={clinicSummary}
               setClinicSummary={setClinicSummary}
               newPatientCount={newPatientCount}
