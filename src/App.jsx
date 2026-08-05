@@ -770,6 +770,109 @@ function sortRowsByDailyNumberThenTime(a, b) {
   return aTime - bTime;
 }
 
+function normalizeStudentNameForMatch(value = "") {
+  return String(value)
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s'-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getNameEditDistance(left = "", right = "") {
+  const a = String(left);
+  const b = String(right);
+  const row = Array.from({ length: b.length + 1 }, (_, index) => index);
+
+  for (let i = 1; i <= a.length; i += 1) {
+    let previousDiagonal = row[0];
+    row[0] = i;
+
+    for (let j = 1; j <= b.length; j += 1) {
+      const previousRowValue = row[j];
+      row[j] = Math.min(
+        row[j] + 1,
+        row[j - 1] + 1,
+        previousDiagonal + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+      previousDiagonal = previousRowValue;
+    }
+  }
+
+  return row[b.length];
+}
+
+function areLikelySameStudentName(left, right) {
+  const a = normalizeStudentNameForMatch(left);
+  const b = normalizeStudentNameForMatch(right);
+  if (!a || !b) return false;
+  if (a === b) return true;
+
+  const aParts = a.split(" ");
+  const bParts = b.split(" ");
+  if (aParts.length < 2 || aParts.length !== bParts.length) return false;
+
+  const aFirst = aParts[0];
+  const bFirst = bParts[0];
+  const aLast = aParts[aParts.length - 1];
+  const bLast = bParts[bParts.length - 1];
+  const firstExact = aFirst === bFirst;
+  const lastExact = aLast === bLast;
+  const firstClose =
+    Math.min(aFirst.length, bFirst.length) >= 4 && getNameEditDistance(aFirst, bFirst) <= 1;
+  const lastClose =
+    Math.min(aLast.length, bLast.length) >= 4 && getNameEditDistance(aLast, bLast) <= 1;
+
+  // Require either the first or last name to match exactly. This corrects a
+  // small typo without accidentally merging two different students.
+  return (firstExact && lastClose) || (lastExact && firstClose);
+}
+
+function buildAssignedStudentSummary(rows = []) {
+  const ignoredNames = new Set(["unassigned", "none", "n/a", "na", "-"]);
+  const groups = [];
+
+  rows.forEach(({ encounter }) => {
+    const assignment = encounter?.assignedStudent || encounter?.assigned_student || "";
+
+    String(assignment)
+      .split("/")
+      .map((name) => name.replace(/\s+/g, " ").trim())
+      .filter(Boolean)
+      .forEach((name) => {
+        if (ignoredNames.has(normalizeStudentNameForMatch(name))) return;
+
+        let group = groups.find((candidate) =>
+          candidate.variants.some((variant) => areLikelySameStudentName(variant.name, name))
+        );
+
+        if (!group) {
+          group = { variants: [] };
+          groups.push(group);
+        }
+
+        const normalized = normalizeStudentNameForMatch(name);
+        const existingVariant = group.variants.find(
+          (variant) => normalizeStudentNameForMatch(variant.name) === normalized
+        );
+
+        if (existingVariant) existingVariant.count += 1;
+        else group.variants.push({ name, count: 1 });
+      });
+  });
+
+  return groups
+    .map((group) =>
+      [...group.variants].sort(
+        (a, b) => b.count - a.count || b.name.length - a.name.length
+      )[0]?.name
+    )
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b))
+    .join(", ");
+}
+
 function getEncounterIntakeValue(encounter, ...keys) {
   const intakeData = encounter?.intakeData || encounter?.intake_data || {};
 
@@ -1926,6 +2029,18 @@ export default function App() {
     loadRefillRequests();
   }, [session]);
 
+  async function syncClinicSummaryStaffRoster(clinicDate = selectedClinicDate) {
+    if (!clinicDate) return;
+
+    const roster = await fetchStaffRoster(clinicDate);
+    setClinicSummary((prev) => ({
+      ...prev,
+      attendingNames: roster.attendings || "",
+      residentNames: roster.residents || "",
+      ms34Names: roster.upperLevels || "",
+    }));
+  }
+
   async function refreshClinicSummaryData() {
     try {
       setSummaryRefreshStatus("Refreshing...");
@@ -1934,7 +2049,10 @@ export default function App() {
         refreshClinicData(),
         loadRefillRequests(),
         loadProfiles(),
+        syncClinicSummaryStaffRoster(),
       ]);
+
+      applyAutoClinicNumbers();
 
       setSummaryRefreshStatus("Refreshed");
 
@@ -4794,6 +4912,11 @@ export default function App() {
     );
   }, [allEncounterRows, selectedClinicDate]);
 
+  const autoMs12Names = useMemo(
+    () => buildAssignedStudentSummary(visibleEncounterRows),
+    [visibleEncounterRows]
+  );
+
   const boardEncounterRows = useMemo(() => {
     return allEncounterRows.filter(
       ({ encounter }) =>
@@ -5002,6 +5125,40 @@ export default function App() {
     );
   }).length;
 
+  function encounterHasRecordedLabs(encounter = {}) {
+    const hasObjectValues = (value) =>
+      value && typeof value === "object" && Object.keys(value).length > 0;
+
+    return (
+      hasObjectValues(encounter.inHouseLabs || encounter.in_house_labs) ||
+      hasObjectValues(encounter.sendOutLabs || encounter.send_out_labs) ||
+      (Array.isArray(encounter.importedSendOutLabs || encounter.imported_send_out_labs) &&
+        (encounter.importedSendOutLabs || encounter.imported_send_out_labs).length > 0)
+    );
+  }
+
+  const autoLabsCount = useMemo(() => {
+    const patientIds = new Set();
+    visibleEncounterRows.forEach(({ patient, encounter }) => {
+      if (encounterHasRecordedLabs(encounter)) patientIds.add(String(patient.id));
+    });
+    return patientIds.size;
+  }, [visibleEncounterRows]);
+
+  const autoZoomCount = summaryPatientRows.filter(({ encounter }) =>
+    String(encounter.visitLocation || encounter.visit_location || "")
+      .trim()
+      .toLowerCase()
+      .includes("zoom")
+  ).length;
+
+  const autoPhoneCount = summaryPatientRows.filter(({ encounter }) =>
+    String(encounter.visitLocation || encounter.visit_location || "")
+      .trim()
+      .toLowerCase()
+      .includes("phone")
+  ).length;
+
   const clinicSummaryStorageKey = selectedClinicDate
     ? `clinic-summary-${selectedClinicDate}`
     : "";
@@ -5022,6 +5179,45 @@ export default function App() {
       console.error("Failed to load saved clinic summary:", error);
     }
   }, [clinicSummaryStorageKey]);
+
+  useEffect(() => {
+    if (!session || !selectedClinicDate) return;
+
+    let cancelled = false;
+
+    async function loadSummaryRoster() {
+      const roster = await fetchStaffRoster(selectedClinicDate);
+      if (cancelled) return;
+
+      setClinicSummary((prev) => ({
+        ...prev,
+        attendingNames: roster.attendings || "",
+        residentNames: roster.residents || "",
+        ms34Names: roster.upperLevels || "",
+      }));
+    }
+
+    loadSummaryRoster();
+
+    const channel = supabase
+      .channel(`clinic-summary-staff-roster-${selectedClinicDate}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "clinic_staff_roster",
+          filter: `clinic_date=eq.${selectedClinicDate}`,
+        },
+        loadSummaryRoster
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [session, selectedClinicDate]);
 
   useEffect(() => {
     if (!clinicSummaryStorageKey) return;
@@ -5222,32 +5418,39 @@ export default function App() {
     };
   }, [patients, selectedClinicDate]);
 
-  useEffect(() => {
+  function applyAutoClinicNumbers() {
     setClinicSummary((prev) => ({
       ...prev,
-      refillCount:
-        prev.refillCount || String(autoRefillPatientCount),
-
-      lwobsCount:
-        prev.lwobsCount || String(autoLwobsCount),
-
+      refillCount: String(autoRefillPatientCount),
+      lwobsCount: String(autoLwobsCount),
+      labsCount: String(autoLabsCount),
       mentalHealthCount: String(specialtyCounts.mental_health || 0),
-addictionMedicineCount: String(specialtyCounts.addiction || 0),
-ptCount: String(specialtyCounts.pt || 0),
-dermatologyCount: String(specialtyCounts.dermatology || 0),
-ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
-
+      addictionMedicineCount: String(specialtyCounts.addiction || 0),
+      ptCount: String(specialtyCounts.pt || 0),
+      dermatologyCount: String(specialtyCounts.dermatology || 0),
+      ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
       socialWorkCount: String(autoSocialWorkSeenCount || 0),
+      zoomCount: String(autoZoomCount),
+      phoneCount: String(autoPhoneCount),
+      ms12Names: autoMs12Names,
     }));
+  }
+
+  useEffect(() => {
+    applyAutoClinicNumbers();
   }, [
     autoRefillPatientCount,
     autoLwobsCount,
+    autoLabsCount,
     specialtyCounts.mental_health,
     specialtyCounts.addiction,
     specialtyCounts.pt,
     specialtyCounts.dermatology,
     specialtyCounts.ophthalmology,
     autoSocialWorkSeenCount,
+    autoZoomCount,
+    autoPhoneCount,
+    autoMs12Names,
   ]);
 
 
@@ -6280,14 +6483,6 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
     );
   }
 
-  function joinActiveNames(list) {
-    return list
-      .map((profile) => (profile.full_name || "").trim())
-      .filter(Boolean)
-      .sort((a, b) => a.localeCompare(b))
-      .join(", ");
-  }
-
   async function loadProfiles() {
     try {
       setLoadingProfiles(true);
@@ -6375,19 +6570,6 @@ ophthalmologyCount: String(specialtyCounts.ophthalmology || 0),
   const activeAttendings = useMemo(() => {
     return activeTodayProfiles.filter((profile) => profile.role === "attending");
   }, [activeTodayProfiles]);
-
-  useEffect(() => {
-    const ms12StudentsOnly = (activeStudents || []).filter(
-      (profile) => profile.role === "student"
-    );
-
-    setClinicSummary((prev) => ({
-      ...prev,
-      attendingNames: prev.attendingNames || joinActiveNames(activeAttendings),
-      ms34Names: prev.ms34Names || joinActiveNames(activeUpperLevels),
-      ms12Names: prev.ms12Names || joinActiveNames(ms12StudentsOnly),
-    }));
-  }, [activeAttendings, activeUpperLevels, activeStudents]);
 
   const canAccessSpecialtyQueue =
     userRole === "leadership" ||
@@ -11359,6 +11541,9 @@ async function markSeenBySocialWork(encounterId) {
               autoLwobsCount={autoLwobsCount}
               autoRefillPatientCount={autoRefillPatientCount}
               autoSocialWorkSeenCount={autoSocialWorkSeenCount}
+              autoLabsCount={autoLabsCount}
+              autoZoomCount={autoZoomCount}
+              autoPhoneCount={autoPhoneCount}
               onRefreshSummary={refreshClinicSummaryData}
               summaryRefreshStatus={summaryRefreshStatus}
             />

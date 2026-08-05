@@ -20,6 +20,9 @@ export default function ClinicSummaryView({
   autoLwobsCount = 0,
   autoRefillPatientCount = 0,
   autoSocialWorkSeenCount = 0,
+  autoLabsCount = 0,
+  autoZoomCount = 0,
+  autoPhoneCount = 0,
   onRefreshSummary,
   summaryRefreshStatus = "",
 }) {
@@ -36,7 +39,12 @@ export default function ClinicSummaryView({
       helper: `Auto: ${autoLwobsCount} cancelled encounter(s)`,
       autoValue: autoLwobsCount,
     },
-    { label: "Labs", key: "labsCount" },
+    {
+      label: "Labs",
+      key: "labsCount",
+      helper: `Auto: ${autoLabsCount} patient(s) with recorded labs`,
+      autoValue: autoLabsCount,
+    },
     {
       label: "Mental Health",
       key: "mentalHealthCount",
@@ -73,8 +81,18 @@ export default function ClinicSummaryView({
       helper: `Auto: ${autoSocialWorkSeenCount} marked seen by Social Work`,
       autoValue: autoSocialWorkSeenCount,
     },
-    { label: "Zoom", key: "zoomCount" },
-    { label: "Phone", key: "phoneCount" },
+    {
+      label: "Zoom",
+      key: "zoomCount",
+      helper: `Auto: ${autoZoomCount} Zoom patient(s)`,
+      autoValue: autoZoomCount,
+    },
+    {
+      label: "Phone",
+      key: "phoneCount",
+      helper: `Auto: ${autoPhoneCount} phone patient(s)`,
+      autoValue: autoPhoneCount,
+    },
   ];
 
   return (
