@@ -8025,7 +8025,7 @@ export default function App() {
   }
 
   async function markNoMedicationsPrescribed(encounterId) {
-    if (userRole !== "leadership" || !session?.user?.id) return;
+    if (!["leadership", "undergraduate"].includes(userRole) || !session?.user?.id) return;
 
     await applyEncounterTransition(encounterId, {
       pharmacyStatus: "no_meds_needed",

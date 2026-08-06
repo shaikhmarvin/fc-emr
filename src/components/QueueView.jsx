@@ -323,7 +323,7 @@ const canMarkSeenBySocialWork =
 
     if (status === "no_meds_needed") {
       return (
-        <span className="rounded-full border border-slate-300 bg-slate-100 px-3 py-1 text-xs font-extrabold uppercase tracking-wide text-slate-700 shadow-sm">
+        <span className="rounded-full border border-black bg-black px-3 py-1 text-xs font-extrabold uppercase tracking-wide text-white shadow-sm">
           NO MEDICATIONS THIS VISIT
         </span>
       );
@@ -426,6 +426,16 @@ const canMarkSeenBySocialWork =
     return `<span class="paper-checkbox${status === "picked_up" ? " checked" : ""}"></span>`;
   }
 
+  function getPrintedNoMedicationsCheckbox(encounter) {
+    const status = encounter?.pharmacyStatus || encounter?.pharmacy_status || "";
+    return `<span class="paper-checkbox${status === "no_meds_needed" ? " checked" : ""}"></span>`;
+  }
+
+  function getPrintedRowClass(encounter) {
+    const status = encounter?.pharmacyStatus || encounter?.pharmacy_status || "";
+    return status === "no_meds_needed" ? "no-meds-row" : "";
+  }
+
   function getEmptyPrintedCheckbox() {
     return '<span class="paper-checkbox"></span>';
   }
@@ -440,10 +450,7 @@ const canMarkSeenBySocialWork =
   }
 
   function printPharmacyQueue({ newRefillsOnly = false } = {}) {
-    const allRows = (waitingEncounterRows || []).filter(({ encounter }) => {
-      const status = encounter?.pharmacyStatus || encounter?.pharmacy_status || "";
-      return status !== "no_meds_needed";
-    });
+    const allRows = waitingEncounterRows || [];
     const refillRows = allRows.filter(({ encounter }) => isRefillOnlyEncounter(encounter));
     const specialtyRows = allRows.filter(({ encounter }) => isSpecialtyOnlyEncounter(encounter));
     const generalRows = allRows.filter(
@@ -479,13 +486,13 @@ const canMarkSeenBySocialWork =
       <section>
         <h2>${escapePrintHtml(title)} <span>(${rows.length})</span></h2>
         <table>
-          <thead><tr><th class="number">Daily #</th><th>Patient Name</th><th>DOB</th><th class="age">Age</th><th class="check">Prescription Filled</th><th class="check">Medication Picked Up</th></tr></thead>
+          <thead><tr><th class="number">Daily #</th><th>Patient Name</th><th>DOB</th><th class="age">Age</th><th class="phone">Phone Number</th><th class="check">Prescription Filled</th><th class="check">Medication Picked Up</th><th class="check no-meds-column">No Medications Prescribed</th></tr></thead>
           <tbody>${
             rows.length
               ? sortByNumberThenName(rows, getDailyCardNumber)
-                  .map(({ patient, encounter }) => `<tr><td class="number-cell">${escapePrintHtml(getDailyCardNumber(patient, encounter) || "—")}</td><td class="patient-cell">${escapePrintHtml(getFullQueuePatientName(patient))}</td><td>${escapePrintHtml(formatDate(patient.dob))}</td><td class="age-cell">${escapePrintHtml(patient.age || "—")}</td><td class="checkbox">${getEmptyPrintedCheckbox()}</td><td class="checkbox">${getPrintedPickupCheckbox(encounter)}</td></tr>`)
+                  .map(({ patient, encounter }) => `<tr class="${getPrintedRowClass(encounter)}"><td class="number-cell">${escapePrintHtml(getDailyCardNumber(patient, encounter) || "—")}</td><td class="patient-cell">${escapePrintHtml(getFullQueuePatientName(patient))}</td><td>${escapePrintHtml(formatDate(patient.dob))}</td><td class="age-cell">${escapePrintHtml(patient.age || "—")}</td><td>${escapePrintHtml(patient.phone || "—")}</td><td class="checkbox">${getEmptyPrintedCheckbox()}</td><td class="checkbox">${getPrintedPickupCheckbox(encounter)}</td><td class="checkbox">${getPrintedNoMedicationsCheckbox(encounter)}</td></tr>`)
                   .join("")
-              : '<tr><td colspan="6" class="empty">No patients</td></tr>'
+              : '<tr><td colspan="8" class="empty">No patients</td></tr>'
           }</tbody>
         </table>
       </section>`;
@@ -494,13 +501,13 @@ const canMarkSeenBySocialWork =
       <section>
         <h2>${newRefillsOnly ? "New Refill Addendum" : "Refill Requests"} <span>(${rows.length})</span></h2>
         <table>
-          <thead><tr><th class="number">Refill #</th><th>Patient Name</th><th>DOB</th><th class="age">Age</th><th class="medications">Medications Requested by Patient</th><th class="check">Prescription Filled</th><th class="check">Medication Picked Up</th></tr></thead>
+          <thead><tr><th class="number">Refill #</th><th>Patient Name</th><th>DOB</th><th class="age">Age</th><th class="phone">Phone Number</th><th class="medications">Medications Requested by Patient</th><th class="check">Prescription Filled</th><th class="check">Medication Picked Up</th><th class="check no-meds-column">No Medications Prescribed</th></tr></thead>
           <tbody>${
             rows.length
               ? sortByNumberThenName(rows, (_patient, encounter) => getRefillNumber(encounter))
-                  .map(({ patient, encounter }) => `<tr><td class="number-cell">${escapePrintHtml(getRefillNumber(encounter) || "—")}</td><td class="patient-cell">${escapePrintHtml(getFullQueuePatientName(patient))}</td><td>${escapePrintHtml(formatDate(patient.dob))}</td><td class="age-cell">${escapePrintHtml(patient.age || "—")}</td><td>${escapePrintHtml(getRefillMedicationRequest(encounter) || "—")}</td><td class="checkbox">${getEmptyPrintedCheckbox()}</td><td class="checkbox">${getPrintedPickupCheckbox(encounter)}</td></tr>`)
+                  .map(({ patient, encounter }) => `<tr class="${getPrintedRowClass(encounter)}"><td class="number-cell">${escapePrintHtml(getRefillNumber(encounter) || "—")}</td><td class="patient-cell">${escapePrintHtml(getFullQueuePatientName(patient))}</td><td>${escapePrintHtml(formatDate(patient.dob))}</td><td class="age-cell">${escapePrintHtml(patient.age || "—")}</td><td>${escapePrintHtml(patient.phone || "—")}</td><td>${escapePrintHtml(getRefillMedicationRequest(encounter) || "—")}</td><td class="checkbox">${getEmptyPrintedCheckbox()}</td><td class="checkbox">${getPrintedPickupCheckbox(encounter)}</td><td class="checkbox">${getPrintedNoMedicationsCheckbox(encounter)}</td></tr>`)
                   .join("")
-              : '<tr><td colspan="7" class="empty">No refill patients</td></tr>'
+              : '<tr><td colspan="9" class="empty">No refill patients</td></tr>'
           }</tbody>
         </table>
       </section>`;
@@ -528,9 +535,11 @@ const canMarkSeenBySocialWork =
       th { background: #dbe4ee !important; font-size: 8pt; line-height: 1.2; text-transform: uppercase; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       tr { break-inside: avoid; }
       tbody tr:nth-child(even) { background: #f8fafc; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .number { width: 7%; } .age { width: 5%; } .check { width: 12%; } .medications { width: 27%; }
+      .number { width: 7%; } .age { width: 5%; } .phone { width: 12%; } .check { width: 11%; } .medications { width: 22%; }
       .number-cell, .age-cell { text-align: center; font-weight: bold; }
       .patient-cell { font-weight: bold; }
+      .no-meds-row .patient-cell { text-decoration: line-through; text-decoration-thickness: 2px; }
+      .no-meds-column { width: 14%; }
       .checkbox { text-align: center; }
       .paper-checkbox { position: relative; display: inline-block; width: 19px; height: 19px; border: 2px solid #111827; border-radius: 2px; }
       .paper-checkbox.checked::after { content: ""; position: absolute; left: 5px; top: 1px; width: 5px; height: 11px; border: solid #111827; border-width: 0 3px 3px 0; transform: rotate(45deg); }
@@ -1195,7 +1204,11 @@ const canMarkSeenBySocialWork =
                     if (e.target.closest("button")) return;
                     openPatientChart(patient.id, encounter.id);
                   }}
-                  className="cursor-pointer rounded-xl border bg-white p-3 shadow-sm transition hover:bg-slate-50"
+                  className={`cursor-pointer rounded-xl border p-3 shadow-sm transition ${
+                    (encounter?.pharmacyStatus || encounter?.pharmacy_status) === "no_meds_needed"
+                      ? "border-slate-400 bg-slate-200 hover:bg-slate-200"
+                      : "bg-white hover:bg-slate-50"
+                  }`}
                 >
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center justify-between gap-3">
@@ -1272,7 +1285,7 @@ const canMarkSeenBySocialWork =
                       </button>
                     )}
 
-                    {userRole === "leadership" &&
+                    {["leadership", "undergraduate"].includes(userRole) &&
                       !isRefillOnlyEncounter(encounter) &&
                       !["picked_up", "no_meds_needed"].includes(
                         encounter?.pharmacyStatus || encounter?.pharmacy_status
