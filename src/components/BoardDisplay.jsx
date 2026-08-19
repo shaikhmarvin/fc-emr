@@ -3,15 +3,41 @@ import { formatDate, getStatusLabel } from "../utils";
 import { getClinicAlert } from "../utils/clinicAlerts";
 import { VISIT_TYPE_BADGE_STYLES, getEncounterVisitTypeKey } from "../constants";
 
-const CLINIC_URL = "https://fc-emr.vercel.app/"; // CHANGE THIS
 const WIFI_NAME = "Volunteers"; // CHANGE THIS
 const WIFI_PASSWORD = "StarToast76"; // CHANGE THIS
 
-const QR_SRC = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(
-  CLINIC_URL
-)}`;
-
 const MIN_AUTO_FIT_SCALE = 0.68;
+const MIN_CARD_WIDTH = 240;
+const MIN_CARD_HEIGHT = 145;
+const TARGET_CARD_ASPECT_RATIO = 1.45;
+
+function getResponsiveColumnCount(width, height, itemCount) {
+  if (!width || !height || !itemCount) return 1;
+
+  let best = null;
+
+  for (let columns = 1; columns <= itemCount; columns += 1) {
+    const rows = Math.ceil(itemCount / columns);
+    const cardWidth = (width - (columns - 1) * 12) / columns;
+    const cardHeight = (height - (rows - 1) * 12) / rows;
+
+    if (cardWidth < MIN_CARD_WIDTH || cardHeight < MIN_CARD_HEIGHT) continue;
+
+    const aspectRatio = cardWidth / cardHeight;
+    const emptySlots = rows * columns - itemCount;
+    const score =
+      Math.abs(Math.log(aspectRatio / TARGET_CARD_ASPECT_RATIO)) +
+      (emptySlots / itemCount) * 0.08;
+
+    if (!best || score < best.score) {
+      best = { columns, score };
+    }
+  }
+
+  if (best) return best.columns;
+
+  return Math.max(1, Math.min(itemCount, Math.floor(width / MIN_CARD_WIDTH)));
+}
 
 function isVisibleOnBoard(encounter) {
   if (!encounter) return false;
@@ -85,8 +111,10 @@ export default function BoardDisplay({
   const [now, setNow] = useState(new Date());
   const viewportRef = useRef(null);
   const contentRef = useRef(null);
+  const gridRef = useRef(null);
   const fitFrameRef = useRef(null);
   const [autoFitScale, setAutoFitScale] = useState(1);
+  const [gridColumns, setGridColumns] = useState(1);
 
   const [boardZoom, setBoardZoom] = useState(() => {
     const savedZoom = Number(window.localStorage.getItem("board-display-zoom"));
@@ -207,6 +235,26 @@ export default function BoardDisplay({
     roster.upperLevels,
     tonightReservedRooms,
   ]);
+
+  useLayoutEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return undefined;
+
+    const updateColumns = () => {
+      const nextColumns = getResponsiveColumnCount(
+        grid.clientWidth,
+        grid.clientHeight,
+        ROOM_OPTIONS.length
+      );
+      setGridColumns((current) => (current === nextColumns ? current : nextColumns));
+    };
+
+    updateColumns();
+    const resizeObserver = new ResizeObserver(updateColumns);
+    resizeObserver.observe(grid);
+
+    return () => resizeObserver.disconnect();
+  }, [ROOM_OPTIONS.length]);
 
   return (
     <div ref={viewportRef} className="h-screen overflow-hidden bg-slate-900">
@@ -332,21 +380,12 @@ export default function BoardDisplay({
                 </p>
 
                 <p className="text-[0.68rem] leading-4 xl:text-xs">
-                  <span className="font-semibold">Site:</span>{" "}
-                  <span className="break-all">{CLINIC_URL}</span>
-                </p>
-
-                <p className="text-[0.68rem] leading-4 xl:text-xs">
                   <span className="font-semibold">WiFi:</span> {WIFI_NAME}
                 </p>
 
                 <p className="text-[0.68rem] leading-4 xl:text-xs">
                   <span className="font-semibold">Password:</span> {WIFI_PASSWORD}
                 </p>
-              </div>
-
-              <div className="hidden rounded-xl bg-white p-1.5 shadow lg:block">
-                <img src={QR_SRC} alt="QR Code" className="h-20 w-20" />
               </div>
 
               <div className="shrink-0 text-right text-xs text-slate-300 xl:text-sm">
@@ -399,10 +438,10 @@ export default function BoardDisplay({
 
         <div className="min-h-0 flex-1">
           <div
+            ref={gridRef}
             className="grid h-full auto-rows-fr gap-2.5 xl:gap-3"
             style={{
-              gridTemplateColumns:
-                "repeat(auto-fit, minmax(clamp(220px, 18vw, 320px), 1fr))",
+              gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 1fr))`,
             }}
           >
             {ROOM_OPTIONS.map((room) => {
@@ -434,7 +473,7 @@ export default function BoardDisplay({
               return (
                 <div
                   key={room.number}
-                  className={`flex min-h-[145px] flex-col rounded-2xl border p-2.5 shadow xl:min-h-[158px] xl:p-3 ${
+                  className={`flex min-h-[145px] min-w-0 flex-col overflow-hidden rounded-2xl border p-2.5 shadow xl:min-h-[158px] xl:p-3 ${
                     occupied
                       ? primaryEncounter.status === "roomed"
                         ? "border-green-300 bg-green-100 text-slate-900"
