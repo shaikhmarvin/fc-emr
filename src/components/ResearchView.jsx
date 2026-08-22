@@ -37,7 +37,10 @@ function minutesBetween(start, end) {
   const startMs = new Date(start || 0).getTime();
   const endMs = new Date(end || 0).getTime();
   if (!startMs || !endMs || endMs < startMs) return null;
-  return Math.round((endMs - startMs) / 60000);
+  const minutes = Math.round((endMs - startMs) / 60000);
+  // Zero-length intervals and encounters spanning more than a full 8-hour
+  // clinic window are almost always incomplete or invalid workflow timestamps.
+  return minutes >= 1 && minutes <= 480 ? minutes : null;
 }
 
 function average(values) {
@@ -246,7 +249,7 @@ export default function ResearchView({ patients = [] }) {
         const start = typeof startField === "function" ? startField(row.encounter) : row.encounter?.[startField];
         const end = typeof endSelector === "function" ? endSelector(row.encounter) : row.encounter?.[endSelector];
         const minutes = minutesBetween(start, end);
-        return { patient: row.patientName, date: row.date, encounterId: row.encounter?.id, value: minutes === null ? "Not calculable" : `${minutes} minutes`, source: `${start ? new Date(start).toLocaleString() : "Missing start"} → ${end ? new Date(end).toLocaleString() : "missing end"}` };
+        return { patient: row.patientName, date: row.date, encounterId: row.encounter?.id, value: minutes === null ? "Not calculable" : `${minutes} minutes`, source: `${start ? new Date(start).toLocaleString() : "Missing start"} → ${end ? new Date(end).toLocaleString() : "missing end"}${minutes === null && start && end ? " · outside valid 1–480 minute range" : ""}` };
       }),
     });
   }
@@ -316,6 +319,7 @@ export default function ResearchView({ patients = [] }) {
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Clinic Flow Analytics</h2>
             <p className="mt-1 text-sm text-slate-600">The former Dashboard analytics, calculated across the selected research period and by clinic date for longitudinal comparison.</p>
+            <p className="mt-1 text-xs text-slate-500">Timing values must be between 1 minute and 8 hours. Values outside that range are marked Not calculable and excluded from averages and ranges.</p>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Metric label="Unique patients" value={report.flow.patients} helper={`${report.flow.visits} general encounters`} onClick={() => showRows("General flow encounters", report.generalAnalyticsRows)} />
