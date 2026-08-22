@@ -1383,7 +1383,9 @@ const canMarkSeenBySocialWork =
                 ? "Awaiting Signature"
                 : canUseOphthoQueueTools
                   ? "Ophtho Queue"
-                  : canUseSocialWorkQueueTools
+                  : userRole === "leadership"
+                    ? "General Clinic"
+                  : userRole === "social_work"
                     ? "Social Work Queue"
                     : userRole === "student" || userRole === "upper_level"
                       ? "My Queue"
@@ -1394,7 +1396,9 @@ const canMarkSeenBySocialWork =
                 ? "Patients awaiting attending signature."
                 : canUseOphthoQueueTools
                   ? "All clinic patients for the selected date except refill-only, including completed general visits. Use the checkbox to prioritize DM / Ophtho list."
-                  : canUseSocialWorkQueueTools
+                  : userRole === "leadership"
+                    ? "General clinic patients for the selected date."
+                  : userRole === "social_work"
                     ? "All clinic patients for the selected date except refill-only, including completed and in-visit patients."
                     : userRole === "student"
                       ? "Patients assigned to you that are still waiting."

@@ -127,6 +127,7 @@ export default function ResearchView({ patients = [] }) {
         if (!date || (startDate && date < startDate) || (endDate && date > endDate)) return;
         const visitType = encounter.visitType || encounter.visit_type || "general";
         const patientName = [patient.first_name || patient.firstName, patient.last_name || patient.lastName].filter(Boolean).join(" ") || patient.name || `Patient ${patient.id}`;
+        const femaleEligible = String(patient.sex || "").trim().toLowerCase() === "female";
         analyticsRows.push({ patientId: String(patient.id), patientName, encounter, date, visitType });
         if (["refill_only", "specialty_only"].includes(visitType)) return;
         if (encounter.status === "cancelled") return;
@@ -137,20 +138,21 @@ export default function ResearchView({ patients = [] }) {
         const mammogram = String(intakeValue(encounter, "mammogramStatus", "mammogramPapSmear") || "Not recorded").trim();
         const factors = [chronic.htn, chronic.dm, language === "Spanish", transportation !== "Not recorded" && transportation !== "Own Transportation", pap !== "Not recorded", mammogram !== "Not recorded"].filter(Boolean).length;
         rows.push({
-          patientId: String(patient.id), patientName, encounter, chronic, language, transportation, pap, mammogram, factors, date,
+          patientId: String(patient.id), patientName, encounter, chronic, language, transportation, pap, mammogram, factors, date, femaleEligible,
           returning: index > 0 || String(intakeValue(encounter, "newReturning")).toLowerCase() === "returning",
           duration: minutesBetween(encounter.createdAt, encounter.visitCompletedAt || encounter.doneAt),
         });
       });
     });
 
-    const countBy = (key) => Object.entries(rows.reduce((counts, row) => {
+    const countBy = (key, sourceRows = rows) => Object.entries(sourceRows.reduce((counts, row) => {
       const value = row[key] || "Not recorded";
       counts[value] = (counts[value] || 0) + 1;
       return counts;
     }, {})).sort((a, b) => b[1] - a[1]);
     const unique = (subset) => new Set(subset.map((row) => row.patientId)).size;
     const chronicRows = rows.filter((row) => row.chronic.htn || row.chronic.dm);
+    const femaleRows = rows.filter((row) => row.femaleEligible);
     const groups = [
       ["HTN+ only", rows.filter((row) => row.chronic.htn && !row.chronic.dm)],
       ["DM+ only", rows.filter((row) => row.chronic.dm && !row.chronic.htn)],
@@ -167,7 +169,7 @@ export default function ResearchView({ patients = [] }) {
     }, {});
     const dailyFlow = Object.entries(dailyGroups).sort((a, b) => b[0].localeCompare(a[0])).map(([date, dateRows]) => ({ date, ...flowMetrics(dateRows) }));
 
-    return { rows, chronicRows, uniquePatients: unique(rows), chronicPatients: unique(chronicRows), chronicReturns: chronicRows.filter((row) => row.returning).length, groups, language: countBy("language"), transportation: countBy("transportation"), pap: countBy("pap"), mammogram: countBy("mammogram"), flow: flowMetrics(generalAnalyticsRows), refillFlow: flowMetrics(refillAnalyticsRows), generalAnalyticsRows, refillAnalyticsRows, dailyFlow };
+    return { rows, chronicRows, femaleRows, uniquePatients: unique(rows), chronicPatients: unique(chronicRows), chronicReturns: chronicRows.filter((row) => row.returning).length, groups, language: countBy("language"), transportation: countBy("transportation"), pap: countBy("pap", femaleRows), mammogram: countBy("mammogram", femaleRows), flow: flowMetrics(generalAnalyticsRows), refillFlow: flowMetrics(refillAnalyticsRows), generalAnalyticsRows, refillAnalyticsRows, dailyFlow };
   }, [patients, startDate, endDate]);
 
   function showRows(title, sourceRows, recordedField = "Encounter included") {
@@ -247,8 +249,8 @@ export default function ResearchView({ patients = [] }) {
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
           <Breakdown title="Language" values={report.language} total={report.rows.length} onSelect={(value) => showRows(`Language: ${value}`, report.rows.filter((row) => row.language === value), "Language")} />
           <Breakdown title="Transportation" values={report.transportation} total={report.rows.length} onSelect={(value) => showRows(`Transportation: ${value}`, report.rows.filter((row) => row.transportation === value), "Transportation")} />
-          <Breakdown title="PAP smear response" values={report.pap} total={report.rows.length} onSelect={(value) => showRows(`PAP smear: ${value}`, report.rows.filter((row) => row.pap === value), "PAP smear")} />
-          <Breakdown title="Mammogram response" values={report.mammogram} total={report.rows.length} onSelect={(value) => showRows(`Mammogram: ${value}`, report.rows.filter((row) => row.mammogram === value), "Mammogram")} />
+          <Breakdown title="PAP smear response — female patients" values={report.pap} total={report.femaleRows.length} onSelect={(value) => showRows(`PAP smear: ${value} (female patients)`, report.femaleRows.filter((row) => row.pap === value), "PAP smear")} />
+          <Breakdown title="Mammogram response — female patients" values={report.mammogram} total={report.femaleRows.length} onSelect={(value) => showRows(`Mammogram: ${value} (female patients)`, report.femaleRows.filter((row) => row.mammogram === value), "Mammogram")} />
         </div>
 
         <div className="mt-8 border-t border-slate-200 pt-6">
