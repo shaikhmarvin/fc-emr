@@ -46,6 +46,12 @@ function average(values) {
   return Math.round(valid.reduce((sum, value) => sum + value, 0) / valid.length);
 }
 
+function minuteRange(values) {
+  const valid = values.filter((value) => Number.isFinite(value));
+  if (!valid.length) return "No valid values";
+  return `${Math.min(...valid)}–${Math.max(...valid)} min`;
+}
+
 function completionTime(encounter) {
   if (!encounter) return null;
   const refillOnly = (encounter.visitType || encounter.visit_type) === "refill_only";
@@ -65,19 +71,32 @@ function flowMetrics(rows) {
   const general = rows.filter(({ encounter }) => !["refill_only", "specialty_only"].includes(encounter.visitType || encounter.visit_type || "general"));
   const refills = rows.filter(({ encounter }) => (encounter.visitType || encounter.visit_type) === "refill_only");
   const averageBetween = (source, start, end) => average(source.map(({ encounter }) => minutesBetween(encounter?.[start], encounter?.[end])));
+  const rangeBetween = (source, start, end) => minuteRange(source.map(({ encounter }) => minutesBetween(encounter?.[start], encounter?.[end])));
+  const assignedToCompleteValues = general.map(({ encounter }) => minutesBetween(encounter.studentAssignedAt, completionTime(encounter)));
+  const totalClinicValues = general.map(({ encounter }) => minutesBetween(encounter.undergradCompletedAt, completionTime(encounter)));
+  const refillPickupValues = refills.map(({ encounter }) => minutesBetween(encounter.undergradCompletedAt || encounter.createdAt, completionTime(encounter)));
+  const pharmacyDelayValues = general.map(({ encounter }) => minutesBetween(encounter.visitCompletedAt, encounter.pharmacyPickedUpAt));
   return {
     patients: new Set(rows.map(({ patientId }) => patientId)).size,
     visits: rows.length,
     completed: rows.filter(({ encounter }) => isComplete(encounter)).length,
     cancelled: rows.filter(({ encounter }) => encounter.status === "cancelled").length,
     startedToUndergrad: averageBetween(general, "createdAt", "undergradCompletedAt"),
+    startedToUndergradRange: rangeBetween(general, "createdAt", "undergradCompletedAt"),
     startedToLeadership: averageBetween(general, "createdAt", "leadershipIntakeCompletedAt"),
+    startedToLeadershipRange: rangeBetween(general, "createdAt", "leadershipIntakeCompletedAt"),
     leadershipToStudent: averageBetween(general, "leadershipIntakeCompletedAt", "studentAssignedAt"),
+    leadershipToStudentRange: rangeBetween(general, "leadershipIntakeCompletedAt", "studentAssignedAt"),
     studentToUpper: averageBetween(general, "studentAssignedAt", "upperLevelAssignedAt"),
-    assignedToComplete: average(general.map(({ encounter }) => minutesBetween(encounter.studentAssignedAt, completionTime(encounter)))),
-    totalClinic: average(general.map(({ encounter }) => minutesBetween(encounter.undergradCompletedAt, completionTime(encounter)))),
-    refillPickup: average(refills.map(({ encounter }) => minutesBetween(encounter.undergradCompletedAt || encounter.createdAt, completionTime(encounter)))),
-    pharmacyDelay: average(general.map(({ encounter }) => minutesBetween(encounter.visitCompletedAt, encounter.pharmacyPickedUpAt))),
+    studentToUpperRange: rangeBetween(general, "studentAssignedAt", "upperLevelAssignedAt"),
+    assignedToComplete: average(assignedToCompleteValues),
+    assignedToCompleteRange: minuteRange(assignedToCompleteValues),
+    totalClinic: average(totalClinicValues),
+    totalClinicRange: minuteRange(totalClinicValues),
+    refillPickup: average(refillPickupValues),
+    refillPickupRange: minuteRange(refillPickupValues),
+    pharmacyDelay: average(pharmacyDelayValues),
+    pharmacyDelayRange: minuteRange(pharmacyDelayValues),
   };
 }
 
@@ -281,18 +300,16 @@ export default function ResearchView({ patients = [] }) {
             <p className="mt-1 text-xs text-slate-500">General clinic only: undergrad complete → visit completion.</p>
             <div className="mt-3 space-y-2">{report.languageStats.map(([label, count, avgMinutes]) => <button type="button" key={label} onClick={() => showTiming(`${label} general-clinic visit times`, report.rows.filter((row) => row.language === label), "undergradCompletedAt")} className="grid w-full grid-cols-[1fr_auto_auto] items-center gap-3 rounded-lg px-1 py-2 text-left text-sm hover:bg-blue-50"><span className="text-slate-600">{label}</span><span className="font-semibold text-slate-900">{count} <span className="font-normal text-slate-400">({percent(count, report.rows.length)})</span></span><span className="min-w-20 text-right font-semibold text-blue-700">{avgMinutes === "—" ? "—" : `${avgMinutes} min avg`}</span></button>)}</div>
           </div>
-          <Breakdown title="Transportation" values={report.transportation} total={report.rows.length} onSelect={(value) => showRows(`Transportation: ${value}`, report.rows.filter((row) => row.transportation === value), "Transportation")} />
+          <div className="rounded-xl border border-slate-200 p-4 lg:col-span-2">
+            <h3 className="font-semibold text-slate-900">Transportation and return visits</h3>
+            <p className="mt-1 text-xs text-slate-500">Evaluated per general-clinic visit. Patients are unique within a mode but may appear under multiple modes when their transportation changes.</p>
+            <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200">
+              <table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Transportation reported</th><th className="px-4 py-3">Visit share</th><th className="px-4 py-3">Unique patients</th><th className="px-4 py-3">Visits</th><th className="px-4 py-3">Patients with later visit</th><th className="px-4 py-3">Return likelihood</th></tr></thead><tbody className="divide-y divide-slate-200">{report.transportationReturnStats.map((mode) => <tr key={mode.label} onClick={() => showRows(`Transportation return data: ${mode.label}`, mode.rows, "Transportation")} className="cursor-pointer hover:bg-blue-50"><td className="px-4 py-3 font-semibold text-slate-900">{mode.label}</td><td className="px-4 py-3">{percent(mode.visits, report.rows.length)}</td><td className="px-4 py-3">{mode.patients}</td><td className="px-4 py-3">{mode.visits}</td><td className="px-4 py-3">{mode.returnedPatients}</td><td className="px-4 py-3 font-semibold text-blue-700">{mode.rate}</td></tr>)}</tbody></table>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">Unique-patient columns should not be summed across modes. Return likelihood is observational and does not establish causation.</p>
+          </div>
           <Breakdown title="PAP smear response — females ages 21–65" values={report.pap} total={report.papEligibleRows.length} onSelect={(value) => showRows(`PAP smear: ${value} (females ages 21–65)`, report.papEligibleRows.filter((row) => row.pap === value), "PAP smear")} />
           <Breakdown title="Mammogram response — females ages 45+" values={report.mammogram} total={report.mammogramEligibleRows.length} onSelect={(value) => showRows(`Mammogram: ${value} (females ages 45+)`, report.mammogramEligibleRows.filter((row) => row.mammogram === value), "Mammogram")} />
-        </div>
-
-        <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-          <h3 className="font-semibold text-emerald-950">Transportation and likelihood of a return visit</h3>
-          <p className="mt-1 text-sm text-emerald-800">Transportation is evaluated separately for every general-clinic visit. A patient is counted once within each mode they reported and may appear in multiple mode cohorts when transportation changes.</p>
-          <div className="mt-3 overflow-x-auto rounded-lg border border-emerald-200 bg-white">
-            <table className="min-w-full text-left text-sm"><thead className="bg-emerald-50 text-xs uppercase text-emerald-800"><tr><th className="px-4 py-3">Transportation reported</th><th className="px-4 py-3">Unique patients in mode</th><th className="px-4 py-3">Visits reporting mode</th><th className="px-4 py-3">Patients with later visit</th><th className="px-4 py-3">Return likelihood</th></tr></thead><tbody className="divide-y divide-slate-200">{report.transportationReturnStats.map((mode) => <tr key={mode.label} onClick={() => showRows(`Transportation return data: ${mode.label}`, mode.rows, "Return status from visit history/intake")} className="cursor-pointer hover:bg-blue-50"><td className="px-4 py-3 font-semibold text-slate-900">{mode.label}</td><td className="px-4 py-3">{mode.patients}</td><td className="px-4 py-3">{mode.visits}</td><td className="px-4 py-3">{mode.returnedPatients}</td><td className="px-4 py-3 font-semibold text-emerald-800">{mode.rate}</td></tr>)}</tbody></table>
-          </div>
-          <p className="mt-2 text-xs text-emerald-800">Unique-patient columns should not be summed across modes because the same patient may report different transportation on different visits. This is an observational return proportion, not a causal estimate.</p>
         </div>
 
         <div className="mt-8 border-t border-slate-200 pt-6">
@@ -304,21 +321,21 @@ export default function ResearchView({ patients = [] }) {
             <Metric label="Unique patients" value={report.flow.patients} helper={`${report.flow.visits} general encounters`} onClick={() => showRows("General flow encounters", report.generalAnalyticsRows)} />
             <Metric label="Completed visits" value={report.flow.completed} onClick={() => showRows("Completed general visits", report.generalAnalyticsRows.filter((row) => isComplete(row.encounter)), "Completed workflow status")} />
             <Metric label="LWOBS / cancelled" value={report.flow.cancelled} onClick={() => showRows("Cancelled general visits", report.generalAnalyticsRows.filter((row) => row.encounter.status === "cancelled"), "Cancelled status")} />
-            <Metric label="Average total clinic time" value={report.flow.totalClinic === "—" ? "—" : `${report.flow.totalClinic} min`} onClick={() => showTiming("General total clinic time", report.generalAnalyticsRows, "undergradCompletedAt")} />
-            <Metric label="Started → undergrad complete" value={report.flow.startedToUndergrad === "—" ? "—" : `${report.flow.startedToUndergrad} min`} onClick={() => showTiming("Started to undergrad complete", report.generalAnalyticsRows, "createdAt", "undergradCompletedAt")} />
-            <Metric label="Started → leadership complete" value={report.flow.startedToLeadership === "—" ? "—" : `${report.flow.startedToLeadership} min`} onClick={() => showTiming("Started to leadership complete", report.generalAnalyticsRows, "createdAt", "leadershipIntakeCompletedAt")} />
-            <Metric label="Leadership → student assigned" value={report.flow.leadershipToStudent === "—" ? "—" : `${report.flow.leadershipToStudent} min`} onClick={() => showTiming("Leadership complete to student assigned", report.generalAnalyticsRows, "leadershipIntakeCompletedAt", "studentAssignedAt")} />
-            <Metric label="Student → upper-level assigned" value={report.flow.studentToUpper === "—" ? "—" : `${report.flow.studentToUpper} min`} onClick={() => showTiming("Student to upper-level assigned", report.generalAnalyticsRows, "studentAssignedAt", "upperLevelAssignedAt")} />
-            <Metric label="Assigned → complete" value={report.flow.assignedToComplete === "—" ? "—" : `${report.flow.assignedToComplete} min`} onClick={() => showTiming("Assigned to complete", report.generalAnalyticsRows, "studentAssignedAt")} />
-            <Metric label="Visit complete → pickup" value={report.flow.pharmacyDelay === "—" ? "—" : `${report.flow.pharmacyDelay} min`} onClick={() => showTiming("Visit complete to medication pickup", report.generalAnalyticsRows, "visitCompletedAt", "pharmacyPickedUpAt")} />
+            <Metric label="Average total clinic time" value={report.flow.totalClinic === "—" ? "—" : `${report.flow.totalClinic} min`} helper={`Range: ${report.flow.totalClinicRange}`} onClick={() => showTiming("General total clinic time", report.generalAnalyticsRows, "undergradCompletedAt")} />
+            <Metric label="Started → undergrad complete" value={report.flow.startedToUndergrad === "—" ? "—" : `${report.flow.startedToUndergrad} min`} helper={`Range: ${report.flow.startedToUndergradRange}`} onClick={() => showTiming("Started to undergrad complete", report.generalAnalyticsRows, "createdAt", "undergradCompletedAt")} />
+            <Metric label="Started → leadership complete" value={report.flow.startedToLeadership === "—" ? "—" : `${report.flow.startedToLeadership} min`} helper={`Range: ${report.flow.startedToLeadershipRange}`} onClick={() => showTiming("Started to leadership complete", report.generalAnalyticsRows, "createdAt", "leadershipIntakeCompletedAt")} />
+            <Metric label="Leadership → student assigned" value={report.flow.leadershipToStudent === "—" ? "—" : `${report.flow.leadershipToStudent} min`} helper={`Range: ${report.flow.leadershipToStudentRange}`} onClick={() => showTiming("Leadership complete to student assigned", report.generalAnalyticsRows, "leadershipIntakeCompletedAt", "studentAssignedAt")} />
+            <Metric label="Student → upper-level assigned" value={report.flow.studentToUpper === "—" ? "—" : `${report.flow.studentToUpper} min`} helper={`Range: ${report.flow.studentToUpperRange}`} onClick={() => showTiming("Student to upper-level assigned", report.generalAnalyticsRows, "studentAssignedAt", "upperLevelAssignedAt")} />
+            <Metric label="Assigned → complete" value={report.flow.assignedToComplete === "—" ? "—" : `${report.flow.assignedToComplete} min`} helper={`Range: ${report.flow.assignedToCompleteRange}`} onClick={() => showTiming("Assigned to complete", report.generalAnalyticsRows, "studentAssignedAt")} />
+            <Metric label="Visit complete → pickup" value={report.flow.pharmacyDelay === "—" ? "—" : `${report.flow.pharmacyDelay} min`} helper={`Range: ${report.flow.pharmacyDelayRange}`} onClick={() => showTiming("Visit complete to medication pickup", report.generalAnalyticsRows, "visitCompletedAt", "pharmacyPickedUpAt")} />
           </div>
 
           <div className="mt-6 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
             <h3 className="font-semibold text-indigo-950">General vs. refill patient wait times</h3>
             <p className="mt-1 text-sm text-indigo-800">Kept separate so refill encounters never affect general-clinic averages.</p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <Metric label="General clinic average" value={report.flow.totalClinic === "—" ? "—" : `${report.flow.totalClinic} min`} helper="Undergrad complete → visit completion" onClick={() => showTiming("General clinic wait-time data", report.generalAnalyticsRows, "undergradCompletedAt")} />
-              <Metric label="Refill patient average" value={report.refillFlow.refillPickup === "—" ? "—" : `${report.refillFlow.refillPickup} min`} helper={`${report.refillFlow.visits} refill encounter(s): check-in → medication pickup`} onClick={() => showTiming("Refill wait-time data", report.refillAnalyticsRows, (encounter) => encounter.undergradCompletedAt || encounter.createdAt)} />
+              <Metric label="General clinic average" value={report.flow.totalClinic === "—" ? "—" : `${report.flow.totalClinic} min`} helper={`Undergrad complete → visit completion · Range: ${report.flow.totalClinicRange}`} onClick={() => showTiming("General clinic wait-time data", report.generalAnalyticsRows, "undergradCompletedAt")} />
+              <Metric label="Refill patient average" value={report.refillFlow.refillPickup === "—" ? "—" : `${report.refillFlow.refillPickup} min`} helper={`${report.refillFlow.visits} refill encounter(s) · Range: ${report.refillFlow.refillPickupRange}`} onClick={() => showTiming("Refill wait-time data", report.refillAnalyticsRows, (encounter) => encounter.undergradCompletedAt || encounter.createdAt)} />
             </div>
           </div>
 
