@@ -82,7 +82,7 @@ function flowMetrics(rows) {
 }
 
 function percent(numerator, denominator) {
-  return denominator ? `${Math.round((numerator / denominator) * 100)}%` : "—";
+  return denominator ? `${((numerator / denominator) * 100).toFixed(2)}%` : "—";
 }
 
 function Metric({ label, value, helper, onClick }) {
@@ -168,6 +168,20 @@ export default function ResearchView({ patients = [] }) {
     const chronicRows = rows.filter((row) => row.chronic.htn || row.chronic.dm);
     const papEligibleRows = rows.filter((row) => row.papEligible);
     const mammogramEligibleRows = rows.filter((row) => row.mammogramEligible);
+    const languageStats = countBy("language").map(([label, count]) => {
+      const languageRows = rows.filter((row) => row.language === label);
+      return [label, count, average(languageRows.map((row) => minutesBetween(row.encounter.undergradCompletedAt, completionTime(row.encounter))))];
+    });
+    const transportationReturnStats = countBy("transportation").map(([label]) => {
+      const modeRows = rows.filter((row) => row.transportation === label);
+      const patientIds = new Set(modeRows.map((row) => row.patientId));
+      const returnedPatientIds = new Set(
+        modeRows
+          .filter((row) => rows.some((later) => later.patientId === row.patientId && later.date > row.date))
+          .map((row) => row.patientId)
+      );
+      return { label, rows: modeRows, patients: patientIds.size, visits: modeRows.length, returnedPatients: returnedPatientIds.size, rate: percent(returnedPatientIds.size, patientIds.size) };
+    });
     const groups = [
       ["HTN+ only", rows.filter((row) => row.chronic.htn && !row.chronic.dm)],
       ["DM+ only", rows.filter((row) => row.chronic.dm && !row.chronic.htn)],
@@ -184,7 +198,7 @@ export default function ResearchView({ patients = [] }) {
     }, {});
     const dailyFlow = Object.entries(dailyGroups).sort((a, b) => b[0].localeCompare(a[0])).map(([date, dateRows]) => ({ date, ...flowMetrics(dateRows) }));
 
-    return { rows, chronicRows, papEligibleRows, mammogramEligibleRows, uniquePatients: unique(rows), chronicPatients: unique(chronicRows), chronicReturns: chronicRows.filter((row) => row.returning).length, groups, language: countBy("language"), transportation: countBy("transportation"), pap: countBy("pap", papEligibleRows), mammogram: countBy("mammogram", mammogramEligibleRows), flow: flowMetrics(generalAnalyticsRows), refillFlow: flowMetrics(refillAnalyticsRows), generalAnalyticsRows, refillAnalyticsRows, dailyFlow };
+    return { rows, chronicRows, papEligibleRows, mammogramEligibleRows, uniquePatients: unique(rows), chronicPatients: unique(chronicRows), chronicReturns: chronicRows.filter((row) => row.returning).length, groups, language: countBy("language"), languageStats, transportation: countBy("transportation"), transportationReturnStats, pap: countBy("pap", papEligibleRows), mammogram: countBy("mammogram", mammogramEligibleRows), flow: flowMetrics(generalAnalyticsRows), refillFlow: flowMetrics(refillAnalyticsRows), generalAnalyticsRows, refillAnalyticsRows, dailyFlow };
   }, [patients, startDate, endDate]);
 
   function showRows(title, sourceRows, recordedField = "Encounter included") {
@@ -262,10 +276,23 @@ export default function ResearchView({ patients = [] }) {
         <p className="mt-2 text-xs text-slate-500">Tracked-factor and visit-time columns are operational proxies for comparison, not validated measures of clinical complexity.</p>
 
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
-          <Breakdown title="Language" values={report.language} total={report.rows.length} onSelect={(value) => showRows(`Language: ${value}`, report.rows.filter((row) => row.language === value), "Language")} />
+          <div className="rounded-xl border border-slate-200 p-4">
+            <h3 className="font-semibold text-slate-900">Language and average visit time</h3>
+            <p className="mt-1 text-xs text-slate-500">General clinic only: undergrad complete → visit completion.</p>
+            <div className="mt-3 space-y-2">{report.languageStats.map(([label, count, avgMinutes]) => <button type="button" key={label} onClick={() => showTiming(`${label} general-clinic visit times`, report.rows.filter((row) => row.language === label), "undergradCompletedAt")} className="grid w-full grid-cols-[1fr_auto_auto] items-center gap-3 rounded-lg px-1 py-2 text-left text-sm hover:bg-blue-50"><span className="text-slate-600">{label}</span><span className="font-semibold text-slate-900">{count} <span className="font-normal text-slate-400">({percent(count, report.rows.length)})</span></span><span className="min-w-20 text-right font-semibold text-blue-700">{avgMinutes === "—" ? "—" : `${avgMinutes} min avg`}</span></button>)}</div>
+          </div>
           <Breakdown title="Transportation" values={report.transportation} total={report.rows.length} onSelect={(value) => showRows(`Transportation: ${value}`, report.rows.filter((row) => row.transportation === value), "Transportation")} />
           <Breakdown title="PAP smear response — females ages 21–65" values={report.pap} total={report.papEligibleRows.length} onSelect={(value) => showRows(`PAP smear: ${value} (females ages 21–65)`, report.papEligibleRows.filter((row) => row.pap === value), "PAP smear")} />
           <Breakdown title="Mammogram response — females ages 45+" values={report.mammogram} total={report.mammogramEligibleRows.length} onSelect={(value) => showRows(`Mammogram: ${value} (females ages 45+)`, report.mammogramEligibleRows.filter((row) => row.mammogram === value), "Mammogram")} />
+        </div>
+
+        <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <h3 className="font-semibold text-emerald-950">Transportation and likelihood of a return visit</h3>
+          <p className="mt-1 text-sm text-emerald-800">Transportation is evaluated separately for every general-clinic visit. A patient is counted once within each mode they reported and may appear in multiple mode cohorts when transportation changes.</p>
+          <div className="mt-3 overflow-x-auto rounded-lg border border-emerald-200 bg-white">
+            <table className="min-w-full text-left text-sm"><thead className="bg-emerald-50 text-xs uppercase text-emerald-800"><tr><th className="px-4 py-3">Transportation reported</th><th className="px-4 py-3">Unique patients in mode</th><th className="px-4 py-3">Visits reporting mode</th><th className="px-4 py-3">Patients with later visit</th><th className="px-4 py-3">Return likelihood</th></tr></thead><tbody className="divide-y divide-slate-200">{report.transportationReturnStats.map((mode) => <tr key={mode.label} onClick={() => showRows(`Transportation return data: ${mode.label}`, mode.rows, "Return status from visit history/intake")} className="cursor-pointer hover:bg-blue-50"><td className="px-4 py-3 font-semibold text-slate-900">{mode.label}</td><td className="px-4 py-3">{mode.patients}</td><td className="px-4 py-3">{mode.visits}</td><td className="px-4 py-3">{mode.returnedPatients}</td><td className="px-4 py-3 font-semibold text-emerald-800">{mode.rate}</td></tr>)}</tbody></table>
+          </div>
+          <p className="mt-2 text-xs text-emerald-800">Unique-patient columns should not be summed across modes because the same patient may report different transportation on different visits. This is an observational return proportion, not a causal estimate.</p>
         </div>
 
         <div className="mt-8 border-t border-slate-200 pt-6">
