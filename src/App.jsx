@@ -11144,9 +11144,7 @@ async function markSeenBySocialWork(encounterId) {
           {activeView === "dashboard" && (
             <DashboardView
               isLeadershipView={isLeadershipView}
-              canViewAnalytics={
-                isLeadershipView || userRole === "undergraduate" || userRole === "attending"
-              }
+              canViewAnalytics={false}
               canEditMrn={userRole === "undergraduate" || isLeadershipView}
               canEditUndergradFields={userRole === "undergraduate" || isLeadershipView}
               canEditAllPatientFields={isLeadershipView}
