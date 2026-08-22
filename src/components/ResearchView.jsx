@@ -6,6 +6,17 @@ function normalizeDate(value) {
   return text.includes("T") ? text.slice(0, 10) : text;
 }
 
+function ageOnDate(dob, dateValue) {
+  if (!dob || !dateValue) return null;
+  const birth = new Date(`${normalizeDate(dob)}T12:00:00`);
+  const visit = new Date(`${normalizeDate(dateValue)}T12:00:00`);
+  if (Number.isNaN(birth.getTime()) || Number.isNaN(visit.getTime())) return null;
+  let age = visit.getFullYear() - birth.getFullYear();
+  const birthdayNotReached = visit.getMonth() < birth.getMonth() || (visit.getMonth() === birth.getMonth() && visit.getDate() < birth.getDate());
+  if (birthdayNotReached) age -= 1;
+  return age;
+}
+
 function isPositive(value) {
   if (value === true || value === 1) return true;
   return ["true", "yes", "positive", "1"].includes(String(value || "").trim().toLowerCase());
@@ -128,6 +139,9 @@ export default function ResearchView({ patients = [] }) {
         const visitType = encounter.visitType || encounter.visit_type || "general";
         const patientName = [patient.first_name || patient.firstName, patient.last_name || patient.lastName].filter(Boolean).join(" ") || patient.name || `Patient ${patient.id}`;
         const femaleEligible = String(patient.sex || "").trim().toLowerCase() === "female";
+        const visitAge = ageOnDate(patient.dob, date);
+        const papEligible = femaleEligible && visitAge !== null && visitAge >= 21 && visitAge <= 65;
+        const mammogramEligible = femaleEligible && visitAge !== null && visitAge >= 45;
         analyticsRows.push({ patientId: String(patient.id), patientName, encounter, date, visitType });
         if (["refill_only", "specialty_only"].includes(visitType)) return;
         if (encounter.status === "cancelled") return;
@@ -136,9 +150,9 @@ export default function ResearchView({ patients = [] }) {
         const transportation = String(intakeValue(encounter, "transportation") || "Not recorded").trim();
         const pap = String(intakeValue(encounter, "papStatus") || "Not recorded").trim();
         const mammogram = String(intakeValue(encounter, "mammogramStatus", "mammogramPapSmear") || "Not recorded").trim();
-        const factors = [chronic.htn, chronic.dm, language === "Spanish", transportation !== "Not recorded" && transportation !== "Own Transportation", pap !== "Not recorded", mammogram !== "Not recorded"].filter(Boolean).length;
+        const factors = [chronic.htn, chronic.dm, language === "Spanish", transportation !== "Not recorded" && transportation !== "Own Transportation", papEligible && pap !== "Not recorded", mammogramEligible && mammogram !== "Not recorded"].filter(Boolean).length;
         rows.push({
-          patientId: String(patient.id), patientName, encounter, chronic, language, transportation, pap, mammogram, factors, date, femaleEligible,
+          patientId: String(patient.id), patientName, encounter, chronic, language, transportation, pap, mammogram, factors, date, visitAge, femaleEligible, papEligible, mammogramEligible,
           returning: index > 0 || String(intakeValue(encounter, "newReturning")).toLowerCase() === "returning",
           duration: minutesBetween(encounter.createdAt, encounter.visitCompletedAt || encounter.doneAt),
         });
@@ -152,7 +166,8 @@ export default function ResearchView({ patients = [] }) {
     }, {})).sort((a, b) => b[1] - a[1]);
     const unique = (subset) => new Set(subset.map((row) => row.patientId)).size;
     const chronicRows = rows.filter((row) => row.chronic.htn || row.chronic.dm);
-    const femaleRows = rows.filter((row) => row.femaleEligible);
+    const papEligibleRows = rows.filter((row) => row.papEligible);
+    const mammogramEligibleRows = rows.filter((row) => row.mammogramEligible);
     const groups = [
       ["HTN+ only", rows.filter((row) => row.chronic.htn && !row.chronic.dm)],
       ["DM+ only", rows.filter((row) => row.chronic.dm && !row.chronic.htn)],
@@ -169,7 +184,7 @@ export default function ResearchView({ patients = [] }) {
     }, {});
     const dailyFlow = Object.entries(dailyGroups).sort((a, b) => b[0].localeCompare(a[0])).map(([date, dateRows]) => ({ date, ...flowMetrics(dateRows) }));
 
-    return { rows, chronicRows, femaleRows, uniquePatients: unique(rows), chronicPatients: unique(chronicRows), chronicReturns: chronicRows.filter((row) => row.returning).length, groups, language: countBy("language"), transportation: countBy("transportation"), pap: countBy("pap", femaleRows), mammogram: countBy("mammogram", femaleRows), flow: flowMetrics(generalAnalyticsRows), refillFlow: flowMetrics(refillAnalyticsRows), generalAnalyticsRows, refillAnalyticsRows, dailyFlow };
+    return { rows, chronicRows, papEligibleRows, mammogramEligibleRows, uniquePatients: unique(rows), chronicPatients: unique(chronicRows), chronicReturns: chronicRows.filter((row) => row.returning).length, groups, language: countBy("language"), transportation: countBy("transportation"), pap: countBy("pap", papEligibleRows), mammogram: countBy("mammogram", mammogramEligibleRows), flow: flowMetrics(generalAnalyticsRows), refillFlow: flowMetrics(refillAnalyticsRows), generalAnalyticsRows, refillAnalyticsRows, dailyFlow };
   }, [patients, startDate, endDate]);
 
   function showRows(title, sourceRows, recordedField = "Encounter included") {
@@ -249,8 +264,8 @@ export default function ResearchView({ patients = [] }) {
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
           <Breakdown title="Language" values={report.language} total={report.rows.length} onSelect={(value) => showRows(`Language: ${value}`, report.rows.filter((row) => row.language === value), "Language")} />
           <Breakdown title="Transportation" values={report.transportation} total={report.rows.length} onSelect={(value) => showRows(`Transportation: ${value}`, report.rows.filter((row) => row.transportation === value), "Transportation")} />
-          <Breakdown title="PAP smear response — female patients" values={report.pap} total={report.femaleRows.length} onSelect={(value) => showRows(`PAP smear: ${value} (female patients)`, report.femaleRows.filter((row) => row.pap === value), "PAP smear")} />
-          <Breakdown title="Mammogram response — female patients" values={report.mammogram} total={report.femaleRows.length} onSelect={(value) => showRows(`Mammogram: ${value} (female patients)`, report.femaleRows.filter((row) => row.mammogram === value), "Mammogram")} />
+          <Breakdown title="PAP smear response — females ages 21–65" values={report.pap} total={report.papEligibleRows.length} onSelect={(value) => showRows(`PAP smear: ${value} (females ages 21–65)`, report.papEligibleRows.filter((row) => row.pap === value), "PAP smear")} />
+          <Breakdown title="Mammogram response — females ages 45+" values={report.mammogram} total={report.mammogramEligibleRows.length} onSelect={(value) => showRows(`Mammogram: ${value} (females ages 45+)`, report.mammogramEligibleRows.filter((row) => row.mammogram === value), "Mammogram")} />
         </div>
 
         <div className="mt-8 border-t border-slate-200 pt-6">
