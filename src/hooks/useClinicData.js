@@ -213,7 +213,7 @@ socialWorkSeenBy:
   return Object.values(patientMap);
 }
 
-export function useClinicData({ authReady, session, userRole }) {
+export function useClinicData({ authReady, session, userRole, isBoardDisplayMode = false }) {
   const [patients, setPatients] = useState([]);
 
   const timeoutRef = useRef(null);
@@ -306,7 +306,14 @@ export function useClinicData({ authReady, session, userRole }) {
         { event: "*", schema: "public", table: "social_work_notes" },
         triggerReload
       )
-      .subscribe();
+      .subscribe((status) => {
+        // A display may have been disconnected while an assignment changed.
+        // Refresh once whenever realtime connects or reconnects so it cannot
+        // remain stuck on the pre-disconnect snapshot.
+        if (status === "SUBSCRIBED" && isBoardDisplayMode) {
+          triggerReload();
+        }
+      });
 
     return () => {
       if (timeoutRef.current) {
@@ -314,7 +321,7 @@ export function useClinicData({ authReady, session, userRole }) {
       }
       supabase.removeChannel(channel);
     };
-  }, [authReady, session, userRole, loadData]);
+  }, [authReady, session, userRole, loadData, isBoardDisplayMode]);
 
   useEffect(() => {
     if (!authReady || !session || !userRole) return;
@@ -332,7 +339,13 @@ export function useClinicData({ authReady, session, userRole }) {
     const fallbackInterval = setInterval(() => {
       // Hidden tabs should not keep burning Supabase Disk I/O overnight.
       refreshVisibleTab();
-    }, 120000);
+    }, isBoardDisplayMode ? 10000 : 120000);
+
+    const refreshFromRoomBoardTab = (event) => {
+      if (event.key === "clinic-room-board-refresh") {
+        loadData();
+      }
+    };
 
     const refreshWhenVisible = () => {
       if (document.visibilityState === "visible") {
@@ -346,13 +359,15 @@ export function useClinicData({ authReady, session, userRole }) {
 
     document.addEventListener("visibilitychange", refreshWhenVisible);
     window.addEventListener("focus", refreshOnFocus);
+    window.addEventListener("storage", refreshFromRoomBoardTab);
 
     return () => {
       clearInterval(fallbackInterval);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
       window.removeEventListener("focus", refreshOnFocus);
+      window.removeEventListener("storage", refreshFromRoomBoardTab);
     };
-  }, [authReady, session, userRole, loadData]);
+  }, [authReady, session, userRole, loadData, isBoardDisplayMode]);
 
   return {
     patients,

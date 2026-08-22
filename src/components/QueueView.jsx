@@ -486,7 +486,7 @@ const canMarkSeenBySocialWork =
       <section>
         <h2>${escapePrintHtml(title)} <span>(${rows.length})</span></h2>
         <table>
-          <thead><tr><th class="number">Daily #</th><th>Patient Name</th><th>DOB</th><th class="age">Age</th><th class="phone">Phone Number</th><th class="check">Prescription Filled</th><th class="check">Medication Picked Up</th><th class="check no-meds-column">No Medications Prescribed</th></tr></thead>
+          <thead><tr><th class="number">Daily #</th><th>Patient Name</th><th>DOB</th><th class="age">Age</th><th class="phone">Phone Number</th><th class="check">Prescription Filled</th><th class="check">Medication Picked Up</th><th class="check no-meds-column">Picking Up Meds Another Day</th></tr></thead>
           <tbody>${
             rows.length
               ? sortByNumberThenName(rows, getDailyCardNumber)

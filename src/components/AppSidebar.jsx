@@ -271,6 +271,13 @@ export default function AppSidebar({
                   >
                     Clinic Summary
                   </button>
+
+                  <button
+                    onClick={() => handleViewChange("research")}
+                    className={getNavItemClass("research")}
+                  >
+                    Research Tracker
+                  </button>
                 </div>
               )}
             </>

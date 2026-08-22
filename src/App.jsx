@@ -81,6 +81,7 @@ import AppHeader from "./components/AppHeader";
 import StickyNotesModal from "./components/StickyNotesModal";
 import DashboardView from "./components/DashboardView";
 import ClinicSummaryView from "./components/ClinicSummaryView";
+import ResearchView from "./components/ResearchView";
 import ProgramsView from "./components/ProgramsView";
 import { fetchProgramSettings } from "./api/programSettings";
 import PAPView from "./components/PAPView";
@@ -2164,6 +2165,7 @@ export default function App() {
     authReady,
     session,
     userRole,
+    isBoardDisplayMode,
   });
 
   function rememberDashboardScrollPosition() {
@@ -7970,6 +7972,14 @@ export default function App() {
         ),
       }))
     );
+
+    // Wake an already-open board display in this browser immediately. The
+    // Supabase encounter subscription handles displays on other devices.
+    try {
+      window.localStorage.setItem("clinic-room-board-refresh", String(Date.now()));
+    } catch (error) {
+      console.error("Failed to notify room board display:", error);
+    }
   }
 
   async function markMedicationsReady(encounterId) {
@@ -11568,6 +11578,10 @@ async function markSeenBySocialWork(encounterId) {
               onRefreshSummary={refreshClinicSummaryData}
               summaryRefreshStatus={summaryRefreshStatus}
             />
+          )}
+
+          {activeView === "research" && isLeadershipView && (
+            <ResearchView patients={patients} />
           )}
 
           {canAccessPrograms && (
