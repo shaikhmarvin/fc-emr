@@ -1105,19 +1105,19 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                     >
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
                         <div className="md:col-span-2"><ReadOnlyField label="Full Name" value={entry.patientName} /></div>
-                        <div className="md:col-span-1"><ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} /></div>
-                        <div className="md:col-span-2"><ReadOnlyField label="Phone Number" value={entry.phone || "—"} /></div>
+                        <div className="md:col-span-2"><ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} /></div>
+                        <div className="md:col-span-2 md:max-w-[220px]"><ReadOnlyField label="Phone Number" value={entry.phone || "—"} /></div>
                         <div className="md:col-span-1"><ReadOnlyField label="MRN" value={entry.mrn || "—"} /></div>
-                        <div className="md:col-span-2"><ReadOnlyField label="Program" value={entry.programType} /></div>
+                        <div className="md:col-span-2"><ReadOnlyField label="Program" value={entry.programType} copyable={false} /></div>
 
-                        <div className="md:col-span-2">
+                        <div className="md:col-span-1">
                           <label className="mb-1 block text-sm font-medium text-slate-700">
                             Status
                           </label>
                           <StatusBadge status={entry.status} />
                         </div>
 
-                        <div className="md:col-span-2"><ReadOnlyField label="Scheduled Visit Date" value={formatDisplayDate(entry.specialtyDate)} /></div>
+                        <div className="md:col-span-2"><ReadOnlyField label="Scheduled Visit Date" value={formatDisplayDate(entry.specialtyDate)} copyable={false} /></div>
                       </div>
                     </button>
 
@@ -1582,16 +1582,16 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                       >
                         <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
                           <div className="md:col-span-2"><ReadOnlyField label="Full Name" value={entry.patientName} /></div>
-                          <div className="md:col-span-1"><ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} /></div>
-                          <div className="md:col-span-2"><ReadOnlyField label="Phone Number" value={entry.phone || "—"} /></div>
+                          <div className="md:col-span-2"><ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} /></div>
+                          <div className="md:col-span-2 md:max-w-[220px]"><ReadOnlyField label="Phone Number" value={entry.phone || "—"} /></div>
                           <div className="md:col-span-1"><ReadOnlyField label="MRN" value={entry.mrn || "—"} /></div>
-                          <div className="md:col-span-2">
+                          <div className="md:col-span-1">
                             <label className="mb-1 block text-sm font-medium text-slate-700">
                               Status
                             </label>
                             <StatusBadge status={entry.status} />
                           </div>
-                          <div className="md:col-span-2"><ReadOnlyField label="Scheduled Visit Date" value={formatDisplayDate(entry.specialtyDate)} /></div>
+                          <div className="md:col-span-2"><ReadOnlyField label="Scheduled Visit Date" value={formatDisplayDate(entry.specialtyDate)} copyable={false} /></div>
                           <div className="md:col-span-2"><ReadOnlyField label="Reason" value={entry.reason || "—"} /></div>
                         </div>
                       </button>
@@ -2038,11 +2038,11 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                           <ReadOnlyField label="Full Name" value={entry.patientName} />
                         </div>
 
-                        <div className="md:col-span-2">
+                        <div className="md:col-span-2 md:max-w-[220px]">
                           <ReadOnlyField label="Phone Number" value={entry.phone || "—"} />
                         </div>
 
-                        <div className="md:col-span-1">
+                        <div className="md:col-span-2">
                           <ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} />
                         </div>
 
@@ -2050,7 +2050,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                           <ReadOnlyField label="MRN" value={entry.mrn || "—"} />
                         </div>
 
-                        <div className="md:col-span-2">
+                        <div className="md:col-span-1">
                           <label className="mb-1 block text-sm font-medium text-slate-700">
                             Status
                           </label>
@@ -2062,7 +2062,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                         </div>
 
                         <div className="md:col-span-2">
-                          <ReadOnlyField label="Scheduled Visit Date" value={formatDisplayDate(entry.specialtyDate)} />
+                          <ReadOnlyField label="Scheduled Visit Date" value={formatDisplayDate(entry.specialtyDate)} copyable={false} />
                         </div>
                       </div>
                     </button>
@@ -2389,7 +2389,7 @@ function getStatusBorderColor(status) {
 function StatusBadge({ status }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${getStatusStyles(
+      className={`inline-flex max-w-full items-center whitespace-normal rounded-full px-2 py-1 text-center text-xs font-medium leading-tight ${getStatusStyles(
         status
       )}`}
     >
