@@ -82,6 +82,7 @@ import StickyNotesModal from "./components/StickyNotesModal";
 import DashboardView from "./components/DashboardView";
 import ClinicSummaryView from "./components/ClinicSummaryView";
 import ResearchView from "./components/ResearchView";
+import { fetchResearchAccess, setResearchLeadershipAccess } from "./api/researchAccess";
 import ProgramsView from "./components/ProgramsView";
 import { fetchProgramSettings } from "./api/programSettings";
 import PAPView from "./components/PAPView";
@@ -1677,9 +1678,42 @@ export default function App() {
   const [programSettings, setProgramSettings] = useState([]);
   const [clinicResourceSettings, setClinicResourceSettings] = useState([]);
   const [clinicResourceSettingsLoaded, setClinicResourceSettingsLoaded] = useState(false);
+  const [researchLeadershipAccess, setResearchLeadershipAccessState] = useState(false);
   const [activeBoardMessage, setActiveBoardMessage] = useState(null);
   const [savedBoardMessages, setSavedBoardMessages] = useState([]);
   const todayIso = formatClinicDate();
+  const isResearchOwner = String(session?.user?.email || "").trim().toLowerCase() === "marvin.shaikh@ttuhsc.edu";
+  const canAccessResearch = isResearchOwner || (isLeadershipView && researchLeadershipAccess);
+
+  useEffect(() => {
+    if (!session) return;
+    let cancelled = false;
+    const loadAccess = async () => {
+      try {
+        const enabled = await fetchResearchAccess();
+        if (!cancelled) setResearchLeadershipAccessState(enabled);
+      } catch (error) {
+        console.error("Failed to load research access setting:", error);
+        if (!cancelled) setResearchLeadershipAccessState(false);
+      }
+    };
+    loadAccess();
+    const channel = supabase.channel("research-access-settings-realtime").on("postgres_changes", { event: "*", schema: "public", table: "research_access_settings" }, loadAccess).subscribe();
+    return () => { cancelled = true; supabase.removeChannel(channel); };
+  }, [session]);
+
+  async function handleResearchLeadershipAccessChange(enabled) {
+    if (!isResearchOwner) return;
+    const previous = researchLeadershipAccess;
+    setResearchLeadershipAccessState(enabled);
+    try {
+      const saved = await setResearchLeadershipAccess(enabled);
+      setResearchLeadershipAccessState(saved);
+    } catch (error) {
+      setResearchLeadershipAccessState(previous);
+      alert(`Failed to change Research Tracker access: ${error.message}`);
+    }
+  }
 
   const tonightSpecialtyPrograms = useMemo(() => {
     return (programSettings || []).filter(
@@ -11048,6 +11082,7 @@ async function markSeenBySocialWork(encounterId) {
         canRefillAccess={canRefillAccess}
         canLabQueueAccess={canLabQueueAccess}
         canProgramsAccess={canAccessPrograms}
+        canAccessResearch={canAccessResearch}
       />
 
       <div className="min-w-0 flex-1 bg-slate-100 xl:ml-64 xl:flex xl:flex-col">
@@ -11578,8 +11613,13 @@ async function markSeenBySocialWork(encounterId) {
             />
           )}
 
-          {activeView === "research" && isLeadershipView && (
-            <ResearchView patients={patients} />
+          {activeView === "research" && canAccessResearch && (
+            <ResearchView
+              patients={patients}
+              isResearchOwner={isResearchOwner}
+              leadershipAccessEnabled={researchLeadershipAccess}
+              onLeadershipAccessChange={handleResearchLeadershipAccessChange}
+            />
           )}
 
           {canAccessPrograms && (

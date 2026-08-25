@@ -134,7 +134,7 @@ function Breakdown({ title, values, total, onSelect }) {
   );
 }
 
-export default function ResearchView({ patients = [] }) {
+export default function ResearchView({ patients = [], isResearchOwner = false, leadershipAccessEnabled = false, onLeadershipAccessChange }) {
   const today = new Date().toISOString().slice(0, 10);
   const [startDate, setStartDate] = useState(`${today.slice(0, 4)}-01-01`);
   const [endDate, setEndDate] = useState(today);
@@ -172,9 +172,8 @@ export default function ResearchView({ patients = [] }) {
         const transportation = String(intakeValue(encounter, "transportation") || "Not recorded").trim();
         const pap = String(intakeValue(encounter, "papStatus") || "Not recorded").trim();
         const mammogram = String(intakeValue(encounter, "mammogramStatus", "mammogramPapSmear") || "Not recorded").trim();
-        const factors = [chronic.htn, chronic.dm, language === "Spanish", transportation !== "Not recorded" && transportation !== "Own Transportation", papEligible && pap !== "Not recorded", mammogramEligible && mammogram !== "Not recorded"].filter(Boolean).length;
         rows.push({
-          patientId: String(patient.id), patientName, encounter, chronic, language, transportation, pap, mammogram, factors, date, visitAge, femaleEligible, papEligible, mammogramEligible,
+          patientId: String(patient.id), patientName, encounter, chronic, language, transportation, pap, mammogram, date, visitAge, femaleEligible, papEligible, mammogramEligible,
           returning: index > 0 || String(intakeValue(encounter, "newReturning")).toLowerCase() === "returning",
           duration: minutesBetween(encounter.createdAt, encounter.visitCompletedAt || encounter.doneAt),
         });
@@ -209,7 +208,7 @@ export default function ResearchView({ patients = [] }) {
       ["DM+ only", rows.filter((row) => row.chronic.dm && !row.chronic.htn)],
       ["HTN+ and DM+", rows.filter((row) => row.chronic.htn && row.chronic.dm)],
       ["Neither recorded", rows.filter((row) => !row.chronic.htn && !row.chronic.dm)],
-    ].map(([label, groupRows]) => ({ label, rows: groupRows, visits: groupRows.length, patients: unique(groupRows), returns: groupRows.filter((row) => row.returning).length, factors: groupRows.length ? (groupRows.reduce((sum, row) => sum + row.factors, 0) / groupRows.length).toFixed(1) : "—", duration: average(groupRows.map((row) => row.duration)) }));
+    ].map(([label, groupRows]) => ({ label, rows: groupRows, visits: groupRows.length, patients: unique(groupRows), returns: groupRows.filter((row) => row.returning).length, duration: average(groupRows.map((row) => row.duration)) }));
 
     const generalAnalyticsRows = analyticsRows.filter((row) => !["refill_only", "specialty_only"].includes(row.visitType));
     const refillAnalyticsRows = analyticsRows.filter((row) => row.visitType === "refill_only");
@@ -276,6 +275,11 @@ export default function ResearchView({ patients = [] }) {
             <p className="mt-1 max-w-3xl text-sm text-slate-600">General-clinic visits only. Longitudinal counts come from saved intakes; HTN+ and DM+ carry forward when any historical intake or badge identified the disease.</p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {isResearchOwner ? (
+              <button type="button" onClick={() => onLeadershipAccessChange?.(!leadershipAccessEnabled)} className={`self-end rounded-lg border px-3 py-2 text-sm font-semibold ${leadershipAccessEnabled ? "border-amber-300 bg-amber-50 text-amber-800" : "border-blue-300 bg-blue-50 text-blue-800"}`}>
+                {leadershipAccessEnabled ? "Make Private to Me" : "Make Public to Leadership"}
+              </button>
+            ) : null}
             <label className="text-xs font-semibold text-slate-600">From<input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className="mt-1 block rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal" /></label>
             <label className="text-xs font-semibold text-slate-600">Through<input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} className="mt-1 block rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal" /></label>
           </div>
@@ -291,11 +295,11 @@ export default function ResearchView({ patients = [] }) {
 
         <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200">
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Disease group</th><th className="px-4 py-3">Patients</th><th className="px-4 py-3">Visits</th><th className="px-4 py-3">Return visits</th><th className="px-4 py-3">Return rate</th><th className="px-4 py-3">Avg tracked factors</th><th className="px-4 py-3">Avg visit minutes</th></tr></thead>
-            <tbody className="divide-y divide-slate-200">{report.groups.map((group) => <tr key={group.label} onClick={() => showRows(group.label, group.rows, group.label)} className="cursor-pointer hover:bg-blue-50"><td className="px-4 py-3 font-semibold text-slate-900">{group.label}</td><td className="px-4 py-3">{group.patients}</td><td className="px-4 py-3">{group.visits}</td><td className="px-4 py-3">{group.returns}</td><td className="px-4 py-3">{percent(group.returns, group.visits)}</td><td className="px-4 py-3">{group.factors}</td><td className="px-4 py-3">{group.duration}</td></tr>)}</tbody>
+            <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Disease group</th><th className="px-4 py-3">Patients</th><th className="px-4 py-3">Visits</th><th className="px-4 py-3">Return visits</th><th className="px-4 py-3">Return rate</th><th className="px-4 py-3">Avg visit minutes</th></tr></thead>
+            <tbody className="divide-y divide-slate-200">{report.groups.map((group) => <tr key={group.label} onClick={() => showRows(group.label, group.rows, group.label)} className="cursor-pointer hover:bg-blue-50"><td className="px-4 py-3 font-semibold text-slate-900">{group.label}</td><td className="px-4 py-3">{group.patients}</td><td className="px-4 py-3">{group.visits}</td><td className="px-4 py-3">{group.returns}</td><td className="px-4 py-3">{percent(group.returns, group.visits)}</td><td className="px-4 py-3">{group.duration}</td></tr>)}</tbody>
           </table>
         </div>
-        <p className="mt-2 text-xs text-slate-500">Tracked-factor and visit-time columns are operational proxies for comparison, not validated measures of clinical complexity.</p>
+        <p className="mt-2 text-xs text-slate-500">Visit-time comparisons are operational measures and not validated measures of clinical complexity.</p>
 
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
           <div className="rounded-xl border border-slate-200 p-4">

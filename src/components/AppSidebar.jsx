@@ -24,6 +24,7 @@ export default function AppSidebar({
   canRefillAccess,
   canLabQueueAccess,
   canProgramsAccess,
+  canAccessResearch = false,
 }) {
   function handleViewChange(view) {
     setActiveView(view);
@@ -263,12 +264,14 @@ export default function AppSidebar({
                     Clinic Summary
                   </button>
 
-                  <button
-                    onClick={() => handleViewChange("research")}
-                    className={getNavItemClass("research")}
-                  >
-                    Research Tracker
-                  </button>
+                  {canAccessResearch && (
+                    <button
+                      onClick={() => handleViewChange("research")}
+                      className={getNavItemClass("research")}
+                    >
+                      Research Tracker
+                    </button>
+                  )}
                 </div>
               )}
             </>
