@@ -312,8 +312,49 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
     );
   }
 
+  const patientById = useMemo(
+    () => new Map((patients || []).map((patient) => [String(patient.id), patient])),
+    [patients]
+  );
+
+  const hydratedProgramEntries = useMemo(() => {
+    return (programEntries || []).map((entry) => {
+      const patient = patientById.get(String(entry.patientId || ""));
+      if (!patient) return entry;
+
+      const patientName = `${patient.firstName || ""} ${patient.lastName || ""}`.trim();
+      return {
+        ...entry,
+        patientName: patientName || entry.patientName || "",
+        mrn: patient.mrn || entry.mrn || "",
+        dob: patient.dob || entry.dob || "",
+        phone: patient.phone || entry.phone || "",
+      };
+    });
+  }, [programEntries, patientById]);
+
+  useEffect(() => {
+    if (!updateProgramEntryFields) return;
+
+    (programEntries || []).forEach((entry) => {
+      const patient = patientById.get(String(entry.patientId || ""));
+      if (!patient) return;
+
+      const patientName = `${patient.firstName || ""} ${patient.lastName || ""}`.trim();
+      const updates = {};
+      if (patientName && patientName !== (entry.patientName || "")) updates.patientName = patientName;
+      if (patient.mrn && patient.mrn !== (entry.mrn || "")) updates.mrn = patient.mrn;
+      if (patient.dob && patient.dob !== (entry.dob || "")) updates.dob = patient.dob;
+      if (patient.phone && patient.phone !== (entry.phone || "")) updates.phone = patient.phone;
+
+      if (Object.keys(updates).length > 0) {
+        updateProgramEntryFields(entry.id, updates);
+      }
+    });
+  }, [programEntries, patientById, updateProgramEntryFields]);
+
   const trackerEntries = useMemo(() => {
-    return programEntries
+    return hydratedProgramEntries
       .filter((entry) => {
         const patientText = (entry.patientName || "").toLowerCase();
 
@@ -337,16 +378,16 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
         const bTime = getCreatedTime(b);
         return filters.sortBy === "created_asc" ? aTime - bTime : bTime - aTime;
       });
-  }, [programEntries, filters, accessibleProgramTypes, isLeadershipView]);
+  }, [hydratedProgramEntries, filters, accessibleProgramTypes, isLeadershipView]);
 
   const specialtyEntries = useMemo(() => {
     return accessibleProgramTypes.reduce((acc, type) => {
-      acc[type] = programEntries
+      acc[type] = hydratedProgramEntries
         .filter((entry) => entry.programType === type)
         .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
       return acc;
     }, {});
-  }, [programEntries, accessibleProgramTypes]);
+  }, [hydratedProgramEntries, accessibleProgramTypes]);
 
   function handleSelectPatient(patient) {
     setNewEntry((prev) => ({
@@ -1062,26 +1103,21 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                       }
                       className="w-full text-left"
                     >
-                      <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
-                        <ReadOnlyField label="Patient" value={entry.patientName} />
-                        <ReadOnlyField label="Phone" value={entry.phone || "—"} />
-                        <ReadOnlyField label="Program" value={entry.programType} />
-                        <ReadOnlyField
-                          label="Created"
-                          value={formatDisplayDate(entry.createdAt)}
-                        />
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
+                        <div className="md:col-span-2"><ReadOnlyField label="Full Name" value={entry.patientName} /></div>
+                        <div className="md:col-span-1"><ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} /></div>
+                        <div className="md:col-span-2"><ReadOnlyField label="Phone Number" value={entry.phone || "—"} /></div>
+                        <div className="md:col-span-1"><ReadOnlyField label="MRN" value={entry.mrn || "—"} /></div>
+                        <div className="md:col-span-2"><ReadOnlyField label="Program" value={entry.programType} /></div>
 
-                        <div>
+                        <div className="md:col-span-2">
                           <label className="mb-1 block text-sm font-medium text-slate-700">
                             Status
                           </label>
                           <StatusBadge status={entry.status} />
                         </div>
 
-                        <ReadOnlyField
-                          label="Scheduled Visit Date"
-                          value={formatDisplayDate(entry.specialtyDate)}
-                        />
+                        <div className="md:col-span-2"><ReadOnlyField label="Scheduled Visit Date" value={formatDisplayDate(entry.specialtyDate)} /></div>
                       </div>
                     </button>
 
@@ -1089,9 +1125,6 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                     {isExpanded && (
                       <>
                         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-                          <ReadOnlyField label="MRN" value={entry.mrn || "—"} />
-                          <ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} />
-                          <ReadOnlyField label="Created" value={formatDisplayDate(entry.createdAt)} />
                           <ReadOnlyField
                             label="Last Contact Attempt"
                             value={
@@ -1547,26 +1580,25 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                         }
                         className="w-full text-left"
                       >
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
-                          <ReadOnlyField label="Patient" value={entry.patientName} />
-                          <ReadOnlyField label="Phone" value={entry.phone || "—"} />
-                          <ReadOnlyField label="Created" value={formatDisplayDate(entry.createdAt)} />
-                          <div>
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
+                          <div className="md:col-span-2"><ReadOnlyField label="Full Name" value={entry.patientName} /></div>
+                          <div className="md:col-span-1"><ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} /></div>
+                          <div className="md:col-span-2"><ReadOnlyField label="Phone Number" value={entry.phone || "—"} /></div>
+                          <div className="md:col-span-1"><ReadOnlyField label="MRN" value={entry.mrn || "—"} /></div>
+                          <div className="md:col-span-2">
                             <label className="mb-1 block text-sm font-medium text-slate-700">
                               Status
                             </label>
                             <StatusBadge status={entry.status} />
                           </div>
-                          <ReadOnlyField label="Reason" value={entry.reason || "—"} />
+                          <div className="md:col-span-2"><ReadOnlyField label="Scheduled Visit Date" value={formatDisplayDate(entry.specialtyDate)} /></div>
+                          <div className="md:col-span-2"><ReadOnlyField label="Reason" value={entry.reason || "—"} /></div>
                         </div>
                       </button>
 
                       {isExpanded && (
                         <>
                           <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-                            <ReadOnlyField label="MRN" value={entry.mrn || "—"} />
-                            <ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} />
-                            <ReadOnlyField label="Created" value={formatDisplayDate(entry.createdAt)} />
                             <ReadOnlyField
                               label="Last Contact Attempt"
                               value={
@@ -1590,6 +1622,15 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                                   </option>
                                 ))}
                               </select>
+                            </Field>
+
+                            <Field label="Scheduled Visit Date">
+                              <input
+                                type="date"
+                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                value={entry.specialtyDate || ""}
+                                onChange={(e) => updateProgramEntry(entry.id, "specialtyDate", e.target.value)}
+                              />
                             </Field>
                           </div>
 
@@ -1994,11 +2035,11 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                     >
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
                         <div className="md:col-span-2">
-                          <ReadOnlyField label="Patient" value={entry.patientName} />
+                          <ReadOnlyField label="Full Name" value={entry.patientName} />
                         </div>
 
                         <div className="md:col-span-2">
-                          <ReadOnlyField label="Phone" value={entry.phone || "—"} />
+                          <ReadOnlyField label="Phone Number" value={entry.phone || "—"} />
                         </div>
 
                         <div className="md:col-span-1">
@@ -2010,18 +2051,18 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                         </div>
 
                         <div className="md:col-span-2">
-                          <ReadOnlyField label="Created" value={formatDisplayDate(entry.createdAt)} />
-                        </div>
-
-                        <div className="md:col-span-1">
                           <label className="mb-1 block text-sm font-medium text-slate-700">
                             Status
                           </label>
                           <StatusBadge status={entry.status} />
                         </div>
 
-                        <div className="md:col-span-3">
+                        <div className="md:col-span-2">
                           <ReadOnlyField label="Reason" value={entry.reason || "—"} multiline />
+                        </div>
+
+                        <div className="md:col-span-2">
+                          <ReadOnlyField label="Scheduled Visit Date" value={formatDisplayDate(entry.specialtyDate)} />
                         </div>
                       </div>
                     </button>
@@ -2029,9 +2070,6 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                     {isExpanded && (
                       <>
                         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-                          <ReadOnlyField label="MRN" value={entry.mrn || "—"} />
-                          <ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} />
-                          <ReadOnlyField label="Created" value={formatDisplayDate(entry.createdAt)} />
                           <ReadOnlyField
                             label="Last Contact Attempt"
                             value={
@@ -2063,6 +2101,27 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                               </select>
                             </div>
                           </div>
+
+                          <Field label="Scheduled Visit Date">
+                            <input
+                              type="date"
+                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                              value={entry.specialtyDate || ""}
+                              onChange={(e) => updateProgramEntry(entry.id, "specialtyDate", e.target.value)}
+                            />
+                          </Field>
+                        </div>
+
+                        <div className="mt-4">
+                          <Field label="Reason">
+                            <textarea
+                              rows={2}
+                              className="min-h-[70px] w-full resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                              value={getProgramDraftValue(entry, "reason")}
+                              onChange={(e) => setProgramDraftValue(entry.id, "reason", e.target.value)}
+                              onBlur={() => saveProgramDraftValue(entry, "reason")}
+                            />
+                          </Field>
                         </div>
 
                         <div className="mt-4">
@@ -2118,6 +2177,13 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                             className="rounded-lg bg-red-100 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-200"
                           >
                             Declined
+                          </button>
+
+                          <button
+                            onClick={() => handleDeleteEntry(entry.id)}
+                            className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700"
+                          >
+                            Delete
                           </button>
                         </div>
                       </>
