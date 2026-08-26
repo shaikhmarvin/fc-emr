@@ -107,8 +107,14 @@ export async function createPatientInSupabase(intakeForm) {
   emergency_contact_phone: intakeForm.emergencyContactPhone || "",
 
   income_range: intakeForm.incomeRange || "",
-  spanish_only: intakeForm.spanishOnly || "",
-  chronic_conditions: intakeForm.chronicConditions || [],
+  spanish_only:
+    intakeForm.languagePreference ||
+    intakeForm.spanishOnly ||
+    (intakeForm.spanishSpeaking ? "Spanish" : ""),
+  chronic_conditions:
+    Array.isArray(intakeForm.chronicConditions) && intakeForm.chronicConditions.length > 0
+      ? intakeForm.chronicConditions
+      : [intakeForm.htn ? "HTN" : null, intakeForm.dm ? "DM" : null].filter(Boolean),
   chronic_conditions_other: intakeForm.chronicConditionsOther || "",
 
   intake_status: intakeForm.intakeStatus || "undergrad-complete",

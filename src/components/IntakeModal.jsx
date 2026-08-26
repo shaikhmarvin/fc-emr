@@ -387,6 +387,39 @@ function renderExistingProgramWarning(programType) {
                   />
                 </div>
               </Field>
+
+              <SectionCard title="Persistent Medical & Language Information" className="xl:col-span-3">
+                <p className="mb-3 text-sm text-slate-600">
+                  Saved to the patient chart and automatically filled on future visits.
+                </p>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <CheckboxCard
+                    label="Hypertension (HTN)"
+                    checked={!!intakeForm.htn}
+                    onChange={(checked) => updateIntakeField("htn", checked)}
+                  />
+                  <CheckboxCard
+                    label="Diabetes (DM)"
+                    checked={!!intakeForm.dm}
+                    onChange={(checked) => updateIntakeField("dm", checked)}
+                  />
+                  <Field label="Language Preference">
+                    <select
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                      value={intakeForm.languagePreference || ""}
+                      onChange={(e) => {
+                        updateIntakeField("languagePreference", e.target.value);
+                        updateIntakeField("spanishSpeaking", e.target.value === "Spanish");
+                      }}
+                    >
+                      <option value="">Select language</option>
+                      <option value="English">English</option>
+                      <option value="Spanish">Spanish</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </Field>
+                </div>
+              </SectionCard>
             </div>
           )}
 
@@ -535,18 +568,6 @@ function renderExistingProgramWarning(programType) {
 
                   <Field label="HTN / DM + Labs in last 6 months" className="md:col-span-2">
                     <div className="flex flex-wrap items-center gap-4">
-                      <InlineCheckbox
-                        label="HTN"
-                        checked={intakeForm.htn}
-                        onChange={(checked) => updateIntakeField("htn", checked)}
-                      />
-
-                      <InlineCheckbox
-                        label="DM"
-                        checked={intakeForm.dm}
-                        onChange={(checked) => updateIntakeField("dm", checked)}
-                      />
-
                       <select
                         className={`rounded-xl border px-3 py-2 text-sm ${intakeForm.htn || intakeForm.dm
                             ? "border-slate-200"
@@ -836,13 +857,9 @@ function renderExistingProgramWarning(programType) {
                     }
                   />
 
-                  <CheckboxCard
-                    label="Spanish Speaking"
-                    checked={!!intakeForm.spanishSpeaking}
-                    onChange={(checked) =>
-                      updateIntakeField("spanishSpeaking", checked)
-                    }
-                  />
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700">
+                    Language preference: <span className="font-semibold">{intakeForm.languagePreference || "Not recorded"}</span>
+                  </div>
                 </div>
               </SectionCard>
             </div>
@@ -883,9 +900,9 @@ function renderExistingProgramWarning(programType) {
   );
 }
 
-function SectionCard({ title, children }) {
+function SectionCard({ title, children, className = "" }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className={`rounded-2xl border border-slate-200 bg-white p-4 shadow-sm ${className}`}>
       <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
         {title}
       </h4>

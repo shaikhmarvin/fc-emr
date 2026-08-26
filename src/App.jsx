@@ -6026,13 +6026,30 @@ export default function App() {
       notes: encounter.notes || "",
       transportation: encounter.transportation || "",
       needsElevator: encounter.needsElevator || false,
-      spanishSpeaking: encounter.spanishSpeaking || "",
+      spanishSpeaking:
+        encounter.spanishSpeaking ||
+        String(patient.spanishOnly || "").toLowerCase().includes("spanish"),
+      languagePreference:
+        patient.spanishOnly ||
+        ((patient.encounters || []).some((item) => item.spanishSpeaking === true)
+          ? "Spanish"
+          : ""),
       over65: patient.age ? Number(patient.age) > 65 : false,
       mammogramStatus: encounter.mammogramStatus || encounter.mammogramPapSmear || "",
       papStatus: encounter.papStatus || "",
       fluShot: encounter.fluShot || "",
-      htn: encounter.htn || false,
-      dm: encounter.dm || false,
+      htn:
+        encounter.htn ||
+        (patient.chronicConditions || []).some((condition) =>
+          ["htn", "hypertension"].includes(String(condition).toLowerCase())
+        ) ||
+        (patient.encounters || []).some((item) => item.htn === true),
+      dm:
+        encounter.dm ||
+        (patient.chronicConditions || []).some((condition) =>
+          ["dm", "diabetes"].includes(String(condition).toLowerCase())
+        ) ||
+        (patient.encounters || []).some((item) => item.dm === true),
       labsLast6Months: encounter.labsLast6Months || "",
       nicotineUse: encounter.nicotineUse || "",
       nicotineDetails: encounter.nicotineDetails || "",
@@ -6516,10 +6533,49 @@ export default function App() {
       sex: prev.sex || matchedPatient.sex || "",
       newReturning: "Returning",
       ttuStudent: prev.ttuStudent || matchedPatient.ttuStudent || false,
+      htn:
+        prev.htn ||
+        (matchedPatient.chronicConditions || []).some((condition) =>
+          ["htn", "hypertension"].includes(String(condition).toLowerCase())
+        ) ||
+        (matchedPatient.encounters || []).some((encounter) => encounter.htn === true),
+      dm:
+        prev.dm ||
+        (matchedPatient.chronicConditions || []).some((condition) =>
+          ["dm", "diabetes"].includes(String(condition).toLowerCase())
+        ) ||
+        (matchedPatient.encounters || []).some((encounter) => encounter.dm === true),
+      languagePreference:
+        prev.languagePreference ||
+        matchedPatient.spanishOnly ||
+        ((matchedPatient.encounters || []).some((encounter) => encounter.spanishSpeaking === true)
+          ? "Spanish"
+          : ""),
+      spanishSpeaking:
+        prev.spanishSpeaking ||
+        String(matchedPatient.spanishOnly || "").toLowerCase().includes("spanish") ||
+        (matchedPatient.encounters || []).some((encounter) => encounter.spanishSpeaking === true),
       over65:
         prev.over65 ||
         (matchedPatient.age ? Number(matchedPatient.age) > 65 : false),
     }));
+  }
+
+  function getPersistentIntakeProfileUpdates(basePatient = {}, form = intakeForm) {
+    const existing = Array.isArray(basePatient.chronicConditions)
+      ? basePatient.chronicConditions
+      : [];
+    const chronicConditions = existing.filter(
+      (condition) => !["htn", "hypertension", "dm", "diabetes"].includes(String(condition).toLowerCase())
+    );
+    if (form.htn) chronicConditions.push("HTN");
+    if (form.dm) chronicConditions.push("DM");
+
+    return {
+      spanishOnly:
+        form.languagePreference || (form.spanishSpeaking ? "Spanish" : ""),
+      chronicConditions,
+    };
   }
 
   function applyMatchedPatientToIntake() {
@@ -6802,14 +6858,32 @@ export default function App() {
       notes: selectedEncounter.notes || "",
       transportation: selectedEncounter.transportation || "",
       needsElevator: selectedEncounter.needsElevator || false,
-      spanishSpeaking: selectedEncounter.spanishSpeaking || false,
+      spanishSpeaking:
+        selectedEncounter.spanishSpeaking ||
+        String(selectedPatient.spanishOnly || "").toLowerCase().includes("spanish") ||
+        (selectedPatient.encounters || []).some((item) => item.spanishSpeaking === true),
+      languagePreference:
+        selectedPatient.spanishOnly ||
+        ((selectedPatient.encounters || []).some((item) => item.spanishSpeaking === true)
+          ? "Spanish"
+          : ""),
       over65: selectedPatient.age ? Number(selectedPatient.age) > 65 : false,
       mammogramStatus:
         selectedEncounter.mammogramStatus || selectedEncounter.mammogramPapSmear || "",
       papStatus: selectedEncounter.papStatus || "",
       fluShot: selectedEncounter.fluShot || "",
-      htn: selectedEncounter.htn || false,
-      dm: selectedEncounter.dm || false,
+      htn:
+        selectedEncounter.htn ||
+        (selectedPatient.chronicConditions || []).some((condition) =>
+          ["htn", "hypertension"].includes(String(condition).toLowerCase())
+        ) ||
+        (selectedPatient.encounters || []).some((item) => item.htn === true),
+      dm:
+        selectedEncounter.dm ||
+        (selectedPatient.chronicConditions || []).some((condition) =>
+          ["dm", "diabetes"].includes(String(condition).toLowerCase())
+        ) ||
+        (selectedPatient.encounters || []).some((item) => item.dm === true),
       labsLast6Months: selectedEncounter.labsLast6Months || "",
       nicotineUse: selectedEncounter.nicotineUse || "",
       nicotineDetails: selectedEncounter.nicotineDetails || "",
@@ -7019,6 +7093,7 @@ export default function App() {
           ethnicity: intakeForm.ethnicity || mrnConflictPatient.ethnicity,
           sex: intakeForm.sex || mrnConflictPatient.sex,
           ttuStudent: intakeForm.ttuStudent || mrnConflictPatient.ttuStudent,
+          ...getPersistentIntakeProfileUpdates(mrnConflictPatient),
         });
 
         const nextStatus = "ready";
@@ -7152,6 +7227,7 @@ export default function App() {
           ethnicity: intakeForm.ethnicity,
           sex: intakeForm.sex,
           ttuStudent: intakeForm.ttuStudent,
+          ...getPersistentIntakeProfileUpdates(selectedPatient),
         });
 
         const nextStatus = "ready";
@@ -7240,6 +7316,10 @@ export default function App() {
 
     if (potentialDuplicate) {
       try {
+        await updatePatientInSupabase(
+          potentialDuplicate.id,
+          getPersistentIntakeProfileUpdates(potentialDuplicate)
+        );
         const savedEncounter = await createEncounterInSupabase(
           potentialDuplicate.id,
           encounter
@@ -7327,6 +7407,7 @@ export default function App() {
                 ethnicity: intakeForm.ethnicity,
                 pronouns: intakeForm.pronouns,
                 ttuStudent: intakeForm.ttuStudent,
+                ...getPersistentIntakeProfileUpdates(patient),
                 encounters: [hydratedEncounter, ...(patient.encounters || [])],
               }
               : patient

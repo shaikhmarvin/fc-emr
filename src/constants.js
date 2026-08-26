@@ -36,6 +36,7 @@ export const EMPTY_FORM = {
   transportation: "",
   needsElevator: false,
   spanishSpeaking: false,
+  languagePreference: "",
   over65: false,
   mammogramStatus: "",
 papStatus: "",

@@ -12,6 +12,17 @@ const NOTE_TYPE_META = {
   physical_therapy: { label: "Physical Therapy", dot: "bg-emerald-500", active: "border-emerald-400 bg-emerald-50 ring-emerald-100" },
 };
 
+function getSavedPatientLanguage(patient) {
+  const saved = String(patient?.spanishOnly || "").trim();
+  const normalized = saved.toLowerCase();
+  if (["yes", "true", "spanish", "spanish only"].includes(normalized)) return "Spanish";
+  if (["no", "false", "english"].includes(normalized)) return "English";
+  if (saved) return saved;
+  return (patient?.encounters || []).some((encounter) => encounter.spanishSpeaking === true)
+    ? "Spanish"
+    : "";
+}
+
 function getNoteTypeMeta(encounter) {
   const inferredType = encounter?.noteType ||
     (encounter?.specialtyType === "ophthalmology" ? "ophthalmology" : "medical");
@@ -1731,6 +1742,24 @@ function getSelectedRoomOptionClass() {
       <p>Age: {selectedPatient.age || "—"}</p>
       <p>Phone: {selectedPatient.phone || "—"}</p>
     </div>
+  </div>
+
+  <div className="mt-3 flex flex-wrap gap-2">
+    {((selectedPatient.chronicConditions || []).some((condition) =>
+      ["htn", "hypertension"].includes(String(condition).toLowerCase())
+    ) || (selectedPatient.encounters || []).some((encounter) => encounter.htn === true)) && (
+      <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-700">HTN</span>
+    )}
+    {((selectedPatient.chronicConditions || []).some((condition) =>
+      ["dm", "diabetes"].includes(String(condition).toLowerCase())
+    ) || (selectedPatient.encounters || []).some((encounter) => encounter.dm === true)) && (
+      <span className="rounded-full bg-orange-100 px-2.5 py-1 text-xs font-semibold text-orange-700">DM</span>
+    )}
+    {getSavedPatientLanguage(selectedPatient) && (
+      <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">
+        Language: {getSavedPatientLanguage(selectedPatient)}
+      </span>
+    )}
   </div>
 
   {selectedPatient.fired && (
