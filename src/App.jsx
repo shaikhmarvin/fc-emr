@@ -11635,6 +11635,7 @@ async function markSeenBySocialWork(encounterId) {
                 isLeadershipView={isLeadershipView}
                 specialtyAccess={currentSpecialtyAccess}
                 onProgramSettingsChange={setProgramSettings}
+                isActive={activeView === "programs"}
                 leadershipOptions={profiles
                   .filter((profile) => profile.role === "leadership")
                   .map((profile) => (profile.full_name || "").trim())

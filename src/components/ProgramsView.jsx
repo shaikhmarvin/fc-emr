@@ -76,8 +76,15 @@ export default function ProgramsView({
   isLeadershipView,
   specialtyAccess,
   onProgramSettingsChange,
+  isActive = false,
 }) {
-  const [activeTab, setActiveTab] = useState("Tracker");
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      return window.sessionStorage.getItem("specialty-programs-active-tab") || "Tracker";
+    } catch {
+      return "Tracker";
+    }
+  });
 
   const normalizedSpecialtyAccess = useMemo(() => {
     return Array.isArray(specialtyAccess) ? specialtyAccess : [];
@@ -290,6 +297,42 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
       setActiveTab(accessibleProgramTypes[0] || "Tracker");
     }
   }, [activeTab, accessibleProgramTypes, isLeadershipView]);
+
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem("specialty-programs-active-tab", activeTab);
+    } catch (error) {
+      console.error("Failed to remember specialty program tab:", error);
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (!isActive) return;
+
+    const restoreFrame = window.requestAnimationFrame(() => {
+      const savedPosition = Number(
+        window.sessionStorage.getItem("specialty-programs-scroll-y") || 0
+      );
+      window.scrollTo({ top: savedPosition, left: 0, behavior: "auto" });
+    });
+
+    const rememberPosition = () => {
+      window.sessionStorage.setItem(
+        "specialty-programs-scroll-y",
+        String(window.scrollY || document.documentElement.scrollTop || 0)
+      );
+    };
+
+    window.addEventListener("scroll", rememberPosition, { passive: true });
+    window.addEventListener("beforeunload", rememberPosition);
+
+    return () => {
+      window.cancelAnimationFrame(restoreFrame);
+      rememberPosition();
+      window.removeEventListener("scroll", rememberPosition);
+      window.removeEventListener("beforeunload", rememberPosition);
+    };
+  }, [isActive]);
 
   async function loadProgramSettings() {
     const data = await fetchProgramSettings();
