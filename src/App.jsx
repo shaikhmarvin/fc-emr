@@ -4644,7 +4644,7 @@ export default function App() {
   ]);
   useEffect(() => {
     if (activeView === "users" && isLeadershipView) {
-      loadProfiles();
+      loadProfiles({ showLoading: true });
     }
   }, [activeView, isLeadershipView]);
 
@@ -6093,11 +6093,11 @@ export default function App() {
   }
 
   useEffect(() => {
-    loadProfiles(); // initial load
+    loadProfiles({ showLoading: true }); // initial load
 
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") {
-        loadProfiles({ includeSignatures: false });
+        loadProfiles({ includeSignatures: false, silent: true });
       }
     }, 120000);
 
@@ -6615,10 +6615,14 @@ export default function App() {
     );
   }
 
-  async function loadProfiles({ includeSignatures = true } = {}) {
+  async function loadProfiles({
+    includeSignatures = true,
+    showLoading = false,
+    silent = false,
+  } = {}) {
     try {
-      setLoadingProfiles(true);
-      setProfilesMessage("");
+      if (showLoading) setLoadingProfiles(true);
+      if (!silent) setProfilesMessage("");
       const data = await fetchProfiles({ includeSignatures });
       setProfiles((previousProfiles) => {
         if (includeSignatures) return data;
@@ -6634,9 +6638,11 @@ export default function App() {
       });
     } catch (error) {
       console.error("Failed to load profiles:", error);
-      setProfilesMessage(`Failed to load users: ${error.message}`);
+      if (!silent) {
+        setProfilesMessage(`Failed to load users: ${error.message}`);
+      }
     } finally {
-      setLoadingProfiles(false);
+      if (showLoading) setLoadingProfiles(false);
     }
 
   }
@@ -11568,7 +11574,9 @@ async function markSeenBySocialWork(encounterId) {
               loadingProfiles={loadingProfiles}
               savingProfileId={savingProfileId}
               onChangeRole={handleChangeProfileRole}
-              onRefresh={loadProfiles}
+              onRefresh={() =>
+                loadProfiles({ includeSignatures: true, showLoading: true })
+              }
               currentUserId={session?.user?.id || null}
               message={profilesMessage}
               userSearch={userSearch}
