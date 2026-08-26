@@ -81,6 +81,16 @@ export async function fetchPatients() {
   return (data ?? []).map(mapPatientFromSupabase);
 }
 
+export async function fetchClinicFlowPatients() {
+  const { data, error } = await supabase
+    .from("patients")
+    .select("id, name, preferred_name")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []).map(mapPatientFromSupabase);
+}
+
 export async function createPatientInSupabase(intakeForm) {
   const fullName = `${intakeForm.firstName || ""} ${intakeForm.lastName || ""}`.trim();
 

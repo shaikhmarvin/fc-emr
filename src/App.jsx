@@ -1740,7 +1740,13 @@ export default function App() {
 
 
   useEffect(() => {
-    if (!session || clinicResourceSettingsLoaded) return;
+    const needsClinicResourceSettings = [
+      "dashboard",
+      "registration",
+      "undergrad-intake",
+      "queue",
+    ].includes(activeView);
+    if (!session || clinicResourceSettingsLoaded || !needsClinicResourceSettings) return;
 
     async function loadClinicResourceSettings() {
       try {
@@ -1758,7 +1764,7 @@ export default function App() {
     }
 
     loadClinicResourceSettings();
-  }, [session, clinicResourceSettingsLoaded]);
+  }, [session, clinicResourceSettingsLoaded, activeView]);
 
   const loadBoardMessages = useCallback(async () => {
     if (!session) return;
@@ -1797,7 +1803,7 @@ export default function App() {
 
     const fallbackInterval = window.setInterval(() => {
       loadBoardMessages();
-    }, 10000);
+    }, 60000);
 
     return () => {
       window.removeEventListener("storage", refreshFromOtherTab);
@@ -1807,7 +1813,11 @@ export default function App() {
   }, [session, loadBoardMessages]);
 
   useEffect(() => {
-    if (!session || papLoaded) return;
+    const needsPapEntries =
+      activeView === "queue" ||
+      activeView === "pharmacy-queue" ||
+      activeView === "pap";
+    if (!session || papLoaded || !needsPapEntries) return;
 
     async function loadPapEntries() {
       try {
@@ -1820,10 +1830,17 @@ export default function App() {
     }
 
     loadPapEntries();
-  }, [session, papLoaded]);
+  }, [session, papLoaded, activeView]);
 
   useEffect(() => {
-    if (!session || programsLoaded) return;
+    const needsProgramEntries =
+      activeView === "queue" ||
+      activeView === "pharmacy-queue" ||
+      activeView === "programs" ||
+      activeView === "dashboard" ||
+      activeView === "registration" ||
+      activeView === "undergrad-intake";
+    if (!session || programsLoaded || !needsProgramEntries) return;
 
     async function loadProgramEntries() {
       try {
@@ -1844,7 +1861,7 @@ export default function App() {
     }
 
     loadProgramEntries();
-  }, [session, programsLoaded, userRole]);
+  }, [session, programsLoaded, userRole, activeView]);
 
   useEffect(() => {
     if (!session) return;
@@ -2035,7 +2052,7 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (!session || formularyLoaded) return;
+    if (!session || formularyLoaded || activeView !== "formulary") return;
 
     async function loadFormulary() {
       try {
@@ -2049,7 +2066,7 @@ export default function App() {
     }
 
     loadFormulary();
-  }, [session, formularyLoaded]);
+  }, [session, formularyLoaded, activeView]);
 
   async function loadRefillRequests() {
     try {
@@ -6079,8 +6096,10 @@ export default function App() {
     loadProfiles(); // initial load
 
     const interval = setInterval(() => {
-      loadProfiles();
-    }, 30000); // every 30 seconds
+      if (document.visibilityState === "visible") {
+        loadProfiles({ includeSignatures: false });
+      }
+    }, 120000);
 
     return () => clearInterval(interval);
   }, []);
@@ -6596,12 +6615,23 @@ export default function App() {
     );
   }
 
-  async function loadProfiles() {
+  async function loadProfiles({ includeSignatures = true } = {}) {
     try {
       setLoadingProfiles(true);
       setProfilesMessage("");
-      const data = await fetchProfiles();
-      setProfiles(data);
+      const data = await fetchProfiles({ includeSignatures });
+      setProfiles((previousProfiles) => {
+        if (includeSignatures) return data;
+
+        const previousById = new Map(
+          previousProfiles.map((profile) => [String(profile.id), profile])
+        );
+        return data.map((profile) => ({
+          ...profile,
+          signature_data_url:
+            previousById.get(String(profile.id))?.signature_data_url || "",
+        }));
+      });
     } catch (error) {
       console.error("Failed to load profiles:", error);
       setProfilesMessage(`Failed to load users: ${error.message}`);

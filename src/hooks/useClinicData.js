@@ -1,7 +1,11 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "../lib/supabase";
-import { fetchEncounters, fetchMedications } from "../api/encounters";
-import { fetchPatients } from "../api/patients";
+import {
+  fetchClinicFlowEncounters,
+  fetchEncounters,
+  fetchMedications,
+} from "../api/encounters";
+import { fetchClinicFlowPatients, fetchPatients } from "../api/patients";
 import { fetchAllergies } from "../api/allergies";
 import { fetchSocialWorkNotes } from "../api/socialWorkNotes";
 import { mapDbStatusToUi } from "../utils";
@@ -220,6 +224,11 @@ export function useClinicData({ authReady, session, userRole, isBoardDisplayMode
   const inFlightRef = useRef(false);
   const queuedReloadRef = useRef(false);
   const lastVisibleRefreshRef = useRef(0);
+  const patientsRef = useRef([]);
+
+  useEffect(() => {
+    patientsRef.current = patients;
+  }, [patients]);
 
   const loadData = useCallback(async () => {
     if (!authReady || !session || !userRole) return;
@@ -234,9 +243,9 @@ export function useClinicData({ authReady, session, userRole, isBoardDisplayMode
     try {
       const [patientsData, encountersData, socialWorkNotesData] =
         await Promise.all([
-          fetchPatients(),
-          fetchEncounters(),
-          fetchSocialWorkNotes(),
+          isBoardDisplayMode ? fetchClinicFlowPatients() : fetchPatients(),
+          isBoardDisplayMode ? fetchClinicFlowEncounters() : fetchEncounters(),
+          isBoardDisplayMode ? Promise.resolve([]) : fetchSocialWorkNotes(),
         ]);
 
       const activePatientIds = [
@@ -247,10 +256,12 @@ export function useClinicData({ authReady, session, userRole, isBoardDisplayMode
         ),
       ];
 
-      const [medicationsData, allergiesData] = await Promise.all([
-        fetchMedications(activePatientIds),
-        fetchAllergies(activePatientIds),
-      ]);
+      const [medicationsData, allergiesData] = isBoardDisplayMode
+        ? [[], []]
+        : await Promise.all([
+            fetchMedications(activePatientIds),
+            fetchAllergies(activePatientIds),
+          ]);
 
       setPatients(
         buildPatientMap(
@@ -271,7 +282,7 @@ export function useClinicData({ authReady, session, userRole, isBoardDisplayMode
         loadData();
       }
     }
-  }, [authReady, session, userRole]);
+  }, [authReady, session, userRole, isBoardDisplayMode]);
 
   useEffect(() => {
     loadData();
@@ -290,6 +301,81 @@ export function useClinicData({ authReady, session, userRole, isBoardDisplayMode
       }, 250);
     };
 
+    const applyEncounterChange = (payload) => {
+      const row = payload.new;
+      const encounterId = row?.id || payload.old?.id;
+
+      if (!encounterId) {
+        triggerReload();
+        return;
+      }
+
+      if (payload.eventType === "DELETE") {
+        setPatients((currentPatients) =>
+          currentPatients.map((patient) => ({
+            ...patient,
+            encounters: (patient.encounters || []).filter(
+              (encounter) => String(encounter.id) !== String(encounterId)
+            ),
+          }))
+        );
+        return;
+      }
+
+      if (!row?.patient_id) {
+        triggerReload();
+        return;
+      }
+
+      // Reuse the normal database-to-UI mapping so realtime rows have exactly
+      // the same shape as rows received during a full reconciliation.
+      const mappedEncounter = buildPatientMap(
+        [{ id: row.patient_id }],
+        [row],
+        [],
+        [],
+        []
+      )[0]?.encounters?.[0];
+
+      if (!mappedEncounter) {
+        triggerReload();
+        return;
+      }
+
+      const patientFound = patientsRef.current.some(
+        (patient) => String(patient.id) === String(row.patient_id)
+      );
+
+      setPatients((currentPatients) => {
+        const nextPatients = currentPatients.map((patient) => {
+          const withoutChangedEncounter = (patient.encounters || []).filter(
+            (encounter) => String(encounter.id) !== String(encounterId)
+          );
+
+          if (String(patient.id) !== String(row.patient_id)) {
+            return withoutChangedEncounter.length === patient.encounters.length
+              ? patient
+              : { ...patient, encounters: withoutChangedEncounter };
+          }
+
+          return {
+            ...patient,
+            encounters: [mappedEncounter, ...withoutChangedEncounter].sort(
+              (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+            ),
+          };
+        });
+
+        return nextPatients;
+      });
+
+      // A new encounter can arrive before its patient record reaches this
+      // device. Reconcile that uncommon case instead of displaying a partial row.
+      if (!patientFound) {
+        triggerReload();
+      }
+    };
+
     // Keep realtime focused on the live clinic flow.
     // Patients, medications, and allergies are still refreshed after local saves,
     // on window focus, and by the fallback interval below. Subscribing every
@@ -299,7 +385,7 @@ export function useClinicData({ authReady, session, userRole, isBoardDisplayMode
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "encounters" },
-        triggerReload
+        applyEncounterChange
       )
       .on(
         "postgres_changes",
@@ -339,7 +425,7 @@ export function useClinicData({ authReady, session, userRole, isBoardDisplayMode
     const fallbackInterval = setInterval(() => {
       // Hidden tabs should not keep burning Supabase Disk I/O overnight.
       refreshVisibleTab();
-    }, isBoardDisplayMode ? 10000 : 120000);
+    }, isBoardDisplayMode ? 60000 : 120000);
 
     const refreshFromRoomBoardTab = (event) => {
       if (event.key === "clinic-room-board-refresh") {

@@ -140,6 +140,29 @@ export async function fetchEncounters() {
   return data ?? [];
 }
 
+// Dedicated display boards only need clinic-flow fields. Keeping chart notes,
+// signatures, vitals, and lab payloads out of this query substantially reduces
+// transfer and database work without changing the full chart query above.
+export async function fetchClinicFlowEncounters() {
+  const { data, error } = await supabase
+    .from("encounters")
+    .select(`
+      id, patient_id, clinic_date, created_at, status,
+      undergrad_completed_at, leadership_intake_completed_at, ready_at,
+      roomed_at, assigned_at, student_assigned_at,
+      upper_level_assigned_at, done_at, cancelled_at,
+      pharmacy_picked_up_at, visit_completed_at,
+      assigned_student, assigned_upper_level, room, notes,
+      chief_complaint, intake_data, leadership_intake_complete,
+      pharmacy_status, pharmacy_ready_at, pharmacy_ready_by,
+      pharmacy_notified_at, pharmacy_notified_by
+    `)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function completePhysicalTherapyNoteInSupabase(encounterId) {
   const { data, error } = await supabase.rpc("complete_physical_therapy_note", {
     target_encounter_id: encounterId,

@@ -267,10 +267,13 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
   const [programRooms, setProgramRooms] = useState({});
 
   useEffect(() => {
+    if (!isActive) return;
     loadProgramSettings();
-  }, []);
+  }, [isActive]);
 
   useEffect(() => {
+    if (!isActive) return;
+
     const channel = supabase
       .channel("program-settings-view-realtime")
       .on(
@@ -289,7 +292,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [isActive]);
 
   useEffect(() => {
     if (isLeadershipView) return;
@@ -377,6 +380,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
   }, [programEntries, patientById]);
 
   useEffect(() => {
+    if (!isActive) return;
     if (!updateProgramEntryFields) return;
 
     (programEntries || []).forEach((entry) => {
@@ -394,7 +398,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
         updateProgramEntryFields(entry.id, updates);
       }
     });
-  }, [programEntries, patientById, updateProgramEntryFields]);
+  }, [isActive, programEntries, patientById, updateProgramEntryFields]);
 
   const trackerEntries = useMemo(() => {
     return hydratedProgramEntries

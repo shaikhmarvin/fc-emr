@@ -1,9 +1,13 @@
 import { supabase } from "../lib/supabase";
 
-export async function fetchProfiles() {
+export async function fetchProfiles({ includeSignatures = true } = {}) {
+  const columns = includeSignatures
+    ? "id, full_name, role, classification, email, approval_status, approved_by, approved_at, created_at, last_seen_at, signature_pin_set, signature_data_url, signature_updated_at, signature_updated_by, can_refill, specialty_access"
+    : "id, full_name, role, classification, email, approval_status, approved_by, approved_at, created_at, last_seen_at, signature_pin_set, signature_updated_at, signature_updated_by, can_refill, specialty_access";
+
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, full_name, role, classification, email, approval_status, approved_by, approved_at, created_at, last_seen_at, signature_pin_set, signature_data_url, signature_updated_at, signature_updated_by, can_refill, specialty_access")
+    .select(columns)
     .order("last_seen_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false });
 
