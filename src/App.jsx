@@ -44,6 +44,7 @@ import {
 } from "./api/boardMessages";
 import ToastStack from "./components/ToastStack";
 import { canStartIntake, canManageRoomBoard, canEditFormulary, canPrescribe, canChart, canUseLabQueue, } from "./utils/permissions";
+import { diagnosisTextMatches, patientHasPriorDiagnosis } from "./utils/patientDiagnoses";
 import { fetchProfiles, updateProfileRole, updateProfileDetails, saveClinicalSignature } from "./api/profiles";
 import { fetchChartingSettings, setMedicalSoapEnabled } from "./api/chartingSettings";
 import {
@@ -6069,17 +6070,11 @@ export default function App() {
       papStatus: encounter.papStatus || "",
       fluShot: encounter.fluShot || "",
       htn:
-        encounter.htn ||
-        (patient.chronicConditions || []).some((condition) =>
-          ["htn", "hypertension"].includes(String(condition).toLowerCase())
-        ) ||
-        (patient.encounters || []).some((item) => item.htn === true),
+        patientHasPriorDiagnosis(patient, "htn") ||
+        encounter.htn === true,
       dm:
-        encounter.dm ||
-        (patient.chronicConditions || []).some((condition) =>
-          ["dm", "diabetes"].includes(String(condition).toLowerCase())
-        ) ||
-        (patient.encounters || []).some((item) => item.dm === true),
+        patientHasPriorDiagnosis(patient, "dm") ||
+        encounter.dm === true,
       labsLast6Months: encounter.labsLast6Months || "",
       nicotineUse: encounter.nicotineUse || "",
       nicotineDetails: encounter.nicotineDetails || "",
@@ -6567,16 +6562,10 @@ export default function App() {
       ttuStudent: prev.ttuStudent || matchedPatient.ttuStudent || false,
       htn:
         prev.htn ||
-        (matchedPatient.chronicConditions || []).some((condition) =>
-          ["htn", "hypertension"].includes(String(condition).toLowerCase())
-        ) ||
-        (matchedPatient.encounters || []).some((encounter) => encounter.htn === true),
+        patientHasPriorDiagnosis(matchedPatient, "htn"),
       dm:
         prev.dm ||
-        (matchedPatient.chronicConditions || []).some((condition) =>
-          ["dm", "diabetes"].includes(String(condition).toLowerCase())
-        ) ||
-        (matchedPatient.encounters || []).some((encounter) => encounter.dm === true),
+        patientHasPriorDiagnosis(matchedPatient, "dm"),
       languagePreference:
         prev.languagePreference ||
         matchedPatient.spanishOnly ||
@@ -6598,7 +6587,9 @@ export default function App() {
       ? basePatient.chronicConditions
       : [];
     const chronicConditions = existing.filter(
-      (condition) => !["htn", "hypertension", "dm", "diabetes"].includes(String(condition).toLowerCase())
+      (condition) =>
+        !diagnosisTextMatches(condition, "htn") &&
+        !diagnosisTextMatches(condition, "dm")
     );
     if (form.htn) chronicConditions.push("HTN");
     if (form.dm) chronicConditions.push("DM");
@@ -6922,17 +6913,11 @@ export default function App() {
       papStatus: selectedEncounter.papStatus || "",
       fluShot: selectedEncounter.fluShot || "",
       htn:
-        selectedEncounter.htn ||
-        (selectedPatient.chronicConditions || []).some((condition) =>
-          ["htn", "hypertension"].includes(String(condition).toLowerCase())
-        ) ||
-        (selectedPatient.encounters || []).some((item) => item.htn === true),
+        patientHasPriorDiagnosis(selectedPatient, "htn") ||
+        selectedEncounter.htn === true,
       dm:
-        selectedEncounter.dm ||
-        (selectedPatient.chronicConditions || []).some((condition) =>
-          ["dm", "diabetes"].includes(String(condition).toLowerCase())
-        ) ||
-        (selectedPatient.encounters || []).some((item) => item.dm === true),
+        patientHasPriorDiagnosis(selectedPatient, "dm") ||
+        selectedEncounter.dm === true,
       labsLast6Months: selectedEncounter.labsLast6Months || "",
       nicotineUse: selectedEncounter.nicotineUse || "",
       nicotineDetails: selectedEncounter.nicotineDetails || "",

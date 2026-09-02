@@ -370,6 +370,22 @@ function renderExistingProgramWarning(programType) {
                       <option>Middle Eastern</option>
                     </select>
                   </Field>
+
+                  <Field label="Language Preference">
+                    <select
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                      value={intakeForm.languagePreference || ""}
+                      onChange={(e) => {
+                        updateIntakeField("languagePreference", e.target.value);
+                        updateIntakeField("spanishSpeaking", e.target.value === "Spanish");
+                      }}
+                    >
+                      <option value="">Select language</option>
+                      <option value="English">English</option>
+                      <option value="Spanish">Spanish</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </Field>
                 </div>
               </SectionCard>
 
@@ -388,38 +404,6 @@ function renderExistingProgramWarning(programType) {
                 </div>
               </Field>
 
-              <SectionCard title="Persistent Medical & Language Information" className="xl:col-span-3">
-                <p className="mb-3 text-sm text-slate-600">
-                  Saved to the patient chart and automatically filled on future visits.
-                </p>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                  <CheckboxCard
-                    label="Hypertension (HTN)"
-                    checked={!!intakeForm.htn}
-                    onChange={(checked) => updateIntakeField("htn", checked)}
-                  />
-                  <CheckboxCard
-                    label="Diabetes (DM)"
-                    checked={!!intakeForm.dm}
-                    onChange={(checked) => updateIntakeField("dm", checked)}
-                  />
-                  <Field label="Language Preference">
-                    <select
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      value={intakeForm.languagePreference || ""}
-                      onChange={(e) => {
-                        updateIntakeField("languagePreference", e.target.value);
-                        updateIntakeField("spanishSpeaking", e.target.value === "Spanish");
-                      }}
-                    >
-                      <option value="">Select language</option>
-                      <option value="English">English</option>
-                      <option value="Spanish">Spanish</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  </Field>
-                </div>
-              </SectionCard>
             </div>
           )}
 
@@ -548,28 +532,46 @@ function renderExistingProgramWarning(programType) {
                   )}
 
                   {showColonoscopyScreening && (
-  <Field label="Colonoscopy">
-    <select
-      className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-      value={intakeForm.colonoscopyStatus || ""}
-      onChange={(e) =>
-        updateIntakeField("colonoscopyStatus", e.target.value)
-      }
-    >
-      <option value="">Select one</option>
-      <option>Interested</option>
-      <option>Not Interested</option>
-      <option>UTD</option>
-      <option>N/A</option>
-    </select>
-    {renderExistingProgramWarning("Colonoscopy")}
-  </Field>
-)}
+                    <Field label="Colonoscopy">
+                      <select
+                        className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                        value={intakeForm.colonoscopyStatus || ""}
+                        onChange={(e) =>
+                          updateIntakeField("colonoscopyStatus", e.target.value)
+                        }
+                      >
+                        <option value="">Select one</option>
+                        <option>Interested</option>
+                        <option>Not Interested</option>
+                        <option>UTD</option>
+                        <option>N/A</option>
+                      </select>
+                      {renderExistingProgramWarning("Colonoscopy")}
+                    </Field>
+                  )}
+
+                  <Field label="Chronic Conditions" className="md:col-span-2">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <CheckboxCard
+                        label="Hypertension (HTN)"
+                        checked={!!intakeForm.htn}
+                        onChange={(checked) => updateIntakeField("htn", checked)}
+                        className="min-h-12 items-center"
+                      />
+
+                      <CheckboxCard
+                        label="Diabetes (DM)"
+                        checked={!!intakeForm.dm}
+                        onChange={(checked) => updateIntakeField("dm", checked)}
+                        className="min-h-12 items-center"
+                      />
+                    </div>
+                  </Field>
 
                   <Field label="HTN / DM + Labs in last 6 months" className="md:col-span-2">
-                    <div className="flex flex-wrap items-center gap-4">
+                    <div>
                       <select
-                        className={`rounded-xl border px-3 py-2 text-sm ${intakeForm.htn || intakeForm.dm
+                        className={`w-full rounded-xl border px-3 py-2.5 text-sm ${intakeForm.htn || intakeForm.dm
                             ? "border-slate-200"
                             : "border-slate-200 bg-slate-50 text-slate-400"
                           }`}
