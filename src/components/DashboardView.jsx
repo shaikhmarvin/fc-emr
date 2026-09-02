@@ -2,7 +2,7 @@ import { useState } from "react";
 import PatientSearch from "./PatientSearch";
 import PatientTable from "./PatientTable";
 import logo from "../assets/free-clinic-logo.png";
-import { formatDate } from "../utils";
+import { formatDate, getStatusLabel } from "../utils";
 import {
   VISIT_TYPE_BADGE_STYLES,
   VISIT_TYPE_FILTERS,
@@ -36,7 +36,54 @@ export default function DashboardView({
   getFullPatientName,
   finalizeClinicDay,
   profiles = [],
+  canRefillAccess = false,
 }) {
+
+  const todayClinicDate = (() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  })();
+
+  function getPatientTodayContext(patient) {
+    const todayEncounters = (patient?.encounters || []).filter((encounter) =>
+      String(encounter?.clinicDate || "").slice(0, 10) === todayClinicDate &&
+      encounter?.status !== "cancelled"
+    );
+
+    if (!todayEncounters.length) {
+      return { inClinic: false };
+    }
+
+    const assignments = Array.from(new Set(todayEncounters.flatMap((encounter) => [
+      encounter.assignedStudent,
+      encounter.assignedUpperLevel,
+    ]).map((value) => String(value || "").trim()).filter(Boolean)));
+
+    const reasons = Array.from(new Set(todayEncounters.map((encounter) => {
+      const directReason = String(
+        encounter.chiefComplaint || encounter.refillMedicationRequest || ""
+      ).trim();
+      if (directReason) return directReason;
+      if (encounter.specialtyType) return `${encounter.specialtyType} visit`;
+      if (encounter.visitType === "refill_only") return "Medication refill";
+      if (encounter.visitType === "specialty_only") return "Specialty visit";
+      return "General clinic visit";
+    })));
+
+    const statuses = Array.from(new Set(todayEncounters.map((encounter) =>
+      getStatusLabel(encounter.status) || encounter.status || "Checked in"
+    )));
+
+    return {
+      inClinic: true,
+      assignment: assignments.length ? assignments.join(" / ") : "Not assigned yet",
+      reason: reasons.join(" • "),
+      status: statuses.join(" • "),
+    };
+  }
 
   const pendingLabEncounters = allEncounterRows.filter(
     ({ encounter }) =>
@@ -1051,6 +1098,7 @@ export default function DashboardView({
         title={patientRecordsTitle}
         patients={visitTypeFilteredPatients}
         getPatientVisitTypeSummary={getPatientVisitTypeSummary}
+        getPatientClinicContext={canRefillAccess ? getPatientTodayContext : null}
         onSelectPatient={openPatientFromFilteredView}
         getFullPatientName={getFullPatientName}
         canEditMrn={canEditMrn}

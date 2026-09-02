@@ -172,6 +172,15 @@ export async function completePhysicalTherapyNoteInSupabase(encounterId) {
   return mapEncounterRow(data);
 }
 
+export async function deletePhysicalTherapyNoteInSupabase(encounterId) {
+  const { data, error } = await supabase.rpc("delete_physical_therapy_note", {
+    target_encounter_id: encounterId,
+  });
+
+  if (error) throw error;
+  return data === true;
+}
+
 function buildIntakeData(encounter) {
   return {
     dailyNumber: encounter.dailyNumber ?? "",

@@ -42,7 +42,9 @@ function GroupNoteChart({
   onSaveSocialWorkNote,
   onCompleteSocialWorkNote,
   onCompletePhysicalTherapyNote,
+  onDeletePhysicalTherapyNote,
   canCompletePhysicalTherapy,
+  canDeletePhysicalTherapy,
   onExportPdf,
   onExportSocialWorkPdf,
   onOpenEncounter,
@@ -256,6 +258,7 @@ function GroupNoteChart({
                 </div>
               ) : null}
               <div className="mt-4 flex flex-wrap justify-end gap-2">
+                {canDeletePhysicalTherapy ? <button type="button" onClick={() => onDeletePhysicalTherapyNote(encounter.id)} disabled={saving} className="rounded-lg border border-red-300 px-5 py-2.5 font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50">Delete PT Note</button> : null}
                 {isPhysicalTherapyCompleted ? <button type="button" onClick={onExportPdf} className="rounded-lg border border-emerald-600 px-5 py-2.5 font-semibold text-emerald-800">Export Signed PDF</button> : null}
                 {!isPhysicalTherapyCompleted && canCompletePhysicalTherapy ? <button type="button" onClick={completePhysicalTherapyNote} disabled={saving || !noteDraft.trim()} className="rounded-lg bg-emerald-700 px-5 py-2.5 font-semibold text-white disabled:opacity-50">Complete Note</button> : null}
                 {!isPhysicalTherapyCompleted ? <button type="button" onClick={saveNote} disabled={saving} className="rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white disabled:opacity-50">{saving ? "Saving..." : "Save Note"}</button> : null}
@@ -393,6 +396,7 @@ export default function ChartView({
   onSaveSocialWorkNote,
   onCompleteSocialWorkNote,
   onCompletePhysicalTherapyNote,
+  onDeletePhysicalTherapyNote,
   attendingSignatureData,
 }) {
 
@@ -1638,7 +1642,9 @@ function getSelectedRoomOptionClass() {
         onSaveSocialWorkNote={onSaveSocialWorkNote}
         onCompleteSocialWorkNote={onCompleteSocialWorkNote}
         onCompletePhysicalTherapyNote={onCompletePhysicalTherapyNote}
+        onDeletePhysicalTherapyNote={onDeletePhysicalTherapyNote}
         canCompletePhysicalTherapy={userRole === "physical_therapy"}
+        canDeletePhysicalTherapy={["physical_therapy", "leadership"].includes(userRole)}
         onExportPdf={handleExportEncounterPdf}
         onExportSocialWorkPdf={handleExportSocialWorkPdf}
         onOpenEncounter={openPatientChart}

@@ -23,6 +23,7 @@ import {
   deleteRefillRequestInSupabase,
   deleteRefillRequestsForPatient,
   completePhysicalTherapyNoteInSupabase,
+  deletePhysicalTherapyNoteInSupabase,
 } from "./api/encounters";
 import {
   fetchStaffRoster,
@@ -4661,6 +4662,15 @@ export default function App() {
   const [selectedClinicDate, setSelectedClinicDate] = useState(
     getLocalDateInputValue()
   );
+  const [dashboardClinicDate, setDashboardClinicDate] = useState(
+    getLocalDateInputValue()
+  );
+
+  useEffect(() => {
+    if (canRefillAccess) {
+      setDashboardClinicDate("");
+    }
+  }, [canRefillAccess]);
 
   const [roomBoardDate, setRoomBoardDate] = useState(getLocalDateInputValue());
   const [specialtyQueueDate, setSpecialtyQueueDate] = useState(getLocalDateInputValue());
@@ -4767,11 +4777,6 @@ export default function App() {
 
     return sortEncountersByDate(selectedPatient.encounters);
   }, [selectedPatient]);
-
-  const patientRecordsTitle = selectedClinicDate
-    ? `Patient Records — ${formatDate(selectedClinicDate)}`
-    : "Patient Records — All Encounters";
-
 
   const allEncounterRows = useMemo(() => {
     return patients.flatMap((patient) =>
@@ -4973,6 +4978,15 @@ export default function App() {
     );
   }, [allEncounterRows, selectedClinicDate]);
 
+  const dashboardEncounterRows = useMemo(() => {
+    if (!dashboardClinicDate) return allEncounterRows;
+
+    return allEncounterRows.filter(
+      ({ encounter }) =>
+        normalizeClinicDate(encounter.clinicDate) === dashboardClinicDate
+    );
+  }, [allEncounterRows, dashboardClinicDate]);
+
   const summaryEncounterRows = useMemo(() => {
     if (!summaryClinicDate) return allEncounterRows;
 
@@ -5099,12 +5113,11 @@ export default function App() {
     patientMatchesSearch(patient, debouncedSearchForm)
   );
 
-  const visiblePatientIds = new Set(
-    visibleEncounterRows.map(({ patient }) => patient.id)
+  const dashboardPatientIds = new Set(
+    dashboardEncounterRows.map(({ patient }) => patient.id)
   );
-
-  const filteredVisiblePatients = filteredPatients.filter((patient) =>
-    visiblePatientIds.has(patient.id)
+  const dashboardFilteredPatients = filteredPatients.filter((patient) =>
+    dashboardPatientIds.has(patient.id)
   );
 
   const summaryPatientRows = useMemo(() => {
@@ -7983,6 +7996,57 @@ export default function App() {
     } catch (error) {
       console.error("Failed to complete Physical Therapy note:", error);
       showToast({ title: "Could not complete PT note", message: error.message, tone: "error" });
+      return false;
+    }
+  }
+
+  async function deletePhysicalTherapyNote(encounterId) {
+    if (!selectedPatient || !encounterId) return false;
+    if (!["physical_therapy", "leadership"].includes(userRole)) return false;
+
+    const targetEncounter = selectedPatient.encounters.find(
+      (encounter) => String(encounter.id) === String(encounterId)
+    );
+    const isPhysicalTherapyNote =
+      targetEncounter?.noteType === "physical_therapy" ||
+      ["pt", "physical_therapy", "physical therapy"].includes(
+        String(targetEncounter?.specialtyType || "").toLowerCase()
+      );
+    if (!isPhysicalTherapyNote) return false;
+
+    const confirmed = window.confirm(
+      "Permanently delete this Physical Therapy note? This cannot be undone."
+    );
+    if (!confirmed) return false;
+
+    try {
+      await deletePhysicalTherapyNoteInSupabase(encounterId);
+      const remainingEncounters = selectedPatient.encounters.filter(
+        (encounter) => String(encounter.id) !== String(encounterId)
+      );
+      setPatients((previousPatients) =>
+        previousPatients.map((patient) =>
+          patient.id === selectedPatient.id
+            ? { ...patient, encounters: remainingEncounters }
+            : patient
+        )
+      );
+      if (String(selectedEncounterId) === String(encounterId)) {
+        setSelectedEncounterId(remainingEncounters[0]?.id || null);
+      }
+      showToast({
+        title: "Physical Therapy note deleted",
+        message: "The PT note was permanently removed from the patient chart.",
+        tone: "success",
+      });
+      return true;
+    } catch (error) {
+      console.error("Failed to delete Physical Therapy note:", error);
+      showToast({
+        title: "Could not delete PT note",
+        message: error.message,
+        tone: "error",
+      });
       return false;
     }
   }
@@ -11309,18 +11373,21 @@ async function markSeenBySocialWork(encounterId) {
               mergePatientRecordsByMrn={mergePatientRecordsByMrn}
               wideMergeCandidateCount={wideMergeCandidates.length}
               onOpenWideMergeReview={() => setShowWideMergeReview(true)}
-              selectedClinicDate={selectedClinicDate}
-              setSelectedClinicDate={setSelectedClinicDate}
-              filteredVisiblePatients={filteredVisiblePatients}
-              visibleEncounterRows={visibleEncounterRows}
+              selectedClinicDate={dashboardClinicDate}
+              setSelectedClinicDate={setDashboardClinicDate}
+              filteredVisiblePatients={dashboardFilteredPatients}
+              visibleEncounterRows={dashboardEncounterRows}
               allEncounterRows={allEncounterRows}
               searchForm={searchForm}
               setSearchForm={setSearchForm}
-              patientRecordsTitle={patientRecordsTitle}
+              patientRecordsTitle={dashboardClinicDate
+                ? `Patient Records — ${formatDate(dashboardClinicDate)}`
+                : "Patient Records — All Encounters"}
               openPatientFromFilteredView={openPatientFromFilteredView}
               getFullPatientName={getFullPatientName}
               finalizeClinicDay={finalizeClinicDay}
               profiles={profiles}
+              canRefillAccess={canRefillAccess}
             />
           )}
 
@@ -11702,6 +11769,7 @@ async function markSeenBySocialWork(encounterId) {
               onStartGroupNote={startGroupNoteEncounter}
               onSaveGroupNote={saveGroupNote}
               onCompletePhysicalTherapyNote={completePhysicalTherapyNote}
+              onDeletePhysicalTherapyNote={deletePhysicalTherapyNote}
               onSaveSocialWorkNote={savePatientSocialWorkNote}
               onCompleteSocialWorkNote={completePatientSocialWorkNote}
               attendingSignatureData={attendingSignatureData}
