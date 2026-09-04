@@ -1,3 +1,4 @@
+import { getEncounterVisitTypeKey } from "../constants";
 import { supabase } from "../lib/supabase";
 
 const EMPTY_OPHTHO_NOTE = {
@@ -78,7 +79,7 @@ function mapEncounterRow(row) {
     mentalHealthCombined: intake.mentalHealthCombined ?? "N/A",
     counseling: intake.counseling ?? "N/A",
     anyMentalHealthPositive: intake.anyMentalHealthPositive ?? false,
-    visitType: intake.visitType ?? "general",
+    visitType: getEncounterVisitTypeKey(row),
     specialtyType: intake.specialtyType ?? "",
     refillMedicationRequest: intake.refillMedicationRequest ?? "",
     socialWorkSeen: intake.socialWorkSeen ?? false,

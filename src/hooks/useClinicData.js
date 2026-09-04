@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import { getEncounterVisitTypeKey } from "../constants";
 import { supabase } from "../lib/supabase";
 import {
   fetchClinicFlowEncounters,
@@ -28,7 +29,7 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
     if (!patient) return;
 
     const intake = encounter.intake_data || {};
-    const visitType = intake.visitType || "general";
+    const visitType = getEncounterVisitTypeKey(encounter);
     const specialtyType = intake.specialtyType || "";
     const dualVisit = intake.dualVisit ?? false;
 
