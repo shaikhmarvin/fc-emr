@@ -158,9 +158,12 @@ export const VISIT_TYPE_FILTERS = [
 
 export function getEncounterVisitTypeKey(encounter) {
   const intakeData = encounter?.intakeData || encounter?.intake_data || {};
+  // Visit type is persisted in intake_data. Some older rows also expose a
+  // top-level visit_type that defaults to general, so intake_data must win when
+  // both exist or refill/specialty encounters are incorrectly relabeled.
   const rawVisitType =
-    encounter?.visitType ?? encounter?.visit_type ??
-    intakeData?.visitType ?? intakeData?.visit_type ?? "general";
+    intakeData?.visitType ?? intakeData?.visit_type ??
+    encounter?.visitType ?? encounter?.visit_type ?? "general";
   const visitType = String(rawVisitType).trim().toLowerCase().replace(/[ -]+/g, "_");
 
   if (["refill", "refills", "refill_only", "refills_only"].includes(visitType)) return "refill_only";

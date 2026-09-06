@@ -9,6 +9,8 @@ test('canonical visit type reads every stored shape', () => {
   assert.equal(getEncounterVisitTypeKey({ intake_data: { visit_type: 'specialty clinic only' } }), 'specialty_only');
   assert.equal(getEncounterVisitTypeKey({ intake_data: { visitType: 'general and specialty' } }), 'both');
   assert.equal(getEncounterVisitTypeKey({}), 'general');
+  assert.equal(getEncounterVisitTypeKey({ visitType: 'general', intake_data: { visitType: 'refill_only' } }), 'refill_only');
+  assert.equal(getEncounterVisitTypeKey({ visit_type: 'general', intakeData: { visit_type: 'specialty_only' } }), 'specialty_only');
 });
 
 test('visit pools are mutually exclusive', () => {
