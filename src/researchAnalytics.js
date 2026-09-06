@@ -1,4 +1,4 @@
-import { getEncounterVisitTypeKey } from "./constants.js";
+import { getEncounterVisitTypeKey, isGeneralClinicEncounter } from "./constants.js";
 
 export function normalizeDate(value) {
   if (!value) return "";
@@ -108,17 +108,13 @@ export function percent(numerator, denominator) {
 }
 
 
-function isGeneralEncounter(encounter) {
-  return ["general", "both"].includes(getEncounterVisitTypeKey(encounter));
-}
-
 function pharmacyCohort(patient, endDate) {
   const conditions = patient.chronicConditions || patient.chronic_conditions || [];
   const hasCondition = Array.isArray(conditions) && conditions.some((condition) =>
     !["", "none", "no", "n/a", "unknown"].includes(String(condition).trim().toLowerCase())
   );
   const historicalFlag = (patient.encounters || []).some((encounter) =>
-    encounter.status !== "cancelled" && normalizeDate(encounter.clinicDate) &&
+    encounter.status !== "cancelled" && isGeneralClinicEncounter(encounter) && normalizeDate(encounter.clinicDate) &&
     (!endDate || normalizeDate(encounter.clinicDate) <= endDate) &&
     (isPositive(intakeValue(encounter, "htn")) || isPositive(intakeValue(encounter, "dm")))
   );
@@ -149,7 +145,7 @@ function buildPharmacyGroups(rows) {
 export function buildResearchReport(patients, startDate, endDate) {
   const chronicByPatient = new Map();
   patients.forEach((patient) => {
-    const encounters = (patient.encounters || []).filter((encounter) => isGeneralEncounter(encounter) && encounter.status !== "cancelled");
+    const encounters = (patient.encounters || []).filter((encounter) => isGeneralClinicEncounter(encounter) && encounter.status !== "cancelled");
     const htnEncounter = encounters.find((encounter) => isPositive(intakeValue(encounter, "htn")));
     const dmEncounter = encounters.find((encounter) => isPositive(intakeValue(encounter, "dm")));
     chronicByPatient.set(String(patient.id), { htn: !!htnEncounter, dm: !!dmEncounter, htnDate: normalizeDate(htnEncounter?.clinicDate), dmDate: normalizeDate(dmEncounter?.clinicDate) });
@@ -181,7 +177,7 @@ export function buildResearchReport(patients, startDate, endDate) {
       const mammogram = String(intakeValue(encounter, "mammogramStatus", "mammogramPapSmear") || "Not recorded").trim();
       rows.push({
         patientId: String(patient.id), patientName, encounter, chronic, language, transportation, pap, mammogram, date, visitAge, femaleEligible, papEligible, mammogramEligible,
-        returning: allEncounters.some((prior) => isGeneralEncounter(prior) && prior.status !== "cancelled" && normalizeDate(prior.clinicDate) && normalizeDate(prior.clinicDate) < date),
+        returning: allEncounters.some((prior) => isGeneralClinicEncounter(prior) && prior.status !== "cancelled" && normalizeDate(prior.clinicDate) && normalizeDate(prior.clinicDate) < date),
         duration: minutesBetween(encounter.createdAt, encounter.visitCompletedAt || encounter.doneAt),
       });
     });
@@ -217,7 +213,7 @@ export function buildResearchReport(patients, startDate, endDate) {
     ["Neither recorded", rows.filter((row) => !row.chronic.htn && !row.chronic.dm)],
   ].map(([label, groupRows]) => ({ label, rows: groupRows, visits: groupRows.length, patients: unique(groupRows), returns: groupRows.filter((row) => row.returning).length, duration: average(groupRows.map((row) => row.duration)) }));
 
-  const generalAnalyticsRows = analyticsRows.filter((row) => !["refill_only", "specialty_only"].includes(row.visitType));
+  const generalAnalyticsRows = analyticsRows.filter((row) => ["general", "both"].includes(row.visitType));
   const refillAnalyticsRows = analyticsRows.filter((row) => row.visitType === "refill_only");
   const dailyGroups = generalAnalyticsRows.reduce((groupsByDate, row) => {
     if (!groupsByDate[row.date]) groupsByDate[row.date] = [];

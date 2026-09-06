@@ -3,6 +3,7 @@ import PatientSearch from "./PatientSearch";
 import PatientTable from "./PatientTable";
 import logo from "../assets/free-clinic-logo.png";
 import { formatDate, getStatusLabel } from "../utils";
+import { getEncounterTypeCounts, getEncounterTypesForPatient, patientHasEncounterType } from "../utils/visitPools";
 import {
   VISIT_TYPE_BADGE_STYLES,
   VISIT_TYPE_FILTERS,
@@ -68,8 +69,8 @@ export default function DashboardView({
       ).trim();
       if (directReason) return directReason;
       if (encounter.specialtyType) return `${encounter.specialtyType} visit`;
-      if (encounter.visitType === "refill_only") return "Medication refill";
-      if (encounter.visitType === "specialty_only") return "Specialty visit";
+      if (getEncounterVisitTypeKey(encounter) === "refill_only") return "Medication refill";
+      if (getEncounterVisitTypeKey(encounter) === "specialty_only") return "Specialty visit";
       return "General clinic visit";
     })));
 
@@ -279,7 +280,7 @@ export default function DashboardView({
   function getEncounterCompletionTime(encounter) {
     if (!encounter) return null;
 
-    const visitType = encounter.visitType || encounter.visit_type;
+    const visitType = getEncounterVisitTypeKey(encounter);
 
     if (visitType === "refill_only") {
       return encounter.pharmacyPickedUpAt || encounter.pharmacy_picked_up_at || null;
@@ -299,7 +300,7 @@ export default function DashboardView({
   function isEncounterComplete(encounter) {
     if (!encounter) return false;
 
-    if ((encounter.visitType || encounter.visit_type) === "refill_only") {
+    if (getEncounterVisitTypeKey(encounter) === "refill_only") {
       const pharmacyStatus =
         encounter.pharmacyStatus || encounter.pharmacy_status;
 
@@ -398,7 +399,7 @@ export default function DashboardView({
   }
 
   function getVisitType(encounter) {
-    return encounter?.visitType || encounter?.visit_type || "general";
+    return getEncounterVisitTypeKey(encounter);
   }
 
   function getRowsForPatient(patient) {
@@ -407,38 +408,27 @@ export default function DashboardView({
     );
   }
 
-  function getPatientVisitTypeSummary(patient) {
-    const rows = getRowsForPatient(patient);
-    const visitTypes = new Set(
-      rows.map(({ encounter }) => getEncounterVisitTypeKey(encounter))
-    );
-
-    if (visitTypes.has("refill_only")) return "refill_only";
-    if (visitTypes.has("both")) return "both";
-    if (visitTypes.has("general") && visitTypes.has("specialty_only")) return "both";
-    if (visitTypes.has("specialty_only")) return "specialty_only";
-
-    return "general";
+  function getPatientEncounterTypes(patient) {
+    return getEncounterTypesForPatient(visibleEncounterRows, patient?.id);
   }
 
-  const visitTypeCounts = {
-    general: 0,
-    both: 0,
-    specialty_only: 0,
-    refill_only: 0,
-  };
+  function getPatientVisitTypeSummary(patient) {
+    if (visitTypeFilter !== "all" && getPatientEncounterTypes(patient).has(visitTypeFilter)) {
+      return visitTypeFilter;
+    }
+    const rows = getRowsForPatient(patient);
+    const latest = [...rows].sort((a, b) =>
+      new Date(b.encounter?.createdAt || b.encounter?.created_at || b.encounter?.clinicDate || 0) -
+      new Date(a.encounter?.createdAt || a.encounter?.created_at || a.encounter?.clinicDate || 0)
+    )[0];
+    return getEncounterVisitTypeKey(latest?.encounter);
+  }
 
-  filteredVisiblePatients.forEach((patient) => {
-    const key = getPatientVisitTypeSummary(patient);
-    visitTypeCounts[key] += 1;
-  });
+  const visitTypeCounts = getEncounterTypeCounts(visibleEncounterRows);
 
-  const visitTypeFilteredPatients =
-    visitTypeFilter === "all"
-      ? filteredVisiblePatients
-      : filteredVisiblePatients.filter(
-        (patient) => getPatientVisitTypeSummary(patient) === visitTypeFilter
-      );
+  const visitTypeFilteredPatients = visitTypeFilter === "all"
+    ? filteredVisiblePatients
+    : filteredVisiblePatients.filter((patient) => patientHasEncounterType(visibleEncounterRows, patient.id, visitTypeFilter));
 
   function isGeneralClinicEncounter(encounter) {
     const visitType = getVisitType(encounter);
@@ -926,10 +916,10 @@ export default function DashboardView({
 
             <div className="mt-2 flex items-end gap-3">
               <p className="text-5xl font-extrabold tracking-tight text-slate-900">
-                {filteredVisiblePatients.length}
+                {visitTypeFilter === "all" ? filteredVisiblePatients.length : visitTypeCounts[visitTypeFilter]}
               </p>
               <p className="pb-2 text-lg font-semibold text-slate-600">
-                Total Patients
+                {visitTypeFilter === "all" ? "Total Patients" : "Matching Encounters"}
               </p>
             </div>
 
@@ -949,7 +939,7 @@ export default function DashboardView({
                 >
                   <div className="flex items-center justify-between gap-3">
                     <span className={`text-sm font-medium ${style.labelClass}`}>
-                      {style.label}
+                      {style.label} visits
                     </span>
                     <span className={`text-xl font-bold ${style.countClass}`}>
                       {visitTypeCounts[key]}

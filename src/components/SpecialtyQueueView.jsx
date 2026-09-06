@@ -1,16 +1,10 @@
 import { useMemo, useState } from "react";
-import { VISIT_TYPE_BADGE_STYLES } from "../constants";
+import { VISIT_TYPE_BADGE_STYLES, getEncounterVisitTypeKey, isGeneralClinicEncounter } from "../constants";
 
 function isDualVisit(patient, encounter) {
     const intakeData = encounter?.intakeData || encounter?.intake_data || {};
 
-    const visitType =
-        encounter?.visitType ||
-        encounter?.visit_type ||
-        intakeData?.visitType ||
-        intakeData?.visit_type ||
-        "";
-
+    const visitType = getEncounterVisitTypeKey(encounter);
     if (
         visitType === "both" ||
         encounter?.dualVisit === true ||
@@ -25,17 +19,7 @@ function isDualVisit(patient, encounter) {
         if (!otherEncounter || otherEncounter.id === encounter.id) return false;
 
         const otherDate = otherEncounter?.clinicDate || otherEncounter?.clinic_date;
-        const otherVisitType =
-            otherEncounter?.visitType ||
-            otherEncounter?.visit_type ||
-            otherEncounter?.intakeData?.visitType ||
-            otherEncounter?.intake_data?.visitType ||
-            "";
-
-        return (
-            otherDate === encounterDate &&
-            (otherVisitType === "general" || otherVisitType === "both")
-        );
+        return otherDate === encounterDate && isGeneralClinicEncounter(otherEncounter);
     });
 }
 

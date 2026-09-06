@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getStatusLabel } from "../utils";
-import { VISIT_TYPE_BADGE_STYLES, getEncounterVisitTypeKey } from "../constants";
+import { VISIT_TYPE_BADGE_STYLES, getEncounterVisitTypeKey, isGeneralClinicEncounter } from "../constants";
 
 function normalizeName(value) {
   return (value || "").trim();
@@ -187,8 +187,7 @@ export default function RoomBoard({
     (encounter.status === "started" ||
       encounter.status === "undergrad_complete" ||
       encounter.status === "ready") &&
-    encounter.visitType !== "specialty_only" &&
-    encounter.visitType !== "refill_only" &&
+    isGeneralClinicEncounter(encounter) &&
     encounter.soapStatus !== "signed"
 ).length}
           </p>
@@ -503,7 +502,7 @@ export default function RoomBoard({
             mental_health: "Mental Health",
             addiction: "Addiction Medicine",
           };
-          const isSpecialty = primaryEncounter?.visitType !== "general";
+          const isSpecialty = primaryEncounter ? !isGeneralClinicEncounter(primaryEncounter) : false;
           const rules = SPECIALTY_ROOM_RULES?.[specialtyType];
           const isRestrictedRoom =
             rules?.allowedRooms?.length > 0 &&

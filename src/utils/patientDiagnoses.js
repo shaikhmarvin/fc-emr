@@ -1,3 +1,5 @@
+import { isGeneralClinicEncounter } from "../constants";
+
 function normalizeDiagnosisText(value) {
   if (value && typeof value === "object") {
     return String(value.name || value.label || value.diagnosis || "").toLowerCase();
@@ -38,8 +40,7 @@ export function patientHasPriorDiagnosis(patient, diagnosis) {
   }
 
   return (patient.encounters || []).some((encounter) => {
-    const visitType = encounter?.visitType || encounter?.visit_type;
-    if (visitType === "refill_only") return false;
+    if (!isGeneralClinicEncounter(encounter)) return false;
 
     if (isAffirmative(encounter?.[diagnosis])) return true;
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { formatDate, getStatusClasses, getStatusLabel } from "../utils";
-import { VISIT_TYPE_BADGE_STYLES, getEncounterVisitTypeKey } from "../constants";
+import { VISIT_TYPE_BADGE_STYLES, getEncounterVisitTypeKey, isRefillOnlyEncounter as isRefillVisit, isSpecialtyOnlyEncounter as isSpecialtyVisit } from "../constants";
 export default function QueueView({
   queueMode = "general",
   userRole,
@@ -909,17 +909,11 @@ const canMarkSeenBySocialWork =
   }
 
   function isRefillOnlyEncounter(encounter) {
-    return (
-      encounter?.visitType === "refill_only" ||
-      encounter?.visit_type === "refill_only"
-    );
+    return isRefillVisit(encounter);
   }
 
   function isSpecialtyOnlyEncounter(encounter) {
-    return (
-      encounter?.visitType === "specialty_only" ||
-      encounter?.visit_type === "specialty_only"
-    );
+    return isSpecialtyVisit(encounter);
   }
 
   function getEncounterSpecialtyName(encounter) {

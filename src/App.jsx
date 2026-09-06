@@ -113,6 +113,10 @@ import {
   PROGRAM_TYPES,
   PROGRAM_STATUSES,
   VISIT_TYPE_BADGE_STYLES,
+  getEncounterVisitTypeKey,
+  isGeneralClinicEncounter,
+  isRefillOnlyEncounter,
+  isSpecialtyOnlyEncounter,
 } from "./constants";
 import {
   calculateAge,
@@ -2347,7 +2351,7 @@ export default function App() {
   }
 
   function getEncounterVisitKind(encounter = {}) {
-    const visitType = String(encounter.visitType || encounter.visit_type || "general");
+    const visitType = getEncounterVisitTypeKey(encounter);
 
     if (visitType === "specialty_only") return "specialty";
     if (visitType === "both") return "both";
@@ -2362,7 +2366,7 @@ export default function App() {
     const sourceDailyNumber = String(sourceEncounter.dailyNumber || "").trim();
     const candidates = (patient.encounters || []).filter((encounter) => {
       if (String(encounter.id) === String(sourceEncounter.id)) return false;
-      if ((encounter.visitType || "general") !== visitType) return false;
+      if (getEncounterVisitTypeKey(encounter) !== visitType) return false;
       if (normalizeClinicDate(encounter.clinicDate) !== sourceClinicDate) return false;
 
       return true;
@@ -4814,7 +4818,7 @@ export default function App() {
       .filter(({ encounter }) => {
         if (!encounter) return false;
 
-        const visitType = encounter.visitType || "general";
+        const visitType = getEncounterVisitTypeKey(encounter);
         const specialtyType = encounter.specialtyType || "";
 
         if (normalizeClinicDate(encounter.clinicDate) !== clinicDateForSpecialtyQueue) return false;
@@ -6158,8 +6162,7 @@ export default function App() {
         normalizeClinicDate(encounter.clinicDate) === effectiveQueueDate;
 
       const isPharmacyWorkflow =
-        encounter.visitType === "refill_only" ||
-        encounter.visitType === "specialty_only";
+        isRefillOnlyEncounter(encounter) || isSpecialtyOnlyEncounter(encounter);
 
       if (!isSelectedQueueDate) return false;
       if (encounter.status === "cancelled") return false;
@@ -6171,7 +6174,7 @@ export default function App() {
       }
 
       if (canUseWholeClinicQueueTools && !isPharmacyQueueView) {
-        if (encounter.visitType === "refill_only") return false;
+        if (isRefillOnlyEncounter(encounter)) return false;
 
         return (
           encounter.status === "ready" ||
@@ -6179,7 +6182,7 @@ export default function App() {
           encounter.status === "in_visit" ||
           encounter.status === "done" ||
           encounter.soapStatus === "signed" ||
-          encounter.visitType === "specialty_only"
+          isSpecialtyOnlyEncounter(encounter)
         );
       }
 
@@ -6209,7 +6212,7 @@ export default function App() {
         rows = activeRows;
       } else if (canUseOphthoQueueTools) {
         rows = activeRows.filter(
-          ({ encounter }) => encounter.visitType !== "refill_only"
+          ({ encounter }) => !isRefillOnlyEncounter(encounter)
         );
       } else {
         rows = activeRows.filter(({ encounter }) =>
@@ -6221,7 +6224,7 @@ export default function App() {
       }
     } else if (userRole === "social_work") {
       rows = activeRows.filter(
-        ({ encounter }) => encounter.visitType !== "refill_only"
+        ({ encounter }) => !isRefillOnlyEncounter(encounter)
       );
     } else if (userRole === "upper_level") {
       rows = activeRows.filter(({ encounter }) =>
@@ -6248,8 +6251,7 @@ export default function App() {
         // leadership/general queue should only show general assignable encounters
         rows = activeRows.filter(
           ({ encounter }) =>
-            encounter.visitType !== "specialty_only" &&
-            encounter.visitType !== "refill_only"
+            isGeneralClinicEncounter(encounter)
         );
       }
 

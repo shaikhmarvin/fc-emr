@@ -158,18 +158,27 @@ export const VISIT_TYPE_FILTERS = [
 
 export function getEncounterVisitTypeKey(encounter) {
   const intakeData = encounter?.intakeData || encounter?.intake_data || {};
-  const visitType =
-    encounter?.visitType ||
-    encounter?.visit_type ||
-    intakeData?.visitType ||
-    intakeData?.visit_type ||
-    "general";
+  const rawVisitType =
+    encounter?.visitType ?? encounter?.visit_type ??
+    intakeData?.visitType ?? intakeData?.visit_type ?? "general";
+  const visitType = String(rawVisitType).trim().toLowerCase().replace(/[ -]+/g, "_");
 
-  if (visitType === "both") return "both";
-  if (visitType === "specialty_only") return "specialty_only";
-  if (visitType === "refill_only") return "refill_only";
-
+  if (["refill", "refills", "refill_only", "refills_only"].includes(visitType)) return "refill_only";
+  if (["specialty", "specialty_only", "specialty_clinic_only"].includes(visitType)) return "specialty_only";
+  if (["both", "general_and_specialty", "general_specialty"].includes(visitType)) return "both";
   return "general";
+}
+
+export function isGeneralClinicEncounter(encounter) {
+  return ["general", "both"].includes(getEncounterVisitTypeKey(encounter));
+}
+
+export function isRefillOnlyEncounter(encounter) {
+  return getEncounterVisitTypeKey(encounter) === "refill_only";
+}
+
+export function isSpecialtyOnlyEncounter(encounter) {
+  return getEncounterVisitTypeKey(encounter) === "specialty_only";
 }
 
 export function formatPhone(value = "") {
