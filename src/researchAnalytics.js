@@ -1,4 +1,5 @@
 import { getEncounterVisitTypeKey, isGeneralClinicEncounter } from "./constants.js";
+import { patientHasPriorDiagnosis } from "./utils/patientDiagnoses.js";
 
 export function normalizeDate(value) {
   if (!value) return "";
@@ -148,7 +149,14 @@ export function buildResearchReport(patients, startDate, endDate) {
     const encounters = (patient.encounters || []).filter((encounter) => isGeneralClinicEncounter(encounter) && encounter.status !== "cancelled");
     const htnEncounter = encounters.find((encounter) => isPositive(intakeValue(encounter, "htn")));
     const dmEncounter = encounters.find((encounter) => isPositive(intakeValue(encounter, "dm")));
-    chronicByPatient.set(String(patient.id), { htn: !!htnEncounter, dm: !!dmEncounter, htnDate: normalizeDate(htnEncounter?.clinicDate), dmDate: normalizeDate(dmEncounter?.clinicDate) });
+    chronicByPatient.set(String(patient.id), {
+      htn: patientHasPriorDiagnosis(patient, "htn"),
+      dm: patientHasPriorDiagnosis(patient, "dm"),
+      htnDate: normalizeDate(htnEncounter?.clinicDate),
+      dmDate: normalizeDate(dmEncounter?.clinicDate),
+      htnSource: htnEncounter ? "General-clinic intake" : "Patient chronic-condition profile",
+      dmSource: dmEncounter ? "General-clinic intake" : "Patient chronic-condition profile",
+    });
   });
 
   const rows = [];
@@ -206,15 +214,30 @@ export function buildResearchReport(patients, startDate, endDate) {
     );
     return { label, rows: modeRows, patients: patientIds.size, visits: modeRows.length, returnedPatients: returnedPatientIds.size, rate: percent(returnedPatientIds.size, patientIds.size) };
   });
-  const groups = [
-    ["HTN+ only", rows.filter((row) => row.chronic.htn && !row.chronic.dm)],
-    ["DM+ only", rows.filter((row) => row.chronic.dm && !row.chronic.htn)],
-    ["HTN+ and DM+", rows.filter((row) => row.chronic.htn && row.chronic.dm)],
-    ["Neither recorded", rows.filter((row) => !row.chronic.htn && !row.chronic.dm)],
-  ].map(([label, groupRows]) => ({ label, rows: groupRows, visits: groupRows.length, patients: unique(groupRows), returns: groupRows.filter((row) => row.returning).length, duration: average(groupRows.map((row) => row.duration)) }));
-
   const generalAnalyticsRows = analyticsRows.filter((row) => ["general", "both"].includes(row.visitType));
-  const refillAnalyticsRows = analyticsRows.filter((row) => row.visitType === "refill_only");
+  const refillAnalyticsRows = analyticsRows
+    .filter((row) => row.visitType === "refill_only" && row.encounter.status !== "cancelled")
+    .map((row) => ({ ...row, chronic: chronicByPatient.get(row.patientId) || { htn: false, dm: false } }));
+  const groupDefinitions = [
+    ["HTN+ only", (chronic) => chronic.htn && !chronic.dm],
+    ["DM+ only", (chronic) => chronic.dm && !chronic.htn],
+    ["HTN+ and DM+", (chronic) => chronic.htn && chronic.dm],
+    ["Neither recorded", (chronic) => !chronic.htn && !chronic.dm],
+  ];
+  const groups = groupDefinitions.map(([label, matches]) => {
+    const groupRows = rows.filter((row) => matches(row.chronic));
+    const refillRows = refillAnalyticsRows.filter((row) => matches(row.chronic));
+    return {
+      label,
+      rows: groupRows,
+      refillRows,
+      visits: groupRows.length,
+      patients: unique(groupRows),
+      refillPatients: unique(refillRows),
+      returns: groupRows.filter((row) => row.returning).length,
+      duration: average(groupRows.map((row) => row.duration)),
+    };
+  });
   const dailyGroups = generalAnalyticsRows.reduce((groupsByDate, row) => {
     if (!groupsByDate[row.date]) groupsByDate[row.date] = [];
     groupsByDate[row.date].push(row);

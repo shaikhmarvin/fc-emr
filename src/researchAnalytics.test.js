@@ -75,3 +75,24 @@ test('refill-only patients are retained only in pharmacy and refill timing; zero
   assert.equal(refill.resolved, 0);
   assert.equal(refill.unrecorded.length, 1);
 });
+
+
+test('chronic groups include patient profile diagnoses without admitting refill visits', () => {
+  const patients = [
+    { id: 'profile-htn', chronicConditions: ['Hypertension'], encounters: [visit('g1', '2026-02-01'), visit('r1', '2026-02-02', { visitType: 'refill_only' })] },
+    { id: 'intake-dm', encounters: [visit('g2', '2026-02-03', { dm: true }), visit('r2', '2026-02-04', { visitType: 'refill_only' })] },
+    { id: 'refill-flag-only', encounters: [visit('g3', '2026-02-05'), visit('r3', '2026-02-06', { visitType: 'refill_only', htn: true, dm: true })] },
+  ];
+  const result = buildResearchReport(patients, '2026-01-01', '2026-09-03');
+  assert.equal(result.rows.length, 3);
+  assert.equal(result.chronicPatients, 2);
+  assert.equal(result.chronicRows.length, 2);
+  assert.equal(result.groups.find(group => group.label === 'HTN+ only').patients, 1);
+  assert.equal(result.groups.find(group => group.label === 'DM+ only').patients, 1);
+  assert.equal(result.groups.find(group => group.label === 'Neither recorded').patients, 1);
+  assert.equal(result.groups.find(group => group.label === 'HTN+ only').refillPatients, 1);
+  assert.equal(result.groups.find(group => group.label === 'DM+ only').refillPatients, 1);
+  assert.equal(result.groups.find(group => group.label === 'Neither recorded').refillPatients, 1);
+  assert.equal(result.groups.reduce((sum, group) => sum + group.refillPatients, 0), 3);
+  assert.equal(result.refillAnalyticsRows.length, 3);
+});

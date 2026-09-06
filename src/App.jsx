@@ -1717,7 +1717,7 @@ export default function App() {
       setResearchLeadershipAccessState(saved);
     } catch (error) {
       setResearchLeadershipAccessState(previous);
-      alert(`Failed to change Research Tracker access: ${error.message}`);
+      alert(`Failed to change Clinic Tracker access: ${error.message}`);
     }
   }
 
@@ -11995,3 +11995,4 @@ async function markSeenBySocialWork(encounterId) {
     </div>
   );
 }
+

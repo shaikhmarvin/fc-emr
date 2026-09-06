@@ -62,9 +62,9 @@ export default function ResearchView({ patients = [], isResearchOwner = false, l
         encounterId: row.encounter?.id,
         value: recordedField === "Pharmacy outcome" ? (row.encounter.pharmacyPickedUpAt || row.encounter.pharmacy_picked_up_at ? "picked up" : (row.encounter.pharmacyStatus || row.encounter.pharmacy_status || "Not recorded").replaceAll("_", " ")) : recordedField === "Language" ? row.language : recordedField === "Transportation" ? row.transportation : recordedField === "PAP smear" ? row.pap : recordedField === "Mammogram" ? row.mammogram : recordedField,
         source: recordedField.startsWith("HTN")
-          ? `Historical intake/badge${row.chronic?.htnDate ? ` on ${row.chronic.htnDate}` : ""}`
+          ? `${row.chronic?.htnSource || "Historical general-clinic intake"}${row.chronic?.htnDate ? ` on ${row.chronic.htnDate}` : ""}`
           : recordedField.startsWith("DM")
-            ? `Historical intake/badge${row.chronic?.dmDate ? ` on ${row.chronic.dmDate}` : ""}`
+            ? `${row.chronic?.dmSource || "Historical general-clinic intake"}${row.chronic?.dmDate ? ` on ${row.chronic.dmDate}` : ""}`
             : ["Language", "Transportation", "PAP smear", "Mammogram"].includes(recordedField)
               ? "Saved encounter intake"
               : "Encounter workflow timestamps/status",
@@ -102,8 +102,8 @@ export default function ResearchView({ patients = [], isResearchOwner = false, l
       <div className="min-w-0 rounded-2xl bg-white p-3 shadow sm:p-4 lg:p-5">
         <div className="research-header">
           <div>
-            <h2 className="text-xl font-semibold text-slate-900">Research Tracker</h2>
-            <p className="mt-1 max-w-3xl text-sm text-slate-600">Language, disease, transportation, screening, and return analyses include general-clinic visits only. Refill visits appear separately in pharmacy use and wait-time comparisons. HTN+ and DM+ carry forward from general-clinic intakes.</p>
+            <h2 className="text-xl font-semibold text-slate-900">Clinic Tracker</h2>
+            <p className="mt-1 max-w-3xl text-sm text-slate-600">Language, disease, transportation, screening, and return analyses include general-clinic visits only. Refill visits appear separately in pharmacy use and wait-time comparisons. HTN+ and DM+ carry forward from the patient chronic-condition profile or general-clinic intakes.</p>
           </div>
           <div className="research-filters">
             {isResearchOwner ? (
@@ -135,11 +135,11 @@ export default function ResearchView({ patients = [], isResearchOwner = false, l
 
         <div className="mt-6 rounded-xl border border-slate-200">
           <table className="research-table">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Disease group</th><th className="px-4 py-3">Patients</th><th className="px-4 py-3">Visits</th><th className="px-4 py-3">Return visits</th><th className="px-4 py-3">Return rate</th><th className="px-4 py-3">Avg visit minutes</th></tr></thead>
-            <tbody className="divide-y divide-slate-200">{report.groups.map((group) => <tr key={group.label} onClick={() => showRows(group.label, group.rows, group.label)} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.currentTarget.click(); } }} className="cursor-pointer hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"><td data-label="Disease group" className="px-4 py-3 font-semibold text-slate-900">{group.label}</td><td data-label="Patients" className="px-4 py-3">{group.patients}</td><td data-label="Visits" className="px-4 py-3">{group.visits}</td><td data-label="Return visits" className="px-4 py-3">{group.returns}</td><td data-label="Return rate" className="px-4 py-3">{percent(group.returns, group.visits)}</td><td data-label="Avg visit minutes" className="px-4 py-3">{group.duration}</td></tr>)}</tbody>
+            <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Disease group</th><th className="px-4 py-3">Patients</th><th className="px-4 py-3">General visits</th><th className="px-4 py-3">Patients with refill-only visit</th><th className="px-4 py-3">General return visits</th><th className="px-4 py-3">Return rate</th><th className="px-4 py-3">Avg visit minutes</th></tr></thead>
+            <tbody className="divide-y divide-slate-200">{report.groups.map((group) => <tr key={group.label} onClick={() => showRows(group.label, group.rows, group.label)} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.currentTarget.click(); } }} className="cursor-pointer hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"><td data-label="Disease group" className="px-4 py-3 font-semibold text-slate-900">{group.label}</td><td data-label="Patients" className="px-4 py-3">{group.patients}</td><td data-label="General visits" className="px-4 py-3">{group.visits}</td><td data-label="Patients with refill-only visit" className="px-4 py-3"><button type="button" className="text-blue-700 hover:underline" onClick={(event) => { event.stopPropagation(); showRows(`${group.label}: patients with refill-only visits`, group.refillRows, "Refill-only visit"); }}>{group.refillPatients}</button></td><td data-label="General return visits" className="px-4 py-3">{group.returns}</td><td data-label="Return rate" className="px-4 py-3">{percent(group.returns, group.visits)}</td><td data-label="Avg visit minutes" className="px-4 py-3">{group.duration}</td></tr>)}</tbody>
           </table>
         </div>
-        <p className="mt-2 text-xs text-slate-500">Return visits require an earlier non-cancelled general-clinic visit in saved history; refill and specialty visits do not qualify. Visit-time comparisons are operational measures and not validated measures of clinical complexity.</p>
+        <p className="mt-2 text-xs text-slate-500">Patients with a refill-only visit are unique patients with at least one non-cancelled refill encounter in the selected date range. General return visits require an earlier non-cancelled general-clinic visit in saved history; refill and specialty visits do not qualify. Visit-time comparisons are operational measures and not validated measures of clinical complexity.</p>
 
           <div className="mt-6 min-w-0 rounded-xl border border-slate-200 p-4">
             <h3 className="font-semibold text-slate-900">Transportation and return visits</h3>
@@ -249,4 +249,5 @@ export default function ResearchView({ patients = [], isResearchOwner = false, l
     </div>
   );
 }
+
 

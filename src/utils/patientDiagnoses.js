@@ -1,4 +1,4 @@
-import { isGeneralClinicEncounter } from "../constants";
+import { isGeneralClinicEncounter } from "../constants.js";
 
 function normalizeDiagnosisText(value) {
   if (value && typeof value === "object") {
@@ -55,3 +55,4 @@ export function patientHasPriorDiagnosis(patient, diagnosis) {
     return encounterDiagnoses.some((value) => diagnosisTextMatches(value, diagnosis));
   });
 }
+

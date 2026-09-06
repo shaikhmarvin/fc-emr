@@ -44,7 +44,7 @@ export default function AppHeader({
             {activeView === "analytics" && "Clinic Analytics"}
             {activeView === "roomboard" && "Room Board"}
             {activeView === "summary" && "Clinic Summary"}
-            {activeView === "research" && "Research Tracker"}
+            {activeView === "research" && "Clinic Tracker"}
             {activeView === "pap" && "Patient Assistance Program Tracker"}
             {activeView === "registration" && "Patient Registration"}
           </h2>
@@ -122,3 +122,4 @@ export default function AppHeader({
   </div>
 );
 }
+
