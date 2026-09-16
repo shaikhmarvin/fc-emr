@@ -488,10 +488,9 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
     !manualPatient.firstName.trim() ||
     !manualPatient.lastName.trim() ||
     !manualPatient.dob ||
-    !manualPatient.phone.trim() ||
-    !manualPatient.mrn.trim()
+    !manualPatient.phone.trim()
   ) {
-    alert("Please fill out first name, last name, DOB, phone, and MRN.");
+    alert("Please fill out first name, last name, DOB, and phone.");
     return;
   }
 
@@ -927,7 +926,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
       />
     </Field>
 
-    <Field label="MRN">
+    <Field label="MRN (optional)">
       <input
         className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
         value={manualPatient.mrn}
