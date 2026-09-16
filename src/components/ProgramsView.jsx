@@ -19,6 +19,7 @@ const PROGRAM_TYPES = [
   "Addiction Medicine",
   "Mammogram",
   "Colonoscopy",
+  "Women's Health Day",
 ];
 
 const PROGRAM_STATUSES = [
@@ -53,9 +54,16 @@ const PROGRAM_STATUS_OPTIONS = {
     "Unable to Reach",
     "Declined",
   ],
+  "Women's Health Day": [
+    "New Referral",
+    "LVM",
+    "Pending Acceptance",
+    "Accepted",
+    "Declined",
+  ],
 };
 
-const GENERIC_TRACKING_PROGRAMS = ["Mammogram", "Colonoscopy"];
+const GENERIC_TRACKING_PROGRAMS = ["Mammogram", "Colonoscopy", "Women's Health Day"];
 
 function getStatusOptions(programType) {
   return PROGRAM_STATUS_OPTIONS[programType] || PROGRAM_STATUS_OPTIONS.default;
@@ -76,8 +84,25 @@ export default function ProgramsView({
   isLeadershipView,
   specialtyAccess,
   onProgramSettingsChange,
+  womensHealthSettings,
+  onSaveWomensHealthSettings,
   isActive = false,
 }) {
+  const [savingWomensHealthSettings, setSavingWomensHealthSettings] = useState(false);
+  const [womensHealthSettingsMessage, setWomensHealthSettingsMessage] = useState("");
+
+  async function saveWomensHealthSettings(updates) {
+    setSavingWomensHealthSettings(true);
+    setWomensHealthSettingsMessage("");
+    try {
+      await onSaveWomensHealthSettings({ ...womensHealthSettings, ...updates });
+      setWomensHealthSettingsMessage("Saved for the whole clinic.");
+    } catch (error) {
+      setWomensHealthSettingsMessage(`Could not save: ${error.message}`);
+    } finally {
+      setSavingWomensHealthSettings(false);
+    }
+  }
   const [activeTab, setActiveTab] = useState(() => {
     try {
       return window.sessionStorage.getItem("specialty-programs-active-tab") || "Tracker";
@@ -218,7 +243,14 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
   function handleProgramStatusChange(entry, newStatus) {
     const updates = { status: newStatus };
 
-    if (newStatus === "Attempted Contact" || newStatus === "Unable to Reach") {
+    if (entry.programType === "Women's Health Day" && newStatus !== "Accepted") {
+      updates.appointmentSlot = "";
+    }
+    if (entry.programType === "Women's Health Day" && newStatus === "Accepted" && !entry.specialtyDate && womensHealthSettings?.eventDate) {
+      updates.specialtyDate = womensHealthSettings.eventDate;
+    }
+
+    if (["Attempted Contact", "Unable to Reach", "LVM"].includes(newStatus)) {
       updates.lastContactAttemptAt = new Date().toISOString();
     }
 
@@ -229,9 +261,9 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
 
     updateProgramEntry(entry.id, "status", newStatus);
 
-    if (updates.lastContactAttemptAt) {
-      updateProgramEntry(entry.id, "lastContactAttemptAt", updates.lastContactAttemptAt);
-    }
+    if (updates.lastContactAttemptAt) updateProgramEntry(entry.id, "lastContactAttemptAt", updates.lastContactAttemptAt);
+    if (updates.appointmentSlot !== undefined) updateProgramEntry(entry.id, "appointmentSlot", updates.appointmentSlot);
+    if (updates.specialtyDate) updateProgramEntry(entry.id, "specialtyDate", updates.specialtyDate);
   }
 
   const filteredPatientOptions = useMemo(() => {
@@ -515,10 +547,11 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
       programType: newEntry.programType,
       reason: newEntry.reason,
       status: newEntry.status,
-      specialtyDate: newEntry.specialtyDate,
+      specialtyDate: newEntry.specialtyDate || (newEntry.programType === "Women's Health Day" && newEntry.status === "Accepted" ? womensHealthSettings?.eventDate || "" : ""),
       scheduleType: "",
       schedulePosition: null,
-      appointmentSlot: "",
+      appointmentSlot: newEntry.programType === "Women's Health Day" && newEntry.status === "Accepted"
+        ? newEntry.appointmentSlot : "",
       notes: newEntry.notes,
       lastContactAttemptAt: "",
       createdAt: new Date().toISOString(),
@@ -976,6 +1009,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                                 ? prev.status
                                 : statusOptions[0],
                               specialtyDate: isGenericTrackingProgram(nextType) ? "" : prev.specialtyDate,
+                              appointmentSlot: nextType === "Women's Health Day" ? prev.appointmentSlot : "",
                             };
                           })
                         }
@@ -994,7 +1028,11 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                         className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                         value={newEntry.status}
                         onChange={(e) =>
-                          setNewEntry((prev) => ({ ...prev, status: e.target.value }))
+                          setNewEntry((prev) => ({
+                            ...prev,
+                            status: e.target.value,
+                            appointmentSlot: e.target.value === "Accepted" ? prev.appointmentSlot : "",
+                          }))
                         }
                       >
                         {getStatusOptions(newEntry.programType).map((status) => (
@@ -1018,6 +1056,17 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                         }
                       />
                     </Field>
+
+                    {newEntry.programType === "Women's Health Day" && newEntry.status === "Accepted" && (
+                      <Field label="Scheduled Visit Time">
+                        <input
+                          type="time"
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                          value={newEntry.appointmentSlot}
+                          onChange={(e) => setNewEntry((prev) => ({ ...prev, appointmentSlot: e.target.value }))}
+                        />
+                      </Field>
+                    )}
 
                     <Field label="Reason" className="md:col-span-2">
                       <textarea
@@ -1376,6 +1425,9 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
       const statusRank = {
         "New Referral": 10,
         "Attempted Contact": 20,
+        LVM: 20,
+        "Pending Acceptance": 25,
+        Accepted: 30,
         Scheduled: 30,
         Backup: 40,
         "Unable to Reach": 70,
@@ -1524,10 +1576,51 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
     if (isGenericTracker) {
       return (
         <div className="space-y-6">
+          {programType === "Women's Health Day" && (
+            <Card>
+              <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                <div className="max-w-xl">
+                  <h3 className="text-lg font-semibold text-slate-900">Women’s Health Day date & display theme</h3>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Set the next event date when it is confirmed. The Rose & Plum theme is optional and starts off.
+                  </p>
+                </div>
+                <Field label="Next Women’s Health Day">
+                  <input
+                    type="date"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    value={womensHealthSettings?.eventDate || ""}
+                    disabled={!canEditProgramSettings || savingWomensHealthSettings}
+                    onChange={(event) => saveWomensHealthSettings({ eventDate: event.target.value })}
+                  />
+                </Field>
+              </div>
+              <button
+                type="button"
+                aria-pressed={womensHealthSettings?.themeEnabled === true}
+                disabled={!canEditProgramSettings || savingWomensHealthSettings}
+                onClick={() => saveWomensHealthSettings({ themeEnabled: !womensHealthSettings?.themeEnabled })}
+                className={`mt-5 block w-full max-w-sm rounded-xl border bg-white p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-70 ${womensHealthSettings?.themeEnabled ? "border-fuchsia-500 ring-2 ring-fuchsia-200" : "border-slate-200 hover:border-slate-400"}`}
+              >
+                <span className="mb-3 block h-7 rounded-lg womens-theme-swatch-rose" />
+                <span className="flex items-center justify-between gap-3 font-semibold text-slate-900">
+                  Rose & Plum
+                  <span className="text-sm text-slate-600">{womensHealthSettings?.themeEnabled ? "On" : "Off"}</span>
+                </span>
+                <span className="mt-1 block text-sm text-slate-600">Soft blush with plum accents. Click to turn the theme {womensHealthSettings?.themeEnabled ? "off" : "on"}.</span>
+              </button>
+              {womensHealthSettingsMessage && <p className="mt-3 text-sm text-slate-600" role="status">{womensHealthSettingsMessage}</p>}
+            </Card>
+          )}
           <Card>
             <h3 className="mb-4 text-lg font-semibold text-slate-900">
               {programType} Tracking
             </h3>
+            {programType === "Women's Health Day" && (
+              <p className="mb-4 text-sm text-slate-600">
+                This event is held twice a year. Add the date when it is confirmed, then record appointment times for accepted patients.
+              </p>
+            )}
 
             <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-4">
               <Field label="Search Patient">
@@ -1638,7 +1731,15 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                             </label>
                             <StatusBadge status={entry.status} />
                           </div>
-                          <div className="md:col-span-2"><ReadOnlyField label="Scheduled Visit Date" value={formatDisplayDate(entry.specialtyDate)} copyable={false} /></div>
+                          <div className="md:col-span-2">
+                            <ReadOnlyField
+                              label={programType === "Women's Health Day" ? "Scheduled Visit" : "Scheduled Visit Date"}
+                              value={programType === "Women's Health Day" && entry.status === "Accepted"
+                                ? [entry.specialtyDate && formatDisplayDate(entry.specialtyDate), entry.appointmentSlot].filter(Boolean).join(" at ") || "—"
+                                : formatDisplayDate(entry.specialtyDate)}
+                              copyable={false}
+                            />
+                          </div>
                           <div className="md:col-span-2"><ReadOnlyField label="Reason" value={entry.reason || "—"} /></div>
                         </div>
                       </button>
@@ -1679,6 +1780,16 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                                 onChange={(e) => updateProgramEntry(entry.id, "specialtyDate", e.target.value)}
                               />
                             </Field>
+                            {programType === "Women's Health Day" && entry.status === "Accepted" && (
+                              <Field label="Scheduled Visit Time">
+                                <input
+                                  type="time"
+                                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                  value={entry.appointmentSlot || ""}
+                                  onChange={(e) => updateProgramEntry(entry.id, "appointmentSlot", e.target.value)}
+                                />
+                              </Field>
+                            )}
                           </div>
 
                           <div className="mt-4">
@@ -2396,9 +2507,13 @@ function getStatusStyles(status) {
     case "New Referral":
       return "bg-purple-100 text-purple-700";
     case "Attempted Contact":
+    case "LVM":
       return "bg-blue-100 text-blue-700";
     case "Scheduled":
+    case "Accepted":
       return "bg-green-100 text-green-700";
+    case "Pending Acceptance":
+      return "bg-amber-100 text-amber-800";
     case "Backup":
       return "bg-yellow-100 text-yellow-700";
     case "Unable to Reach":
@@ -2417,9 +2532,13 @@ function getStatusBorderColor(status) {
     case "New Referral":
       return "border-l-purple-400";
     case "Attempted Contact":
+    case "LVM":
       return "border-l-blue-400";
     case "Scheduled":
+    case "Accepted":
       return "border-l-green-500";
+    case "Pending Acceptance":
+      return "border-l-amber-400";
     case "Backup":
       return "border-l-yellow-400";
     case "Unable to Reach":

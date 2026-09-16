@@ -107,6 +107,8 @@ export default function BoardDisplay({
   selectedClinicDate,
   tonightReservedRooms = [],
   boardMessage = null,
+  womensHealthDayActive = false,
+  womensHealthThemeActive = false,
 }) {
   const [now, setNow] = useState(new Date());
   const viewportRef = useRef(null);
@@ -257,7 +259,12 @@ export default function BoardDisplay({
   }, [ROOM_OPTIONS.length]);
 
   return (
-    <div ref={viewportRef} className="h-screen overflow-hidden bg-slate-900">
+    <div
+      ref={viewportRef}
+      className="h-screen overflow-hidden bg-slate-900"
+      data-womens-health-theme={womensHealthThemeActive ? "rose" : undefined}
+      data-womens-health-board={womensHealthThemeActive ? "true" : undefined}
+    >
       <div
         ref={contentRef}
         className="flex h-full flex-col p-2 text-white xl:p-3"
@@ -273,10 +280,10 @@ export default function BoardDisplay({
             <div className="flex min-w-0 flex-1 flex-wrap items-start gap-2 2xl:gap-3">
               <div className="shrink-0 rounded-xl border border-slate-600 bg-slate-800/55 px-2.5 py-1.5 shadow">
                 <h1 className="text-[clamp(1rem,1.25vw,1.45rem)] font-extrabold leading-tight">
-                  Free Clinic Board
+                  {womensHealthDayActive ? "Women’s Health Day Board" : "Free Clinic Board"}
                 </h1>
                 <p className="text-[0.7rem] font-semibold leading-tight text-slate-300 xl:text-xs">
-                  Live Display
+                  {womensHealthDayActive ? "Preventive care · Live clinic display" : "Live Display"}
                 </p>
                 {clinicDateLabel ? (
                   <p className="text-[0.65rem] font-bold leading-tight text-slate-400 xl:text-[0.7rem]">

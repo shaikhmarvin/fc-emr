@@ -78,6 +78,7 @@ function mapEncounterRow(row) {
     physicalTherapy: intake.physicalTherapy ?? "N/A",
     mentalHealthCombined: intake.mentalHealthCombined ?? "N/A",
     counseling: intake.counseling ?? "N/A",
+    womenHealthDay: intake.womenHealthDay ?? "N/A",
     anyMentalHealthPositive: intake.anyMentalHealthPositive ?? false,
     visitType: getEncounterVisitTypeKey(row),
     specialtyType: intake.specialtyType ?? "",
@@ -210,6 +211,7 @@ function buildIntakeData(encounter) {
     physicalTherapy: encounter.physicalTherapy ?? "N/A",
     mentalHealthCombined: encounter.mentalHealthCombined ?? "N/A",
     counseling: encounter.counseling ?? "N/A",
+    womenHealthDay: encounter.womenHealthDay ?? "N/A",
     anyMentalHealthPositive: encounter.anyMentalHealthPositive ?? false,
     visitType: encounter.visitType ?? "general",
     specialtyType: encounter.specialtyType ?? "",
@@ -553,6 +555,7 @@ export async function updateEncounterInSupabase(encounterId, updates, conditions
     "physicalTherapy",
     "mentalHealthCombined",
     "counseling",
+    "womenHealthDay",
     "anyMentalHealthPositive",
     "visitType",
     "specialtyType",
@@ -614,6 +617,7 @@ export async function updateEncounterInSupabase(encounterId, updates, conditions
       mentalHealthCombined:
         updates.mentalHealthCombined ?? currentIntake.mentalHealthCombined ?? "N/A",
       counseling: updates.counseling ?? currentIntake.counseling ?? "N/A",
+      womenHealthDay: updates.womenHealthDay ?? currentIntake.womenHealthDay ?? "N/A",
       anyMentalHealthPositive:
         updates.anyMentalHealthPositive ??
         currentIntake.anyMentalHealthPositive ??

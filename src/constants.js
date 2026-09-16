@@ -52,6 +52,7 @@ papStatus: "",
   physicalTherapy: "N/A",
   mentalHealthCombined: "N/A",
   counseling: "N/A",
+  womenHealthDay: "N/A",
   visitType: "general", // general | specialty_only | both
 specialtyType: "", // pt | dermatology | mental_health | addiction
   anyMentalHealthPositive: false,

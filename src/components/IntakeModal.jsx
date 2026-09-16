@@ -1,3 +1,5 @@
+import { isClinicResourceAvailable } from "../utils/clinicResourceEligibility";
+
 export default function IntakeModal({
   showIntakeModal,
   setShowIntakeModal,
@@ -48,53 +50,8 @@ export default function IntakeModal({
     intakeForm.substanceUseTreatment === "Yes" ||
     intakeForm.substanceUseTreatment === "Maybe";
 
-  const patientSex = String(intakeForm.sex || "").trim().toLowerCase();
-const patientAge = Number(intakeForm.age);
-
-function getResourceSetting(resourceKey) {
-  return clinicResourceSettings.find(
-    (setting) => setting.resource_key === resourceKey
-  );
-}
-
 function isResourceAvailable(resourceKey) {
-  const setting = getResourceSetting(resourceKey);
-
-  if (!setting) return false;
-  if (!setting.enabled) return false;
-
-  if (setting.sex_restriction === "female" && patientSex !== "female") {
-    return false;
-  }
-
-  if (setting.sex_restriction === "male" && patientSex !== "male") {
-    return false;
-  }
-
-  if (setting.min_age !== null && setting.min_age !== undefined) {
-    if (!patientAge || patientAge < Number(setting.min_age)) return false;
-  }
-
-  if (setting.max_age !== null && setting.max_age !== undefined) {
-    if (!patientAge || patientAge > Number(setting.max_age)) return false;
-  }
-
-  if (setting.seasonal) {
-    const currentMonth = new Date().getMonth() + 1;
-    const start = Number(setting.season_start_month);
-    const end = Number(setting.season_end_month);
-
-    if (start && end) {
-      const inSeason =
-        start <= end
-          ? currentMonth >= start && currentMonth <= end
-          : currentMonth >= start || currentMonth <= end;
-
-      if (!inSeason) return false;
-    }
-  }
-
-  return true;
+  return isClinicResourceAvailable(resourceKey, clinicResourceSettings, intakeForm);
 }
 
 const showPapScreening = isResourceAvailable("pap");
@@ -102,6 +59,7 @@ const showMammogramScreening = isResourceAvailable("mammogram");
 const showFluShotScreening = isResourceAvailable("flu_shot");
 const showCounselingService = isResourceAvailable("counseling");
 const showColonoscopyScreening = isResourceAvailable("colonoscopy");
+const showWomensHealthDayService = isResourceAvailable("womens_health_day");
 
 function isCompletedProgramEntry(entry) {
   return String(entry?.status || "").trim().toLowerCase() === "completed";
@@ -810,6 +768,23 @@ function renderExistingProgramWarning(programType) {
                         }
                       />
                       {renderExistingProgramWarning("Counseling")}
+                    </Field>
+                  )}
+
+                  {showWomensHealthDayService && (
+                    <Field label="Women's Health Day">
+                      <input
+                        className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                        placeholder="Reason for interest, such as Pap smear, breast exam, or preventive care"
+                        value={intakeForm.womenHealthDay === "N/A" ? "" : (intakeForm.womenHealthDay || "")}
+                        onChange={(e) =>
+                          updateIntakeField(
+                            "womenHealthDay",
+                            e.target.value.trim() === "" ? "N/A" : e.target.value
+                          )
+                        }
+                      />
+                      {renderExistingProgramWarning("Women's Health Day")}
                     </Field>
                   )}
 

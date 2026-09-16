@@ -97,6 +97,7 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
       physicalTherapy: intake.physicalTherapy ?? "N/A",
       mentalHealthCombined: intake.mentalHealthCombined ?? "N/A",
       counseling: intake.counseling ?? "N/A",
+      womenHealthDay: intake.womenHealthDay ?? "N/A",
       anyMentalHealthPositive: intake.anyMentalHealthPositive ?? false,
       status: mapDbStatusToUi(encounter.status),
       assignedStudent: encounter.assigned_student || "",

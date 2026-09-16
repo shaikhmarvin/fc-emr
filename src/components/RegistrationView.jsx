@@ -238,11 +238,25 @@ export default function RegistrationView({
                 type="number"
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm lg:w-24"
                 placeholder="Min age"
+                min="0"
                 value={setting.min_age ?? ""}
                 onChange={(e) =>
                   onSaveClinicResourceSetting?.(setting.resource_key, {
                     min_age:
                       e.target.value === "" ? null : Number(e.target.value),
+                  })
+                }
+              />
+
+              <input
+                type="number"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm lg:w-24"
+                placeholder="Max age"
+                min="0"
+                value={setting.max_age ?? ""}
+                onChange={(e) =>
+                  onSaveClinicResourceSetting?.(setting.resource_key, {
+                    max_age: e.target.value === "" ? null : Number(e.target.value),
                   })
                 }
               />

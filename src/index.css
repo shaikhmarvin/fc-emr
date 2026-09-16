@@ -1,3 +1,40 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+[data-womens-health-theme="rose"] {
+  --wh-background: #fff4f8;
+  --wh-surface: #fffafd;
+  --wh-soft: #fce7f0;
+  --wh-border: #edc8d9;
+  --wh-accent: #8d325f;
+  --wh-accent-hover: #74264e;
+  --wh-dark: #43243b;
+  --wh-ink: #402638;
+  --wh-board: #76536b;
+  --wh-board-panel: #65445a;
+}
+
+[data-womens-health-theme] { background-color: var(--wh-background) !important; }
+[data-womens-health-theme] > div.bg-slate-100 { background-color: var(--wh-background) !important; }
+[data-womens-health-theme] :is(aside.bg-white, header.bg-white, .rounded-2xl.bg-white, .rounded-xl.bg-white, .rounded-2xl.bg-slate-50, .rounded-xl.bg-slate-50) {
+  background-color: var(--wh-surface) !important;
+}
+[data-womens-health-theme] :is(.rounded-2xl.bg-slate-100, .rounded-xl.bg-slate-100) {
+  background-color: var(--wh-soft) !important;
+}
+[data-womens-health-theme] button.bg-blue-600 { background-color: var(--wh-accent) !important; }
+[data-womens-health-theme] button.hover\:bg-blue-700:hover { background-color: var(--wh-accent-hover) !important; }
+[data-womens-health-theme] :is(.rounded-2xl.border-slate-200, .rounded-xl.border-slate-200) { border-color: var(--wh-border) !important; }
+[data-womens-health-theme] .womens-health-day-banner { color: var(--wh-accent) !important; }
+[data-womens-health-theme] .womens-health-day-strip { background-color: var(--wh-accent) !important; }
+
+[data-womens-health-board] { background: var(--wh-board) !important; }
+[data-womens-health-board] :is(.bg-slate-800, .bg-slate-800\/55, .bg-slate-800\/70, .bg-slate-800\/85) {
+  background-color: var(--wh-board-panel) !important;
+}
+[data-womens-health-board] button.bg-slate-700 { background-color: var(--wh-accent) !important; }
+
+.womens-theme-swatch-rose {
+  background: linear-gradient(105deg, #fce7f0 0 52%, #8d325f 52% 76%, #76536b 76%);
+}

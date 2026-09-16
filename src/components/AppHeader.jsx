@@ -13,10 +13,12 @@ export default function AppHeader({
   chartingSettingsBusy,
   onToggleMedicalSoap,
   onManageSignature,
+  womensHealthDayActive = false,
+  womensHealthThemeActive = false,
 }) {
   return (
   <div className="sticky top-0 z-40 border-b bg-white shadow-sm">
-    <div className="h-1 bg-red-500" />
+    <div className={`h-1 ${womensHealthThemeActive ? "womens-health-day-strip" : "bg-red-500"}`} />
 
     <div className="flex flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
       <div className="flex min-w-0 items-start gap-3">
@@ -50,6 +52,9 @@ export default function AppHeader({
           </h2>
 
           <p className="text-sm text-slate-500">{formatDate(new Date())}</p>
+          {womensHealthDayActive && (
+            <p className="womens-health-day-banner mt-1 text-sm font-semibold">Women’s Health Day · Preventive care and wellness</p>
+          )}
 
           {activeView === "chart" && selectedPatient && (
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 sm:text-sm">

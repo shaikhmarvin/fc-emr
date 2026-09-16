@@ -87,6 +87,8 @@ import ResearchView from "./components/ResearchView";
 import { fetchResearchAccess, setResearchLeadershipAccess } from "./api/researchAccess";
 import ProgramsView from "./components/ProgramsView";
 import { fetchProgramSettings } from "./api/programSettings";
+import { fetchWomensHealthDaySettings, saveWomensHealthDaySettings, isWomensHealthDay } from "./api/womensHealthDaySettings";
+import { isClinicResourceAvailable } from "./utils/clinicResourceEligibility";
 import PAPView from "./components/PAPView";
 import {
   fetchProgramEntries,
@@ -1682,14 +1684,50 @@ export default function App() {
   const [programEntries, setProgramEntries] = useState([]);
   const [programsLoaded, setProgramsLoaded] = useState(false);
   const [programSettings, setProgramSettings] = useState([]);
+  const [womensHealthSettings, setWomensHealthSettings] = useState({ eventDate: "", themeEnabled: false });
+  const [womensHealthClock, setWomensHealthClock] = useState(() => new Date());
   const [clinicResourceSettings, setClinicResourceSettings] = useState([]);
-  const [clinicResourceSettingsLoaded, setClinicResourceSettingsLoaded] = useState(false);
   const [researchLeadershipAccess, setResearchLeadershipAccessState] = useState(false);
   const [activeBoardMessage, setActiveBoardMessage] = useState(null);
   const [savedBoardMessages, setSavedBoardMessages] = useState([]);
   const todayIso = formatClinicDate();
+  const womensHealthDayToday = isWomensHealthDay(womensHealthSettings.eventDate, womensHealthClock);
+  const womensHealthThemeActive = womensHealthDayToday && womensHealthSettings.themeEnabled;
   const isResearchOwner = String(session?.user?.email || "").trim().toLowerCase() === "marvin.shaikh@ttuhsc.edu";
   const canAccessResearch = isResearchOwner || (isLeadershipView && researchLeadershipAccess);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setWomensHealthClock(new Date()), 60000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    let cancelled = false;
+    fetchWomensHealthDaySettings()
+      .then((settings) => { if (!cancelled) setWomensHealthSettings(settings); })
+      .catch((error) => console.error("Could not load Women's Health Day settings:", error));
+
+    const channel = supabase
+      .channel("womens-health-day-settings-realtime")
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "womens_health_day_settings" }, (payload) => {
+        if (!cancelled && payload.new) {
+          setWomensHealthSettings({ eventDate: payload.new.event_date || "", themeEnabled: payload.new.theme_enabled === true });
+        }
+      })
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [session]);
+
+  async function handleSaveWomensHealthSettings(nextSettings) {
+    const saved = await saveWomensHealthDaySettings(nextSettings);
+    setWomensHealthSettings(saved);
+    return saved;
+  }
 
   useEffect(() => {
     if (!session) return;
@@ -1752,13 +1790,12 @@ export default function App() {
       "undergrad-intake",
       "queue",
     ].includes(activeView);
-    if (!session || clinicResourceSettingsLoaded || !needsClinicResourceSettings) return;
+    if (!session || !needsClinicResourceSettings) return;
 
     async function loadClinicResourceSettings() {
       try {
         const rows = await fetchClinicResourceSettings();
         setClinicResourceSettings(rows || []);
-        setClinicResourceSettingsLoaded(true);
       } catch (error) {
         console.error("Failed to load clinic resource settings:", error);
         showToast({
@@ -1770,7 +1807,7 @@ export default function App() {
     }
 
     loadClinicResourceSettings();
-  }, [session, clinicResourceSettingsLoaded, activeView]);
+  }, [session, activeView]);
 
   const loadBoardMessages = useCallback(async () => {
     if (!session) return;
@@ -2286,7 +2323,8 @@ export default function App() {
     );
 
     try {
-      const saved = await updateClinicResourceSetting(resourceKey, updates);
+      const currentSetting = previousSettings.find((setting) => setting.resource_key === resourceKey);
+      const saved = await updateClinicResourceSetting(resourceKey, updates, currentSetting);
 
       setClinicResourceSettings((prev) =>
         prev.map((setting) =>
@@ -2471,6 +2509,7 @@ export default function App() {
       mentalHealthCombined:
         updates.mentalHealthCombined ?? baseEncounter.mentalHealthCombined ?? "N/A",
       counseling: updates.counseling ?? baseEncounter.counseling ?? "N/A",
+      womenHealthDay: updates.womenHealthDay ?? baseEncounter.womenHealthDay ?? "N/A",
       anyMentalHealthPositive:
         updates.anyMentalHealthPositive ?? baseEncounter.anyMentalHealthPositive ?? false,
       visitType,
@@ -5665,6 +5704,7 @@ export default function App() {
         physicalTherapy: "N/A",
         mentalHealthCombined: "N/A",
         counseling: "N/A",
+        womenHealthDay: "N/A",
         anyMentalHealthPositive: false,
         status: "started",
         assignedStudent: "",
@@ -6092,6 +6132,7 @@ export default function App() {
       physicalTherapy: encounter.physicalTherapy || "N/A",
       mentalHealthCombined: encounter.mentalHealthCombined || "N/A",
       counseling: encounter.counseling || "N/A",
+      womenHealthDay: encounter.womenHealthDay || "N/A",
       anyMentalHealthPositive: encounter.anyMentalHealthPositive || false,
       visitType: encounter.visitType || "general",
       specialtyType: encounter.specialtyType || "",
@@ -6933,6 +6974,7 @@ export default function App() {
       physicalTherapy: selectedEncounter.physicalTherapy || "N/A",
       mentalHealthCombined: selectedEncounter.mentalHealthCombined || "N/A",
       counseling: selectedEncounter.counseling || "N/A",
+      womenHealthDay: selectedEncounter.womenHealthDay || "N/A",
       anyMentalHealthPositive: selectedEncounter.anyMentalHealthPositive || false,
       visitType: selectedEncounter.visitType || "general",
       specialtyType: selectedEncounter.specialtyType || "",
@@ -7014,6 +7056,10 @@ export default function App() {
 
     if (hasText(intakeForm.counseling)) {
       pushEntry("Counseling", intakeForm.counseling, chiefComplaint);
+    }
+
+    if (hasText(intakeForm.womenHealthDay) && isClinicResourceAvailable("womens_health_day", clinicResourceSettings, intakeForm)) {
+      pushEntry("Women's Health Day", intakeForm.womenHealthDay, chiefComplaint);
     }
 
     if (
@@ -7164,6 +7210,7 @@ export default function App() {
           physicalTherapy: intakeForm.physicalTherapy,
           mentalHealthCombined: intakeForm.mentalHealthCombined,
           counseling: intakeForm.counseling,
+          womenHealthDay: intakeForm.womenHealthDay,
           anyMentalHealthPositive: intakeForm.anyMentalHealthPositive,
           visitType: intakeForm.visitType,
           specialtyType: intakeForm.specialtyType,
@@ -7297,6 +7344,7 @@ export default function App() {
           physicalTherapy: intakeForm.physicalTherapy,
           mentalHealthCombined: intakeForm.mentalHealthCombined,
           counseling: intakeForm.counseling,
+          womenHealthDay: intakeForm.womenHealthDay,
           anyMentalHealthPositive: intakeForm.anyMentalHealthPositive,
           visitType: intakeForm.visitType,
           specialtyType: intakeForm.specialtyType,
@@ -7413,6 +7461,7 @@ export default function App() {
             encounter.mentalHealthCombined ??
             "N/A",
           counseling: intakeData.counseling ?? encounter.counseling ?? "N/A",
+          womenHealthDay: intakeData.womenHealthDay ?? encounter.womenHealthDay ?? "N/A",
           anyMentalHealthPositive:
             intakeData.anyMentalHealthPositive ??
             encounter.anyMentalHealthPositive ??
@@ -7557,6 +7606,7 @@ export default function App() {
                   "N/A",
                 counseling:
                   intakeData.counseling ?? encounter.counseling ?? "N/A",
+                womenHealthDay: intakeData.womenHealthDay ?? encounter.womenHealthDay ?? "N/A",
                 anyMentalHealthPositive:
                   intakeData.anyMentalHealthPositive ??
                   encounter.anyMentalHealthPositive ??
@@ -7743,6 +7793,7 @@ export default function App() {
       physicalTherapy: "N/A",
       mentalHealthCombined: "N/A",
       counseling: "N/A",
+      womenHealthDay: "N/A",
       anyMentalHealthPositive: false,
       status: "started",
       assignedStudent: "",
@@ -11206,6 +11257,8 @@ async function markSeenBySocialWork(encounterId) {
   if (isBoardDisplayMode) {
     return (
       <BoardDisplay
+        womensHealthDayActive={womensHealthDayToday}
+        womensHealthThemeActive={womensHealthThemeActive}
         ROOM_OPTIONS={ROOM_OPTIONS}
         canOpenCharts={userRole !== "lab"}
         roomMap={roomMap}
@@ -11233,7 +11286,10 @@ async function markSeenBySocialWork(encounterId) {
 
 
   return (
-    <div className="min-h-screen bg-slate-100 xl:flex">
+    <div
+      className="min-h-screen bg-slate-100 xl:flex"
+      data-womens-health-theme={womensHealthThemeActive ? "rose" : undefined}
+    >
       <AppSidebar
         activeView={activeView}
         setActiveView={setActiveView}
@@ -11255,6 +11311,8 @@ async function markSeenBySocialWork(encounterId) {
 
       <div className="min-w-0 flex-1 bg-slate-100 xl:ml-64 xl:flex xl:flex-col">
         <AppHeader
+          womensHealthDayActive={womensHealthDayToday}
+          womensHealthThemeActive={womensHealthThemeActive}
           activeView={activeView}
           selectedPatient={selectedPatient}
           getFullPatientName={getFullPatientName}
@@ -11809,6 +11867,8 @@ async function markSeenBySocialWork(encounterId) {
                 isLeadershipView={isLeadershipView}
                 specialtyAccess={currentSpecialtyAccess}
                 onProgramSettingsChange={setProgramSettings}
+                womensHealthSettings={womensHealthSettings}
+                onSaveWomensHealthSettings={handleSaveWomensHealthSettings}
                 isActive={activeView === "programs"}
                 leadershipOptions={profiles
                   .filter((profile) => profile.role === "leadership")

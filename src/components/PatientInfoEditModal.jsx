@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { formatPhone } from "../constants";
 
 const EMPTY_FORM = {
   firstName: "",
@@ -54,7 +55,7 @@ function createForm(patient, selectedEncounter) {
     preferredName: patient?.preferredName || "",
     dob: patient?.dob || "",
     mrn: patient?.mrn || "",
-    phone: patient?.phone || "",
+    phone: formatPhone(String(patient?.phone || "")),
     pronouns: patient?.pronouns || "",
     ethnicity: patient?.ethnicity || "",
     sex: patient?.sex || "",
@@ -66,7 +67,7 @@ function createForm(patient, selectedEncounter) {
     zipCode: patient?.zipCode || "",
     emergencyContactName: patient?.emergencyContactName || "",
     emergencyContactRelation: patient?.emergencyContactRelation || "",
-    emergencyContactPhone: patient?.emergencyContactPhone || "",
+    emergencyContactPhone: formatPhone(String(patient?.emergencyContactPhone || "")),
     incomeRange: patient?.incomeRange || "",
     spanishOnly: patient?.spanishOnly || "",
     chronicConditions: patient?.chronicConditions || [],
@@ -291,8 +292,9 @@ export default function PatientInfoEditModal({
                   <FieldLabel>Phone</FieldLabel>
                   <FieldInput
                     placeholder="Enter phone number"
+                    inputMode="tel"
                     value={form.phone}
-                    onChange={(e) => updateField("phone", e.target.value)}
+                    onChange={(e) => updateField("phone", formatPhone(e.target.value))}
                   />
                 </div>
 
@@ -412,8 +414,9 @@ export default function PatientInfoEditModal({
                   <FieldLabel>Emergency Contact Phone</FieldLabel>
                   <FieldInput
                     placeholder="Enter emergency contact phone"
+                    inputMode="tel"
                     value={form.emergencyContactPhone}
-                    onChange={(e) => updateField("emergencyContactPhone", e.target.value)}
+                    onChange={(e) => updateField("emergencyContactPhone", formatPhone(e.target.value))}
                   />
                 </div>
 
