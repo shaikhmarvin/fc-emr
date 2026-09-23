@@ -1683,6 +1683,8 @@ export default function App() {
   const [summaryRefreshStatus, setSummaryRefreshStatus] = useState("");
   const [programEntries, setProgramEntries] = useState([]);
   const [programsLoaded, setProgramsLoaded] = useState(false);
+  const programWritesRef = useRef(0);
+  const programWriteVersionRef = useRef(0);
   const [programSettings, setProgramSettings] = useState([]);
   const [womensHealthSettings, setWomensHealthSettings] = useState({ eventDate: "", themeEnabled: false });
   const [womensHealthClock, setWomensHealthClock] = useState(() => new Date());
@@ -1907,6 +1909,37 @@ export default function App() {
   }, [session, programsLoaded, userRole, activeView]);
 
   useEffect(() => {
+    if (!session || activeView !== "programs" || !programsLoaded) return;
+
+    let active = true;
+    let latestRequest = 0;
+    const refreshProgramEntries = async () => {
+      if (programWritesRef.current > 0) return;
+      const request = ++latestRequest;
+      const writeVersion = programWriteVersionRef.current;
+      try {
+        const rows = await fetchProgramEntries();
+        if (active && request === latestRequest &&
+            programWritesRef.current === 0 &&
+            programWriteVersionRef.current === writeVersion) {
+          setProgramEntries(rows);
+        }
+      } catch (error) {
+        console.error("Failed to refresh specialty referrals:", error);
+      }
+    };
+
+    refreshProgramEntries();
+    window.addEventListener("focus", refreshProgramEntries);
+    const timer = window.setInterval(refreshProgramEntries, 30000);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", refreshProgramEntries);
+      window.clearInterval(timer);
+    };
+  }, [session, activeView, programsLoaded]);
+
+  useEffect(() => {
     if (!session) return;
 
     async function loadProgramSettingsForBoard() {
@@ -1971,6 +2004,8 @@ export default function App() {
 
 
   async function addProgramEntry(entry) {
+    programWritesRef.current += 1;
+    programWriteVersionRef.current += 1;
     setProgramEntries((prev) => [entry, ...prev]);
 
     try {
@@ -1984,10 +2019,14 @@ export default function App() {
       alert(`Failed to save program entry: ${error.message}`);
 
       setProgramEntries((prev) => prev.filter((item) => item.id !== entry.id));
+    } finally {
+      programWritesRef.current -= 1;
     }
   }
 
   async function updateProgramEntry(entryId, field, value) {
+    programWritesRef.current += 1;
+    programWriteVersionRef.current += 1;
     const previousEntries = [...programEntries];
 
     setProgramEntries((prev) =>
@@ -2006,10 +2045,14 @@ export default function App() {
       console.error("Failed to update program entry:", error);
       alert(`Failed to update program entry: ${error.message}`);
       setProgramEntries(previousEntries);
+    } finally {
+      programWritesRef.current -= 1;
     }
   }
 
   async function updateProgramEntryFields(entryId, updates) {
+    programWritesRef.current += 1;
+    programWriteVersionRef.current += 1;
     const previousEntries = [...programEntries];
 
     setProgramEntries((prev) =>
@@ -2028,10 +2071,14 @@ export default function App() {
       console.error("Failed to update program entry:", error);
       alert(`Failed to update program entry: ${error.message}`);
       setProgramEntries(previousEntries);
+    } finally {
+      programWritesRef.current -= 1;
     }
   }
 
   async function removeProgramEntry(entryId) {
+    programWritesRef.current += 1;
+    programWriteVersionRef.current += 1;
     const previousEntries = [...programEntries];
 
     setProgramEntries((prev) => prev.filter((entry) => entry.id !== entryId));
@@ -2042,6 +2089,8 @@ export default function App() {
       console.error("Failed to delete program entry:", error);
       alert(`Failed to delete program entry: ${error.message}`);
       setProgramEntries(previousEntries);
+    } finally {
+      programWritesRef.current -= 1;
     }
   }
 
