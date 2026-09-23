@@ -7,6 +7,8 @@ import {
 import { supabase } from "../lib/supabase";
 import { fetchProgramSettings, updateProgramSetting } from "../api/programSettings";
 import { createPatientInSupabase } from "../api/patients";
+import WomensHealthSchedule from "./WomensHealthSchedule";
+import { WHD_SLOTS, whdSlotLabel } from "../utils/womensHealthSchedule";
 
 
 
@@ -90,6 +92,7 @@ export default function ProgramsView({
 }) {
   const [savingWomensHealthSettings, setSavingWomensHealthSettings] = useState(false);
   const [womensHealthSettingsMessage, setWomensHealthSettingsMessage] = useState("");
+  const [womensHealthView, setWomensHealthView] = useState("waitlist");
 
   async function saveWomensHealthSettings(updates) {
     setSavingWomensHealthSettings(true);
@@ -152,6 +155,7 @@ export default function ProgramsView({
   const [programDrafts, setProgramDrafts] = useState({});
 
   const [showAddReferral, setShowAddReferral] = useState(false);
+  const [savingReferral, setSavingReferral] = useState(false);
   const [ophthoClinicMode, setOphthoClinicMode] = useState("off_day");
 
 
@@ -523,16 +527,16 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
   }
 }
 
-  function handleAddEntry() {
-    if (!canAddAnyProgramEntry) return;
+  async function handleAddEntry() {
+    if (!canAddAnyProgramEntry || savingReferral) return;
 
     if (
       !newEntry.patientId ||
       !newEntry.patientName ||
       !newEntry.programType ||
-      !newEntry.reason.trim()
+      (newEntry.programType !== "Women's Health Day" && !newEntry.reason.trim())
     ) {
-      alert("Please fill out patient, program, and reason.");
+      alert(newEntry.programType === "Women's Health Day" ? "Please select a patient and program." : "Please fill out patient, program, and reason.");
       return;
     }
 
@@ -556,7 +560,17 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
       createdAt: new Date().toISOString(),
     };
 
-    addProgramEntry(entry);
+    setSavingReferral(true);
+    let saved;
+    try {
+      saved = await addProgramEntry(entry);
+    } catch (error) {
+      alert(error.message || "Could not save referral.");
+      return;
+    } finally {
+      setSavingReferral(false);
+    }
+    if (saved === false) return;
     setActiveTab(entry.programType);
 
     setNewEntry({
@@ -565,9 +579,9 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
       mrn: "",
       dob: "",
       phone: "",
-      programType: "Physical Therapy",
+      programType: entry.programType,
       reason: "",
-      status: "New Referral",
+      status: getStatusOptions(entry.programType)[0],
       notes: "",
       specialtyDate: "",
       scheduleType: "",
@@ -779,10 +793,10 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
     return Number.isNaN(time) ? 0 : time;
   }
 
-  function renderTracker() {
+  function renderAddReferral() {
+    if (!canAddAnyProgramEntry) return null;
+    const specialty = accessibleProgramTypes.includes(activeTab) ? activeTab : "";
     return (
-      <div className="space-y-6">
-        {canAddAnyProgramEntry && (
           <Card>
             <div className="flex items-center justify-between">
               <div>
@@ -790,12 +804,25 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                   Add Referral Entry
                 </h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Create a new specialty referral from intake.
+                  {specialty ? `Create a new ${specialty} referral.` : "Create a new specialty referral from intake."}
                 </p>
               </div>
 
               <button
-                onClick={() => setShowAddReferral((prev) => !prev)}
+                onClick={() => {
+                  if (!showAddReferral && specialty) {
+                    setNewEntry((prev) => ({
+                      ...prev,
+                      programType: specialty,
+                      status: prev.programType === specialty ? prev.status : getStatusOptions(specialty)[0],
+                      specialtyDate: prev.programType === specialty ? prev.specialtyDate : "",
+                      appointmentSlot: prev.programType === specialty ? prev.appointmentSlot : "",
+                      scheduleType: "",
+                      schedulePosition: null,
+                    }));
+                  }
+                  setShowAddReferral((prev) => !prev);
+                }}
                 className={`rounded-lg px-4 py-2 text-sm font-medium transition ${showAddReferral
                   ? "border border-slate-300 text-slate-700 hover:bg-slate-50"
                   : "bg-green-600 text-white hover:bg-green-700"
@@ -996,6 +1023,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                       <select
                         className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                         value={newEntry.programType}
+                        disabled={Boolean(specialty)}
                         onChange={(e) =>
                           setNewEntry((prev) => {
                             const nextType = e.target.value;
@@ -1058,16 +1086,18 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
 
                     {newEntry.programType === "Women's Health Day" && newEntry.status === "Accepted" && (
                       <Field label="Scheduled Visit Time">
-                        <input
-                          type="time"
+                        <select
                           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                           value={newEntry.appointmentSlot}
                           onChange={(e) => setNewEntry((prev) => ({ ...prev, appointmentSlot: e.target.value }))}
-                        />
+                        >
+                          <option value="">Not scheduled</option>
+                          {WHD_SLOTS.map((slot) => <option key={slot} value={slot}>{whdSlotLabel(slot)}</option>)}
+                        </select>
                       </Field>
                     )}
 
-                    <Field label="Reason" className="md:col-span-2">
+                    <Field label={newEntry.programType === "Women's Health Day" ? "Reason (optional)" : "Reason"} className="md:col-span-2">
                       <textarea
                         rows={2}
                         className="min-h-[70px] w-full resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm leading-snug whitespace-pre-wrap break-words"
@@ -1092,17 +1122,22 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                   <div className="mt-4">
                     <button
                       onClick={handleAddEntry}
+                      disabled={savingReferral}
                       className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
                     >
-                      Add Referral
+                      {savingReferral ? "Saving…" : "Add Referral"}
                     </button>
                   </div>
                 </div>
               </div>
             )}
           </Card>
-        )}
+    );
+  }
 
+  function renderTracker() {
+    return (
+      <div className="space-y-6">
         <Card>
           <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-5">
             <Field label="Search Patient">
@@ -1188,7 +1223,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                     )}`}
                   >
                     {/* COLLAPSED HEADER */}
-                    <button
+                    <TrackerCardSummary expanded={isExpanded}
                       onClick={() =>
                         setExpandedEntryIds((prev) =>
                           prev.includes(entry.id)
@@ -1196,7 +1231,6 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                             : [...prev, entry.id]
                         )
                       }
-                      className="w-full text-left"
                     >
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
                         <div className="md:col-span-2"><ReadOnlyField label="Full Name" value={entry.patientName} /></div>
@@ -1214,7 +1248,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
 
                         <div className="md:col-span-2"><ReadOnlyField label="Scheduled Visit Date" value={formatDisplayDate(entry.specialtyDate)} copyable={false} /></div>
                       </div>
-                    </button>
+                    </TrackerCardSummary>
 
                     {/* EXPANDED CONTENT */}
                     {isExpanded && (
@@ -1611,7 +1645,16 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
               {womensHealthSettingsMessage && <p className="mt-3 text-sm text-slate-600" role="status">{womensHealthSettingsMessage}</p>}
             </Card>
           )}
-          <Card>
+          {programType === "Women's Health Day" && <div className="flex gap-2" aria-label="Women’s Health Day views">
+            {[ ["waitlist", "Waitlist tracker"], ["schedule", "Schedule"] ].map(([view, label]) => <button key={view} type="button" aria-pressed={womensHealthView === view} onClick={() => setWomensHealthView(view)} className={`rounded-lg px-4 py-2 font-medium ${womensHealthView === view ? "bg-purple-700 text-white" : "bg-white text-slate-700"}`}>{label}</button>)}
+          </div>}
+          {programType === "Women's Health Day" && womensHealthView === "schedule" ? <WomensHealthSchedule
+            entries={programEntries}
+            settings={womensHealthSettings}
+            canEditSettings={canEditProgramSettings}
+            onSaveSettings={onSaveWomensHealthSettings}
+            onUpdate={updateProgramEntryFields}
+          /> : <Card>
             <h3 className="mb-4 text-lg font-semibold text-slate-900">
               {programType} Tracking
             </h3>
@@ -1709,7 +1752,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                         entry.status
                       )}`}
                     >
-                      <button
+                      <TrackerCardSummary expanded={isExpanded}
                         onClick={() =>
                           setExpandedEntryIds((prev) =>
                             prev.includes(entry.id)
@@ -1717,7 +1760,6 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                               : [...prev, entry.id]
                           )
                         }
-                        className="w-full text-left"
                       >
                         <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
                           <div className="md:col-span-2"><ReadOnlyField label="Full Name" value={entry.patientName} /></div>
@@ -1741,7 +1783,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                           </div>
                           <div className="md:col-span-2"><ReadOnlyField label="Reason" value={entry.reason || "—"} /></div>
                         </div>
-                      </button>
+                      </TrackerCardSummary>
 
                       {isExpanded && (
                         <>
@@ -1781,12 +1823,15 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                             </Field>
                             {programType === "Women's Health Day" && entry.status === "Accepted" && (
                               <Field label="Scheduled Visit Time">
-                                <input
-                                  type="time"
+                                <select
                                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                                   value={entry.appointmentSlot || ""}
                                   onChange={(e) => updateProgramEntry(entry.id, "appointmentSlot", e.target.value)}
-                                />
+                                >
+                                  <option value="">Not scheduled</option>
+                                  {entry.appointmentSlot && !WHD_SLOTS.includes(entry.appointmentSlot) && <option value={entry.appointmentSlot}>{entry.appointmentSlot} (existing)</option>}
+                                  {WHD_SLOTS.map((slot) => <option key={slot} value={slot}>{whdSlotLabel(slot)}</option>)}
+                                </select>
                               </Field>
                             )}
                           </div>
@@ -1832,7 +1877,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                 })}
               </div>
             )}
-          </Card>
+          </Card>}
         </div>
       );
     }
@@ -2180,7 +2225,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                       entry.status
                     )}`}
                   >
-                    <button
+                    <TrackerCardSummary expanded={isExpanded}
                       onClick={() =>
                         setExpandedEntryIds((prev) =>
                           prev.includes(entry.id)
@@ -2188,7 +2233,6 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                             : [...prev, entry.id]
                         )
                       }
-                      className="w-full text-left"
                     >
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
                         <div className="md:col-span-2">
@@ -2222,7 +2266,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                           <ReadOnlyField label="Scheduled Visit Date" value={formatDisplayDate(entry.specialtyDate)} copyable={false} />
                         </div>
                       </div>
-                    </button>
+                    </TrackerCardSummary>
 
                     {isExpanded && (
                       <>
@@ -2474,7 +2518,10 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
           return (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => {
+                if (tab !== activeTab) setShowAddReferral(false);
+                setActiveTab(tab);
+              }}
               className={`rounded-lg px-4 py-2 text-sm font-medium ${isActive
                 ? "bg-slate-900 text-white"
                 : "bg-white text-slate-700 hover:bg-slate-100"
@@ -2485,6 +2532,8 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
           );
         })}
       </div>
+
+      {accessibleProgramTypes.length > 0 && renderAddReferral()}
 
       {accessibleProgramTypes.length === 0 ? (
         <Card>
@@ -2578,6 +2627,27 @@ function Field({ label, children, className = "" }) {
   );
 }
 
+function TrackerCardSummary({ expanded, onClick, children }) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-expanded={expanded}
+      onClick={onClick}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onClick();
+        }
+      }}
+      className="-m-4 box-content w-full cursor-pointer rounded-2xl p-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-purple-600"
+    >
+      {children}
+    </div>
+  );
+}
+
 function ReadOnlyField({ label, value, copyable = true, multiline = false }) {
   const displayValue = value || "—";
 
@@ -2593,7 +2663,7 @@ function ReadOnlyField({ label, value, copyable = true, multiline = false }) {
   }
 
   return (
-    <div className="min-w-0" onClick={(e) => e.stopPropagation()}>
+    <div className="min-w-0">
       <label className="mb-1 block text-sm font-medium text-slate-700">
         {label}
       </label>

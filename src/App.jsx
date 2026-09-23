@@ -87,7 +87,7 @@ import ResearchView from "./components/ResearchView";
 import { fetchResearchAccess, setResearchLeadershipAccess } from "./api/researchAccess";
 import ProgramsView from "./components/ProgramsView";
 import { fetchProgramSettings } from "./api/programSettings";
-import { fetchWomensHealthDaySettings, saveWomensHealthDaySettings, isWomensHealthDay } from "./api/womensHealthDaySettings";
+import { fetchWomensHealthDaySettings, saveWomensHealthDaySettings, isWomensHealthDay, mapWomensHealthSettings } from "./api/womensHealthDaySettings";
 import { isClinicResourceAvailable } from "./utils/clinicResourceEligibility";
 import PAPView from "./components/PAPView";
 import {
@@ -1714,7 +1714,7 @@ export default function App() {
       .channel("womens-health-day-settings-realtime")
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "womens_health_day_settings" }, (payload) => {
         if (!cancelled && payload.new) {
-          setWomensHealthSettings({ eventDate: payload.new.event_date || "", themeEnabled: payload.new.theme_enabled === true });
+          setWomensHealthSettings(mapWomensHealthSettings(payload.new));
         }
       })
       .subscribe();
@@ -2014,11 +2014,13 @@ export default function App() {
       setProgramEntries((prev) =>
         prev.map((item) => (item.id === entry.id ? saved : item))
       );
+      return true;
     } catch (error) {
       console.error("Failed to create program entry:", error);
       alert(`Failed to save program entry: ${error.message}`);
 
       setProgramEntries((prev) => prev.filter((item) => item.id !== entry.id));
+      return false;
     } finally {
       programWritesRef.current -= 1;
     }
