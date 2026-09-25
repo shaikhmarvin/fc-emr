@@ -34,6 +34,7 @@ export default function ResearchView({ patients = [], isResearchOwner = false, l
   const [startDate, setStartDate] = useState(`${today.slice(0, 4)}-01-01`);
   const [endDate, setEndDate] = useState(today);
   const [drilldown, setDrilldown] = useState(null);
+  const [clinicEvent, setClinicEvent] = useState("");
   const [study, setStudy] = useState("patients");
   const [dailyPage, setDailyPage] = useState(0);
   const dialogRef = useRef(null);
@@ -51,7 +52,7 @@ export default function ResearchView({ patients = [], isResearchOwner = false, l
     };
   }, [drilldown]);
 
-  const report = useMemo(() => buildResearchReport(patients, startDate, endDate), [patients, startDate, endDate]);
+  const report = useMemo(() => buildResearchReport(patients, startDate, endDate, clinicEvent), [patients, startDate, endDate, clinicEvent]);
 
   function showRows(title, sourceRows, recordedField = "Encounter included") {
     setDrilldown({
@@ -106,6 +107,12 @@ export default function ResearchView({ patients = [], isResearchOwner = false, l
             <p className="mt-1 max-w-3xl text-sm text-slate-600">Language, disease, transportation, screening, and return analyses include general-clinic visits only. Refill visits appear separately in pharmacy use and wait-time comparisons. HTN+ and DM+ carry forward from the patient chronic-condition profile or general-clinic intakes.</p>
           </div>
           <div className="research-filters">
+            <label className="text-xs font-semibold text-slate-600">Clinic statistics
+              <select value={clinicEvent} onChange={(event) => { setClinicEvent(event.target.value); setDailyPage(0); setDrilldown(null); }} className="mt-1 block w-full rounded-lg border p-2">
+                <option value="">Regular clinic</option>
+                <option value="womens_health_day">Women's Health Day</option>
+              </select>
+            </label>
             {isResearchOwner ? (
               <button type="button" onClick={() => onLeadershipAccessChange?.(!leadershipAccessEnabled)} className={`rounded-lg border px-3 py-2 text-sm font-semibold sm:col-span-2 ${leadershipAccessEnabled ? "border-amber-300 bg-amber-50 text-amber-800" : "border-blue-300 bg-blue-50 text-blue-800"}`}>
                 {leadershipAccessEnabled ? "Make Private to Me" : "Make Public to Leadership"}
@@ -116,6 +123,7 @@ export default function ResearchView({ patients = [], isResearchOwner = false, l
           </div>
         </div>
 
+        <p className="mb-3 text-sm font-semibold text-purple-800">{clinicEvent ? "Showing Women's Health Day visits only." : "Women's Health Day visits are excluded from regular clinic statistics."}</p>
         <nav aria-label="Research studies" className="research-navigation">
           {[["patients", "Patients & returns"], ["times", "Visit times"], ["pharmacy", "Pharmacy & refills"], ["screening", "Screening"]].map(([key, label]) => (
             <button key={key} type="button" aria-current={study === key ? "page" : undefined} aria-controls="research-study-panel" onClick={() => { setStudy(key); setDailyPage(0); }} className={study === key ? "research-nav-active" : ""}>{label}</button>

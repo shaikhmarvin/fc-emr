@@ -1,3 +1,4 @@
+import { clinicEventForDate, isWomensHealthEncounter, hasOnlyWomensHealthVisitsOnDate } from "./utils/clinicEvents.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./lib/supabase";
 import { createPatientInSupabase, updatePatientInSupabase, mergePatientsByMrnInSupabase, mergePatientsInSupabase } from "./api/patients";
@@ -2528,6 +2529,7 @@ export default function App() {
         normalizeClinicDate(baseEncounter.clinic_date) ||
         formatClinicDate(),
       createdAt: new Date().toISOString(),
+      clinicEvent: updates.clinicEvent ?? baseEncounter.clinicEvent ?? "",
       dailyNumber: updates.dailyNumber ?? baseEncounter.dailyNumber ?? "",
       refillNumber: "",
       newReturning: updates.newReturning ?? baseEncounter.newReturning ?? "Returning",
@@ -5082,14 +5084,13 @@ export default function App() {
     );
   }, [allEncounterRows, dashboardClinicDate]);
 
-  const summaryEncounterRows = useMemo(() => {
-    if (!summaryClinicDate) return allEncounterRows;
+  const womensHealthSummaryRows = useMemo(() => allEncounterRows.filter(({ encounter }) =>
+    isWomensHealthEncounter(encounter) && (!summaryClinicDate || normalizeClinicDate(encounter.clinicDate) === summaryClinicDate)
+  ), [allEncounterRows, summaryClinicDate]);
 
-    return allEncounterRows.filter(
-      ({ encounter }) =>
-        normalizeClinicDate(encounter.clinicDate) === summaryClinicDate
-    );
-  }, [allEncounterRows, summaryClinicDate]);
+  const summaryEncounterRows = useMemo(() => allEncounterRows.filter(({ encounter }) =>
+    !isWomensHealthEncounter(encounter) && (!summaryClinicDate || normalizeClinicDate(encounter.clinicDate) === summaryClinicDate)
+  ), [allEncounterRows, summaryClinicDate]);
 
   const autoMs12Names = useMemo(
     () => buildAssignedStudentSummary(summaryEncounterRows),
@@ -5505,6 +5506,7 @@ export default function App() {
     patients.forEach((patient) => {
       patient.encounters.forEach((encounter) => {
         if (normalizeClinicDate(encounter.clinicDate) !== summaryClinicDate) return;
+        if (isWomensHealthEncounter(encounter)) return;
         if (encounter.visitType !== "refill_only") return;
 
         patientIds.add(String(patient.id));
@@ -5517,6 +5519,8 @@ export default function App() {
       if (!request.patient_id) return;
       if (!request.approved_by || !request.approved_at) return;
       if (dateKeyFromTimestamp(request.approved_at) !== summaryClinicDate) return;
+      const refillPatient = patients.find((patient) => String(patient.id) === String(request.patient_id));
+      if (hasOnlyWomensHealthVisitsOnDate(refillPatient, summaryClinicDate)) return;
 
       const requester = profileById.get(String(request.requested_by));
       const approver = profileById.get(String(request.approved_by));
@@ -5546,7 +5550,7 @@ export default function App() {
 
     patients.forEach((patient) => {
       const encountersForDate = (patient.encounters || []).filter(
-        (encounter) => normalizeClinicDate(encounter.clinicDate) === summaryClinicDate
+        (encounter) => !isWomensHealthEncounter(encounter) && normalizeClinicDate(encounter.clinicDate) === summaryClinicDate
       );
 
       encountersForDate.forEach((encounter) => {
@@ -5688,6 +5692,9 @@ export default function App() {
     try {
       let targetPatient = null;
       const createdEncounters = [];
+      const intakeClinicDate = formatClinicDate();
+      const eventSettings = await fetchWomensHealthDaySettings();
+      const clinicEvent = clinicEventForDate(intakeClinicDate, eventSettings.eventDate);
 
       if (data.matchedPatientId) {
         const existingPatient = patients.find((p) => p.id === data.matchedPatientId);
@@ -5726,7 +5733,8 @@ export default function App() {
       }
 
       const encounterBase = {
-        clinicDate: formatClinicDate(),
+        clinicEvent,
+        clinicDate: intakeClinicDate,
         createdAt: new Date().toISOString(),
         dailyNumber: data.dailyNumber || "",
         refillNumber: "",
@@ -11593,6 +11601,7 @@ async function markSeenBySocialWork(encounterId) {
 
           {activeView === "undergrad-intake" && (userRole === "undergraduate" || isLeadershipView) && (
             <UndergradIntakeView
+              womensHealthDayActive={womensHealthDayToday}
               onSave={handleUndergradStartEncounter}
               patients={patients}
               tonightSpecialtyNames={tonightSpecialtyNames}
@@ -11876,6 +11885,7 @@ async function markSeenBySocialWork(encounterId) {
 
           {activeView === "summary" && isLeadershipView && (
             <ClinicSummaryView
+              womensHealthRows={womensHealthSummaryRows}
               selectedClinicDate={summaryClinicDate}
               setSelectedClinicDate={setSummaryClinicDate}
               clinicSummary={clinicSummary}
@@ -11908,6 +11918,8 @@ async function markSeenBySocialWork(encounterId) {
           {canAccessPrograms && (
             <div className={activeView === "programs" ? "" : "hidden"}>
               <ProgramsView
+                openPatientChart={openPatientChart}
+                canOpenCharts={userRole !== "lab"}
                 programEntries={programEntries}
                 addProgramEntry={addProgramEntry}
                 updateProgramEntry={updateProgramEntry}

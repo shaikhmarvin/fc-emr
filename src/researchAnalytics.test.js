@@ -96,3 +96,23 @@ test('chronic groups include patient profile diagnoses without admitting refill 
   assert.equal(result.groups.reduce((sum, group) => sum + group.refillPatients, 0), 3);
   assert.equal(result.refillAnalyticsRows.length, 3);
 });
+
+
+test("Women's Health Day is separate across visits, refills, return history, and disease history", () => {
+  const patients = [{ id: 'p', sex: 'Female', dob: '1970-01-01', encounters: [
+    visit('event', '2026-01-01', { clinicEvent: 'womens_health_day', htn: true, spanishSpeaking: true }),
+    visit('event-refill', '2026-01-01', { intake_data: { clinicEvent: 'womens_health_day' }, visitType: 'refill_only' }),
+    visit('regular', '2026-02-01'),
+    visit('cancelled-event', '2026-03-01', { clinicEvent: 'womens_health_day', status: 'cancelled' }),
+  ] }];
+  const regular = buildResearchReport(patients, '2026-01-01', '2026-12-31');
+  assert.deepEqual(regular.rows.map(r => r.encounter.id), ['regular']);
+  assert.equal(regular.rows[0].returning, false);
+  assert.equal(regular.chronicRows.length, 0);
+  assert.equal(regular.refillAnalyticsRows.length, 0);
+  const event = buildResearchReport(patients, '2026-01-01', '2026-12-31', 'womens_health_day');
+  assert.deepEqual(event.rows.map(r => r.encounter.id), ['event']);
+  assert.equal(event.uniquePatients, 1);
+  assert.equal(event.refillAnalyticsRows.length, 1);
+  assert.equal(event.papEligibleRows.length, 1);
+});

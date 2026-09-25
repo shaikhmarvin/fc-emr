@@ -1,3 +1,4 @@
+import { patientsForClinicEvent } from "./utils/clinicEvents.js";
 import { getEncounterVisitTypeKey, isGeneralClinicEncounter } from "./constants.js";
 import { patientHasPriorDiagnosis } from "./utils/patientDiagnoses.js";
 
@@ -143,7 +144,8 @@ function buildPharmacyGroups(rows) {
   });
 }
 
-export function buildResearchReport(patients, startDate, endDate) {
+export function buildResearchReport(patients, startDate, endDate, clinicEvent = "") {
+  patients = patientsForClinicEvent(patients, clinicEvent);
   const chronicByPatient = new Map();
   patients.forEach((patient) => {
     const encounters = (patient.encounters || []).filter((encounter) => isGeneralClinicEncounter(encounter) && encounter.status !== "cancelled");

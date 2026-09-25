@@ -16,6 +16,7 @@ function mapProgramRow(row) {
     scheduleType: row.schedule_group || "",
     schedulePosition: row.schedule_position ?? null,
     appointmentSlot: row.appointment_slot || "",
+    clinicianGenderPreference: row.clinician_gender_preference || "",
     notes: row.notes || "",
     lastContactAttemptAt: row.last_contact_attempt_at || "",
     createdAt: row.created_at || "",
@@ -62,6 +63,7 @@ export async function createProgramEntryInSupabase(entry) {
         ? null
         : entry.schedulePosition,
     appointment_slot: entry.appointmentSlot || "",
+    clinician_gender_preference: entry.clinicianGenderPreference || "",
     notes: entry.notes || "",
     last_contact_attempt_at: entry.lastContactAttemptAt || null,
     created_at: entry.createdAt || new Date().toISOString(),
@@ -112,6 +114,10 @@ export async function updateProgramEntryInSupabase(entryId, updates) {
 
   if ("appointmentSlot" in updates) {
     payload.appointment_slot = updates.appointmentSlot || "";
+  }
+
+  if ("clinicianGenderPreference" in updates) {
+    payload.clinician_gender_preference = updates.clinicianGenderPreference || "";
   }
 
   if ("notes" in updates) payload.notes = updates.notes || "";

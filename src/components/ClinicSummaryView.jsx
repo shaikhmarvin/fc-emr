@@ -8,6 +8,7 @@ function SummaryCard({ label, value }) {
 }
 
 export default function ClinicSummaryView({
+  womensHealthRows = [],
   selectedClinicDate,
   setSelectedClinicDate,
   clinicSummary,
@@ -97,10 +98,19 @@ export default function ClinicSummaryView({
 
   return (
     <div className="space-y-4 p-3 sm:p-4 lg:space-y-6 lg:p-6">
+      <section className="rounded-2xl bg-purple-50 p-4" aria-label="Women's Health Day totals">
+        <h2 className="text-xl font-semibold">Women's Health Day</h2>
+        <p className="mb-3 text-sm text-slate-600">Separate totals for the selected date. Excluded from the regular clinic counts and export below.</p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <SummaryCard label="Patients" value={new Set(womensHealthRows.filter(({ encounter }) => encounter.status !== "cancelled").map(({ patient }) => String(patient.id))).size} />
+          <SummaryCard label="Visits" value={womensHealthRows.filter(({ encounter }) => encounter.status !== "cancelled").length} />
+          <SummaryCard label="Cancelled visits" value={womensHealthRows.filter(({ encounter }) => encounter.status === "cancelled").length} />
+        </div>
+      </section>
       <div className="rounded-2xl bg-white p-4 shadow">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-slate-900">Clinic Summary</h2>
+            <h2 className="text-xl font-semibold text-slate-900">Regular Clinic Summary</h2>
             <p className="mt-1 text-sm text-slate-600">
               Review nightly totals and enter manual counts before exporting.
             </p>

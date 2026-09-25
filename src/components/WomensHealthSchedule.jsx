@@ -80,7 +80,7 @@ export default function WomensHealthSchedule({ entries, settings, canEditSetting
           {scheduled.map((entry) => <div key={entry.id} className="mb-3 rounded-lg bg-slate-50 p-3">
             <p className="font-medium">{entry.patientName}</p>
             <p className="text-sm">DOB: {entry.dob || "—"} · {entry.phone || "No phone"}</p>
-            <p className="text-sm">Reason: {entry.reason || "—"}</p>
+            <p className="text-sm">Reason: {entry.reason || "—"}</p><p className="text-sm">Clinician preference: {entry.clinicianGenderPreference || "Not recorded"}</p>
             <label className="mt-2 block text-sm">Move to another time
               <select value="" disabled={busy} onChange={(event) => schedule(entry, event.target.value)} className="mt-1 w-full rounded-lg border p-2">
                 <option value="">Choose time</option>
@@ -97,7 +97,7 @@ export default function WomensHealthSchedule({ entries, settings, canEditSetting
     <input aria-label="Search waitlist" placeholder="Search name, DOB, or MRN" value={search} onChange={(event) => setSearch(event.target.value)} className="w-full rounded-lg border p-2" />
     {waitlist.length === 0 && <p className="text-sm text-slate-500">No matching patients awaiting scheduling.</p>}
     {waitlist.map((entry) => <div key={entry.id} className="flex flex-wrap items-center gap-3 rounded-xl border p-3">
-      <div className="min-w-48 flex-1"><p className="font-medium">{entry.patientName}</p><p className="text-sm">DOB: {entry.dob || "—"} · {entry.status}</p><p className="text-sm">Reason: {entry.reason || "—"}</p></div>
+      <div className="min-w-48 flex-1"><p className="font-medium">{entry.patientName}</p><p className="text-sm">DOB: {entry.dob || "—"} · {entry.status}</p><p className="text-sm">Reason: {entry.reason || "—"}</p><p className="text-sm">Clinician preference: {entry.clinicianGenderPreference || "Not recorded"}</p></div>
       <select aria-label={`Appointment time for ${entry.patientName}`} disabled={busy || !date} value={choices[entry.id] || ""} onChange={(event) => setChoices({ ...choices, [entry.id]: event.target.value })} className="rounded-lg border p-2">
         <option value="">Choose time</option>
         {WHD_SLOTS.map((slot) => { const remaining = Math.max(0, capacities[slot] - whdSlotEntries(whdEntries, date, slot).length); return <option key={slot} value={slot} disabled={!remaining}>{whdSlotLabel(slot)} — {remaining} available</option>; })}

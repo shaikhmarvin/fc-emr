@@ -77,6 +77,8 @@ function isGenericTrackingProgram(programType) {
 
 export default function ProgramsView({
   programEntries,
+  openPatientChart,
+  canOpenCharts = true,
   addProgramEntry,
   updateProgramEntry,
   updateProgramEntryFields,
@@ -173,6 +175,7 @@ export default function ProgramsView({
     scheduleType: "",
     schedulePosition: null,
     appointmentSlot: "",
+    clinicianGenderPreference: "",
   });
 
   const [manualPatient, setManualPatient] = useState({
@@ -399,6 +402,24 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
     [patients]
   );
 
+  function renderOpenPatientChart(entry) {
+    if (!canOpenCharts || !openPatientChart) return null;
+    const patient = patientById.get(String(entry.patientId || ""));
+    return (
+      <div className="mt-3">
+        <button
+          type="button"
+          disabled={!patient}
+          onClick={() => openPatientChart(patient.id)}
+          className="rounded-lg border border-purple-200 px-3 py-2 text-sm font-medium text-purple-700 hover:bg-purple-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Open patient chart
+        </button>
+        {!patient && <p className="mt-1 text-xs text-slate-500">No linked patient chart is available.</p>}
+      </div>
+    );
+  }
+
   const hydratedProgramEntries = useMemo(() => {
     return (programEntries || []).map((entry) => {
       const patient = patientById.get(String(entry.patientId || ""));
@@ -555,6 +576,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
       schedulePosition: null,
       appointmentSlot: newEntry.programType === "Women's Health Day" && newEntry.status === "Accepted"
         ? newEntry.appointmentSlot : "",
+      clinicianGenderPreference: newEntry.programType === "Women's Health Day" ? newEntry.clinicianGenderPreference : "",
       notes: newEntry.notes,
       lastContactAttemptAt: "",
       createdAt: new Date().toISOString(),
@@ -587,6 +609,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
       scheduleType: "",
       schedulePosition: null,
       appointmentSlot: "",
+      clinicianGenderPreference: "",
     });
   }
 
@@ -896,7 +919,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
   </h4>
 
   <p className="mb-4 text-xs text-slate-500">
-    Create historical/manual specialty patient
+    Create a patient for this program, even if they have never visited the clinic. Search by name and DOB above first to avoid duplicate records.
   </p>
 
   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -1097,6 +1120,17 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                       </Field>
                     )}
 
+                    {newEntry.programType === "Women's Health Day" && (
+                      <Field label="Clinician gender preference">
+                        <select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                          value={newEntry.clinicianGenderPreference || ""}
+                          onChange={(e) => setNewEntry((prev) => ({ ...prev, clinicianGenderPreference: e.target.value }))}>
+                          <option value="">Not recorded</option>
+                          <option value="Male">Male</option>
+                          <option value="Female">Female</option>
+                        </select>
+                      </Field>
+                    )}
                     <Field label={newEntry.programType === "Women's Health Day" ? "Reason (optional)" : "Reason"} className="md:col-span-2">
                       <textarea
                         rows={2}
@@ -1249,6 +1283,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                         <div className="md:col-span-2"><ReadOnlyField label="Scheduled Visit Date" value={formatDisplayDate(entry.specialtyDate)} copyable={false} /></div>
                       </div>
                     </TrackerCardSummary>
+                      {renderOpenPatientChart(entry)}
 
                     {/* EXPANDED CONTENT */}
                     {isExpanded && (
@@ -1782,8 +1817,10 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                             />
                           </div>
                           <div className="md:col-span-2"><ReadOnlyField label="Reason" value={entry.reason || "—"} /></div>
+                          {programType === "Women's Health Day" && <div className="md:col-span-3"><ReadOnlyField label="Clinician gender preference" value={entry.clinicianGenderPreference || "Not recorded"} /></div>}
                         </div>
                       </TrackerCardSummary>
+                      {renderOpenPatientChart(entry)}
 
                       {isExpanded && (
                         <>
@@ -1821,6 +1858,17 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                                 onChange={(e) => updateProgramEntry(entry.id, "specialtyDate", e.target.value)}
                               />
                             </Field>
+                            {programType === "Women's Health Day" && (
+                              <Field label="Clinician gender preference">
+                                <select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                  value={entry.clinicianGenderPreference || ""}
+                                  onChange={(e) => updateProgramEntry(entry.id, "clinicianGenderPreference", e.target.value)}>
+                                  <option value="">Not recorded</option>
+                                  <option value="Male">Male</option>
+                                  <option value="Female">Female</option>
+                                </select>
+                              </Field>
+                            )}
                             {programType === "Women's Health Day" && entry.status === "Accepted" && (
                               <Field label="Scheduled Visit Time">
                                 <select
@@ -2267,6 +2315,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                         </div>
                       </div>
                     </TrackerCardSummary>
+                      {renderOpenPatientChart(entry)}
 
                     {isExpanded && (
                       <>

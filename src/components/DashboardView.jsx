@@ -1,3 +1,4 @@
+import { isWomensHealthEncounter } from "../utils/clinicEvents.js";
 import { useState } from "react";
 import PatientSearch from "./PatientSearch";
 import PatientTable from "./PatientTable";
@@ -255,7 +256,7 @@ export default function DashboardView({
     const rows = selectedClinicDate ? visibleEncounterRows : allEncounterRows;
 
     return rows.filter(({ encounter }) => {
-      if (!encounter) return false;
+      if (!encounter || isWomensHealthEncounter(encounter)) return false;
       if (!selectedClinicDate) return true;
       return encounter.clinicDate === selectedClinicDate;
     });

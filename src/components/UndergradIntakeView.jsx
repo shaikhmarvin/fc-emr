@@ -440,6 +440,7 @@ const EMPTY_FORM = {
 
 export default function UndergradIntakeView({
   onSave,
+  womensHealthDayActive = false,
   patients,
   tonightSpecialtyNames = [],
 }) {
@@ -913,6 +914,10 @@ export default function UndergradIntakeView({
                 />
               </div>
 
+              <div className="rounded-lg bg-purple-50 p-3 text-sm text-purple-900">
+                <p className="font-semibold">Clinic: {womensHealthDayActive ? "Women's Health Day" : "Regular clinic"}</p>
+                {womensHealthDayActive && <p>Set automatically for today's event. This visit will count only in Women's Health Day statistics.</p>}
+              </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
                   Visit Type
@@ -922,7 +927,7 @@ export default function UndergradIntakeView({
                   value={form.visitType || "general"}
                   onChange={(e) => handleVisitTypeChange(e.target.value)}
                 >
-                  <option value="general">General Clinic</option>
+                  <option value="general">{womensHealthDayActive ? "Women's Health Day" : "General Clinic"}</option>
                   <option value="specialty_only">Specialty Clinic Only</option>
                   <option value="both">General + Specialty Clinic</option>
                   <option value="refill_only">Refills Only</option>
