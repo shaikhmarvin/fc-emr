@@ -87,17 +87,21 @@ export default function WomensHealthSchedule({ entries, settings, canEditSetting
           <h4 className="font-semibold">{whdSlotLabel(slot)}</h4>
           <p className="mb-3 text-sm text-slate-600">{scheduled.length} scheduled{WHD_SLOTS.includes(slot) ? ` / ${capacities[slot]} places · ${Math.max(0, capacities[slot] - scheduled.length)} available` : " · Existing appointment time"}</p>
           {scheduled.length === 0 && <p className="text-sm text-slate-500">No patients scheduled.</p>}
-          {scheduled.map((entry) => <div key={entry.id} className="mb-3 rounded-lg bg-slate-50 p-3">
-            <p className="font-medium">{entry.patientName}</p>
-            <p className="text-sm">DOB: {entry.dob || "—"} · {entry.phone || "No phone"}</p>
+          {scheduled.map((entry) => <details key={entry.id} className="mb-3 rounded-lg bg-slate-50 p-3">
+            <summary className="cursor-pointer rounded font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-purple-600">
+              {entry.patientName}
+              <span className="ml-2 text-sm font-normal text-slate-600">DOB: {entry.dob || "—"}</span>
+            </summary>
+            <div className="mt-3">
+            <p className="text-sm">Phone: {entry.phone || "No phone"}</p>
             <p className="text-sm">Reason: {entry.reason || "—"}</p>
             <label className="mt-2 block text-sm">Clinician gender preference
-              <select value={entry.clinicianGenderPreference || ""} disabled={busy}
+              <select value={entry.clinicianGenderPreference === "Male" ? "" : (entry.clinicianGenderPreference || "")} disabled={busy}
                 onChange={(event) => saveClinicianPreference(entry, event.target.value)}
                 className="mt-1 w-full rounded-lg border p-2">
-                <option value="">Not recorded</option>
-                <option value="Male">Male</option>
+                <option value="No Preference">No Preference</option>
                 <option value="Female">Female</option>
+                <option value="">Not Recorded</option>
               </select>
             </label>
             <label className="mt-2 block text-sm">Move to another time
@@ -107,7 +111,8 @@ export default function WomensHealthSchedule({ entries, settings, canEditSetting
               </select>
             </label>
             <button type="button" disabled={busy} onClick={() => returnToWaitlist(entry)} className="mt-2 text-sm font-medium text-purple-700">Return to waitlist</button>
-          </div>)}
+            </div>
+          </details>)}
         </div>;
       })}
     </div>}
