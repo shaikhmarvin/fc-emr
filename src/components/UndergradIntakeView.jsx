@@ -914,10 +914,12 @@ export default function UndergradIntakeView({
                 />
               </div>
 
-              <div className="rounded-lg bg-purple-50 p-3 text-sm text-purple-900">
-                <p className="font-semibold">Clinic: {womensHealthDayActive ? "Women's Health Day" : "Regular clinic"}</p>
-                {womensHealthDayActive && <p>Set automatically for today's event. This visit will count only in Women's Health Day statistics.</p>}
-              </div>
+              {womensHealthDayActive && (
+                <div className="rounded-lg bg-purple-50 p-3 text-sm text-purple-900">
+                  <p className="font-semibold">Women's Health Day</p>
+                  <p>Set automatically for today's event. This visit will count only in Women's Health Day statistics.</p>
+                </div>
+              )}
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
                   Visit Type
