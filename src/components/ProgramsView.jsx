@@ -1,3 +1,4 @@
+import { specialtyProgram, specialtyTrackerVisits } from "../utils/specialtyTracker.js";
 import { useEffect, useMemo, useState } from "react";
 import {
   PT_TIME_SLOTS,
@@ -418,6 +419,17 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
         {!patient && <p className="mt-1 text-xs text-slate-500">No linked patient chart is available.</p>}
       </div>
     );
+  }
+
+  const trackerVisits = useMemo(() => specialtyTrackerVisits(programEntries, patients), [programEntries, patients]);
+
+  function renderSpecialtyVisit(entry) {
+    if (!specialtyProgram({ visitType: "specialty_only", specialtyType: entry.programType })) return null;
+    const visit = trackerVisits.get(String(entry.id));
+    return <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
+      <span className="font-medium">Specialty visit: </span>
+      {visit ? visit.status + " · " + formatDisplayDate(visit.date) : "Not checked in"}
+    </div>;
   }
 
   const hydratedProgramEntries = useMemo(() => {
@@ -1272,6 +1284,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                         <div className="md:col-span-2"><ReadOnlyField label="Scheduled Visit Date" value={formatDisplayDate(entry.specialtyDate)} copyable={false} /></div>
                       </div>
                     </TrackerCardSummary>
+                      {renderSpecialtyVisit(entry)}
                       {isExpanded && renderOpenPatientChart(entry)}
 
                     {/* EXPANDED CONTENT */}
@@ -1808,6 +1821,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                           <div className="md:col-span-2"><ReadOnlyField label="Reason" value={entry.reason || "—"} /></div>
                         </div>
                       </TrackerCardSummary>
+                      {renderSpecialtyVisit(entry)}
                       {isExpanded && renderOpenPatientChart(entry)}
 
                       {isExpanded && (
@@ -2292,6 +2306,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                         </div>
                       </div>
                     </TrackerCardSummary>
+                      {renderSpecialtyVisit(entry)}
                       {isExpanded && renderOpenPatientChart(entry)}
 
                     {isExpanded && (

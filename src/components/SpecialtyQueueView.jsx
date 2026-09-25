@@ -1,3 +1,4 @@
+import { matchingSpecialtyTracker } from "../utils/specialtyTracker.js";
 import { useMemo, useState } from "react";
 import { VISIT_TYPE_BADGE_STYLES, getEncounterVisitTypeKey, isGeneralClinicEncounter } from "../constants";
 
@@ -89,7 +90,7 @@ function matchesSearch(row, query, getFullPatientName) {
     const phone = (row.patient.phone || "").toLowerCase();
     const specialty = getSpecialtyLabel(row.encounter.specialtyType).toLowerCase();
     const visitType = getVisitTypeLabel(row.encounter.visitType).toLowerCase();
-    const complaint = (row.encounter.chiefComplaint || "").toLowerCase();
+    const complaint = (row.encounter.trackerReason || "").toLowerCase();
     const dailyCardNumber = String(getDailyCardNumber(row.patient, row.encounter) || "").toLowerCase();
 
     return (
@@ -137,7 +138,7 @@ function SpecialtyTable({
                             <div>Patient</div>
                             <div>DOB</div>
                             <div>Visit Type</div>
-                            <div>Chief Complaint</div>
+                            <div>Reason</div>
                             <div></div>
                         </div>
 
@@ -184,7 +185,7 @@ function SpecialtyTable({
 
                                     <div className="text-slate-700">
                                         <div className="line-clamp-2">
-                                            {encounter.chiefComplaint || "—"}
+                                            {encounter.trackerReason || ""}
                                         </div>
                                     </div>
 
@@ -239,7 +240,7 @@ function SpecialtyTable({
                                 </div>
 
                                 <div className="text-sm text-slate-600">
-                                    Chief Complaint: {encounter.chiefComplaint || "—"}
+                                    Reason: {encounter.trackerReason || ""}
                                 </div>
 
                                 <button
@@ -260,7 +261,8 @@ function SpecialtyTable({
 
 
 export default function SpecialtyQueueView({
-    specialtyEncounterRows,
+    specialtyEncounterRows: encounterRows,
+    programEntries = [],
     selectedClinicDate,
     setSelectedClinicDate,
     openPatientChart,
@@ -271,6 +273,11 @@ export default function SpecialtyQueueView({
     lockedSpecialty = "",
 
 }) {
+
+    const specialtyEncounterRows = useMemo(() => (encounterRows || []).map((row) => ({
+        ...row,
+        encounter: { ...row.encounter, trackerReason: matchingSpecialtyTracker(programEntries, row.patient.id, row.encounter)?.reason || "" },
+    })), [encounterRows, programEntries]);
 
     const [selectedSpecialty, setSelectedSpecialty] = useState(lockedSpecialty);
 

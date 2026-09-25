@@ -1,4 +1,4 @@
-import { clinicEventForDate, isWomensHealthEncounter, hasOnlyWomensHealthVisitsOnDate } from "./utils/clinicEvents.js";
+import { clinicEventForDate, isWomensHealthEncounter, hasOnlyWomensHealthVisitsOnDate, womensHealthChiefComplaint } from "./utils/clinicEvents.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./lib/supabase";
 import { createPatientInSupabase, updatePatientInSupabase, mergePatientsByMrnInSupabase, mergePatientsInSupabase } from "./api/patients";
@@ -5732,6 +5732,9 @@ export default function App() {
         targetPatient = await createPatientInSupabase(patientToSave);
       }
 
+      const eventChiefComplaint = womensHealthChiefComplaint(
+        programEntries, targetPatient.id, intakeClinicDate, clinicEvent
+      );
       const encounterBase = {
         clinicEvent,
         clinicDate: intakeClinicDate,
@@ -5740,7 +5743,7 @@ export default function App() {
         refillNumber: "",
         newReturning: data.matchedPatientId ? "Returning" : (data.isReturning || "New"),
         visitLocation: "In Clinic",
-        chiefComplaint: "",
+        chiefComplaint: eventChiefComplaint || data.chiefComplaint || "",
         notes: "",
         transportation: "",
         needsElevator: false,
@@ -5789,9 +5792,9 @@ export default function App() {
           ...encounterBase,
           visitType: "specialty_only",
           specialtyType: data.specialtyType || "",
-          chiefComplaint: data.specialtyType
+          chiefComplaint: eventChiefComplaint || (data.specialtyType
             ? `${data.specialtyType} Specialty Visit`
-            : "Specialty Visit",
+            : "Specialty Visit"),
           status: "undergrad_complete",
           leadershipIntakeComplete: true,
           pharmacyStatus: "waiting",
@@ -5814,13 +5817,13 @@ export default function App() {
           ...encounterBase,
           visitType: data.visitType || "general",
           specialtyType: isRefillOnly ? "" : data.specialtyType || "",
-          chiefComplaint: isRefillOnly
+          chiefComplaint: eventChiefComplaint || (isRefillOnly
             ? "Refills Only"
             : isSpecialtyOnly
               ? data.specialtyType
                 ? `${data.specialtyType} Specialty Visit`
                 : "Specialty Visit"
-              : encounterBase.chiefComplaint || data.chiefComplaint || "",
+              : encounterBase.chiefComplaint || data.chiefComplaint || ""),
           status: isRefillOnly || isSpecialtyOnly ? "undergrad_complete" : "started",
           leadershipIntakeComplete: isRefillOnly || isSpecialtyOnly,
           pharmacyStatus: isRefillOnly || isSpecialtyOnly ? "waiting" : "",
@@ -11622,6 +11625,7 @@ async function markSeenBySocialWork(encounterId) {
 
           {(activeView === "queue" || activeView === "pharmacy-queue") && (
             <QueueView
+              womensHealthEventDate={womensHealthSettings.eventDate}
               queueMode={activeView === "pharmacy-queue" ? "pharmacy" : "general"}
               userRole={userRole}
               searchForm={searchForm}
@@ -11670,6 +11674,7 @@ async function markSeenBySocialWork(encounterId) {
 
           {activeView === "specialty-queue" && canAccessSpecialtyQueue && (
             <SpecialtyQueueView
+              programEntries={programEntries}
               specialtyEncounterRows={
                 userRole === "physical_therapy"
                   ? physicalTherapyEncounterRows

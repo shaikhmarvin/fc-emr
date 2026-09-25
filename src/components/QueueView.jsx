@@ -1,8 +1,10 @@
+import { womensHealthQueuePreference } from "../utils/clinicEvents.js";
 import { useEffect, useState } from "react";
 import { formatDate, getStatusClasses, getStatusLabel } from "../utils";
 import { VISIT_TYPE_BADGE_STYLES, getEncounterVisitTypeKey, isRefillOnlyEncounter as isRefillVisit, isSpecialtyOnlyEncounter as isSpecialtyVisit } from "../constants";
 export default function QueueView({
   queueMode = "general",
+  womensHealthEventDate = "",
   userRole,
   searchForm,
   waitingEncounterRows,
@@ -45,6 +47,19 @@ export default function QueueView({
   specialtyAccess,
   papEntries,
 }) {
+
+  function clinicianPreferenceBadge(patient, encounter) {
+    if (queueMode !== "general") return null;
+    const preference = womensHealthQueuePreference(programEntries, patient.id, encounter, womensHealthEventDate);
+    if (preference === null) return null;
+    const colors = preference === "Female" ? "border-purple-300 bg-purple-100 text-purple-950"
+      : preference === "No Preference" ? "border-emerald-300 bg-emerald-50 text-emerald-950"
+      : "border-amber-300 bg-amber-50 text-amber-950";
+    return <div className={"flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border-2 px-3 py-2 " + colors}>
+      <span className="text-xs font-bold uppercase tracking-wide">Clinician preference</span>
+      <span className="text-xs font-bold">{preference}</span>
+    </div>;
+  }
 
   const [queueAssignmentDrafts, setQueueAssignmentDrafts] = useState({});
   const [queueSearch, setQueueSearch] = useState("");
@@ -1231,7 +1246,8 @@ const canMarkSeenBySocialWork =
                       </div>
                     </div>
 
-                    <p className="text-sm font-medium text-slate-900">
+                    {clinicianPreferenceBadge(patient, encounter)}
+                  <p className="text-sm font-medium text-slate-900">
                       {encounter.chiefComplaint || "No chief complaint"}
                     </p>
 
@@ -1630,7 +1646,8 @@ const canMarkSeenBySocialWork =
                 </div>
 
                 {/* Chief complaint */}
-                <p className="text-sm font-medium text-slate-900">
+                {clinicianPreferenceBadge(patient, encounter)}
+                  <p className="text-sm font-medium text-slate-900">
                   {encounter.chiefComplaint || "No chief complaint"}
                 </p>
 
@@ -2007,6 +2024,7 @@ const canMarkSeenBySocialWork =
                     </span>
                   </div>
 
+                  {clinicianPreferenceBadge(patient, encounter)}
                   <p className="text-sm font-medium text-slate-900">
                     {encounter.chiefComplaint || "No chief complaint"}
                   </p>
