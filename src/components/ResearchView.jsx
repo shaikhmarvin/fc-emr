@@ -123,7 +123,6 @@ export default function ResearchView({ patients = [], isResearchOwner = false, l
           </div>
         </div>
 
-        <p className="mb-3 text-sm font-semibold text-purple-800">{clinicEvent ? "Showing Women's Health Day visits only." : "Women's Health Day visits are excluded from regular clinic statistics."}</p>
         <nav aria-label="Research studies" className="research-navigation">
           {[["patients", "Patients & returns"], ["times", "Visit times"], ["pharmacy", "Pharmacy & refills"], ["screening", "Screening"]].map(([key, label]) => (
             <button key={key} type="button" aria-current={study === key ? "page" : undefined} aria-controls="research-study-panel" onClick={() => { setStudy(key); setDailyPage(0); }} className={study === key ? "research-nav-active" : ""}>{label}</button>

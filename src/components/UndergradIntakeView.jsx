@@ -917,7 +917,7 @@ export default function UndergradIntakeView({
               {womensHealthDayActive && (
                 <div className="rounded-lg bg-purple-50 p-3 text-sm text-purple-900">
                   <p className="font-semibold">Women's Health Day</p>
-                  <p>Set automatically for today's event. This visit will count only in Women's Health Day statistics.</p>
+                  <p>Set automatically for today's event. This visit is tagged for Women's Health Day reporting.</p>
                 </div>
               )}
               <div>
