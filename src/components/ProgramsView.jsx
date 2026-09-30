@@ -714,11 +714,13 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
         return;
       }
 
-      updateProgramEntry(entry.id, "specialtyDate", entry.specialtyDate || nextProgramDates["Physical Therapy"] || "");
-      updateProgramEntry(entry.id, "scheduleType", "primary");
-      updateProgramEntry(entry.id, "schedulePosition", null);
-      updateProgramEntry(entry.id, "appointmentSlot", slotOrPosition);
-      updateProgramEntry(entry.id, "status", "Scheduled");
+      updateProgramEntryFields(entry.id, {
+        specialtyDate: entry.specialtyDate || nextProgramDates["Physical Therapy"] || "",
+        scheduleType: "primary",
+        schedulePosition: null,
+        appointmentSlot: slotOrPosition,
+        status: "Scheduled",
+      });
       return;
     }
 
@@ -736,11 +738,13 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
       return;
     }
 
-    updateProgramEntry(entry.id, "specialtyDate", entry.specialtyDate || nextProgramDates[entry.programType] || "");
-    updateProgramEntry(entry.id, "scheduleType", "primary");
-    updateProgramEntry(entry.id, "schedulePosition", slotOrPosition);
-    updateProgramEntry(entry.id, "appointmentSlot", "");
-    updateProgramEntry(entry.id, "status", "Scheduled");
+    updateProgramEntryFields(entry.id, {
+      specialtyDate: entry.specialtyDate || nextProgramDates[entry.programType] || "",
+      scheduleType: "primary",
+      schedulePosition: slotOrPosition,
+      appointmentSlot: "",
+      status: "Scheduled",
+    });
   }
 
   function handleAssignBackup(entry, backupPosition) {
@@ -758,11 +762,13 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
       return;
     }
 
-    updateProgramEntry(entry.id, "specialtyDate", entry.specialtyDate || nextProgramDates[entry.programType] || "");
-    updateProgramEntry(entry.id, "scheduleType", "backup");
-    updateProgramEntry(entry.id, "schedulePosition", backupPosition);
-    updateProgramEntry(entry.id, "appointmentSlot", "");
-    updateProgramEntry(entry.id, "status", "Backup");
+    updateProgramEntryFields(entry.id, {
+      specialtyDate: entry.specialtyDate || nextProgramDates[entry.programType] || "",
+      scheduleType: "backup",
+      schedulePosition: backupPosition,
+      appointmentSlot: "",
+      status: "Backup",
+    });
   }
 
   function handleUnassign(entry) {
