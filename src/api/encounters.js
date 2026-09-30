@@ -1,5 +1,6 @@
 import { getEncounterVisitTypeKey } from "../constants";
 import { supabase } from "../lib/supabase";
+import { preserveRegistrationProgress } from "../utils/encounterProgress.js";
 
 const EMPTY_OPHTHO_NOTE = {
   hpi: "",
@@ -280,6 +281,13 @@ export async function assignNextRefillNumberInSupabase(encounterId, clinicDate) 
 }
 
 export async function updateEncounterInSupabase(encounterId, updates, conditions = {}) {
+  if (["started", "undergrad_complete"].includes(updates.status)) {
+    const { data: current, error } = await supabase.from("encounters")
+      .select("status, leadership_intake_complete, leadership_intake_completed_at")
+      .eq("id", encounterId).single();
+    if (error) throw error;
+    updates = preserveRegistrationProgress(updates, current);
+  }
   const payload = {};
 
   if (updates.patientId !== undefined) {
