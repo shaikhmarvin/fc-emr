@@ -1,5 +1,6 @@
 import { clinicEventForDate, womensHealthChiefComplaint } from "./utils/clinicEvents.js";
 import { isolateGeneralVisitUpdates } from "./utils/encounterProgress.js";
+import { canReceivePtCheckIns, getNewPtCheckIns } from "./utils/ptCheckInNotifications.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./lib/supabase";
 import { createPatientInSupabase, updatePatientInSupabase, mergePatientsByMrnInSupabase, mergePatientsInSupabase } from "./api/patients";
@@ -5651,6 +5652,32 @@ export default function App() {
   }, [currentUserProfile, userRole]);
 
   const canUseOphthoQueueTools = currentSpecialtyAccess.includes("Ophthalmology");
+  const ptCheckInNotificationsRef = useRef({ scope: "", seen: new Set() });
+  useEffect(() => {
+    const clinicDate = formatClinicDate();
+    const scope = `${session?.user?.id || ""}:${clinicDate}`;
+    if (ptCheckInNotificationsRef.current.scope !== scope) {
+      ptCheckInNotificationsRef.current = { scope, seen: new Set() };
+    }
+    if (!session?.user?.id || !canReceivePtCheckIns(userRole, currentSpecialtyAccess)) return;
+    const { seen } = ptCheckInNotificationsRef.current;
+    const arrivals = getNewPtCheckIns(allEncounterRows, clinicDate, seen);
+    if (!arrivals.length) return;
+    arrivals.forEach(({ encounter }) => seen.add(String(encounter.id)));
+    showToast({
+      title: "Physical Therapy check-in",
+      message: arrivals.length === 1
+        ? `${getFullPatientName(arrivals[0].patient)} has checked in for PT.`
+        : `${arrivals.length} patients have checked in for PT.`,
+      type: "info",
+      duration: 0,
+      actionLabel: "Open Specialty Queue",
+      onClick: () => {
+        setSpecialtyQueueDate(clinicDate);
+        setActiveView("specialty-queue");
+      },
+    });
+  }, [allEncounterRows, session?.user?.id, userRole, currentSpecialtyAccess]);
   const canUseWholeClinicQueueTools = canUseOphthoQueueTools || userRole === "social_work";
 
   const canAccessPrograms = isLeadershipView || currentSpecialtyAccess.length > 0;
