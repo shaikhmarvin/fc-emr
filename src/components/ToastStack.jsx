@@ -58,7 +58,7 @@ export default function ToastStack({ toasts, onDismiss }) {
                 onClick={() => onDismiss(toast.id)}
                 className="rounded-md px-2 py-1 text-xs font-medium hover:bg-black/5"
               >
-                Dismiss
+                {toast.onAcknowledge ? "Acknowledge" : "Dismiss"}
               </button>
             </div>
           </div>

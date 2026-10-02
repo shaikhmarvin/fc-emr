@@ -135,6 +135,8 @@ function buildPatientMap(patientsData, encountersData, medicationsData, allergie
       disciplineSignerName: encounter.discipline_signer_name || "",
       disciplineSignatureData: encounter.discipline_signature_data_url || "",
       workflowVersion: Number(encounter.workflow_version || 0),
+      specialtyTrackerId: intake.specialtyTrackerId || "",
+      specialtyTrackerReason: intake.specialtyTrackerReason,
       visitType,
       specialtyType,
       dualVisit,

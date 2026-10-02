@@ -27,6 +27,8 @@ function mapEncounterRow(row) {
   return {
     id: row.id,
     patientId: row.patient_id,
+    specialtyTrackerId: intake.specialtyTrackerId || "",
+    specialtyTrackerReason: intake.specialtyTrackerReason,
     clinicDate: row.clinic_date || "",
     createdAt: row.created_at || "",
     chiefComplaint: row.chief_complaint || "",

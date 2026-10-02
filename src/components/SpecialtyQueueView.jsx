@@ -276,7 +276,7 @@ export default function SpecialtyQueueView({
 
     const specialtyEncounterRows = useMemo(() => (encounterRows || []).map((row) => ({
         ...row,
-        encounter: { ...row.encounter, trackerReason: matchingSpecialtyTracker(programEntries, row.patient.id, row.encounter)?.reason || "" },
+        encounter: { ...row.encounter, trackerReason: row.encounter.specialtyTrackerReason ?? (matchingSpecialtyTracker(programEntries, row.patient.id, row.encounter)?.reason || "") },
     })), [encounterRows, programEntries]);
 
     const [selectedSpecialty, setSelectedSpecialty] = useState(lockedSpecialty);

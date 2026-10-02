@@ -19,6 +19,8 @@ export function matchingSpecialtyTracker(entries, patientId, encounter) {
   const program = specialtyProgram(encounter);
   const date = String(encounter?.clinicDate || encounter?.clinic_date || '').slice(0, 10);
   if (!program || !patientId || !date) return null;
+  const linkedId = encounter.specialtyTrackerId || encounter.intake_data?.specialtyTrackerId;
+  if (linkedId) return (entries || []).find(entry => String(entry.id) === String(linkedId) && String(entry.patientId) === String(patientId) && entry.programType === program) || null;
   const matches = (entries || []).filter((entry) => {
     if (String(entry.patientId) !== String(patientId) || entry.programType !== program) return false;
     if (entry.createdAt && String(entry.createdAt).slice(0, 10) > date) return false;

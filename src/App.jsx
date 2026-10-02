@@ -2,7 +2,8 @@ import { intakeDemographics } from "./utils/patientDemographics.js";
 import { clearWomensHealthTracker } from "./api/programs.js";
 import { clinicEventForDate, womensHealthChiefComplaint } from "./utils/clinicEvents.js";
 import { isolateGeneralVisitUpdates } from "./utils/encounterProgress.js";
-import { canReceivePtCheckIns, getNewPtCheckIns } from "./utils/ptCheckInNotifications.js";
+import { specialtyCheckIns } from "./utils/specialtyCheckInNotifications.js";
+import { specialtyProgram } from "./utils/specialtyTracker.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./lib/supabase";
 import { createPatientInSupabase, updatePatientInSupabase, mergePatientsByMrnInSupabase, mergePatientsInSupabase } from "./api/patients";
@@ -1234,6 +1235,7 @@ export default function App() {
   const [toasts, setToasts] = useState([]);
 
   function dismissToast(toastId) {
+    toasts.find(toast => toast.id === toastId)?.onAcknowledge?.();
     setToasts((prev) => prev.filter((toast) => toast.id !== toastId));
   }
 
@@ -1244,12 +1246,13 @@ export default function App() {
     duration = 3500,
     onClick = null,
     actionLabel = "",
+    onAcknowledge = null,
   }) {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
     setToasts((prev) => [
       ...prev,
-      { id, title, message, type, onClick, actionLabel },
+      { id, title, message, type, onClick, actionLabel, onAcknowledge },
     ]);
 
     if (duration > 0) {
@@ -5666,31 +5669,37 @@ export default function App() {
   }, [currentUserProfile, userRole]);
 
   const canUseOphthoQueueTools = currentSpecialtyAccess.includes("Ophthalmology");
-  const ptCheckInNotificationsRef = useRef({ scope: "", seen: new Set() });
+  const specialtyAlertsRef = useRef({ scope: "", shown: new Set() });
   useEffect(() => {
+    if (!session?.user?.id) return;
     const clinicDate = formatClinicDate();
-    const scope = `${session?.user?.id || ""}:${clinicDate}`;
-    if (ptCheckInNotificationsRef.current.scope !== scope) {
-      ptCheckInNotificationsRef.current = { scope, seen: new Set() };
+    const scope = session.user.id + ":" + clinicDate;
+    if (specialtyAlertsRef.current.scope !== scope) specialtyAlertsRef.current = { scope, shown: new Set() };
+    const storageKey = "specialty-checkin-ack:" + scope;
+    let acknowledged;
+    try { acknowledged = new Set(JSON.parse(localStorage.getItem(storageKey) || "[]")); }
+    catch { acknowledged = new Set(); }
+    const arrivals = specialtyCheckIns(allEncounterRows, clinicDate, userRole, currentSpecialtyAccess, acknowledged);
+    for (const { patient, encounter } of arrivals) {
+      const program = specialtyProgram(encounter);
+      const key = encounter.id + ":" + program;
+      if (specialtyAlertsRef.current.shown.has(key)) continue;
+      specialtyAlertsRef.current.shown.add(key);
+      showToast({
+        title: program + " check-in",
+        message: getFullPatientName(patient) + " has checked in for " + program + ".",
+        duration: 0,
+        actionLabel: "Open Specialty Queue",
+        onClick: () => { setSpecialtyQueueDate(clinicDate); setActiveView("specialty-queue"); },
+        onAcknowledge: () => {
+          try {
+            const saved = new Set(JSON.parse(localStorage.getItem(storageKey) || "[]"));
+            saved.add(key);
+            localStorage.setItem(storageKey, JSON.stringify([...saved]));
+          } catch { /* This session still deduplicates alerts if storage is unavailable. */ }
+        },
+      });
     }
-    if (!session?.user?.id || !canReceivePtCheckIns(userRole, currentSpecialtyAccess)) return;
-    const { seen } = ptCheckInNotificationsRef.current;
-    const arrivals = getNewPtCheckIns(allEncounterRows, clinicDate, seen);
-    if (!arrivals.length) return;
-    arrivals.forEach(({ encounter }) => seen.add(String(encounter.id)));
-    showToast({
-      title: "Physical Therapy check-in",
-      message: arrivals.length === 1
-        ? `${getFullPatientName(arrivals[0].patient)} has checked in for PT.`
-        : `${arrivals.length} patients have checked in for PT.`,
-      type: "info",
-      duration: 0,
-      actionLabel: "Open Specialty Queue",
-      onClick: () => {
-        setSpecialtyQueueDate(clinicDate);
-        setActiveView("specialty-queue");
-      },
-    });
   }, [allEncounterRows, session?.user?.id, userRole, currentSpecialtyAccess]);
   const canUseWholeClinicQueueTools = canUseOphthoQueueTools || userRole === "social_work";
 
