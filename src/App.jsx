@@ -1,3 +1,4 @@
+import { intakeDemographics } from "./utils/patientDemographics.js";
 import { clinicEventForDate, womensHealthChiefComplaint } from "./utils/clinicEvents.js";
 import { isolateGeneralVisitUpdates } from "./utils/encounterProgress.js";
 import { canReceivePtCheckIns, getNewPtCheckIns } from "./utils/ptCheckInNotifications.js";
@@ -5731,8 +5732,7 @@ export default function App() {
         const patientUpdates = {
           preferredName: data.preferredName,
           phone: data.phone,
-          sex: data.sex,
-          ethnicity: data.ethnicity,
+          ...intakeDemographics(data, existingPatient),
           address: data.addressLine1,
           city: data.city,
           state: data.state,
@@ -6728,6 +6728,7 @@ export default function App() {
       spanishOnly:
         form.languagePreference || (form.spanishSpeaking ? "Spanish" : ""),
       chronicConditions,
+      ...intakeDemographics(form, basePatient),
     };
   }
 

@@ -1,3 +1,4 @@
+import { SEX_OPTIONS, ETHNICITY_OPTIONS } from "../utils/patientDemographics.js";
 import { useMemo, useState } from "react";
 import { formatPhone } from "../constants";
 
@@ -309,20 +310,20 @@ export default function PatientInfoEditModal({
 
                 <div>
                   <FieldLabel>Ethnicity</FieldLabel>
-                  <FieldInput
-                    placeholder="Enter ethnicity"
-                    value={form.ethnicity}
-                    onChange={(e) => updateField("ethnicity", e.target.value)}
-                  />
+                  <FieldSelect aria-label="Ethnicity" value={form.ethnicity} onChange={(e) => updateField("ethnicity", e.target.value)}>
+                    <option value="">Not recorded</option>
+                    {form.ethnicity && !ETHNICITY_OPTIONS.includes(form.ethnicity) && <option value={form.ethnicity}>{form.ethnicity} (existing)</option>}
+                    {ETHNICITY_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                  </FieldSelect>
                 </div>
 
                 <div>
                   <FieldLabel>Sex</FieldLabel>
-                  <FieldInput
-                    placeholder="Enter sex"
-                    value={form.sex}
-                    onChange={(e) => updateField("sex", e.target.value)}
-                  />
+                  <FieldSelect aria-label="Sex" value={form.sex} onChange={(e) => updateField("sex", e.target.value)}>
+                    <option value="">Not recorded</option>
+                    {form.sex && !SEX_OPTIONS.includes(form.sex) && <option value={form.sex}>{form.sex} (existing)</option>}
+                    {SEX_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                  </FieldSelect>
                 </div>
 
                 <div>

@@ -1,15 +1,8 @@
+import { SEX_OPTIONS, ETHNICITY_OPTIONS } from "../utils/patientDemographics.js";
 
 import { useEffect, useMemo, useState } from "react";
 
-const ETHNICITY_OPTIONS = [
-  "Hispanic or Latino",
-  "Asian",
-  "Black or African American",
-  "White",
-  "Middle Eastern",
-];
 
-const SEX_OPTIONS = ["Male", "Female", "Other", "Prefer not to say"];
 
 const YES_NO_OPTIONS = ["Yes", "No"];
 
