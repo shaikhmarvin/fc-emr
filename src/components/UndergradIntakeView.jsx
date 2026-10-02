@@ -1,4 +1,6 @@
 import { SEX_OPTIONS, ETHNICITY_OPTIONS } from "../utils/patientDemographics.js";
+import { womensHealthAppointments } from "../utils/womensHealthIntake.js";
+import { whdSlotLabel } from "../utils/womensHealthSchedule.js";
 
 import { useEffect, useMemo, useState } from "react";
 
@@ -434,6 +436,9 @@ const EMPTY_FORM = {
 export default function UndergradIntakeView({
   onSave,
   womensHealthDayActive = false,
+  womensHealthEventDate = "",
+  programEntries = [],
+  programsLoaded = false,
   patients,
   tonightSpecialtyNames = [],
 }) {
@@ -441,6 +446,17 @@ export default function UndergradIntakeView({
   const [matchPatientId, setMatchPatientId] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showFiredPatientModal, setShowFiredPatientModal] = useState(false);
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState(null);
+  const appointments = womensHealthDayActive
+    ? womensHealthAppointments(programEntries, patients, womensHealthEventDate) : [];
+
+  function prefillAppointment({ entry, patient }) {
+    if (!patient || isSubmitting) return;
+    setForm({ ...EMPTY_FORM });
+    handleSelectMatch(patient);
+    setForm(prev => ({ ...prev, dob: patient.dob || entry.dob || "", phone: patient.phone || entry.phone || "", ttuStudent: patient.ttuStudent || false, chiefComplaint: entry.reason || "" }));
+    setSelectedAppointmentId(entry.id);
+  }
 
   function handleChange(key, value) {
     // Keep the existing-patient link when undergrad adds updateable details
@@ -582,6 +598,7 @@ export default function UndergradIntakeView({
       if (!didSave) return;
 
       setForm(EMPTY_FORM);
+      setSelectedAppointmentId(null);
       setMatchPatientId(null);
       setShowFiredPatientModal(false);
     } finally {
@@ -591,6 +608,10 @@ export default function UndergradIntakeView({
 
   async function handleSubmit() {
     if (isSubmitting) return;
+    if (selectedAppointmentId && appointments.some(({ patient, checkedIn }) => checkedIn && String(patient?.id) === String(matchPatientId))) {
+      alert("This patient already has a general visit for today. Open their existing registration instead.");
+      return;
+    }
 
     if (
       (form.visitType === "both" || form.visitType === "specialty_only") &&
@@ -632,6 +653,30 @@ export default function UndergradIntakeView({
             </div>
           )}
         </div>
+
+        {womensHealthDayActive && (
+          <section className="rounded-2xl bg-white p-4 shadow-sm">
+            <h2 className="text-lg font-semibold">Today’s Women’s Health Day Appointments</h2>
+            <p className="mt-1 text-sm text-slate-600">Select a patient to fill in the intake form. Review the information and complete missing fields before saving.</p>
+            {!programsLoaded ? <p className="mt-3 text-sm">Loading appointments…</p> : !appointments.length ? <p className="mt-3 text-sm">No scheduled appointments for today.</p> : (
+              <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                {appointments.map(({ entry, patient, checkedIn }) => (
+                  <div key={entry.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">
+                    <div className="min-w-0">
+                      <p className="break-words font-semibold">{patient ? `${patient.firstName} ${patient.lastName}` : entry.patientName}</p>
+                      <p className="text-sm text-slate-600">{whdSlotLabel(entry.appointmentSlot)} · DOB: {formatDisplayDate(patient?.dob || entry.dob)}</p>
+                      <p className="text-sm">{checkedIn ? "Already checked in" : !patient ? "Patient chart needs linking by leadership" : selectedAppointmentId === entry.id ? "Intake form filled — review below" : "Not checked in"}</p>
+                    </div>
+                    <button type="button" disabled={!patient || checkedIn || isSubmitting} onClick={() => prefillAppointment({ entry, patient })} className="rounded-lg bg-purple-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Fill intake form</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {selectedAppointmentId && <label className="mt-4 block text-sm font-medium">Visit reason
+              <textarea className="mt-1 w-full rounded-lg border border-slate-300 p-2" value={form.chiefComplaint || ""} onChange={e => handleChange("chiefComplaint", e.target.value)} />
+            </label>}
+          </section>
+        )}
 
         {matchedPatient && (
           <div
@@ -1062,6 +1107,7 @@ export default function UndergradIntakeView({
               onClick={() => {
                 if (isSubmitting) return;
                 setForm(EMPTY_FORM);
+      setSelectedAppointmentId(null);
                 setMatchPatientId(null);
               }}
               disabled={isSubmitting}

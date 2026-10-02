@@ -31,7 +31,13 @@ export async function fetchProgramEntries() {
 
   if (error) throw error;
 
-  return (data || []).map(mapProgramRow);
+  return (data || []).filter(row => !row.archived_at).map(mapProgramRow);
+}
+
+export async function clearWomensHealthTracker() {
+  const { data, error } = await supabase.rpc("archive_womens_health_tracker");
+  if (error) throw error;
+  return data || [];
 }
 
 export async function resetPhysicalTherapyStatusesForMonthEnd() {

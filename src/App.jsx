@@ -1,4 +1,5 @@
 import { intakeDemographics } from "./utils/patientDemographics.js";
+import { clearWomensHealthTracker } from "./api/programs.js";
 import { clinicEventForDate, womensHealthChiefComplaint } from "./utils/clinicEvents.js";
 import { isolateGeneralVisitUpdates } from "./utils/encounterProgress.js";
 import { canReceivePtCheckIns, getNewPtCheckIns } from "./utils/ptCheckInNotifications.js";
@@ -2095,6 +2096,18 @@ export default function App() {
       console.error("Failed to delete program entry:", error);
       alert(`Failed to delete program entry: ${error.message}`);
       setProgramEntries(previousEntries);
+    } finally {
+      programWritesRef.current -= 1;
+    }
+  }
+
+  async function handleClearWomensHealthTracker() {
+    programWritesRef.current += 1;
+    programWriteVersionRef.current += 1;
+    try {
+      const archivedIds = new Set((await clearWomensHealthTracker()).map(String));
+      setProgramEntries(prev => prev.filter(entry => !archivedIds.has(String(entry.id))));
+      return archivedIds.size;
     } finally {
       programWritesRef.current -= 1;
     }
@@ -5768,7 +5781,7 @@ export default function App() {
         refillNumber: "",
         newReturning: data.matchedPatientId ? "Returning" : (data.isReturning || "New"),
         visitLocation: "In Clinic",
-        chiefComplaint: eventChiefComplaint || data.chiefComplaint || "",
+        chiefComplaint: data.chiefComplaint || eventChiefComplaint || "",
         notes: "",
         transportation: "",
         needsElevator: false,
@@ -5842,7 +5855,7 @@ export default function App() {
           ...encounterBase,
           visitType: data.visitType || "general",
           specialtyType: isRefillOnly ? "" : data.specialtyType || "",
-          chiefComplaint: eventChiefComplaint || (isRefillOnly
+          chiefComplaint: data.chiefComplaint || eventChiefComplaint || (isRefillOnly
             ? "Refills Only"
             : isSpecialtyOnly
               ? data.specialtyType
@@ -11632,6 +11645,9 @@ async function markSeenBySocialWork(encounterId) {
             <UndergradIntakeView
               womensHealthDayActive={womensHealthDayToday}
               onSave={handleUndergradStartEncounter}
+              womensHealthEventDate={womensHealthSettings.eventDate}
+              programEntries={programEntries}
+              programsLoaded={programsLoaded}
               patients={patients}
               tonightSpecialtyNames={tonightSpecialtyNames}
             />
@@ -11955,6 +11971,7 @@ async function markSeenBySocialWork(encounterId) {
                 updateProgramEntry={updateProgramEntry}
                 updateProgramEntryFields={updateProgramEntryFields}
                 removeProgramEntry={removeProgramEntry}
+                onClearWomensHealthTracker={handleClearWomensHealthTracker}
                 patients={patients}
                 selectedClinicDate={selectedClinicDate}
                 isLeadershipView={isLeadershipView}

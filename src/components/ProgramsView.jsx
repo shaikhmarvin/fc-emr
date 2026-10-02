@@ -85,6 +85,7 @@ export default function ProgramsView({
   updateProgramEntry,
   updateProgramEntryFields,
   removeProgramEntry,
+  onClearWomensHealthTracker,
   patients,
   selectedClinicDate,
   isLeadershipView,
@@ -97,6 +98,22 @@ export default function ProgramsView({
   const [savingWomensHealthSettings, setSavingWomensHealthSettings] = useState(false);
   const [womensHealthSettingsMessage, setWomensHealthSettingsMessage] = useState("");
   const [womensHealthView, setWomensHealthView] = useState("waitlist");
+  const [clearingWomensHealth, setClearingWomensHealth] = useState(false);
+
+  async function clearWomensHealth() {
+    if (!isLeadershipView || clearingWomensHealth) return;
+    const count = programEntries.filter(entry => entry.programType === "Women's Health Day").length;
+    if (!window.confirm(`Clear all ${count} Women's Health Day tracker entries, including scheduled and waitlisted patients? Entries will be archived. Patient charts and visits will remain unchanged.`)) return;
+    setClearingWomensHealth(true);
+    try {
+      const cleared = await onClearWomensHealthTracker();
+      setWomensHealthSettingsMessage(`${cleared} entries archived. The tracker is ready for the next event. Patient charts and visits were preserved.`);
+    } catch (error) {
+      setWomensHealthSettingsMessage(`Could not clear the tracker: ${error.message}`);
+    } finally {
+      setClearingWomensHealth(false);
+    }
+  }
 
   async function saveWomensHealthSettings(updates) {
     setSavingWomensHealthSettings(true);
@@ -1686,6 +1703,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                 </span>
                 <span className="mt-1 block text-sm text-slate-600">Soft blush with plum accents. Click to turn the theme {womensHealthSettings?.themeEnabled ? "off" : "on"}.</span>
               </button>
+              {isLeadershipView && <button type="button" onClick={clearWomensHealth} disabled={clearingWomensHealth || !programEntries.some(entry => entry.programType === "Women's Health Day")} className="mt-4 rounded-lg border border-red-300 px-4 py-2 text-sm font-semibold text-red-700 disabled:opacity-50">{clearingWomensHealth ? "Clearing…" : "Clear Women’s Health Day Tracker"}</button>}
               {womensHealthSettingsMessage && <p className="mt-3 text-sm text-slate-600" role="status">{womensHealthSettingsMessage}</p>}
             </Card>
           )}
