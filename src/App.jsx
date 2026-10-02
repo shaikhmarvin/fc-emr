@@ -1036,7 +1036,7 @@ function dualVisitBadge(encounter) {
     pt: "PT",
     mental_health: "Mental Health",
     mentalhealth: "Mental Health",
-    counseling: "Mental Health",
+    counseling: "Counseling",
     addiction: "Addiction",
     ophthalmology: "Ophthalmology",
     optometry: "Optometry",
@@ -1631,7 +1631,7 @@ export default function App() {
       return;
     }
 
-    if (userRole === "physical_therapy") {
+    if (["physical_therapy", "counseling"].includes(userRole)) {
       setActiveView("specialty-queue");
       return;
     }
@@ -2352,7 +2352,7 @@ export default function App() {
       return;
     }
 
-    if (userRole === "physical_therapy") {
+    if (["physical_therapy", "counseling"].includes(userRole)) {
       setActiveView("specialty-queue");
       return;
     }
@@ -4978,6 +4978,7 @@ export default function App() {
       Dermatology: "dermatology",
       Ophthalmology: "ophthalmology",
       "Mental Health": "mental_health",
+      "Counseling": "counseling",
       "Addiction Medicine": "addiction",
     };
 
@@ -5665,6 +5666,7 @@ export default function App() {
     if (userRole === "physical_therapy" && !access.includes("Physical Therapy")) {
       return [...access, "Physical Therapy"];
     }
+    if (userRole === "counseling" && !access.includes("Counseling")) return [...access, "Counseling"];
     return access;
   }, [currentUserProfile, userRole]);
 
@@ -6901,14 +6903,14 @@ export default function App() {
       nextClassification !== null
         ? nextClassification
         : currentProfile?.classification ?? null;
-    const effectiveExtraUpdates = effectiveRole === "physical_therapy"
+    const effectiveExtraUpdates = ["physical_therapy", "counseling"].includes(effectiveRole)
       ? {
           ...extraUpdates,
           specialty_access: Array.from(new Set([
             ...(Array.isArray(currentProfile?.specialty_access)
               ? currentProfile.specialty_access
               : []),
-            "Physical Therapy",
+            effectiveRole === "counseling" ? "Counseling" : "Physical Therapy",
           ])),
         }
       : extraUpdates;
@@ -11736,7 +11738,7 @@ async function markSeenBySocialWork(encounterId) {
               formatDate={formatDate}
               isLeadershipView={isLeadershipView}
               dualVisitBadge={dualVisitBadge}
-              lockedSpecialty={userRole === "physical_therapy" ? "pt" : ""}
+              lockedSpecialty={userRole === "physical_therapy" ? "pt" : userRole === "counseling" ? "counseling" : ""}
               selectedClinicDate={specialtyQueueDate}
               setSelectedClinicDate={setSpecialtyQueueDate}
             />

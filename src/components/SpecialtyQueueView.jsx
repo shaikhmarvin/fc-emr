@@ -32,6 +32,7 @@ function getSpecialtyLabel(type) {
             return "Dermatology";
         case "ophthalmology":
             return "Ophthalmology";
+        case "counseling": return "Counseling";
         case "mental_health":
             return "Mental Health";
         case "addiction":
@@ -303,6 +304,8 @@ export default function SpecialtyQueueView({
         ({ encounter }) => encounter.specialtyType === "mental_health"
     );
 
+    const counselingRows = specialtyEncounterRows.filter(({ encounter }) => encounter.specialtyType === "counseling");
+
     const addictionRows = specialtyEncounterRows.filter(
         ({ encounter }) => encounter.specialtyType === "addiction"
     );
@@ -378,6 +381,7 @@ export default function SpecialtyQueueView({
                         { key: "dermatology", label: "Dermatology" },
                         { key: "ophthalmology", label: "Ophthalmology" },
                         { key: "mental_health", label: "Mental Health" },
+                        { key: "counseling", label: "Counseling" },
                         { key: "addiction", label: "Addiction Medicine" },
                     ].map((item) => (
                         <button
@@ -449,6 +453,7 @@ export default function SpecialtyQueueView({
                         />
                     )}
 
+                    {selectedSpecialty === "counseling" && <SpecialtyTable title="Counseling" rows={counselingRows} search={search} openPatientChart={openPatientChart} getFullPatientName={getFullPatientName} formatDate={formatDate} dualVisitBadge={dualVisitBadge} />}
                     {selectedSpecialty === "addiction" && (
                         <SpecialtyTable
                             title="Addiction Medicine"
@@ -506,6 +511,7 @@ export default function SpecialtyQueueView({
                         dualVisitBadge={dualVisitBadge}
                     />
 
+                    <SpecialtyTable title="Counseling" rows={counselingRows} search={search} openPatientChart={openPatientChart} getFullPatientName={getFullPatientName} formatDate={formatDate} dualVisitBadge={dualVisitBadge} />
                     <SpecialtyTable
                         title="Addiction Medicine"
                         rows={addictionRows}

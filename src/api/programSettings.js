@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase";
+import { withCounselingSchedule } from "../utils/counselingSchedule.js";
 
 export async function fetchProgramSettings() {
   const { data, error } = await supabase
@@ -10,7 +11,7 @@ export async function fetchProgramSettings() {
     return [];
   }
 
-  return data;
+  return withCounselingSchedule(data || []);
 }
 
 export async function updateProgramSetting(program_type, updates) {
@@ -21,5 +22,6 @@ export async function updateProgramSetting(program_type, updates) {
 
   if (error) {
     console.error("Error updating program settings:", error);
+    throw error;
   }
 }

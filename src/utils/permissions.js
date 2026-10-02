@@ -30,7 +30,7 @@ export function canChart(role) {
     role === "attending" ||
     role === "leadership" ||
     role === "social_work" ||
-    role === "physical_therapy"
+    role === "physical_therapy" || role === "counseling"
   );
 }
 

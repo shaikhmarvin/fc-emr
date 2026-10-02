@@ -5,6 +5,7 @@ const SPECIALTY_ACCESS_OPTIONS = [
   "Ophthalmology",
   "Physical Therapy",
   "Mental Health",
+  "Counseling",
   "Addiction Medicine",
   "Women's Health Day",
 ];
@@ -233,7 +234,7 @@ export default function UserManagementView({
                             profile.role === "attending" ||
                             profile.role === "pharmacy" ||
                             profile.role === "social_work" ||
-                            profile.role === "physical_therapy" ||
+                            profile.role === "physical_therapy" || profile.role === "counseling" ||
                             profile.role === "undergraduate"
                           }
                         >
@@ -249,7 +250,7 @@ export default function UserManagementView({
                         profile.role !== "attending" &&
                         profile.role !== "pharmacy" &&
                         profile.role !== "social_work" &&
-                        profile.role !== "physical_therapy" &&
+                        profile.role !== "physical_therapy" && profile.role !== "counseling" &&
                         profile.role !== "lab" &&
                         profile.role !== "undergraduate" ? (
                           <div className="text-xs text-red-500">
@@ -275,7 +276,7 @@ export default function UserManagementView({
                               profile.role !== "attending" &&
                               profile.role !== "pharmacy" &&
                               profile.role !== "social_work" &&
-                              profile.role !== "physical_therapy" &&
+                              profile.role !== "physical_therapy" && profile.role !== "counseling" &&
                               profile.role !== "lab") ||
                             (isCurrentUser && profile.role === "leadership")
                           }
@@ -289,6 +290,7 @@ export default function UserManagementView({
                           <option value="lab">lab</option>
                           <option value="social_work">social_work</option>
                           <option value="physical_therapy">physical_therapy</option>
+                          <option value="counseling">Counseling</option>
                         </select>
                       </label>
                     </div>
@@ -533,7 +535,7 @@ export default function UserManagementView({
                               profile.role === "attending" ||
                               profile.role === "pharmacy" ||
                               profile.role === "social_work" ||
-                              profile.role === "physical_therapy" ||
+                              profile.role === "physical_therapy" || profile.role === "counseling" ||
                               profile.role === "undergraduate"
                             }
                           >
@@ -548,7 +550,7 @@ export default function UserManagementView({
                           profile.role !== "attending" &&
                           profile.role !== "pharmacy" &&
                           profile.role !== "social_work" &&
-                          profile.role !== "physical_therapy" &&
+                          profile.role !== "physical_therapy" && profile.role !== "counseling" &&
                           profile.role !== "lab" &&
                           profile.role !== "undergraduate" ? (
                             <div className="mt-1 text-xs text-red-500">
@@ -571,7 +573,7 @@ export default function UserManagementView({
                                 profile.role !== "attending" &&
                                 profile.role !== "pharmacy" &&
                                 profile.role !== "social_work" &&
-                                profile.role !== "physical_therapy" &&
+                                profile.role !== "physical_therapy" && profile.role !== "counseling" &&
                                 profile.role !== "lab") ||
                               (isCurrentUser && profile.role === "leadership")
                             }
@@ -585,6 +587,7 @@ export default function UserManagementView({
                             <option value="lab">lab</option>
                             <option value="social_work">social_work</option>
                             <option value="physical_therapy">physical_therapy</option>
+                          <option value="counseling">Counseling</option>
                           </select>
                         </td>
 

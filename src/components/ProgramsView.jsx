@@ -1962,7 +1962,16 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
             <div className="space-y-4">
               <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div className="grid flex-1 grid-cols-1 gap-4 md:grid-cols-3">
-                  <Field label={`Next ${programType} Clinic Date`}>
+                  <Field label={programType === "Counseling" ? "Counseling — every Wednesday" : `Next ${programType} Clinic Date`}>
+                    {programType === "Counseling" ? <label className="flex items-center gap-2 text-sm">
+                      <input type="checkbox" checked={programSettings.find(row => row.program_type === "Counseling")?.counseling_enabled !== false} onChange={async event => {
+                        try {
+                          await updateProgramSetting("Counseling", { counseling_enabled: event.target.checked });
+                          await loadProgramSettings();
+                        } catch (error) { alert(`Could not save counseling availability: ${error.message}`); }
+                      }} />
+                      Counselor available (turn off when absent; turn back on when available)
+                    </label> :
                     <input
                       type="date"
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -1981,7 +1990,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
 
                         await loadProgramSettings();
                       }}
-                    />
+                    />}
                   </Field>
 
                   <ReadOnlyField

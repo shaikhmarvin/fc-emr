@@ -549,6 +549,7 @@ export default function PatientInfoEditModal({
                       <option value="dermatology">Dermatology</option>
                       <option value="ophthalmology">Ophthalmology</option>
                       <option value="mental_health">Mental Health</option>
+                      <option value="counseling">Counseling</option>
                       <option value="addiction">Addiction Medicine</option>
                     </FieldSelect>
                   </div>
