@@ -107,7 +107,7 @@ function renderExistingProgramWarning(programType) {
   return (
     <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
       <div className="font-semibold">
-        Already on {programType} tracker
+        Already on {programType === "Mammogram" ? "Mammogram/Breast Exam" : programType} tracker
       </div>
       <div className="mt-1">
         Status: {entry.status || "—"} • Reason: {entry.reason || "—"}
@@ -436,7 +436,7 @@ function renderExistingProgramWarning(programType) {
               <SectionCard title="Screenings">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   {showMammogramScreening && (
-                    <Field label="Mammogram">
+                    <Field label="Mammogram/Breast Exam">
                       <select
                         className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
                         value={intakeForm.mammogramStatus}

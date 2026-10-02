@@ -192,7 +192,7 @@ export default function RegistrationView({
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="font-semibold text-slate-900">
-                {setting.display_name}
+                {setting.resource_key === "mammogram" ? "Mammogram/Breast Exam" : setting.display_name}
               </div>
               <div className="mt-1 text-xs text-slate-500">
                 {setting.sex_restriction !== "any"

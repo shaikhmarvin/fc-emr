@@ -1,3 +1,4 @@
+import "./ProgramsView.css";
 import { specialtyProgram, specialtyTrackerVisits } from "../utils/specialtyTracker.js";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -1180,7 +1181,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
     return (
       <div className="space-y-6">
         <Card>
-          <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-5">
+          <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
             <Field label="Search Patient">
               <input
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -1273,12 +1274,12 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                         )
                       }
                     >
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
+                      <div className="tracker-summary-fields">
                         <div className="md:col-span-2"><ReadOnlyField label="Full Name" value={entry.patientName} /></div>
-                        <div className="md:col-span-2"><ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} /></div>
-                        <div className="md:col-span-2 md:max-w-[220px]"><ReadOnlyField label="Phone Number" value={entry.phone || "—"} /></div>
+                        <div className="tracker-dob"><ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} /></div>
+                        <div className="tracker-phone"><ReadOnlyField label="Phone Number" value={entry.phone || "—"} /></div>
                         <div className="md:col-span-1"><ReadOnlyField label="MRN" value={entry.mrn || "—"} /></div>
-                        <div className="md:col-span-2"><ReadOnlyField label="Program" value={entry.programType} copyable={false} /></div>
+                        <div className="md:col-span-2"><ReadOnlyField label="Program" value={entry.programType === "Mammogram" ? "Mammogram/Breast Exam" : entry.programType} copyable={false} /></div>
 
                         <div className="md:col-span-1">
                           <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -1296,7 +1297,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                     {/* EXPANDED CONTENT */}
                     {isExpanded && (
                       <>
-                        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
                           <ReadOnlyField
                             label="Last Contact Attempt"
                             value={
@@ -1804,10 +1805,10 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                           )
                         }
                       >
-                        <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
+                        <div className="tracker-summary-fields">
                           <div className="md:col-span-2"><ReadOnlyField label="Full Name" value={entry.patientName} /></div>
-                          <div className="md:col-span-2"><ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} /></div>
-                          <div className="md:col-span-2 md:max-w-[220px]"><ReadOnlyField label="Phone Number" value={entry.phone || "—"} /></div>
+                          <div className="tracker-dob"><ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} /></div>
+                          <div className="tracker-phone"><ReadOnlyField label="Phone Number" value={entry.phone || "—"} /></div>
                           <div className="md:col-span-1"><ReadOnlyField label="MRN" value={entry.mrn || "—"} /></div>
                           <div className="md:col-span-1">
                             <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -1824,7 +1825,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                               copyable={false}
                             />
                           </div>
-                          <div className="md:col-span-2"><ReadOnlyField label="Reason" value={entry.reason || "—"} /></div>
+                          <div className="tracker-reason"><ReadOnlyField label="Reason" value={entry.reason || "—"} /></div>
                         </div>
                       </TrackerCardSummary>
                       {renderSpecialtyVisit(entry)}
@@ -1832,7 +1833,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
 
                       {isExpanded && (
                         <>
-                          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
                             <ReadOnlyField
                               label="Last Contact Attempt"
                               value={
@@ -2279,16 +2280,16 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                         )
                       }
                     >
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
+                      <div className="tracker-summary-fields">
                         <div className="md:col-span-2">
                           <ReadOnlyField label="Full Name" value={entry.patientName} />
                         </div>
 
-                        <div className="md:col-span-2 md:max-w-[220px]">
+                        <div className="tracker-phone">
                           <ReadOnlyField label="Phone Number" value={entry.phone || "—"} />
                         </div>
 
-                        <div className="md:col-span-2">
+                        <div className="tracker-dob">
                           <ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} />
                         </div>
 
@@ -2303,7 +2304,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                           <StatusBadge status={entry.status} />
                         </div>
 
-                        <div className="md:col-span-2">
+                        <div className="tracker-reason">
                           <ReadOnlyField label="Reason" value={entry.reason || "—"} multiline />
                         </div>
 
@@ -2317,7 +2318,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
 
                     {isExpanded && (
                       <>
-                        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
                           <ReadOnlyField
                             label="Last Contact Attempt"
                             value={
@@ -2720,7 +2721,7 @@ function ReadOnlyField({ label, value, copyable = true, multiline = false }) {
             className={
               multiline
                 ? "block whitespace-normal break-words leading-snug"
-                : "block truncate"
+                : "block whitespace-normal break-words"
             }
           >
             {displayValue}
