@@ -1,3 +1,4 @@
+import BreastExamBadge from "./BreastExamBadge";
 import { useEffect, useState } from "react";
 import { getStatusLabel } from "../utils";
 import { VISIT_TYPE_BADGE_STYLES, getEncounterVisitTypeKey, isGeneralClinicEncounter } from "../constants";
@@ -602,6 +603,7 @@ export default function RoomBoard({
 )}
 
                     {newReturningBadge?.(primaryEncounter)}
+                      <BreastExamBadge encounter={primaryEncounter} />
                     {priorityBadge(primaryEncounter)}
                     {spanishBadge(primaryEncounter)}
                     {htnBadge?.(primaryEncounter)}

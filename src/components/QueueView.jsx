@@ -1,3 +1,4 @@
+import BreastExamBadge from "./BreastExamBadge";
 import { womensHealthQueuePreference } from "../utils/clinicEvents.js";
 import { useEffect, useState } from "react";
 import { formatDate, getStatusClasses, getStatusLabel } from "../utils";
@@ -1276,6 +1277,7 @@ const canMarkSeenBySocialWork =
 
                       {dualVisitBadge?.(encounter)}
                       {newReturningBadge?.(encounter)}
+                      <BreastExamBadge encounter={encounter} />
                       {priorityBadge?.(encounter)}
                       {spanishBadge?.(encounter)}
                       {htnBadge?.(encounter)}
@@ -1684,6 +1686,7 @@ const canMarkSeenBySocialWork =
                 <div className="flex flex-wrap gap-2">
                   {dualVisitBadge?.(encounter)}
                   {newReturningBadge?.(encounter)}
+                      <BreastExamBadge encounter={encounter} />
                   {getDailyCardNumber(patient, encounter) && (
                     <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800">
                       Daily #{getDailyCardNumber(patient, encounter)}
@@ -2050,6 +2053,7 @@ const canMarkSeenBySocialWork =
                   <div className="flex flex-wrap gap-2">
                     {dualVisitBadge(encounter)}
                     {newReturningBadge?.(encounter)}
+                      <BreastExamBadge encounter={encounter} />
                     {getDailyCardNumber(patient, encounter) && (
                       <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800">
                         Daily #{getDailyCardNumber(patient, encounter)}

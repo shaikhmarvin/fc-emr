@@ -1,3 +1,4 @@
+import BreastExamBadge from "./BreastExamBadge";
 import { useMemo, useState } from "react";
 function getRegistrationStatusBadge(status) {
   switch (status) {
@@ -350,6 +351,7 @@ export default function RegistrationView({
     </h2>
     {getRegistrationStatusBadge(encounter.status)}
     {newReturningBadge?.(encounter)}
+                      <BreastExamBadge encounter={encounter} />
     {dualVisitBadge?.(encounter)}
     {getDailyCardNumber(patient, encounter) && (
       <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800">

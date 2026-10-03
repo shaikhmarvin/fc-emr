@@ -1,3 +1,4 @@
+import BreastExamBadge from "./BreastExamBadge";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { formatDate, getStatusLabel } from "../utils";
 import { getClinicAlert } from "../utils/clinicAlerts";
@@ -568,6 +569,7 @@ export default function BoardDisplay({
                         )}
 
                         {newReturningBadge?.(primaryEncounter)}
+                      <BreastExamBadge encounter={primaryEncounter} />
                         {priorityBadge(primaryEncounter)}
                         {spanishBadge(primaryEncounter)}
                         {htnBadge?.(primaryEncounter)}
