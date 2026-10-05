@@ -603,6 +603,17 @@ const canMarkSeenBySocialWork =
     );
   }
 
+  function socialWorkSeenBadge(encounter) {
+    if (!isSeenBySocialWork(encounter)) return null;
+    const seenAt = getSocialWorkSeenAt(encounter);
+    return (
+      <span className="rounded-full bg-teal-100 px-2 py-1 text-xs font-bold text-teal-800 shadow-sm">
+        Seen by Social Work
+        {seenAt ? ` ${formatDate(seenAt)}` : ""}
+      </span>
+    );
+  }
+
   function isPatientOnActivePap(patient) {
     return (papEntries || []).some((entry) => {
       const status = String(entry?.status || "").toLowerCase();
@@ -1706,12 +1717,7 @@ const canMarkSeenBySocialWork =
                       Patient Assistance Program
                     </span>
                   )}
-                  {canUseSocialWorkQueueTools && isSeenBySocialWork(encounter) && (
-                    <span className="rounded-full bg-teal-100 px-2 py-1 text-xs font-bold text-teal-800 shadow-sm">
-                      Seen by Social Work
-                      {getSocialWorkSeenAt(encounter) ? ` ${formatDate(getSocialWorkSeenAt(encounter))}` : ""}
-                    </span>
-                  )}
+                  {socialWorkSeenBadge(encounter)}
                   {canUseWholeClinicQueueTools && isGeneralVisitComplete(encounter) && (
                     <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-800">
                       Completed Visit
@@ -2053,6 +2059,7 @@ const canMarkSeenBySocialWork =
                   <div className="flex flex-wrap gap-2">
                     {dualVisitBadge(encounter)}
                     {newReturningBadge?.(encounter)}
+                    {socialWorkSeenBadge(encounter)}
                       <BreastExamBadge encounter={encounter} />
                     {getDailyCardNumber(patient, encounter) && (
                       <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800">
