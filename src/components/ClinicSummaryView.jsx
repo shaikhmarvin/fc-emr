@@ -52,6 +52,12 @@ export default function ClinicSummaryView({
       autoValue: specialtyCounts.mental_health || 0,
     },
     {
+      label: "Counseling",
+      key: "counselingCount",
+      helper: `Auto: ${specialtyCounts.counseling || 0} from counseling check-ins`,
+      autoValue: specialtyCounts.counseling || 0,
+    },
+    {
       label: "Addiction Medicine",
       key: "addictionMedicineCount",
       helper: `Auto: ${specialtyCounts.addiction || 0}`,
@@ -222,6 +228,7 @@ export default function ClinicSummaryView({
             <SummaryCard label="Dermatology" value={specialtyCounts.dermatology} />
             <SummaryCard label="Ophthalmology" value={specialtyCounts.ophthalmology} />
             <SummaryCard label="Mental Health" value={specialtyCounts.mental_health} />
+            <SummaryCard label="Counseling" value={specialtyCounts.counseling} />
             <SummaryCard label="Addiction Medicine" value={specialtyCounts.addiction} />
           </div>
         </div>

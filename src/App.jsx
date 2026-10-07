@@ -1673,6 +1673,7 @@ export default function App() {
     refillCount: "",
     labsCount: "",
     mentalHealthCount: "",
+    counselingCount: "",
     addictionMedicineCount: "",
     ptCount: "",
     dermatologyCount: "",
@@ -5561,6 +5562,7 @@ export default function App() {
       dermatology: { specialtyOnly: 0, both: 0 },
       ophthalmology: { specialtyOnly: 0, both: 0 },
       mental_health: { specialtyOnly: 0, both: 0 },
+      counseling: { specialtyOnly: 0, both: 0 },
       addiction: { specialtyOnly: 0, both: 0 },
       social_work: { specialtyOnly: 0, both: 0 },
     };
@@ -5612,6 +5614,7 @@ export default function App() {
       dermatology: formatSpecialtyCount(counts.dermatology),
       ophthalmology: formatSpecialtyCount(counts.ophthalmology),
       mental_health: formatSpecialtyCount(counts.mental_health),
+      counseling: formatSpecialtyCount(counts.counseling),
       addiction: formatSpecialtyCount(counts.addiction),
       social_work: formatSpecialtyCount(counts.social_work),
     };
@@ -5624,6 +5627,7 @@ export default function App() {
       lwobsCount: String(autoLwobsCount),
       labsCount: String(autoLabsCount),
       mentalHealthCount: String(specialtyCounts.mental_health || 0),
+      counselingCount: String(specialtyCounts.counseling || 0),
       addictionMedicineCount: String(specialtyCounts.addiction || 0),
       ptCount: String(specialtyCounts.pt || 0),
       dermatologyCount: String(specialtyCounts.dermatology || 0),
@@ -5642,6 +5646,7 @@ export default function App() {
     autoLwobsCount,
     autoLabsCount,
     specialtyCounts.mental_health,
+    specialtyCounts.counseling,
     specialtyCounts.addiction,
     specialtyCounts.pt,
     specialtyCounts.dermatology,
@@ -10912,6 +10917,13 @@ async function markSeenBySocialWork(encounterId) {
             blankStaffSideCell(),
             bodyCell("Mental Health"),
             bodyCell(clinicSummary.mentalHealthCount ?? 0, AlignmentType.CENTER),
+          ],
+        }),
+        new TableRow({
+          children: [
+            blankStaffSideCell(),
+            bodyCell("Counseling"),
+            bodyCell(clinicSummary.counselingCount ?? 0, AlignmentType.CENTER),
           ],
         }),
         new TableRow({
