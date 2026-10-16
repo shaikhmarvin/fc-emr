@@ -11978,6 +11978,7 @@ async function markSeenBySocialWork(encounterId) {
           {activeView === "research" && canAccessResearch && (
             <ResearchView
               patients={patients}
+              womensHealthEventDate={womensHealthSettings.eventDate}
               isResearchOwner={isResearchOwner}
               leadershipAccessEnabled={researchLeadershipAccess}
               onLeadershipAccessChange={handleResearchLeadershipAccessChange}

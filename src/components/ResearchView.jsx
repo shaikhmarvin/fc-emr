@@ -30,7 +30,7 @@ function Breakdown({ title, values, total, onSelect }) {
   );
 }
 
-export default function ResearchView({ patients = [], isResearchOwner = false, leadershipAccessEnabled = false, onLeadershipAccessChange }) {
+export default function ResearchView({ patients = [], womensHealthEventDate = "", isResearchOwner = false, leadershipAccessEnabled = false, onLeadershipAccessChange }) {
   const today = new Date().toISOString().slice(0, 10);
   const [startDate, setStartDate] = useState(`${today.slice(0, 4)}-01-01`);
   const [endDate, setEndDate] = useState(today);
@@ -53,7 +53,7 @@ export default function ResearchView({ patients = [], isResearchOwner = false, l
     };
   }, [drilldown]);
 
-  const report = useMemo(() => buildResearchReport(patients, startDate, endDate, clinicEvent), [patients, startDate, endDate, clinicEvent]);
+  const report = useMemo(() => buildResearchReport(patients, startDate, endDate, clinicEvent, womensHealthEventDate), [patients, startDate, endDate, clinicEvent, womensHealthEventDate]);
 
   function showRows(title, sourceRows, recordedField = "Encounter included") {
     setDrilldown({

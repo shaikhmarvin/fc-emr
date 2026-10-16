@@ -1,16 +1,23 @@
 export const WOMENS_HEALTH_DAY = "womens_health_day";
 
 export function clinicEventForDate(clinicDate, eventDate) {
-  return eventDate && clinicDate === eventDate ? WOMENS_HEALTH_DAY : "";
+  return eventDate && String(clinicDate || '').slice(0, 10) === eventDate ? WOMENS_HEALTH_DAY : "";
 }
 
-export function isWomensHealthEncounter(encounter) {
-  return (encounter?.clinicEvent ?? encounter?.intake_data?.clinicEvent ?? encounter?.intakeData?.clinicEvent) === WOMENS_HEALTH_DAY;
+export function encounterClinicEvent(encounter, eventDate = '') {
+  const saved = [encounter?.intake_data?.clinicEvent, encounter?.intake_data?.clinic_event,
+    encounter?.intakeData?.clinicEvent, encounter?.intakeData?.clinic_event,
+    encounter?.clinicEvent, encounter?.clinic_event].map(value => String(value || '').trim()).find(Boolean);
+  return saved || clinicEventForDate(encounter?.clinicDate || encounter?.clinic_date, eventDate);
 }
 
-export function patientsForClinicEvent(patients, clinicEvent = "") {
+export function isWomensHealthEncounter(encounter, eventDate = '') {
+  return encounterClinicEvent(encounter, eventDate) === WOMENS_HEALTH_DAY;
+}
+
+export function patientsForClinicEvent(patients, clinicEvent = "", eventDate = '') {
   return patients.map((patient) => ({ ...patient, encounters: (patient.encounters || []).filter((encounter) =>
-    isWomensHealthEncounter(encounter) === (clinicEvent === WOMENS_HEALTH_DAY)) }));
+    isWomensHealthEncounter(encounter, eventDate) === (clinicEvent === WOMENS_HEALTH_DAY)) }));
 }
 
 // Refill requests have no encounter link; use the patient's saved visits on that date.

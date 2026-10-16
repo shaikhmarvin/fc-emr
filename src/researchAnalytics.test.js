@@ -126,3 +126,24 @@ test('blank research responses use the same category in summaries and source row
   assert.deepEqual(result.pap, [['Not recorded', 1]]);
   assert.deepEqual(result.mammogram, [['Not recorded', 1]]);
 });
+
+test('configured event date recovers legacy visits across research without leaking into regular clinic', () => {
+  const patients = [{ id: 'p', sex: 'Female', dob: '1970-01-01', encounters: [
+    visit('legacy', '2026-03-01', { clinicEvent: '', htn: true }),
+    visit('legacy-refill', '2026-03-01', { visitType: 'refill_only' }),
+    visit('saved', '2026-02-01', { clinicEvent: '', intake_data: { clinicEvent: 'womens_health_day' } }),
+    visit('regular', '2026-04-01'),
+  ] }];
+  const regular = buildResearchReport(patients, '2026-01-01', '2026-09-01', '', '2026-03-01');
+  const event = buildResearchReport(patients, '2026-01-01', '2026-09-01', 'womens_health_day', '2026-03-01');
+  assert.deepEqual(regular.rows.map(row => row.encounter.id), ['regular']);
+  assert.equal(regular.rows[0].returning, false);
+  assert.equal(regular.chronicRows.length, 0);
+  assert.equal(regular.refillAnalyticsRows.length, 0);
+  assert.deepEqual(event.rows.map(row => row.encounter.id), ['saved', 'legacy']);
+  assert.equal(event.rows[1].returning, true);
+  assert.equal(event.refillAnalyticsRows.length, 1);
+  assert.equal(event.flow.visits, 2);
+  assert.equal(event.papEligibleRows.length, 2);
+  assert.equal(patients[0].encounters[0].clinicEvent, '');
+});

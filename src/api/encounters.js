@@ -1,6 +1,8 @@
 import { getEncounterVisitTypeKey } from "../constants";
 import { supabase } from "../lib/supabase";
 import { preserveRegistrationProgress } from "../utils/encounterProgress.js";
+import { encounterClinicEvent } from "../utils/clinicEvents.js";
+import { fetchWomensHealthDaySettings } from "./womensHealthDaySettings";
 
 const EMPTY_OPHTHO_NOTE = {
   hpi: "",
@@ -81,7 +83,7 @@ function mapEncounterRow(row) {
     physicalTherapy: intake.physicalTherapy ?? "N/A",
     mentalHealthCombined: intake.mentalHealthCombined ?? "N/A",
     counseling: intake.counseling ?? "N/A",
-    clinicEvent: intake.clinicEvent || "",
+    clinicEvent: encounterClinicEvent(row),
     womenHealthDay: intake.womenHealthDay ?? "N/A",
     anyMentalHealthPositive: intake.anyMentalHealthPositive ?? false,
     visitType: getEncounterVisitTypeKey(row),
@@ -215,7 +217,7 @@ function buildIntakeData(encounter) {
     physicalTherapy: encounter.physicalTherapy ?? "N/A",
     mentalHealthCombined: encounter.mentalHealthCombined ?? "N/A",
     counseling: encounter.counseling ?? "N/A",
-    clinicEvent: encounter.clinicEvent || "",
+    clinicEvent: encounterClinicEvent(encounter),
     womenHealthDay: encounter.womenHealthDay ?? "N/A",
     anyMentalHealthPositive: encounter.anyMentalHealthPositive ?? false,
     visitType: encounter.visitType ?? "general",
@@ -229,6 +231,13 @@ function buildIntakeData(encounter) {
 }
 
 export async function createEncounterInSupabase(patientId, encounter) {
+  // Every creation path must persist event identity, including leadership intake
+  // and visits started from a chart. Do not depend on an individual caller.
+  let clinicEvent = encounterClinicEvent(encounter);
+  if (!clinicEvent) {
+    const settings = await fetchWomensHealthDaySettings();
+    clinicEvent = encounterClinicEvent(encounter, settings.eventDate);
+  }
   const row = {
     patient_id: patientId,
     clinic_date: encounter.clinicDate,
@@ -238,7 +247,7 @@ export async function createEncounterInSupabase(patientId, encounter) {
     notes: encounter.notes || "",
     note_type: encounter.noteType || (encounter.specialtyType === "ophthalmology" ? "ophthalmology" : "medical"),
     group_note: encounter.groupNote || "",
-    intake_data: buildIntakeData(encounter),
+    intake_data: buildIntakeData({ ...encounter, clinicEvent }),
     leadership_intake_complete: encounter.leadershipIntakeComplete ?? false,
     hpi: encounter.soapSubjective || "",
     objective: encounter.soapObjective || "",
@@ -630,7 +639,7 @@ export async function updateEncounterInSupabase(encounterId, updates, conditions
       mentalHealthCombined:
         updates.mentalHealthCombined ?? currentIntake.mentalHealthCombined ?? "N/A",
       counseling: updates.counseling ?? currentIntake.counseling ?? "N/A",
-      clinicEvent: updates.clinicEvent ?? currentIntake.clinicEvent ?? "",
+      clinicEvent: updates.clinicEvent || encounterClinicEvent({ intake_data: currentIntake }),
       womenHealthDay: updates.womenHealthDay ?? currentIntake.womenHealthDay ?? "N/A",
       anyMentalHealthPositive:
         updates.anyMentalHealthPositive ??

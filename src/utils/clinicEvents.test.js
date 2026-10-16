@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { clinicEventForDate, isWomensHealthEncounter, womensHealthQueuePreference, womensHealthChiefComplaint, hasOnlyWomensHealthVisitsOnDate, patientsForClinicEvent, WOMENS_HEALTH_DAY } from './clinicEvents.js';
+import { clinicEventForDate, encounterClinicEvent, isWomensHealthEncounter, womensHealthQueuePreference, womensHealthChiefComplaint, hasOnlyWomensHealthVisitsOnDate, patientsForClinicEvent, WOMENS_HEALTH_DAY } from './clinicEvents.js';
 
 test('intake classification matches only the configured event date', () => {
   assert.equal(clinicEventForDate('2026-10-03', '2026-10-03'), WOMENS_HEALTH_DAY);
@@ -17,6 +17,23 @@ test('mixed patient histories are split by visit without modifying the original 
   assert.deepEqual(patientsForClinicEvent(patients)[0].encounters.map(e => e.id), ['regular']);
   assert.deepEqual(patientsForClinicEvent(patients, WOMENS_HEALTH_DAY)[0].encounters.map(e => e.id), ['event']);
   assert.equal(patients[0].encounters.length, 2);
+});
+
+test('empty mapped event labels cannot hide persisted event identity', () => {
+  assert.equal(isWomensHealthEncounter({ clinicEvent: '', intake_data: { clinicEvent: WOMENS_HEALTH_DAY } }), true);
+  assert.equal(isWomensHealthEncounter({ clinicEvent: '', intakeData: { clinic_event: WOMENS_HEALTH_DAY } }), true);
+  assert.equal(isWomensHealthEncounter({ clinic_event: WOMENS_HEALTH_DAY }), true);
+  assert.equal(isWomensHealthEncounter({ clinicEvent: 'regular', intake_data: { clinicEvent: WOMENS_HEALTH_DAY } }), true);
+});
+
+test('configured date recovers unlabelled event visits but respects explicit labels and saved history', () => {
+  const date = '2026-10-03';
+  assert.equal(encounterClinicEvent({ clinicDate: date, clinicEvent: '' }, date), WOMENS_HEALTH_DAY);
+  assert.equal(encounterClinicEvent({ clinic_date: `${date}T12:00:00Z` }, date), WOMENS_HEALTH_DAY);
+  assert.equal(encounterClinicEvent({ clinicDate: date, clinicEvent: 'regular' }, date), 'regular');
+  assert.equal(encounterClinicEvent({ clinicDate: '2026-10-04' }, date), '');
+  assert.equal(encounterClinicEvent({ clinicDate: date }, ''), '');
+  assert.equal(encounterClinicEvent({ clinicDate: date, intake_data: { clinicEvent: WOMENS_HEALTH_DAY } }, '2027-01-01'), WOMENS_HEALTH_DAY);
 });
 
 test('event-only refill patients stay separate without excluding regular visits on the same date', () => {
