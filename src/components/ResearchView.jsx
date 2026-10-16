@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./ResearchView.css";
+import ResearchStudies from "./ResearchStudies.jsx";
 import { buildResearchReport, normalizeDate, minutesBetween, completionTime, isComplete, percent } from "../researchAnalytics.js";
 
 function Metric({ label, value, helper, onClick }) {
@@ -103,7 +104,7 @@ export default function ResearchView({ patients = [], isResearchOwner = false, l
       <div className="min-w-0 rounded-2xl bg-white p-3 shadow sm:p-4 lg:p-5">
         <div className="research-header">
           <div>
-            <h2 className="text-xl font-semibold text-slate-900">Clinic Tracker</h2>
+            <h2 className="text-xl font-semibold text-slate-900">Research</h2>
             <p className="mt-1 max-w-3xl text-sm text-slate-600">Language, disease, transportation, screening, and return analyses include general-clinic visits only. Refill visits appear separately in pharmacy use and wait-time comparisons. HTN+ and DM+ carry forward from the patient chronic-condition profile or general-clinic intakes.</p>
           </div>
           <div className="research-filters">
@@ -123,15 +124,17 @@ export default function ResearchView({ patients = [], isResearchOwner = false, l
           </div>
         </div>
 
+        {startDate && endDate && startDate > endDate && <p role="alert" className="text-sm text-red-700">Choose a From date on or before the Through date.</p>}
         <nav aria-label="Research studies" className="research-navigation">
-          {[["patients", "Patients & returns"], ["times", "Visit times"], ["pharmacy", "Pharmacy & refills"], ["screening", "Screening"]].map(([key, label]) => (
+          {[["patients", "Patients & returns"], ["access", "Language & access"], ["times", "Visit times"], ["pharmacy", "Pharmacy & refills"], ["screening", "Screening"]].map(([key, label]) => (
             <button key={key} type="button" aria-current={study === key ? "page" : undefined} aria-controls="research-study-panel" onClick={() => { setStudy(key); setDailyPage(0); }} className={study === key ? "research-nav-active" : ""}>{label}</button>
           ))}
         </nav>
         <div id="research-study-panel" className="research-study-panel">
+        <ResearchStudies key={`${clinicEvent}-${startDate}-${endDate}`} report={report} endDate={endDate} study={study} onInspect={setDrilldown} />
         {study === "patients" && <section aria-label="Patients and return visits">
 <h2 className="text-lg font-semibold text-slate-900">Patients and return visits</h2>
-<p className="mt-1 text-sm text-slate-600">Disease groups, transportation, and follow-up patterns for general-clinic visits.</p>
+<p className="mt-1 text-sm text-slate-600">Disease groups and follow-up patterns for general-clinic visits.</p>
         <div className="research-metrics mt-5">
           <Metric label="Patients" value={report.uniquePatients} helper={`${report.rows.length} general visits`} onClick={() => showRows("General-clinic patients and visits", report.rows)} />
           <Metric label="Chronic-disease patients" value={report.chronicPatients} helper="HTN+ or DM+" onClick={() => showRows("Chronic-disease data points", report.chronicRows, "HTN/DM historical flag")} />
@@ -148,13 +151,22 @@ export default function ResearchView({ patients = [], isResearchOwner = false, l
         </div>
         <p className="mt-2 text-xs text-slate-500">Patients with a refill-only visit are unique patients with at least one non-cancelled refill encounter in the selected date range. General return visits require an earlier non-cancelled general-clinic visit in saved history; refill and specialty visits do not qualify. Visit-time comparisons are operational measures and not validated measures of clinical complexity.</p>
 
+        </section>}
+        {study === "access" && <section aria-label="Language and access">
+          <h2 className="text-lg font-semibold text-slate-900">Language and access</h2>
+          <p className="mt-1 text-sm text-slate-600">Recorded language indicators, visit duration, and transportation patterns for general-clinic visits.</p>
+          <div className="rounded-xl border border-slate-200 p-4">
+            <h3 className="font-semibold text-slate-900">Language and average visit time</h3>
+            <p className="mt-1 text-xs text-slate-500">General clinic only: undergrad complete → visit completion.</p>
+            <div className="mt-3 space-y-2">{!report.languageStats.length && <p className="text-sm text-slate-500">No general-clinic visits in this date range.</p>}{report.languageStats.map(([label, count, avgMinutes]) => <button type="button" key={label} onClick={() => showTiming(`${label} general-clinic visit times`, report.rows.filter((row) => row.language === label), "undergradCompletedAt")} className="grid w-full grid-cols-1 gap-1 rounded-lg px-1 py-2 text-left text-sm hover:bg-blue-50 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:gap-3"><span className="break-words text-slate-600">{label}</span><span className="font-semibold text-slate-900">{count} <span className="font-normal text-slate-400">({percent(count, report.rows.length)})</span></span><span className="font-semibold text-blue-700 sm:min-w-20 sm:text-right">{avgMinutes === "—" ? "—" : `${avgMinutes} min avg`}</span></button>)}</div>
+          </div>
           <div className="mt-6 min-w-0 rounded-xl border border-slate-200 p-4">
             <h3 className="font-semibold text-slate-900">Transportation and return visits</h3>
             <p className="mt-1 text-xs text-slate-500">Evaluated per general-clinic visit. Patients are unique within a mode but may appear under multiple modes when their transportation changes.</p>
             <div className="mt-3 rounded-lg border border-slate-200">
-              <table className="research-table"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Transportation reported</th><th className="px-4 py-3">Visit share</th><th className="px-4 py-3">Unique patients</th><th className="px-4 py-3">Visits</th><th className="px-4 py-3">Patients with later visit</th><th className="px-4 py-3">Return likelihood</th></tr></thead><tbody className="divide-y divide-slate-200">{report.transportationReturnStats.map((mode) => <tr key={mode.label} onClick={() => showRows(`Transportation return data: ${mode.label}`, mode.rows, "Transportation")} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.currentTarget.click(); } }} className="cursor-pointer hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"><td data-label="Transportation reported" className="px-4 py-3 font-semibold text-slate-900">{mode.label}</td><td data-label="Visit share" className="px-4 py-3">{percent(mode.visits, report.rows.length)}</td><td data-label="Unique patients" className="px-4 py-3">{mode.patients}</td><td data-label="Visits" className="px-4 py-3">{mode.visits}</td><td data-label="Patients with later visit" className="px-4 py-3">{mode.returnedPatients}</td><td data-label="Return likelihood" className="px-4 py-3 font-semibold text-blue-700">{mode.rate}</td></tr>)}</tbody></table>
+              <table className="research-table"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Transportation reported</th><th className="px-4 py-3">Visit share</th><th className="px-4 py-3">Unique patients</th><th className="px-4 py-3">Visits</th><th className="px-4 py-3">Patients with later visit</th><th className="px-4 py-3">Observed return share</th></tr></thead><tbody className="divide-y divide-slate-200">{report.transportationReturnStats.map((mode) => <tr key={mode.label} onClick={() => showRows(`Transportation return data: ${mode.label}`, mode.rows, "Transportation")} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.currentTarget.click(); } }} className="cursor-pointer hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"><td data-label="Transportation reported" className="px-4 py-3 font-semibold text-slate-900">{mode.label}</td><td data-label="Visit share" className="px-4 py-3">{percent(mode.visits, report.rows.length)}</td><td data-label="Unique patients" className="px-4 py-3">{mode.patients}</td><td data-label="Visits" className="px-4 py-3">{mode.visits}</td><td data-label="Patients with later visit" className="px-4 py-3">{mode.returnedPatients}</td><td data-label="Observed return share" className="px-4 py-3 font-semibold text-blue-700">{mode.rate}</td></tr>)}</tbody></table>
             </div>
-            <p className="mt-2 text-xs text-slate-500">Unique-patient columns should not be summed across modes. Return likelihood is observational and does not establish causation.</p>
+            <p className="mt-2 text-xs text-slate-500">Unique-patient columns should not be summed across modes. Observed return share is observational and does not establish causation.</p>
           </div>
         </section>}
         {study === "times" && <section aria-label="Visit times">
@@ -168,11 +180,6 @@ export default function ResearchView({ patients = [], isResearchOwner = false, l
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-200 p-4">
-            <h3 className="font-semibold text-slate-900">Language and average visit time</h3>
-            <p className="mt-1 text-xs text-slate-500">General clinic only: undergrad complete → visit completion.</p>
-            <div className="mt-3 space-y-2">{!report.languageStats.length && <p className="text-sm text-slate-500">No general-clinic visits in this date range.</p>}{report.languageStats.map(([label, count, avgMinutes]) => <button type="button" key={label} onClick={() => showTiming(`${label} general-clinic visit times`, report.rows.filter((row) => row.language === label), "undergradCompletedAt")} className="grid w-full grid-cols-1 gap-1 rounded-lg px-1 py-2 text-left text-sm hover:bg-blue-50 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:gap-3"><span className="break-words text-slate-600">{label}</span><span className="font-semibold text-slate-900">{count} <span className="font-normal text-slate-400">({percent(count, report.rows.length)})</span></span><span className="font-semibold text-blue-700 sm:min-w-20 sm:text-right">{avgMinutes === "—" ? "—" : `${avgMinutes} min avg`}</span></button>)}</div>
-          </div>
 </div>        <div className="mt-6 min-w-0">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Clinic Flow Analytics</h2>

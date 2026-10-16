@@ -116,3 +116,13 @@ test("Women's Health Day is separate across visits, refills, return history, and
   assert.equal(event.refillAnalyticsRows.length, 1);
   assert.equal(event.papEligibleRows.length, 1);
 });
+
+test('blank research responses use the same category in summaries and source rows', () => {
+  const result = report([visit('g1', '2026-02-01', { transportation: '   ', papStatus: ' ', mammogramStatus: '\t' })], { sex: 'Female', dob: '1970-01-01' });
+  assert.equal(result.rows[0].transportation, 'Not recorded');
+  assert.equal(result.rows[0].pap, 'Not recorded');
+  assert.equal(result.rows[0].mammogram, 'Not recorded');
+  assert.deepEqual(result.transportation, [['Not recorded', 1]]);
+  assert.deepEqual(result.pap, [['Not recorded', 1]]);
+  assert.deepEqual(result.mammogram, [['Not recorded', 1]]);
+});

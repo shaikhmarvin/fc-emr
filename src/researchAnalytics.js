@@ -148,12 +148,12 @@ export function buildResearchReport(patients, startDate, endDate, clinicEvent = 
   patients = patientsForClinicEvent(patients, clinicEvent);
   const chronicByPatient = new Map();
   patients.forEach((patient) => {
-    const encounters = (patient.encounters || []).filter((encounter) => isGeneralClinicEncounter(encounter) && encounter.status !== "cancelled");
+    const encounters = (patient.encounters || []).filter((encounter) => isGeneralClinicEncounter(encounter) && encounter.status !== "cancelled" && normalizeDate(encounter.clinicDate) && (!endDate || normalizeDate(encounter.clinicDate) <= endDate));
     const htnEncounter = encounters.find((encounter) => isPositive(intakeValue(encounter, "htn")));
     const dmEncounter = encounters.find((encounter) => isPositive(intakeValue(encounter, "dm")));
     chronicByPatient.set(String(patient.id), {
-      htn: patientHasPriorDiagnosis(patient, "htn"),
-      dm: patientHasPriorDiagnosis(patient, "dm"),
+      htn: patientHasPriorDiagnosis({ ...patient, encounters }, "htn"),
+      dm: patientHasPriorDiagnosis({ ...patient, encounters }, "dm"),
       htnDate: normalizeDate(htnEncounter?.clinicDate),
       dmDate: normalizeDate(dmEncounter?.clinicDate),
       htnSource: htnEncounter ? "General-clinic intake" : "Patient chronic-condition profile",
@@ -182,9 +182,9 @@ export function buildResearchReport(patients, startDate, endDate, clinicEvent = 
       if (encounter.status === "cancelled") return;
       const chronic = chronicByPatient.get(String(patient.id)) || { htn: false, dm: false };
       const language = isPositive(intakeValue(encounter, "spanishSpeaking")) ? "Spanish" : "English / not marked Spanish";
-      const transportation = String(intakeValue(encounter, "transportation") || "Not recorded").trim();
-      const pap = String(intakeValue(encounter, "papStatus") || "Not recorded").trim();
-      const mammogram = String(intakeValue(encounter, "mammogramStatus", "mammogramPapSmear") || "Not recorded").trim();
+      const transportation = String(intakeValue(encounter, "transportation") || "").trim() || "Not recorded";
+      const pap = String(intakeValue(encounter, "papStatus") || "").trim() || "Not recorded";
+      const mammogram = String(intakeValue(encounter, "mammogramStatus", "mammogramPapSmear") || "").trim() || "Not recorded";
       rows.push({
         patientId: String(patient.id), patientName, encounter, chronic, language, transportation, pap, mammogram, date, visitAge, femaleEligible, papEligible, mammogramEligible,
         returning: allEncounters.some((prior) => isGeneralClinicEncounter(prior) && prior.status !== "cancelled" && normalizeDate(prior.clinicDate) && normalizeDate(prior.clinicDate) < date),
