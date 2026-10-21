@@ -1,3 +1,4 @@
+import { isOphthoEncounter as isOphthalmologyEncounter } from "./utils/ophthalmology.js";
 import { intakeDemographics } from "./utils/patientDemographics.js";
 import { clearWomensHealthTracker } from "./api/programs.js";
 import { clinicEventForDate, womensHealthChiefComplaint } from "./utils/clinicEvents.js";
@@ -1438,11 +1439,13 @@ export default function App() {
   }
 
   function canUpperLevelSignSoap(role, encounter) {
+    if (isOphthalmologyEncounter(encounter)) return false;
     if (role !== "upper_level") return false;
     return encounter?.soapStatus === "awaiting_upper";
   }
 
   function canSubmitSoapForUpperLevel(role, encounter) {
+    if (isOphthalmologyEncounter(encounter)) return false;
     if (!encounter) return false;
     return (
       (role === "student" || role === "leadership") &&
@@ -1451,6 +1454,7 @@ export default function App() {
   }
 
   function canSubmitSoapForAttending(role, encounter) {
+    if (isOphthalmologyEncounter(encounter)) return false;
     if (!encounter) return false;
 
     const isDraft = encounter.soapStatus === "draft" || !encounter.soapStatus;
@@ -1463,6 +1467,7 @@ export default function App() {
   }
 
   function canAttendingSignSoap(role, encounter) {
+    if (isOphthalmologyEncounter(encounter)) return false;
     if (!encounter) return false;
 
     if (role !== "attending" || !!encounter.attendingSignedAt) return false;
@@ -1471,6 +1476,7 @@ export default function App() {
   }
 
   function canUseAttendingPin(role, encounter) {
+    if (isOphthalmologyEncounter(encounter)) return false;
     if (!encounter || !!encounter.attendingSignedAt) return false;
     if (!["student", "upper_level", "leadership"].includes(role)) return false;
     return encounter.soapStatus === "awaiting_attending";
@@ -1495,7 +1501,7 @@ export default function App() {
     if (!source) return [];
 
     const isOphthoEncounter =
-      encounter?.specialtyType === "ophthalmology";
+      isOphthalmologyEncounter(encounter);
 
     if (isOphthoEncounter) {
       const ophtho = {
@@ -4881,6 +4887,7 @@ export default function App() {
     selectedEncounter
   );
   const canReopenSoap =
+    !isOphthalmologyEncounter(selectedEncounter) &&
     ["attending", "leadership"].includes(userRole) &&
     selectedEncounter?.soapStatus === "signed";
   useEffect(() => {
@@ -5676,6 +5683,7 @@ export default function App() {
   }, [currentUserProfile, userRole]);
 
   const canUseOphthoQueueTools = currentSpecialtyAccess.includes("Ophthalmology");
+  const [ophthoClinicMode, setOphthoClinicMode] = useState("off_day");
   const specialtyAlertsRef = useRef({ scope: "", shown: new Set() });
   useEffect(() => {
     if (!session?.user?.id) return;
@@ -5686,15 +5694,15 @@ export default function App() {
     let acknowledged;
     try { acknowledged = new Set(JSON.parse(localStorage.getItem(storageKey) || "[]")); }
     catch { acknowledged = new Set(); }
-    const arrivals = specialtyCheckIns(allEncounterRows, clinicDate, userRole, currentSpecialtyAccess, acknowledged);
+    const arrivals = specialtyCheckIns(allEncounterRows, clinicDate, userRole, currentSpecialtyAccess, acknowledged, programEntries);
     for (const { patient, encounter } of arrivals) {
-      const program = specialtyProgram(encounter);
+      const program = specialtyProgram(encounter) || "Ophthalmology";
       const key = encounter.id + ":" + program;
       if (specialtyAlertsRef.current.shown.has(key)) continue;
       specialtyAlertsRef.current.shown.add(key);
       showToast({
         title: program + " check-in",
-        message: getFullPatientName(patient) + " has checked in for " + program + ".",
+        message: getFullPatientName(patient) + " has checked in for " + program + (isGeneralClinicEncounter(encounter) || encounter.visitType === "both" || encounter.dualVisit || patient.encounters?.some(other => other.id !== encounter.id && other.clinicDate === encounter.clinicDate && isGeneralClinicEncounter(other)) ? " + general clinic." : " only."),
         duration: 0,
         actionLabel: "Open Specialty Queue",
         onClick: () => { setSpecialtyQueueDate(clinicDate); setActiveView("specialty-queue"); },
@@ -5707,7 +5715,7 @@ export default function App() {
         },
       });
     }
-  }, [allEncounterRows, session?.user?.id, userRole, currentSpecialtyAccess]);
+  }, [allEncounterRows, session?.user?.id, userRole, currentSpecialtyAccess, programEntries]);
   const canUseWholeClinicQueueTools = canUseOphthoQueueTools || userRole === "social_work";
 
   const canAccessPrograms = isLeadershipView || currentSpecialtyAccess.length > 0;
@@ -7966,15 +7974,17 @@ export default function App() {
     }
   }
 
-  async function startGroupNoteEncounter(noteType) {
-    if (!selectedPatient) return;
-    const allowed =
+  async function startGroupNoteEncounter(noteType, targetPatient = selectedPatient) {
+    if (!targetPatient) return;
+    const allowed = (noteType === "ophthalmology" && canUseOphthoQueueTools) ||
       (noteType === "physical_therapy" &&
         (userRole === "physical_therapy" ||
           currentSpecialtyAccess.includes("Physical Therapy")));
     if (!allowed) return;
 
-    const label = "Physical Therapy";
+    const label = noteType === "ophthalmology" ? "Ophthalmology" : "Physical Therapy";
+    const existing = targetPatient.encounters?.find(encounter => encounter.clinicDate === formatClinicDate() && (encounter.noteType === noteType || encounter.specialtyType === noteType) && encounter.status !== "cancelled");
+    if (existing) { openPatientChart(targetPatient.id, existing.id); return; }
     const newEncounter = {
       clinicDate: formatClinicDate(),
       createdAt: new Date().toISOString(),
@@ -7992,7 +8002,7 @@ export default function App() {
     };
 
     try {
-      const savedEncounter = await createEncounterInSupabase(selectedPatient.id, newEncounter);
+      const savedEncounter = await createEncounterInSupabase(targetPatient.id, newEncounter);
       const hydratedEncounter = {
         ...newEncounter,
         id: savedEncounter.id,
@@ -8001,11 +8011,13 @@ export default function App() {
         status: mapDbStatusToUi(savedEncounter.status),
       };
       setPatients((prev) => prev.map((patient) =>
-        patient.id === selectedPatient.id
+        patient.id === targetPatient.id
           ? { ...patient, encounters: [hydratedEncounter, ...patient.encounters] }
           : patient
       ));
+      setSelectedPatientId(targetPatient.id);
       setSelectedEncounterId(savedEncounter.id);
+      setActiveView("chart");
       showToast({ title: `${label} note started`, message: "This is a separate discipline-specific encounter.", tone: "success" });
     } catch (error) {
       console.error(`Failed to start ${label} note:`, error);
@@ -9974,10 +9986,17 @@ async function markSeenBySocialWork(encounterId) {
     }
   }
 
-  async function saveSoapNote(showConfirmation = true) {
+  async function saveSoapNote(showConfirmation = true, submitFinal = false) {
     if (!selectedPatient || !selectedEncounter || !session?.user?.id || !userRole) return;
 
-    const currentSoapStatus = selectedEncounter.soapStatus || "draft";
+    const isOphtho = selectedEncounter.noteType === "ophthalmology" || selectedEncounter.specialtyType === "ophthalmology";
+    if (isOphtho && (!canUseOphthoQueueTools || ["completed", "signed"].includes(selectedEncounter.soapStatus))) return;
+    if (submitFinal && (!isOphtho || soapBusy || soapAutosaveInFlightRef.current)) return;
+    if (submitFinal) {
+      const missing = getMissingSoapFields(soapDraft);
+      if (missing.length) { showSoapMessage("Complete before submitting: " + missing.join(", ")); return; }
+    }
+    const currentSoapStatus = submitFinal ? "completed" : selectedEncounter.soapStatus || "draft";
 
     const authorId = showConfirmation
       ? session.user.id
@@ -9988,7 +10007,7 @@ async function markSeenBySocialWork(encounterId) {
       : (selectedEncounter.soapAuthorRole || userRole);
 
     const isOphthoEncounter =
-      selectedEncounter?.specialtyType === "ophthalmology";
+      isOphthalmologyEncounter(selectedEncounter);
 
     const ophtho = {
       ...EMPTY_OPHTHO_NOTE,
@@ -10026,7 +10045,7 @@ async function markSeenBySocialWork(encounterId) {
         setSoapUiMessage("Saving...");
       }
 
-      await updateEncounterInSupabase(selectedEncounter.id, {
+      const saved = await updateEncounterInSupabase(selectedEncounter.id, {
         soapSubjective: soapSubjectiveToSave,
         soapObjective: soapObjectiveToSave,
         soapAssessment: soapAssessmentToSave,
@@ -10036,7 +10055,7 @@ async function markSeenBySocialWork(encounterId) {
         soapAuthorRole: authorRole,
         soapStatus: currentSoapStatus,
         ophthalmologyNote: isOphthoEncounter ? ophtho : null,
-      });
+      }, isOphtho ? { expectedWorkflowVersion: selectedEncounter.workflowVersion ?? 0, expectedSoapStatus: selectedEncounter.soapStatus || "draft" } : {});
 
       setPatients((prev) =>
         prev.map((patient) =>
@@ -10047,6 +10066,7 @@ async function markSeenBySocialWork(encounterId) {
                 encounter.id === selectedEncounter.id
                   ? {
                     ...encounter,
+                    workflowVersion: saved.workflow_version ?? encounter.workflowVersion,
                     soapSubjective: soapSubjectiveToSave,
                     soapObjective: soapObjectiveToSave,
                     soapAssessment: soapAssessmentToSave,
@@ -10066,9 +10086,10 @@ async function markSeenBySocialWork(encounterId) {
       );
 
       if (showConfirmation) {
-        showSoapMessage("SOAP note saved.");
+        showSoapMessage(submitFinal ? "Ophthalmology note submitted as final." : "SOAP note saved.");
       }
     } catch (error) {
+      if (error.code === "WORKFLOW_CONFLICT") await refreshClinicData?.();
       console.error("Failed to save SOAP note:", error);
       showSoapMessage(`Failed to save SOAP note: ${error.message}`);
     } finally {
@@ -10079,10 +10100,10 @@ async function markSeenBySocialWork(encounterId) {
   useEffect(() => {
     if (
       activeView !== "chart" ||
-      !medicalSoapEnabled ||
+      (!medicalSoapEnabled && selectedEncounter?.specialtyType !== "ophthalmology" && selectedEncounter?.noteType !== "ophthalmology") ||
       !selectedEncounter?.id ||
       soapDraft.encounterId !== selectedEncounter.id ||
-      selectedEncounter.soapStatus === "signed" ||
+      ["signed", "completed"].includes(selectedEncounter.soapStatus) ||
       ["social_work", "physical_therapy"].includes(selectedEncounter.noteType) ||
       soapBusy ||
       soapAutosaveInFlightRef.current
@@ -11732,6 +11753,9 @@ async function markSeenBySocialWork(encounterId) {
               onDeleteRefillRequest={handleDeleteRefillRequest}
               programEntries={programEntries}
               specialtyAccess={currentSpecialtyAccess}
+              onStartOphthoVisit={(patient) => startGroupNoteEncounter("ophthalmology", patient)}
+              ophthoClinicMode={ophthoClinicMode}
+              setOphthoClinicMode={setOphthoClinicMode}
               papEntries={papEntries}
 
             />
@@ -11739,6 +11763,7 @@ async function markSeenBySocialWork(encounterId) {
 
           {activeView === "specialty-queue" && canAccessSpecialtyQueue && (
             <SpecialtyQueueView
+              allowedSpecialties={userRole === "student" ? currentSpecialtyAccess : null}
               programEntries={programEntries}
               specialtyEncounterRows={
                 userRole === "physical_therapy"
@@ -11896,6 +11921,8 @@ async function markSeenBySocialWork(encounterId) {
               saveSendOutLabs={saveSendOutLabs}
               editingVitalsIndex={editingVitalsIndex}
               startEditVitals={startEditVitals}
+              canUseOphtho={canUseOphthoQueueTools}
+              onSubmitOphthoFinal={() => saveSoapNote(true, true)}
               saveSoapNote={saveSoapNote}
               soapAutoSaveEnabled={true}
               updateEncounterField={updateEncounterField}
@@ -11999,6 +12026,9 @@ async function markSeenBySocialWork(encounterId) {
                 patients={patients}
                 selectedClinicDate={selectedClinicDate}
                 isLeadershipView={isLeadershipView}
+                onStartOphthoVisit={(patient) => startGroupNoteEncounter("ophthalmology", patient)}
+                ophthoClinicMode={ophthoClinicMode}
+                setOphthoClinicMode={setOphthoClinicMode}
                 specialtyAccess={currentSpecialtyAccess}
                 onProgramSettingsChange={setProgramSettings}
                 womensHealthSettings={womensHealthSettings}

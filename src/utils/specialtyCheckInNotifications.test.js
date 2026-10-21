@@ -17,3 +17,12 @@ test('old, cancelled, finished, and non-specialty visits do not alert', () => {
   const rows = [row('a', 'pt', { clinicDate: '2026-10-02' }), row('b', 'pt', { status: 'cancelled' }), row('c', 'pt', { status: 'done' }), row('d', 'pt', { visitType: 'general' })];
   assert.equal(specialtyCheckIns(rows, date, 'physical_therapy', [], new Set()).length, 0);
 });
+
+test('ophthalmology alerts include referral patients checked in for general care and exclude final notes', () => {
+  const entries = [{ patientId:'p', programType:'Ophthalmology', status:'Scheduled', specialtyDate:date }];
+  const listed = {...row('general', '', {visitType:'general'}), patient:{id:'p'}};
+  assert.equal(specialtyCheckIns([listed], date, 'student', ['Ophthalmology'], new Set(), entries).length, 1);
+  assert.equal(specialtyCheckIns([listed], date, 'student', [], new Set(), entries).length, 0);
+  assert.equal(specialtyCheckIns([listed], date, 'student', ['Ophthalmology'], new Set(['general:Ophthalmology']), entries).length, 0);
+  assert.equal(specialtyCheckIns([row('final', 'ophthalmology', {soapStatus:'completed'})], date, 'student', ['Ophthalmology'], new Set()).length, 0);
+});

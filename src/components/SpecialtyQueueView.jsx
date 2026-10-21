@@ -272,15 +272,19 @@ export default function SpecialtyQueueView({
     isLeadershipView,
     dualVisitBadge,
     lockedSpecialty = "",
+    allowedSpecialties = null,
 
 }) {
 
-    const specialtyEncounterRows = useMemo(() => (encounterRows || []).map((row) => ({
+    const allowedKeys = allowedSpecialties?.map(label => ({ "Physical Therapy": "pt", "Dermatology": "dermatology", "Ophthalmology": "ophthalmology", "Mental Health": "mental_health", "Counseling": "counseling", "Addiction Medicine": "addiction" }[label])).filter(Boolean);
+    const restrictedSpecialty = lockedSpecialty || (allowedKeys?.length === 1 ? allowedKeys[0] : "");
+    const specialtyEncounterRows = useMemo(() => (encounterRows || []).filter(row => !allowedSpecialties || allowedSpecialties.includes(getSpecialtyLabel(row.encounter.specialtyType))).map((row) => ({
         ...row,
         encounter: { ...row.encounter, trackerReason: row.encounter.specialtyTrackerReason ?? (matchingSpecialtyTracker(programEntries, row.patient.id, row.encounter)?.reason || "") },
-    })), [encounterRows, programEntries]);
+    })), [encounterRows, programEntries, allowedSpecialties]);
 
-    const [selectedSpecialty, setSelectedSpecialty] = useState(lockedSpecialty);
+    const [specialtySelection, setSelectedSpecialty] = useState("");
+    const selectedSpecialty = restrictedSpecialty || ((!allowedKeys || allowedKeys.includes(specialtySelection)) ? specialtySelection : "");
 
     const [search, setSearch] = useState("");
     const today = new Date().toISOString().slice(0, 10);
@@ -320,7 +324,7 @@ export default function SpecialtyQueueView({
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                     <div>
                         <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">
-                            {lockedSpecialty === "pt" ? "Physical Therapy Queue" : "Specialty Queue"}
+                            {restrictedSpecialty ? `${getSpecialtyLabel(restrictedSpecialty)} Queue` : "Specialty Queue"}
                         </h1>
                         <p className="mt-1 text-sm text-slate-600">
                             {lockedSpecialty === "pt"
@@ -383,7 +387,7 @@ export default function SpecialtyQueueView({
                         { key: "mental_health", label: "Mental Health" },
                         { key: "counseling", label: "Counseling" },
                         { key: "addiction", label: "Addiction Medicine" },
-                    ].map((item) => (
+                    ].filter(item => !allowedKeys || allowedKeys.includes(item.key)).map((item) => (
                         <button
                             key={item.key}
                             onClick={() => setSelectedSpecialty(item.key)}
@@ -398,7 +402,7 @@ export default function SpecialtyQueueView({
             )}
             {!isLeadershipView && selectedSpecialty && (
                 <div className="space-y-4">
-                    {!lockedSpecialty ? <button
+                    {!restrictedSpecialty ? <button
                         onClick={() => setSelectedSpecialty("")}
                         className="text-sm font-medium text-blue-600 hover:underline"
                     >

@@ -1,3 +1,4 @@
+import { ophthoReferral, isOphthoEncounter, matchesOphthoDay } from "../utils/ophthalmology.js";
 import "./ProgramsView.css";
 import { specialtyProgram, specialtyTrackerVisits } from "../utils/specialtyTracker.js";
 import { useEffect, useMemo, useState } from "react";
@@ -90,6 +91,9 @@ export default function ProgramsView({
   selectedClinicDate,
   isLeadershipView,
   specialtyAccess,
+  onStartOphthoVisit,
+  ophthoClinicMode,
+  setOphthoClinicMode,
   onProgramSettingsChange,
   womensHealthSettings,
   onSaveWomensHealthSettings,
@@ -177,7 +181,7 @@ export default function ProgramsView({
 
   const [showAddReferral, setShowAddReferral] = useState(false);
   const [savingReferral, setSavingReferral] = useState(false);
-  const [ophthoClinicMode, setOphthoClinicMode] = useState("off_day");
+
 
 
   const [newEntry, setNewEntry] = useState({
@@ -1427,13 +1431,6 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
     return specialtyType === "ophthalmology" || specialtyType === "ophtho";
   }
 
-  function isLeadershipCompletedEncounter(encounter) {
-    return (
-      encounter?.leadershipIntakeComplete === true ||
-      Boolean(encounter?.leadershipIntakeCompletedAt || encounter?.leadership_intake_completed_at)
-    );
-  }
-
   function getOphthoInterestText(encounter) {
     const intakeData = encounter?.intakeData || encounter?.intake_data || {};
     return encounter?.ophthalmology || intakeData?.ophthalmology || "";
@@ -1450,41 +1447,16 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
   }
 
   function getTodayOphthoRows() {
-    const scheduledPatientIds = new Set();
-    const scheduledByDemographics = new Set();
-
-    (programEntries || []).forEach((entry) => {
-      if (entry.programType !== "Ophthalmology") return;
-      if (entry.status === "Completed" || entry.status === "Declined") return;
-      if (entry.specialtyDate && entry.specialtyDate !== selectedClinicDate) return;
-
-      if (entry.patientId) scheduledPatientIds.add(String(entry.patientId));
-      if (entry.patientName || entry.dob) {
-        scheduledByDemographics.add(`${String(entry.patientName || "").toLowerCase()}|${entry.dob || ""}`);
-      }
-    });
-
     const rows = [];
 
     (patients || []).forEach((patient) => {
       (patient.encounters || []).forEach((encounter) => {
         if (encounter.clinicDate !== selectedClinicDate) return;
-        if (!isLeadershipCompletedEncounter(encounter)) return;
+        if (!matchesOphthoDay(programEntries, patient, encounter, ophthoClinicMode)) return;
 
-        const patientKey = String(patient.id || encounter.patientId || "");
-        const demoKey = `${`${patient.firstName || ""} ${patient.lastName || ""}`.trim().toLowerCase()}|${patient.dob || ""}`;
         const hasOphthoInterest = hasUsefulProgramText(getOphthoInterestText(encounter));
         const diabeticScreening = needsDiabeticEyeScreening(encounter);
-        const scheduledToday =
-          isOphthoSpecialtyEncounter(encounter) ||
-          scheduledPatientIds.has(patientKey) ||
-          scheduledByDemographics.has(demoKey);
-
-        if (ophthoClinicMode === "on_day") {
-          if (!scheduledToday) return;
-        } else if (!hasOphthoInterest && !diabeticScreening) {
-          return;
-        }
+        const scheduledToday = isOphthoSpecialtyEncounter(encounter) || Boolean(ophthoReferral(programEntries, patient, encounter));
 
         rows.push({
           patient,
@@ -1578,7 +1550,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">Ophthalmology Today</h3>
                 <p className="mt-1 text-sm text-slate-600">
-                  Ophtho is now a same-day clinic list, not a running referral tracker.
+                  Same-day eye care, visit reasons, and diabetic screening.
                 </p>
               </div>
 
@@ -1652,7 +1624,9 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                       </div>
                     </div>
 
+                    {normalizedSpecialtyAccess.includes("Ophthalmology") && <button type="button" onClick={() => onStartOphthoVisit?.(patient)} className="mt-3 rounded-lg bg-violet-700 px-3 py-2 text-sm font-semibold text-white">Start Ophtho Visit</button>}
                     <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <ReadOnlyField label="Ophtho Visit Reason" value={ophthoReferral(programEntries, patient, encounter)?.reason || encounter.specialtyTrackerReason || (isOphthoEncounter(encounter) ? encounter.chiefComplaint : "") || "—"} />
                       <ReadOnlyField label="Ophtho Interest" value={getOphthoInterestText(encounter) || "—"} />
                       <ReadOnlyField label="Diabetic Eye Exam Past Year" value={encounter.diabeticEyeExamPastYear || "—"} />
                       <ReadOnlyField label="Chief Complaint" value={encounter.chiefComplaint || "—"} />

@@ -538,7 +538,7 @@ async function buildEncounterPdfDoc({
   doc.text(patientName, margin, y + 2);
   y += 8;
 
-  if (!isSigned) {
+  if (!isSigned && encounter?.noteType !== "ophthalmology" && encounter?.specialtyType !== "ophthalmology") {
     doc.setTextColor(200, 0, 0);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
@@ -573,7 +573,9 @@ async function buildEncounterPdfDoc({
     y = drawSection(doc, "Plan", narrative.plan, y, { margin });
   }
 
-  const signaturesLine = isPhysicalTherapyNote
+  const signaturesLine = encounter?.noteType === "ophthalmology" || encounter?.specialtyType === "ophthalmology"
+    ? `Author: ${normalizeText(soapAuthorName)} | Signature: ____________________  Date: __________`
+    : isPhysicalTherapyNote
     ? `Physical Therapist: ${normalizeText(encounter?.disciplineSignerName || soapAuthorName)} | Electronically signed: ${normalizeText(encounter?.disciplineSignedAt ? new Date(encounter.disciplineSignedAt).toLocaleString() : "Pending")}`
     : isSocialWorkNote
       ? `Completed: ${normalizeText(encounter?.disciplineSignedAt ? new Date(encounter.disciplineSignedAt).toLocaleString() : "Completed")}`

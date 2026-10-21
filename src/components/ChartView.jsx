@@ -390,6 +390,8 @@ export default function ChartView({
   onOpenStickyNotes,
   userRole,
   medicalSoapEnabled,
+  canUseOphtho,
+  onSubmitOphthoFinal,
   canCreatePhysicalTherapyNote,
   onStartGroupNote,
   onSaveGroupNote,
@@ -1014,6 +1016,8 @@ function formatLabDateTime(value) {
 
   function formatSoapStatus(status) {
     switch (status) {
+      case "completed":
+        return { label: "Final", color: "bg-green-100 text-green-800" };
       case "draft":
         return { label: "Draft", color: "bg-slate-200 text-slate-700" };
       case "awaiting_upper":
@@ -1455,7 +1459,8 @@ function formatLabDateTime(value) {
   const importedSendOutLabs = Array.isArray(selectedEncounter?.importedSendOutLabs)
     ? selectedEncounter.importedSendOutLabs
     : [];
-  const isSoapLocked = selectedEncounter?.soapStatus === "signed";
+  const isOphtho = selectedEncounter?.noteType === "ophthalmology" || selectedEncounter?.specialtyType === "ophthalmology";
+  const isSoapLocked = selectedEncounter?.soapStatus === "signed" || (isOphtho && (!canUseOphtho || selectedEncounter?.soapStatus === "completed"));
   const isSupportDataLocked = false;
   const clinicAlert = getClinicAlert(new Date());
   const vitalsHistory = selectedEncounter?.vitalsHistory || [];
@@ -1861,6 +1866,7 @@ function getSelectedRoomOptionClass() {
           </button>
         ) : null}
 
+        {canUseOphtho && <button type="button" onClick={() => onStartGroupNote?.("ophthalmology")} className="rounded-lg bg-violet-600 px-4 py-2 text-white">Start Ophtho Visit</button>}
         {canCreatePhysicalTherapyNote ? (
           <button
             type="button"
@@ -3602,7 +3608,7 @@ function getSelectedRoomOptionClass() {
 
 
 
-          {medicalSoapEnabled ? (
+          {(isOphtho ? canUseOphtho : medicalSoapEnabled) ? (
             <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -3641,12 +3647,13 @@ function getSelectedRoomOptionClass() {
               <div className="mt-5 flex flex-wrap gap-2">
                 <button type="button" onClick={handleExportEncounterPdf} className="rounded-lg border border-slate-400 px-4 py-2 font-semibold text-slate-700">Export PDF</button>
                 {!isSoapLocked ? <button type="button" onClick={saveSoapNote} disabled={soapBusy} className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white disabled:opacity-50">Save Draft</button> : null}
-                {canSubmitForUpperLevel ? <button type="button" onClick={submitSoapForUpperLevel} disabled={soapBusy} className="rounded-lg bg-violet-600 px-4 py-2 font-semibold text-white disabled:opacity-50">Submit to Upper Level</button> : null}
-                {canSubmitForAttending ? <button type="button" onClick={submitSoapForAttending} disabled={soapBusy} className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white disabled:opacity-50">Submit to Attending</button> : null}
-                {canSignAsUpperLevel ? <button type="button" onClick={signSoapAsUpperLevel} disabled={soapBusy} className="rounded-lg bg-purple-700 px-4 py-2 font-semibold text-white disabled:opacity-50">Upper-Level Sign</button> : null}
-                {canSignAsAttending ? <button type="button" onClick={signSoapAsAttending} disabled={soapBusy} className="rounded-lg bg-emerald-700 px-4 py-2 font-semibold text-white disabled:opacity-50">Attending Sign</button> : null}
-                {canSignWithAttendingPin && activeAttendings?.length ? <button type="button" onClick={() => setShowSignModal(true)} disabled={soapBusy} className="rounded-lg border border-emerald-700 px-4 py-2 font-semibold text-emerald-800 disabled:opacity-50">Attending Sign with PIN</button> : null}
-                {canReopenSoap ? <button type="button" onClick={reopenSoapNote} disabled={soapBusy} className="rounded-lg border border-amber-500 px-4 py-2 font-semibold text-amber-800 disabled:opacity-50">Reopen Note</button> : null}
+                {isOphtho && !isSoapLocked && <button type="button" onClick={onSubmitOphthoFinal} disabled={soapBusy} className="rounded-lg bg-emerald-700 px-4 py-2 font-semibold text-white disabled:opacity-50">Submit Final</button>}
+                {!isOphtho && canSubmitForUpperLevel ? <button type="button" onClick={submitSoapForUpperLevel} disabled={soapBusy} className="rounded-lg bg-violet-600 px-4 py-2 font-semibold text-white disabled:opacity-50">Submit to Upper Level</button> : null}
+                {!isOphtho && canSubmitForAttending ? <button type="button" onClick={submitSoapForAttending} disabled={soapBusy} className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white disabled:opacity-50">Submit to Attending</button> : null}
+                {!isOphtho && canSignAsUpperLevel ? <button type="button" onClick={signSoapAsUpperLevel} disabled={soapBusy} className="rounded-lg bg-purple-700 px-4 py-2 font-semibold text-white disabled:opacity-50">Upper-Level Sign</button> : null}
+                {!isOphtho && canSignAsAttending ? <button type="button" onClick={signSoapAsAttending} disabled={soapBusy} className="rounded-lg bg-emerald-700 px-4 py-2 font-semibold text-white disabled:opacity-50">Attending Sign</button> : null}
+                {!isOphtho && canSignWithAttendingPin && activeAttendings?.length ? <button type="button" onClick={() => setShowSignModal(true)} disabled={soapBusy} className="rounded-lg border border-emerald-700 px-4 py-2 font-semibold text-emerald-800 disabled:opacity-50">Attending Sign with PIN</button> : null}
+                {!isOphtho && canReopenSoap ? <button type="button" onClick={reopenSoapNote} disabled={soapBusy} className="rounded-lg border border-amber-500 px-4 py-2 font-semibold text-amber-800 disabled:opacity-50">Reopen Note</button> : null}
               </div>
             </div>
           ) : (

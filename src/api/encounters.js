@@ -429,7 +429,7 @@ export async function updateEncounterInSupabase(encounterId, updates, conditions
     }
 
     if (
-      ["awaiting_upper", "awaiting_attending", "signed"].includes(
+      ["awaiting_upper", "awaiting_attending", "signed", "completed"].includes(
         updates.soapStatus
       ) &&
       updates.soapCompletedAt === undefined

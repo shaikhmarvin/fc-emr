@@ -1,3 +1,4 @@
+import { ophthoReferral, matchesOphthoDay } from "../utils/ophthalmology.js";
 import BreastExamBadge from "./BreastExamBadge";
 import { womensHealthQueuePreference } from "../utils/clinicEvents.js";
 import { useEffect, useState } from "react";
@@ -46,6 +47,9 @@ export default function QueueView({
   onDeleteRefillRequest,
   programEntries,
   specialtyAccess,
+  onStartOphthoVisit,
+  ophthoClinicMode,
+  setOphthoClinicMode,
   papEntries,
 }) {
 
@@ -234,20 +238,17 @@ const canMarkSeenBySocialWork =
   }
 
   function isPatientOnOphthoList(patient, encounter) {
-    return (programEntries || []).some((entry) => {
-      if (entry.programType !== "Ophthalmology") return false;
-      if (["Completed", "Declined"].includes(entry.status)) return false;
+    return Boolean(ophthoReferral(programEntries, patient, encounter));
+  }
 
-      const samePatientId =
-        entry.patientId && patient?.id && String(entry.patientId) === String(patient.id);
-      const samePatientDemographics =
-        entry.patientName &&
-        patient &&
-        normalizeName(entry.patientName) === normalizeName(getFullQueuePatientName(patient)) &&
-        (!entry.dob || !patient.dob || entry.dob === patient.dob);
-
-      return samePatientId || samePatientDemographics;
-    });
+  function ophthoDetails(patient, encounter) {
+    if (!canUseOphthoQueueTools) return null;
+    const entry = ophthoReferral(programEntries, patient, encounter);
+    const reason = entry?.reason || (encounter.specialtyType === "ophthalmology" ? encounter.specialtyTrackerReason || encounter.chiefComplaint : "");
+    return <span className="inline-flex flex-wrap items-center gap-2">
+      <button type="button" onClick={() => onStartOphthoVisit?.(patient)} className="rounded-lg bg-violet-700 px-3 py-2 text-xs font-semibold text-white">Start Ophtho Visit</button>
+      {reason && <span className="rounded-lg bg-violet-50 px-2 py-1 text-xs text-violet-900">Ophtho reason: {reason}</span>}
+    </span>;
   }
 
   function getOphthoPriorityScore(row) {
@@ -1071,6 +1072,7 @@ const canMarkSeenBySocialWork =
       if (isRefillOnlyEncounter(encounter)) return false;
       if (isSpecialtyOnlyEncounter(encounter) && !canUseWholeClinicQueueTools) return false;
 
+      if (canUseOphthoQueueTools && !matchesOphthoDay(programEntries, patient, encounter, ophthoClinicMode)) return false;
       return rowMatchesQueueSearch(patient, encounter);
     }
   );
@@ -1418,7 +1420,7 @@ const canMarkSeenBySocialWork =
               {userRole === "attending"
                 ? "Patients awaiting attending signature."
                 : canUseOphthoQueueTools
-                  ? "All clinic patients for the selected date except refill-only, including completed general visits. Use the checkbox to prioritize DM / Ophtho list."
+                  ? "On Day shows ophthalmology visits and listed patients. Off Day shows patients ready for eye screening after intake. These controls affect your ophthalmology view only."
                   : userRole === "leadership"
                     ? "General clinic patients for the selected date."
                   : userRole === "social_work"
@@ -1472,6 +1474,7 @@ const canMarkSeenBySocialWork =
               </>
             )}
 
+            {canUseOphthoQueueTools && <div className="flex items-center gap-2"><span className="text-sm font-semibold">Ophtho:</span>{["on_day", "off_day"].map(mode => <button key={mode} type="button" aria-pressed={ophthoClinicMode === mode} onClick={() => setOphthoClinicMode(mode)} className={`rounded-lg border px-3 py-2 text-sm ${ophthoClinicMode === mode ? "bg-violet-700 text-white" : "bg-white text-slate-700"}`}>{mode === "on_day" ? "On Day" : "Off Day"}</button>)}</div>}
             {canUseOphthoQueueTools && (
               <label className="flex items-center gap-2 rounded-lg border border-orange-100 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-800">
                 <input
@@ -1707,6 +1710,7 @@ const canMarkSeenBySocialWork =
                   {spanishBadge(encounter)}
                   {htnBadge?.(encounter)}
                   {diabetesBadge?.(encounter)}
+                  {ophthoDetails(patient, encounter)}
                   {canUseOphthoQueueTools && isPatientOnOphthoList(patient, encounter) && (
                     <span className="rounded-full bg-orange-100 px-2 py-1 text-xs font-semibold text-orange-800">
                       Ophtho List
@@ -2070,7 +2074,8 @@ const canMarkSeenBySocialWork =
                     {spanishBadge(encounter)}
                     {htnBadge?.(encounter)}
                     {diabetesBadge?.(encounter)}
-                    {canUseOphthoQueueTools && isPatientOnOphthoList(patient, encounter) && (
+                    {ophthoDetails(patient, encounter)}
+                  {canUseOphthoQueueTools && isPatientOnOphthoList(patient, encounter) && (
                       <span className="rounded-full bg-orange-100 px-2 py-1 text-xs font-semibold text-orange-800">
                         Ophtho List
                       </span>
