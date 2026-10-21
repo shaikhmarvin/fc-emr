@@ -1,9 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ophthoReferral, matchesOphthoDay, isOphthoEncounter, existingOphthoVisit } from './ophthalmology.js';
+import { ophthoReferral, matchesOphthoDay, isOphthoEncounter, existingOphthoVisit, canReopenOphthoNote } from './ophthalmology.js';
 const patient = {id: 'p', firstName: 'Test', lastName: 'Patient', dob: '2000-01-01'};
 const encounter = {clinicDate: '2026-10-20', visitType: 'general'};
 const referral = {id: 'r', patientId: 'p', programType: 'Ophthalmology', reason: 'Blurry vision', status: 'Scheduled', specialtyDate: '2026-10-20'};
+test('only leadership can reopen final ophthalmology notes', () => {
+  const note = {noteType:'ophthalmology', soapStatus:'completed'};
+  assert.equal(canReopenOphthoNote('leadership', note), true);
+  assert.equal(canReopenOphthoNote('leadership', {...note, soapStatus:'signed'}), true);
+  for (const role of ['attending', 'ophthalmology', 'undergraduate', 'physical_therapy', '']) {
+    assert.equal(canReopenOphthoNote(role, note), false);
+  }
+  assert.equal(canReopenOphthoNote('leadership', {...note, soapStatus:'draft'}), false);
+  assert.equal(canReopenOphthoNote('leadership', {noteType:'medical', soapStatus:'signed'}), false);
+  assert.equal(canReopenOphthoNote('leadership', null), false);
+});
 test('ophtho reason uses the patient and clinic date, with scheduled referrals first', () => {
   const entries = [{...referral, patientId:'other'}, {...referral, specialtyDate:'2026-10-21'}, {...referral, specialtyDate:null, reason:'Old'}, referral];
   assert.equal(ophthoReferral(entries, patient, encounter)?.reason, 'Blurry vision');

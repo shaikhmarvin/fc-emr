@@ -4,6 +4,11 @@ export function isOphthoEncounter(encounter) {
   return encounter?.noteType === 'ophthalmology' || ['ophthalmology', 'ophtho', 'optho'].includes(specialty);
 }
 
+export function canReopenOphthoNote(role, encounter) {
+  return role === 'leadership' && isOphthoEncounter(encounter) &&
+    ['completed', 'signed'].includes(encounter?.soapStatus);
+}
+
 export function ophthoReferral(entries, patient, encounter) {
   const name = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
   return (entries || []).filter(entry => entry.programType === 'Ophthalmology' &&

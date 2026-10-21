@@ -1,4 +1,4 @@
-import { isOphthoEncounter as isOphthalmologyEncounter, existingOphthoVisit } from "./utils/ophthalmology.js";
+import { isOphthoEncounter as isOphthalmologyEncounter, existingOphthoVisit, canReopenOphthoNote } from "./utils/ophthalmology.js";
 import { intakeDemographics } from "./utils/patientDemographics.js";
 import { clearWomensHealthTracker } from "./api/programs.js";
 import { clinicEventForDate, womensHealthChiefComplaint } from "./utils/clinicEvents.js";
@@ -4887,7 +4887,9 @@ export default function App() {
     selectedEncounter
   );
   const canReopenSoap =
-    !isOphthalmologyEncounter(selectedEncounter) &&
+    isOphthalmologyEncounter(selectedEncounter)
+      ? canReopenOphthoNote(userRole, selectedEncounter)
+      :
     ["attending", "leadership"].includes(userRole) &&
     selectedEncounter?.soapStatus === "signed";
   useEffect(() => {
@@ -9995,6 +9997,9 @@ async function markSeenBySocialWork(encounterId) {
     if (submitFinal) {
       const missing = getMissingSoapFields(soapDraft);
       if (missing.length) { showSoapMessage("Complete before submitting: " + missing.join(", ")); return; }
+      if (!window.confirm(
+        "Submit this ophthalmology note as final?\n\nNo changes to this note can be made after submission unless leadership reopens it with a documented reason. The original submitted version will be preserved. Please review the note before continuing."
+      )) return;
     }
     const currentSoapStatus = submitFinal ? "completed" : selectedEncounter.soapStatus || "draft";
 
@@ -10708,7 +10713,34 @@ async function markSeenBySocialWork(encounterId) {
 
   async function reopenSoapNote() {
     if (!selectedPatient || !selectedEncounter) return;
-    if (!canReopenSoap) return;
+    if (!canReopenSoap || soapBusy) return;
+
+    if (isOphthalmologyEncounter(selectedEncounter)) {
+      const reason = window.prompt("Why does this ophthalmology note need to be reopened? A reason is required. The submitted version and this action will be preserved in the audit trail.");
+      if (reason === null) return;
+      if (!reason.trim()) { showSoapMessage("A reason is required to reopen the note."); return; }
+      try {
+        setSoapBusy(true);
+        const { data, error } = await supabase.rpc("reopen_ophthalmology_note", {
+          target_encounter_id: selectedEncounter.id,
+          reopen_reason: reason.trim(),
+          expected_workflow_version: selectedEncounter.workflowVersion ?? 0,
+        });
+        if (error) throw error;
+        setPatients(prev => prev.map(patient => patient.id === selectedPatient.id
+          ? { ...patient, encounters: patient.encounters.map(encounter => encounter.id === selectedEncounter.id
+            ? { ...encounter, soapStatus: "draft", soapCompletedAt: null, workflowVersion: data.workflow_version }
+            : encounter) } : patient));
+        await loadAuditLog();
+        showSoapMessage("Ophthalmology note reopened. The submitted version is preserved in the audit trail.");
+      } catch (error) {
+        showSoapMessage(`Failed to reopen ophthalmology note: ${error.message}`);
+        await refreshClinicData?.();
+      } finally {
+        setSoapBusy(false);
+      }
+      return;
+    }
 
     try {
       setSoapBusy(true);

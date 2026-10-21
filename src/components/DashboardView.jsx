@@ -1,4 +1,5 @@
 import { isWomensHealthEncounter } from "../utils/clinicEvents.js";
+import { isCompletedRecordForExport, RECORD_TYPE_OPTIONS, filterRecordTypes } from "../utils/completedRecords.js";
 import { useState } from "react";
 import PatientSearch from "./PatientSearch";
 import PatientTable from "./PatientTable";
@@ -112,8 +113,22 @@ export default function DashboardView({
   const [finalizeMessage, setFinalizeMessage] = useState("");
 
   const [exportingRecords, setExportingRecords] = useState(false);
+  const [recordOutputMode, setRecordOutputMode] = useState(null);
+  const [selectedRecordTypes, setSelectedRecordTypes] = useState(RECORD_TYPE_OPTIONS.map(option => option.value));
 
-  async function handleExportSignedRecords() {
+  async function handleExportSignedRecords(mode = "download") {
+    if (exportingRecords || !selectedRecordTypes.length) return;
+    // Open during the click so the browser does not block the print tab.
+    const printWindow = mode === "print" ? window.open("", "_blank") : null;
+    if (mode === "print" && !printWindow) {
+      alert("Allow pop-ups for this site to print completed records.");
+      return;
+    }
+    if (printWindow) {
+      printWindow.opener = null;
+      printWindow.document.title = "Preparing completed records";
+      printWindow.document.body.textContent = "Preparing records for printing...";
+    }
     try {
       setExportingRecords(true);
 
@@ -128,21 +143,10 @@ export default function DashboardView({
       };
 
       const signedEncounterRows = allEncounterRows.filter(({ encounter }) => {
-        if (!encounter) return false;
-        const isCompletedPhysicalTherapy =
-          encounter.noteType === "physical_therapy" &&
-          encounter.disciplineNoteStatus === "completed";
-        const isSignedMedical =
-          encounter.soapStatus === "signed" || !!encounter.attendingSignedAt;
-        if (!selectedClinicDate) {
-          return isSignedMedical || isCompletedPhysicalTherapy;
-        }
-        return (
-          encounter.clinicDate === selectedClinicDate &&
-          (isSignedMedical || isCompletedPhysicalTherapy)
-        );
+        return isCompletedRecordForExport(encounter, selectedClinicDate);
       }).map((row) => ({
         ...row,
+        soapAuthorName: profiles.find((profile) => profile.id === row.encounter?.soapAuthorId)?.full_name || row.encounter?.soapAuthorName || "",
         attendingSignatureData: profiles.find((profile) => profile.id === row.encounter?.attendingSignedBy)?.signature_data_url || "",
       }));
 
@@ -173,17 +177,22 @@ export default function DashboardView({
           }))
       );
 
-      const rowsForExport = [...signedEncounterRows, ...completedSocialWorkRows];
+      const rowsForExport = filterRecordTypes([...signedEncounterRows, ...completedSocialWorkRows], selectedRecordTypes);
 
-      const { downloadSignedEncountersZip } = await import("../utils/pdfGenerator");
-      await downloadSignedEncountersZip({
+      const { downloadCompletedRecordsPdf, printCompletedRecordsPdf } = await import("../utils/pdfGenerator");
+      const outputRecords = mode === "print" ? printCompletedRecordsPdf : downloadCompletedRecordsPdf;
+      await outputRecords({
         rows: rowsForExport,
+        clinicDate: selectedClinicDate,
         logoSrc: logo,
         getFullPatientName,
+        printWindow,
       });
+      setRecordOutputMode(null);
     } catch (error) {
+      printWindow?.close();
       console.error("Failed to export signed records:", error);
-      alert(error.message || "Failed to export signed records.");
+      alert(error.message || "Failed to prepare completed records.");
     } finally {
       setExportingRecords(false);
     }
@@ -603,6 +612,29 @@ export default function DashboardView({
   }
   return (
     <div className="space-y-4 p-3 sm:p-4 lg:space-y-6 lg:p-6">
+      {isLeadershipView && recordOutputMode && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3">
+          <div role="dialog" aria-modal="true" aria-labelledby="record-output-title" onKeyDown={event => { if (event.key === "Escape" && !exportingRecords) setRecordOutputMode(null); }} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <h2 id="record-output-title" className="text-xl font-bold text-slate-900">Choose notes to {recordOutputMode === "print" ? "print" : "download"}</h2>
+            <p className="mt-2 text-sm text-slate-600">{selectedClinicDate ? `Clinic date: ${formatDate(selectedClinicDate)}.` : "All clinic dates."} Only completed or final notes are included.</p>
+            <fieldset disabled={exportingRecords} className="mt-4 space-y-3">
+              <legend className="sr-only">Note types</legend>
+              {RECORD_TYPE_OPTIONS.map(option => (
+                <label key={option.value} className="flex items-center gap-3 rounded-lg border border-slate-200 p-3">
+                  <input autoFocus={option.value === "ophthalmology"} type="checkbox" checked={selectedRecordTypes.includes(option.value)} onChange={event => setSelectedRecordTypes(current => event.target.checked ? [...current, option.value] : current.filter(type => type !== option.value))} className="h-4 w-4" />
+                  <span>{option.label}</span>
+                </label>
+              ))}
+              <button type="button" onClick={() => setSelectedRecordTypes(["ophthalmology"])} className="text-sm font-semibold text-violet-700 underline">Ophthalmology only</button>
+            </fieldset>
+            {!selectedRecordTypes.length && <p className="mt-3 text-sm text-amber-800">Choose at least one note type.</p>}
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" disabled={exportingRecords} onClick={() => setRecordOutputMode(null)} className="rounded-lg border border-slate-300 px-4 py-2 disabled:opacity-50">Cancel</button>
+              <button type="button" disabled={exportingRecords || !selectedRecordTypes.length} onClick={() => handleExportSignedRecords(recordOutputMode)} className="rounded-lg bg-slate-700 px-4 py-2 font-semibold text-white disabled:opacity-50">{exportingRecords ? "Preparing..." : recordOutputMode === "print" ? "Print selected notes" : "Download selected notes"}</button>
+            </div>
+          </div>
+        </div>
+      )}
       {isLeadershipView && showFinalizeReview && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3">
           <div className="max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-4 shadow-xl sm:p-6">
@@ -888,15 +920,25 @@ export default function DashboardView({
           {isLeadershipView && (
             <button
               type="button"
-              onClick={handleExportSignedRecords}
+              onClick={() => setRecordOutputMode("download")}
               disabled={exportingRecords}
               className="inline-flex w-full items-center justify-center whitespace-nowrap rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
             >
               {exportingRecords
                 ? "Exporting..."
                 : selectedClinicDate
-                  ? "Export Records for Selected Date"
-                  : "Export Completed Records"}
+                  ? "Export PDF for Selected Date"
+                  : "Export Completed Records PDF"}
+            </button>
+          )}
+          {isLeadershipView && (
+            <button
+              type="button"
+              onClick={() => setRecordOutputMode("print")}
+              disabled={exportingRecords}
+              className="inline-flex w-full items-center justify-center whitespace-nowrap rounded-lg border border-slate-400 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+            >
+              {exportingRecords ? "Preparing..." : selectedClinicDate ? "Print Records for Selected Date" : "Print Completed Records"}
             </button>
           )}
         </div>

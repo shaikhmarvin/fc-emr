@@ -1,6 +1,12 @@
 
 import { jsPDF } from "jspdf";
 import JSZip from "jszip";
+import { isOphthoEncounter } from "./ophthalmology.js";
+
+// Leave room for binder holes along the left and top edges on every page.
+const PDF_LEFT_MARGIN = 25.4;
+const PDF_TOP_MARGIN = 22;
+const PDF_RIGHT_MARGIN = 14;
 
 function normalizeText(value) {
   if (value === null || value === undefined) return "—";
@@ -310,7 +316,7 @@ function loadImageDimensions(src) {
 
 async function addLogo(doc, logoSrc, margin) {
   const meta = await loadImageDimensions(logoSrc);
-  if (!meta) return 18;
+  if (!meta) return PDF_TOP_MARGIN + 8;
 
   const maxWidth = 74;
   const maxHeight = 18;
@@ -318,15 +324,15 @@ async function addLogo(doc, logoSrc, margin) {
   const width = meta.width * scale;
   const height = meta.height * scale;
 
-  doc.addImage(meta.src, "PNG", margin, 10, width, height, undefined, "FAST");
-  return 10 + height + 4;
+  doc.addImage(meta.src, "PNG", margin, PDF_TOP_MARGIN, width, height, undefined, "FAST");
+  return PDF_TOP_MARGIN + height + 4;
 }
 
 function ensurePageSpace(doc, y, needed, marginBottom = 15) {
   const pageHeight = doc.internal.pageSize.getHeight();
   if (y + needed > pageHeight - marginBottom) {
     doc.addPage();
-    return 15;
+    return PDF_TOP_MARGIN;
   }
   return y;
 }
@@ -345,8 +351,8 @@ function drawWrappedLine(doc, label, text, x, y, width, opts = {}) {
 }
 
 function drawSection(doc, title, text, startY, opts = {}) {
-  const margin = opts.margin || 14;
-  const width = doc.internal.pageSize.getWidth() - margin * 2;
+  const margin = opts.margin || PDF_LEFT_MARGIN;
+  const width = doc.internal.pageSize.getWidth() - margin - PDF_RIGHT_MARGIN;
   let y = ensurePageSpace(doc, startY, 18);
 
   doc.setFont("helvetica", "bold");
@@ -357,15 +363,28 @@ function drawSection(doc, title, text, startY, opts = {}) {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   const lines = doc.splitTextToSize(text, width);
-  doc.text(lines, margin, y);
-  return y + lines.length * 4.5 + 3;
+  for (const line of lines) {
+    if (y > doc.internal.pageSize.getHeight() - 15) {
+      doc.addPage();
+      y = PDF_TOP_MARGIN;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11.5);
+      doc.text(`${title} (continued)`, margin, y);
+      y += 6;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+    }
+    doc.text(line, margin, y);
+    y += 4.5;
+  }
+  return y + 3;
 }
 
 function drawGridTable(doc, title, headers, rows, startY, opts = {}) {
-  const margin = opts.margin || 14;
+  const margin = opts.margin || PDF_LEFT_MARGIN;
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const tableWidth = pageWidth - margin * 2;
+  const tableWidth = pageWidth - margin - PDF_RIGHT_MARGIN;
   const colWidths = opts.colWidths || headers.map(() => tableWidth / headers.length);
   const lineHeight = 4;
   const padding = 2;
@@ -398,7 +417,7 @@ function drawGridTable(doc, title, headers, rows, startY, opts = {}) {
 
     if (y + rowHeight > pageHeight - 15) {
       doc.addPage();
-      y = 15;
+      y = PDF_TOP_MARGIN;
       drawHeader();
     }
 
@@ -418,7 +437,7 @@ function drawGridTable(doc, title, headers, rows, startY, opts = {}) {
 
 function drawMedicationReconciliationPage(doc, medications, encounter, patientName, startY, margin) {
   let y = startY;
-  const width = doc.internal.pageSize.getWidth() - margin * 2;
+  const width = doc.internal.pageSize.getWidth() - margin - PDF_RIGHT_MARGIN;
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
@@ -515,13 +534,17 @@ async function buildEncounterPdfDoc({
   upperLevelSignerName,
   attendingSignerName,
   attendingSignatureData,
+  document,
 }) {
-  const doc = new jsPDF({ unit: "mm", format: "letter" });
-  const margin = 14;
+  const doc = document || new jsPDF({ unit: "mm", format: "letter" });
+  if (document) doc.addPage();
+  const margin = PDF_LEFT_MARGIN;
+  const contentWidth = doc.internal.pageSize.getWidth() - margin - PDF_RIGHT_MARGIN;
   const patientName = fullNameFromPatient(patient, getFullPatientName);
   const narrative = getEncounterNarrative(encounter);
   const isPhysicalTherapyNote = encounter?.noteType === "physical_therapy";
   const isSocialWorkNote = encounter?.noteType === "social_work";
+  const isOphtho = isOphthoEncounter(encounter);
   const isPhysicalTherapySigned =
     isPhysicalTherapyNote && encounter?.disciplineNoteStatus === "completed";
   const isSocialWorkCompleted =
@@ -538,7 +561,7 @@ async function buildEncounterPdfDoc({
   doc.text(patientName, margin, y + 2);
   y += 8;
 
-  if (!isSigned && encounter?.noteType !== "ophthalmology" && encounter?.specialtyType !== "ophthalmology") {
+  if (!isSigned && !(isOphtho && encounter?.soapStatus === "completed")) {
     doc.setTextColor(200, 0, 0);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
@@ -557,13 +580,28 @@ async function buildEncounterPdfDoc({
   y += 6;
 
   const isGroupNote = ["social_work", "physical_therapy"].includes(encounter?.noteType);
-  if (isGroupNote) {
+  if (isOphtho) {
+    const note = encounter.ophthalmologyNote || {};
+    y = drawSection(doc, "Ophthalmology Note", `Status: ${["completed", "signed"].includes(encounter.soapStatus) ? "Final" : "Draft"}`, y, { margin });
+    y = drawSection(doc, "Chief Complaint & HPI", normalizeText(note.hpi || encounter.soapSubjective), y, { margin });
+    if (Object.values(note).some(value => String(value || '').trim())) {
+      y = drawSection(doc, "Medical / Ocular History", normalizeText(note.ocularHistory), y, { margin });
+      for (const [label, od, os] of [["VA Distant", "vaOd", "vaOs"], ["PH", "phOd", "phOs"], ["IOP", "iopOd", "iopOs"], ["External", "externalOd", "externalOs"], ["Slit Lamp", "slitLampOd", "slitLampOs"], ["Dilated Fundus Exam", "fundusOd", "fundusOs"]]) {
+        y = drawSection(doc, label, `OD: ${normalizeText(note[od])}\nOS: ${normalizeText(note[os])}`, y, { margin });
+      }
+    } else {
+      y = drawSection(doc, "Examination & History", normalizeText(encounter.soapObjective), y, { margin });
+    }
+    y = drawSection(doc, "Assessment", normalizeText(note.assessment || encounter.soapAssessment), y, { margin });
+    y = drawSection(doc, "Plan", normalizeText(note.plan || encounter.soapPlan), y, { margin });
+    if (encounter.notes) y = drawSection(doc, "Additional Notes", encounter.notes, y, { margin });
+  } else if (isGroupNote) {
     const noteLabel = encounter.noteType === "social_work" ? "Social Work Note" : "Physical Therapy Note";
     y = drawSection(doc, noteLabel, normalizeText(encounter?.groupNote), y, { margin });
   } else {
-    y = drawWrappedLine(doc, "Medications", condensedMedicationList(sortedMedications), margin, y, 180, { labelWidth: 24, fontSize: 10, lineHeight: 4.5 });
-    y = drawWrappedLine(doc, "Allergies", condensedAllergyList(patient?.allergies || []), margin, y, 180, { labelWidth: 24, fontSize: 10, lineHeight: 4.5 });
-    y = drawWrappedLine(doc, "Vitals", latestVitalsSummary(encounter), margin, y, 180, { labelWidth: 24, fontSize: 10, lineHeight: 4.5 });
+    y = drawWrappedLine(doc, "Medications", condensedMedicationList(sortedMedications), margin, y, contentWidth, { labelWidth: 24, fontSize: 10, lineHeight: 4.5 });
+    y = drawWrappedLine(doc, "Allergies", condensedAllergyList(patient?.allergies || []), margin, y, contentWidth, { labelWidth: 24, fontSize: 10, lineHeight: 4.5 });
+    y = drawWrappedLine(doc, "Vitals", latestVitalsSummary(encounter), margin, y, contentWidth, { labelWidth: 24, fontSize: 10, lineHeight: 4.5 });
     y += 2;
 
     y = drawSection(doc, "Chief Complaint", narrative.chiefComplaint, y, { margin });
@@ -573,7 +611,8 @@ async function buildEncounterPdfDoc({
     y = drawSection(doc, "Plan", narrative.plan, y, { margin });
   }
 
-  const signaturesLine = encounter?.noteType === "ophthalmology" || encounter?.specialtyType === "ophthalmology"
+  if (isOphtho) y = ensurePageSpace(doc, y, 20);
+  const signaturesLine = isOphtho
     ? `Author: ${normalizeText(soapAuthorName)} | Signature: ____________________  Date: __________`
     : isPhysicalTherapyNote
     ? `Physical Therapist: ${normalizeText(encounter?.disciplineSignerName || soapAuthorName)} | Electronically signed: ${normalizeText(encounter?.disciplineSignedAt ? new Date(encounter.disciplineSignedAt).toLocaleString() : "Pending")}`
@@ -586,7 +625,7 @@ async function buildEncounterPdfDoc({
     signaturesLine,
     margin,
     y,
-    180,
+    contentWidth,
     { labelWidth: isPhysicalTherapyNote ? 34 : 20, fontSize: 10, lineHeight: 4.5 }
   );
 
@@ -594,7 +633,7 @@ async function buildEncounterPdfDoc({
     try {
       if (y > 245) {
         doc.addPage();
-        y = margin;
+        y = PDF_TOP_MARGIN;
       }
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9);
@@ -610,7 +649,7 @@ async function buildEncounterPdfDoc({
     try {
       if (y > 245) {
         doc.addPage();
-        y = margin;
+        y = PDF_TOP_MARGIN;
       }
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9);
@@ -624,7 +663,7 @@ async function buildEncounterPdfDoc({
 
   const labRows = inHouseLabRows(encounter);
   const nursingNotes = inHouseNursingNotes(encounter);
-  if (!isGroupNote && (labRows.length || nursingNotes)) {
+  if (!isGroupNote && !isOphtho && (labRows.length || nursingNotes)) {
     doc.addPage();
     y = await addLogo(doc, logoSrc, margin);
     doc.setFont("helvetica", "bold");
@@ -635,7 +674,7 @@ async function buildEncounterPdfDoc({
     if (labRows.length) {
       y = drawGridTable(doc, "In-House Labs", ["Test", "Value", "Flag", "Reference"], labRows, y, {
         margin,
-        colWidths: [58, 28, 16, 84],
+        colWidths: [58, 28, 16, 84].map(width => width / 186 * contentWidth),
       });
     }
 
@@ -644,7 +683,7 @@ async function buildEncounterPdfDoc({
     }
   }
 
-  if (!isGroupNote) {
+  if (!isGroupNote && !isOphtho) {
     doc.addPage();
     y = await addLogo(doc, logoSrc, margin);
     drawMedicationReconciliationPage(doc, sortedMedications, encounter, patientName, y, margin);
@@ -663,9 +702,47 @@ export async function downloadEncounterPdf(args) {
     ? "Social_Work"
     : args.encounter?.noteType === "physical_therapy"
       ? "Physical_Therapy"
-      : "Medical";
+      : isOphthoEncounter(args.encounter) ? "Ophthalmology" : "Medical";
   const filename = `${clinicDate}_${lastName}_${firstName}_${recordType}.pdf`;
   doc.save(filename);
+}
+
+export async function buildCompletedRecordsPdf({ rows, logoSrc, getFullPatientName }) {
+  if (!rows?.length) throw new Error("There are no completed notes to export for this date.");
+  let doc;
+  for (const row of rows) {
+    doc = await buildEncounterPdfDoc({
+      ...row,
+      sortedMedications: row.sortedMedications || row.medications || row.patient?.medications || [],
+      logoSrc,
+      getFullPatientName,
+      document: doc,
+    });
+  }
+  return doc;
+}
+
+export async function downloadCompletedRecordsPdf(args) {
+  const doc = await buildCompletedRecordsPdf(args);
+  doc.save(`completed_records_${cleanFilePart(args.clinicDate || 'all_dates')}.pdf`);
+}
+
+export async function printCompletedRecordsPdf(args) {
+  const doc = await buildCompletedRecordsPdf(args);
+  if (!args.printWindow || args.printWindow.closed) {
+    throw new Error("The print window was closed. Click Print to try again.");
+  }
+  // Ask the PDF viewer to open its print dialog without saving a download.
+  doc.autoPrint();
+  const url = URL.createObjectURL(doc.output("blob"));
+  args.printWindow.location.replace(url);
+  // Keep the PDF available while its preview is open, then release it.
+  const cleanup = setInterval(() => {
+    if (args.printWindow.closed) {
+      URL.revokeObjectURL(url);
+      clearInterval(cleanup);
+    }
+  }, 1000);
 }
 
 export async function downloadSignedEncountersZip({ rows, logoSrc, getFullPatientName }) {

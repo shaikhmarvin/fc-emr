@@ -420,6 +420,8 @@ export default function ChartView({
         return "Signed by attending";
       case "soap_reopened":
         return "SOAP note reopened";
+      case "ophthalmology_note_reopened":
+        return "Ophthalmology note reopened by leadership";
       case "skip_upper_level_approved":
         return "Skip Upper Level approved";
       case "skip_upper_level_removed":
@@ -3654,7 +3656,7 @@ function getSelectedRoomOptionClass() {
                 {!isOphtho && canSignAsUpperLevel ? <button type="button" onClick={signSoapAsUpperLevel} disabled={soapBusy} className="rounded-lg bg-purple-700 px-4 py-2 font-semibold text-white disabled:opacity-50">Upper-Level Sign</button> : null}
                 {!isOphtho && canSignAsAttending ? <button type="button" onClick={signSoapAsAttending} disabled={soapBusy} className="rounded-lg bg-emerald-700 px-4 py-2 font-semibold text-white disabled:opacity-50">Attending Sign</button> : null}
                 {!isOphtho && canSignWithAttendingPin && activeAttendings?.length ? <button type="button" onClick={() => setShowSignModal(true)} disabled={soapBusy} className="rounded-lg border border-emerald-700 px-4 py-2 font-semibold text-emerald-800 disabled:opacity-50">Attending Sign with PIN</button> : null}
-                {!isOphtho && canReopenSoap ? <button type="button" onClick={reopenSoapNote} disabled={soapBusy} className="rounded-lg border border-amber-500 px-4 py-2 font-semibold text-amber-800 disabled:opacity-50">Reopen Note</button> : null}
+                {canReopenSoap ? <button type="button" onClick={reopenSoapNote} disabled={soapBusy} className="rounded-lg border border-amber-500 px-4 py-2 font-semibold text-amber-800 disabled:opacity-50">Reopen Note</button> : null}
               </div>
             </div>
           ) : (
@@ -3693,7 +3695,22 @@ function getSelectedRoomOptionClass() {
                           {new Date(entry.created_at).toLocaleString()}
                         </p>
 
-                        {![
+                        {entry.action === "ophthalmology_note_reopened" ? (
+                          <div className="mt-2 text-sm text-slate-700">
+                            <p><strong>Reason:</strong> {entry.details?.reason}</p>
+                            <details className="mt-2">
+                              <summary className="cursor-pointer font-medium">View original submitted note</summary>
+                              <div className="mt-2 space-y-3 rounded bg-white p-3">
+                                {[["Chief Complaint & HPI", "hpi"], ["Examination & History", "objective"], ["Assessment", "assessment"], ["Plan", "plan"], ["Additional Notes", "notes"]].map(([label, field]) => (
+                                  <div key={field}>
+                                    <p className="font-semibold">{label}</p>
+                                    <p className="whitespace-pre-wrap break-words">{entry.details?.original_note?.[field] || "—"}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </details>
+                          </div>
+                        ) : ![
                           "soap_saved",
                           "soap_submitted_upper",
                           "soap_submitted_attending",
