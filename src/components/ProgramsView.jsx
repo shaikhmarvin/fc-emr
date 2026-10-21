@@ -1,4 +1,4 @@
-import { ophthoReferral, isOphthoEncounter, matchesOphthoDay } from "../utils/ophthalmology.js";
+import { ophthoReferral, isOphthoEncounter, matchesOphthoDay, existingOphthoVisit } from "../utils/ophthalmology.js";
 import "./ProgramsView.css";
 import { specialtyProgram, specialtyTrackerVisits } from "../utils/specialtyTracker.js";
 import { useEffect, useMemo, useState } from "react";
@@ -1624,7 +1624,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                       </div>
                     </div>
 
-                    {normalizedSpecialtyAccess.includes("Ophthalmology") && <button type="button" onClick={() => onStartOphthoVisit?.(patient)} className="mt-3 rounded-lg bg-violet-700 px-3 py-2 text-sm font-semibold text-white">Start Ophtho Visit</button>}
+                    {normalizedSpecialtyAccess.includes("Ophthalmology") && !existingOphthoVisit(patient, encounter.clinicDate) && <button type="button" onClick={() => onStartOphthoVisit?.(patient)} className="mt-3 rounded-lg bg-violet-700 px-3 py-2 text-sm font-semibold text-white">Start Ophtho Visit</button>}
                     <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                       <ReadOnlyField label="Ophtho Visit Reason" value={ophthoReferral(programEntries, patient, encounter)?.reason || encounter.specialtyTrackerReason || (isOphthoEncounter(encounter) ? encounter.chiefComplaint : "") || "—"} />
                       <ReadOnlyField label="Ophtho Interest" value={getOphthoInterestText(encounter) || "—"} />

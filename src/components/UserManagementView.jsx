@@ -7,7 +7,6 @@ const SPECIALTY_ACCESS_OPTIONS = [
   "Mental Health",
   "Counseling",
   "Addiction Medicine",
-  "Women's Health Day",
 ];
 
 function normalizeSpecialtyAccess(value) {

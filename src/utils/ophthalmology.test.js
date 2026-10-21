@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ophthoReferral, matchesOphthoDay, isOphthoEncounter } from './ophthalmology.js';
+import { ophthoReferral, matchesOphthoDay, isOphthoEncounter, existingOphthoVisit } from './ophthalmology.js';
 const patient = {id: 'p', firstName: 'Test', lastName: 'Patient', dob: '2000-01-01'};
 const encounter = {clinicDate: '2026-10-20', visitType: 'general'};
 const referral = {id: 'r', patientId: 'p', programType: 'Ophthalmology', reason: 'Blurry vision', status: 'Scheduled', specialtyDate: '2026-10-20'};
@@ -22,4 +22,12 @@ test('off day screens completed intake for eye interest or diabetes screening', 
   assert.equal(matchesOphthoDay([], patient, {...encounter, dm:true, leadershipIntakeComplete:true}, 'off_day'), true);
   assert.equal(matchesOphthoDay([], patient, {...encounter, dm:true, diabeticEyeExamPastYear:'yes', leadershipIntakeComplete:true}, 'off_day'), false);
   assert.equal(matchesOphthoDay([], patient, {...encounter, ophthalmology:'Blurry vision', leadershipIntakeComplete:true}, 'off_day'), true);
+});
+
+test('existing visits match date and legacy specialty data, excluding cancelled visits', () => {
+  const visit = {...encounter, specialtyType:'ophthalmology', status:'done'};
+  assert.equal(existingOphthoVisit({...patient, encounters:[visit]}, encounter.clinicDate), visit);
+  assert.equal(existingOphthoVisit({...patient, encounters:[visit]}, '2026-10-21'), undefined);
+  assert.equal(existingOphthoVisit({...patient, encounters:[{...visit, status:'cancelled'}]}, encounter.clinicDate), undefined);
+  assert.ok(existingOphthoVisit({...patient, encounters:[{...encounter, intake_data:{specialtyType:'ophtho'}}]}, encounter.clinicDate));
 });

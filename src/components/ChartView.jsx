@@ -1,3 +1,4 @@
+import { existingOphthoVisit } from "../utils/ophthalmology.js";
 import { getStatusClasses, getStatusLabel } from "../utils";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import OphthalmologySoapForm from "./OphthalmologySoapForm";
@@ -1866,7 +1867,7 @@ function getSelectedRoomOptionClass() {
           </button>
         ) : null}
 
-        {canUseOphtho && <button type="button" onClick={() => onStartGroupNote?.("ophthalmology")} className="rounded-lg bg-violet-600 px-4 py-2 text-white">Start Ophtho Visit</button>}
+        {canUseOphtho && !existingOphthoVisit(selectedPatient) && <button type="button" onClick={() => onStartGroupNote?.("ophthalmology")} className="rounded-lg bg-violet-600 px-4 py-2 text-white">Start Ophtho Visit</button>}
         {canCreatePhysicalTherapyNote ? (
           <button
             type="button"

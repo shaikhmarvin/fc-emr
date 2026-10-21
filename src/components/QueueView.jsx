@@ -1,4 +1,4 @@
-import { ophthoReferral, matchesOphthoDay } from "../utils/ophthalmology.js";
+import { ophthoReferral, matchesOphthoDay, existingOphthoVisit } from "../utils/ophthalmology.js";
 import BreastExamBadge from "./BreastExamBadge";
 import { womensHealthQueuePreference } from "../utils/clinicEvents.js";
 import { useEffect, useState } from "react";
@@ -246,7 +246,7 @@ const canMarkSeenBySocialWork =
     const entry = ophthoReferral(programEntries, patient, encounter);
     const reason = entry?.reason || (encounter.specialtyType === "ophthalmology" ? encounter.specialtyTrackerReason || encounter.chiefComplaint : "");
     return <span className="inline-flex flex-wrap items-center gap-2">
-      <button type="button" onClick={() => onStartOphthoVisit?.(patient)} className="rounded-lg bg-violet-700 px-3 py-2 text-xs font-semibold text-white">Start Ophtho Visit</button>
+      {!existingOphthoVisit(patient, encounter.clinicDate) && <button type="button" onClick={() => onStartOphthoVisit?.(patient)} className="rounded-lg bg-violet-700 px-3 py-2 text-xs font-semibold text-white">Start Ophtho Visit</button>}
       {reason && <span className="rounded-lg bg-violet-50 px-2 py-1 text-xs text-violet-900">Ophtho reason: {reason}</span>}
     </span>;
   }

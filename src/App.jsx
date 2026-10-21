@@ -1,4 +1,4 @@
-import { isOphthoEncounter as isOphthalmologyEncounter } from "./utils/ophthalmology.js";
+import { isOphthoEncounter as isOphthalmologyEncounter, existingOphthoVisit } from "./utils/ophthalmology.js";
 import { intakeDemographics } from "./utils/patientDemographics.js";
 import { clearWomensHealthTracker } from "./api/programs.js";
 import { clinicEventForDate, womensHealthChiefComplaint } from "./utils/clinicEvents.js";
@@ -7983,7 +7983,7 @@ export default function App() {
     if (!allowed) return;
 
     const label = noteType === "ophthalmology" ? "Ophthalmology" : "Physical Therapy";
-    const existing = targetPatient.encounters?.find(encounter => encounter.clinicDate === formatClinicDate() && (encounter.noteType === noteType || encounter.specialtyType === noteType) && encounter.status !== "cancelled");
+    const existing = noteType === "ophthalmology" ? existingOphthoVisit(targetPatient, formatClinicDate()) : targetPatient.encounters?.find(encounter => encounter.clinicDate === formatClinicDate() && (encounter.noteType === noteType || encounter.specialtyType === noteType) && encounter.status !== "cancelled");
     if (existing) { openPatientChart(targetPatient.id, existing.id); return; }
     const newEncounter = {
       clinicDate: formatClinicDate(),
