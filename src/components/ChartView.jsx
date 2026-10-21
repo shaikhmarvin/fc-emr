@@ -1627,6 +1627,11 @@ function getSelectedRoomOptionClass() {
 
   if (!selectedPatient) return null;
 
+  const encounterIntake = selectedEncounter?.intakeData || selectedEncounter?.intake_data || {};
+  const leadershipNote = selectedEncounter?.notes || selectedEncounter?.leadershipNotes ||
+    selectedEncounter?.leadership_notes || encounterIntake.notes ||
+    encounterIntake.leadershipNotes || encounterIntake.leadership_notes || "";
+
   const groupChartType = userRole === "social_work"
     ? "social_work"
     : userRole === "physical_therapy"
@@ -2080,6 +2085,13 @@ function getSelectedRoomOptionClass() {
                     disabled={isSupportDataLocked}
                     className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base disabled:bg-slate-100"
                   />
+                </div>
+
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3">
+                  <h4 className="mb-1 text-sm font-semibold text-amber-900">Leadership Note</h4>
+                  <p className="whitespace-pre-wrap break-words text-sm text-slate-800">
+                    {leadershipNote || "No leadership note recorded."}
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
