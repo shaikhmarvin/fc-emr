@@ -1,4 +1,6 @@
+import { importedLabFlag, needsExtractionReview, labFlagChoices, toggleLabFlag } from "../lib/labFlags.js";
 import { useMemo, useState } from "react";
+import { findLabByAlias } from "../lib/labCatalog.js";
 
 const GROUP_ORDER = [
   "CBC",
@@ -21,43 +23,6 @@ function unwrapLabValue(value) {
   if (value === null || value === undefined) return value;
   if (typeof value === "object") return value.value ?? null;
   return value;
-}
-
-function parseRange(rangeText = "") {
-  const text = String(rangeText || "").trim();
-  if (!text) return null;
-
-  const plusMatch = text.match(/(-?\d+(?:\.\d+)?)\+/);
-  if (plusMatch) {
-    const min = Number(plusMatch[1]);
-    if (!Number.isNaN(min)) {
-      return { min, max: Infinity };
-    }
-  }
-
-  const rangeMatch = text.match(/(-?\d+(?:\.\d+)?)\s*[-–]\s*(-?\d+(?:\.\d+)?)/);
-  if (!rangeMatch) return null;
-
-  const min = Number(rangeMatch[1]);
-  const max = Number(rangeMatch[2]);
-  if (Number.isNaN(min) || Number.isNaN(max)) return null;
-
-  return { min, max };
-}
-
-function computeFlag(value, rangeText = "") {
-  const unwrapped = unwrapLabValue(value);
-  if (unwrapped === null || unwrapped === undefined || unwrapped === "") return "";
-
-  const numeric = Number(String(unwrapped).replace(/,/g, "").trim());
-  if (Number.isNaN(numeric)) return "";
-
-  const parsedRange = parseRange(rangeText);
-  if (!parsedRange) return "";
-
-  if (numeric < parsedRange.min) return "L";
-  if (numeric > parsedRange.max) return "H";
-  return "";
 }
 
 function getDisplayValue(value) {
@@ -102,7 +67,8 @@ function badgeClasses(kind) {
     case "low":
       return "bg-red-100 text-red-700";
     case "suspicious":
-      return "bg-amber-100 text-amber-700";
+    case "review":
+      return "bg-blue-100 text-blue-700";
     case "duplicate_same":
       return "bg-red-100 text-red-700";
     case "duplicate_recent":
@@ -128,6 +94,9 @@ export default function LabReviewPanel({
   labs = [],
   onChangeLabs = null,
   onAuditEvent = null,
+  onShowSource = null,
+  onRememberRange = null,
+  onlyNeedsReview = false,
 }) {
   const [openGroups, setOpenGroups] = useState(() => {
     const initial = {};
@@ -158,9 +127,17 @@ export default function LabReviewPanel({
     prev.map((lab, i) => {
       if (i !== index) return lab;
 
+      const clearReusedRange = lab.referenceRangeSource === "verified_default" &&
+        (patch.key !== undefined || patch.unit !== undefined) && patch.referenceRangeText === undefined
+        ? { referenceRangeText: "", referenceRangeSource: "", referenceRangeNeedsReview: false } : {};
+
       return {
         ...lab,
+        ...clearReusedRange,
         ...patch,
+        ...(["value", "unit", "referenceRangeText", "key"].some(key => key in patch)
+          ? { manualFlag: null, reportedFlag: "", resultSymbol: "", flag: "", abnormalFlag: "", hlFlag: "" } : {}),
+        sourceReviewed: patch.sourceReviewed ?? false,
         _qaAction: lab._qaAction === "added" ? "added" : "edited",
         _qaOriginal: lab._qaOriginal || {
           key: lab.key || "",
@@ -178,11 +155,15 @@ export default function LabReviewPanel({
 }
 
   function updateLabValue(index, newValue) {
-    updateLab(index, { value: normalizeValueForStorage(newValue) });
+    const value = normalizeValueForStorage(newValue);
+    updateLab(index, { value, missing: value === null, autoFilled: false });
   }
 
   function updateLabName(index, displayName) {
-    updateLab(index, { displayName });
+    const definition = findLabByAlias(displayName);
+    updateLab(index, { displayName,
+      key: definition?.key || `outside-${displayName.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
+      group: definition?.group || 'Other', custom: !definition });
   }
 
   function addLab(group) {
@@ -228,6 +209,7 @@ export default function LabReviewPanel({
 
   return (
     <div className="space-y-4">
+      <button type="button" onClick={() => addLab("Other")} className="text-sm font-medium text-blue-700">+ Add a missing result</button>
       {groupedLabs.map(([group, rows]) => {
         const isOpen = openGroups[group] ?? true;
 
@@ -259,26 +241,28 @@ export default function LabReviewPanel({
 
                 <div className="divide-y divide-slate-100">
                   {rows.map(({ lab, index }) => {
+                    if (onlyNeedsReview && !needsExtractionReview(lab)) return null;
                     const displayValue = getDisplayValue(lab.value);
                     const displayRange = lab.referenceRangeText || lab.expectedRangeText || "";
-const flag = computeFlag(lab.value, displayRange);
+const flag = importedLabFlag(lab);
                     const duplicateSame = lab.duplicateType === "same_encounter";
                     const duplicateRecent = lab.duplicateType === "recent";
-                    const suspicious = !!lab.suspicious;
-                    const isAbnormal = flag === "H" || flag === "L";
+                    const suspicious = needsExtractionReview(lab);
+                    const isAbnormal = flag === "H" || flag === "L" || flag === "A";
 
                     return (
                       <div
                         key={`${lab.key || "lab"}-${index}`}
-                        className={`px-4 py-3 ${duplicateSame ? "bg-red-50/60" : duplicateRecent ? "bg-blue-50/60" : suspicious ? "bg-amber-50/60" : "bg-white"}`}
+                        className={`px-4 py-3 ${duplicateSame ? "bg-red-50/60" : duplicateRecent ? "bg-blue-50/60" : suspicious ? "bg-blue-50/40" : "bg-white"}`}
                       >
-                        <div className="flex items-start justify-between gap-4">
+                        <div className="flex flex-wrap items-start justify-between gap-4">
                           <div className="min-w-0 flex-1">
-                            {lab.custom ? (
+                            {onChangeLabs ? (
                               <input
                                 type="text"
                                 value={lab.displayName || ""}
                                 onChange={(e) => updateLabName(index, e.target.value)}
+                                aria-label="Lab name"
                                 placeholder="Lab name"
                                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-900 outline-none focus:border-blue-500"
                               />
@@ -286,10 +270,29 @@ const flag = computeFlag(lab.value, displayRange);
                               <div className="text-sm font-semibold text-slate-900">{lab.displayName}</div>
                             )}
 
+                            <div className="my-2 flex flex-wrap items-center gap-3 text-xs">
+                              {lab.sourcePage && <button type="button" onClick={() => onShowSource?.(lab)} className="font-medium text-blue-700">View page {lab.sourcePage}</button>}
+                              {(lab.suspicious || lab.custom || lab.extractionMethod === "text_fallback" || lab.referenceRangeNeedsReview) && <label className="flex items-center gap-1 text-slate-700">
+                                <input type="checkbox" checked={!!lab.sourceReviewed} onChange={event => updateLab(index, { sourceReviewed: event.target.checked, referenceRangeNeedsReview: !event.target.checked && lab.referenceRangeSource === "verified_default" })} /> Verified result and range
+                              </label>}
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <label className="text-xs text-slate-600">Units
+                                <input aria-label={`Units for ${lab.displayName || "lab"}`} value={lab.unit || ""} onChange={e => updateLab(index, { unit: e.target.value })} className="ml-2 w-28 rounded border border-slate-300 px-2 py-1" />
+                              </label>
+                              <label className="text-xs text-slate-600">Report range
+                                <input aria-label={`Range for ${lab.displayName || "lab"}`} value={lab.referenceRangeText || ""} onChange={e => updateLab(index, { referenceRangeText: e.target.value, referenceRangeSource: "manual", referenceRangeNeedsReview: false, referenceRangeCleared: !e.target.value.trim() })} className="ml-2 w-32 rounded border border-slate-300 px-2 py-1" />
+                              </label>
+                            </div>
+                            {onRememberRange && lab.referenceRangeText?.trim() && !lab.referenceRangeNeedsReview && (
+                              <button type="button" onClick={() => onRememberRange(lab)} className="mt-2 text-xs font-medium text-blue-700">Verify &amp; reuse this range</button>
+                            )}
+                            {lab.referenceRangeSource === "verified_default" && <p className="mt-1 text-xs text-amber-700">Reused range{lab.referenceRangeNeedsReview ? " — verify for this report" : " — verified"}</p>}
                             <div className="mt-1 flex flex-wrap items-center gap-2">
                               {flag === "H" && pill("HIGH", "high")}
                               {flag === "L" && pill("LOW", "low")}
-                              {suspicious && pill("CHECK", "suspicious")}
+                              {flag === "A" && pill(lab.manualFlag === "A" ? "ABNORMAL" : "FLAGGED BY LAB", "high")}
+                              {suspicious && pill("VERIFY EXTRACTION", "review")}
                               {duplicateSame && pill("DUP SAME VISIT", "duplicate_same")}
                               {duplicateRecent && pill("RECENT DUP", "duplicate_recent")}
                               {lab.autoFilled && pill("AUTOFILLED", "autofill")}
@@ -301,13 +304,13 @@ const flag = computeFlag(lab.value, displayRange);
   <div>Range: {displayRange}</div>
 ) : null}
                                 {lab.rawLine ? (
-                                  <div className="truncate">Source: {lab.rawLine}</div>
+                                  <div className="whitespace-pre-wrap break-words">Source: {lab.rawLine}</div>
                                 ) : null}
                                 {lab.duplicateInfo ? (
                                   <div className="font-medium text-blue-700">{lab.duplicateInfo}</div>
                                 ) : null}
                                 {suspicious ? (
-                                  <div className="font-medium text-amber-700">Value looks unusual — review before saving.</div>
+                                  <div className="font-medium text-blue-700">Check the extracted text against the report. This review label does not mean the result is abnormal.</div>
                                 ) : null}
                               </div>
                             )}
@@ -317,10 +320,24 @@ const flag = computeFlag(lab.value, displayRange);
                             <div className="min-w-[92px]">
                               <input
                                 type="text"
+                                aria-label={`Result for ${lab.displayName || "lab"}`}
                                 value={displayValue === "—" ? "" : displayValue}
                                 onChange={(e) => updateLabValue(index, e.target.value)}
                                 className={`w-full rounded-lg border px-3 py-2 text-right text-sm font-semibold outline-none ${isAbnormal ? "border-red-300 bg-red-50 text-red-700" : "border-slate-300 bg-white text-slate-900"}`}
                               />
+                              <div role="group" aria-label={`Flag for ${lab.displayName || "lab"}`} className="mt-2 flex items-center justify-end gap-1">
+                                <span className="mr-1 text-xs text-slate-500">Flag</span>
+                                {labFlagChoices(lab).map(choice => (
+                                  <button key={choice} type="button"
+                                    aria-label={`Mark ${lab.displayName || "lab"} ${choice === "H" ? "high" : choice === "L" ? "low" : "abnormal"}`}
+                                    aria-pressed={flag === choice}
+                                    title={`${choice === "H" ? "High" : choice === "L" ? "Low" : "Abnormal"} — click again to clear`}
+                                    onClick={() => updateLab(index, { manualFlag: toggleLabFlag(lab, choice), sourceReviewed: !!lab.sourceReviewed })}
+                                    className={`min-w-8 rounded-md border px-2 py-1 text-xs font-semibold ${flag === choice ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-600 hover:bg-slate-100"}`}
+                                  >{choice}</button>
+                                ))}
+                                {flag && !labFlagChoices(lab).includes(flag) && <button type="button" onClick={() => updateLab(index, { manualFlag: "", sourceReviewed: !!lab.sourceReviewed })} className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-600">Clear</button>}
+                              </div>
                             </div>
 
                             <button

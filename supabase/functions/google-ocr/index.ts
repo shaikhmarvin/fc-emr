@@ -66,7 +66,34 @@ serve(async (req) => {
             );
         }
 
-        const texts = (visionJson.responses || []).map(
+        const responses = visionJson.responses || [];
+        const pages = responses.map((response: any) => {
+            const page = response.fullTextAnnotation?.pages?.[0];
+            const width = page?.width || 1;
+            const height = page?.height || 1;
+            const words = (page?.blocks || []).flatMap((block: any) =>
+                (block.paragraphs || []).flatMap((paragraph: any) =>
+                    (paragraph.words || []).map((word: any) => {
+                        const vertices = word.boundingBox?.vertices || [];
+                        if (vertices.length < 4) return null;
+                        const xs = vertices.map((point: any) => (point.x || 0) / width);
+                        const ys = vertices.map((point: any) => (point.y || 0) / height);
+                        return {
+                            text: (word.symbols || []).map((symbol: any) => symbol.text || "").join(""),
+                            confidence: word.confidence ?? 0,
+                            angle: Math.atan2(ys[1] - ys[0], xs[1] - xs[0]),
+                            textHeight: Math.hypot(xs[3] - xs[0], ys[3] - ys[0]),
+                            box: { x: Math.min(...xs), y: Math.min(...ys),
+                                width: Math.max(...xs) - Math.min(...xs),
+                                height: Math.max(...ys) - Math.min(...ys) },
+                        };
+                    }).filter(Boolean)
+                )
+            );
+            return { text: response.fullTextAnnotation?.text || response.textAnnotations?.[0]?.description || "",
+                words, error: response.error ? "The scan reader could not read this page. Review it manually." : "" };
+        });
+        const texts = responses.map(
             (r: any) =>
                 r.fullTextAnnotation?.text ||
                 r.textAnnotations?.[0]?.description ||
@@ -74,7 +101,7 @@ serve(async (req) => {
         );
 
         return new Response(
-            JSON.stringify({ texts }),
+            JSON.stringify({ texts, pages }),
             {
                 status: 200,
                 headers: { ...corsHeaders, "Content-Type": "application/json" },

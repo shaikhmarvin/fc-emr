@@ -1,3 +1,7 @@
+import LabTrends from "./LabTrends.jsx";
+import { labDateForTrend } from "../lib/labTrends.js";
+import { findLabByKey, findLabByAlias } from "../lib/labCatalog.js";
+import { importedLabFlag } from "../lib/labFlags.js";
 import { existingOphthoVisit } from "../utils/ophthalmology.js";
 import { getStatusClasses, getStatusLabel } from "../utils";
 import { Fragment, useEffect, useMemo, useState } from "react";
@@ -705,7 +709,20 @@ function formatLabDateTime(value) {
       mcv: "MCV",
       mch: "MCH",
       mchc: "MCHC",
-      rdw: "RDW",
+      rdw: "RDW-CV",
+      rdwcv: "RDW-CV",
+      "rdw cv": "RDW-CV",
+      "rdw-cv": "RDW-CV",
+      rdw_sd: "RDW-SD",
+      rdwsd: "RDW-SD",
+      "rdw sd": "RDW-SD",
+      "rdw-sd": "RDW-SD",
+      nrbc_percent: "NRBC %",
+      "nrbc%": "NRBC %",
+      "nrbc %": "NRBC %",
+      nrbc_absolute: "NRBC Absolute",
+      "nrbc abs": "NRBC Absolute",
+      "nrbc absolute": "NRBC Absolute",
       platelets: "Platelets",
       platelet: "Platelets",
       sodium: "Sodium",
@@ -788,7 +805,7 @@ function formatLabDateTime(value) {
 
     const lower = String(label || "").toLowerCase();
 
-    if (/(wbc|rbc|hemoglobin|hematocrit|mcv|mch|mchc|rdw|platelet)/i.test(lower)) return "CBC";
+    if (/(wbc|rbc|nrbc|hemoglobin|hematocrit|mcv|mch|mchc|rdw|platelet)/i.test(lower)) return "CBC";
     if (/(sodium|potassium|chloride|bun|creatinine|anion gap|ionized calcium|tco2|calcium)/i.test(lower)) return "Chemistry / Renal";
     if (/(ast|alt|alk phos|bilirubin|albumin)/i.test(lower)) return "Liver";
     if (/(glucose|a1c|hba1c)/i.test(lower)) return "Diabetes";
@@ -800,20 +817,8 @@ function formatLabDateTime(value) {
     return "Other";
   }
 
-  function getLabFlag(rawFlag, value) {
-    const flag = String(rawFlag || "").trim().toUpperCase();
-    if (flag === "H" || flag === "L") return flag;
-
-    const lowerValue = String(value || "").trim().toLowerCase();
-    if (lowerValue === "positive" || lowerValue === "detected" || lowerValue === "reactive") {
-      return "H";
-    }
-
-    return "";
-  }
-
   function isAbnormalFlag(flag) {
-    return flag === "H" || flag === "L";
+    return flag === "H" || flag === "L" || flag === "A";
   }
 
   function getLabFlagClasses(flag) {
@@ -852,6 +857,8 @@ function formatLabDateTime(value) {
 
         return {
           analyte: label,
+          analyteKey: findLabByAlias(config.label)?.key || label,
+          resultType: findLabByAlias(config.label)?.resultType,
           group: config.group || inferLabGroup(label),
           dateKey,
           value: entry.value,
@@ -873,23 +880,23 @@ function formatLabDateTime(value) {
 
     return importedLabs
       .map((lab) => {
-        const rawValue = lab?.value;
+        const rawValue = lab?.value && typeof lab.value === "object" ? lab.value.value : lab?.value;
         if (!hasMeaningfulLabValue(rawValue)) return null;
 
         const analyte = normalizeLabName(
           lab?.displayName || lab?.normalizedName || lab?.key || "Lab"
         );
 
-        const dateKey = normalizeLabDate(
-          lab?.collectionDate ||
-          lab?.collectedAt ||
-          lab?.date ||
-          encounter?.clinicDate ||
-          encounter?.createdAt
-        );
+        const trendDate = labDateForTrend(lab, encounter);
+        const dateKey = normalizeLabDate(trendDate.value);
 
         return {
           analyte,
+          analyteKey: lab?.key || findLabByAlias(analyte)?.key || analyte,
+          resultType: findLabByKey(lab?.key)?.resultType,
+          dateSource: trendDate.source,
+          sourceDocumentId: lab?.sourceDocumentId,
+          sourceResultId: lab?.sourceResultId,
           group: inferLabGroup(analyte, lab?.group),
           dateKey,
           value: rawValue,
@@ -897,13 +904,7 @@ function formatLabDateTime(value) {
           fullValueText: String(rawValue ?? "").trim(),
           unitText: String(lab?.units || lab?.unit || "").trim(),
           sourceLabel: "Outside",
-          flag: String(
-            lab?.resultSymbol ||
-            lab?.flag ||
-            lab?.abnormalFlag ||
-            lab?.hlFlag ||
-            ""
-          ).trim(),
+          flag: importedLabFlag(lab),
           referenceRange: String(
             lab?.referenceRangeText ||
             lab?.referenceRange ||
@@ -966,6 +967,7 @@ function formatLabDateTime(value) {
     return {
       dateKeys,
       groupedRows,
+      results: allResults,
       abnormalCount,
     };
   }
@@ -1130,7 +1132,7 @@ function formatLabDateTime(value) {
   }
 
   const [showTimeline, setShowTimeline] = useState(false);
-  const [showLabs, setShowLabs] = useState(false);
+  const [showLabs, setShowLabs] = useState(true);
   const [showSendOutLabs, setShowSendOutLabs] = useState(false);
   const [showSignModal, setShowSignModal] = useState(false);
   const [showAudit, setShowAudit] = useState(false);
@@ -3373,7 +3375,7 @@ function getSelectedRoomOptionClass() {
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   Longitudinal Trends
                 </p>
-                <p className="text-lg font-semibold text-slate-900">Full Lab View</p>
+                <p className="text-lg font-semibold text-slate-900">Lab Trends &amp; History</p>
               </div>
               <span>{showLabs ? "▲" : "▼"}</span>
             </button>
@@ -3417,6 +3419,8 @@ function getSelectedRoomOptionClass() {
                     <span className="mt-1 block text-lg font-semibold text-slate-900">{longitudinalLabData.abnormalCount}</span>
                   </div>
                 </div>
+
+                <LabTrends key={selectedPatient?.id} results={longitudinalLabData.results} filter={labFilter} />
 
                 {longitudinalLabData.dateKeys.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">

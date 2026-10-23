@@ -1,9 +1,11 @@
+import { parseExplicitStiResults } from './stiResults.js';
+import { identifyHepatitisTest, parseExplicitHepatitisResults } from './hepatitisResults.js';
 import {
   LAB_ALIAS_INDEX,
   findLabByAlias,
   valueLooksSuspicious,
-} from "./labCatalog";
-import { LAB_PANELS } from "./labCatalog";
+} from "./labCatalog.js";
+import { LAB_PANELS } from "./labCatalog.js";
 
 const UMC_REFERENCE_RANGES = {
   // CBC
@@ -607,6 +609,8 @@ function findLabMatch(line = "") {
   const normalizedLine = normalizeLine(raw);
   const compactLine = normalizeCompact(raw);
   const tokens = tokenizeLine(raw).map((token) => normalizeCompact(token));
+  const hepatitisLabel = identifyHepatitisTest(raw);
+  if (hepatitisLabel) return hepatitisLabel;
     if (normalizedLine.includes("true sodium level")) {
     return null;
   }
@@ -615,7 +619,7 @@ function findLabMatch(line = "") {
     normalizedLine.includes("rdw sd") ||
     compactLine.includes("rdwsd")
   ) {
-    return null;
+    return findLabByAlias("rdw-sd");
   }
 
   if (normalizedLine.includes("tsh 3rd generation")) {
@@ -1067,6 +1071,8 @@ function expandPanels(results) {
   const expandedPanels = new Set();
 
   for (const panelName in LAB_PANELS) {
+    // Hepatitis panels vary by laboratory; never infer unreported components.
+    if (panelName === "Hepatitis Panel") continue;
     const panelKeys = LAB_PANELS[panelName];
 
     if (expandedPanels.has(panelName)) continue;
@@ -2320,11 +2326,6 @@ function getUmcColumnLabelEntry(line = "") {
   }
 
   if (
-    compact.includes("rdwsd") ||
-    compact === "nrbc" ||
-    compact === "nrbcpercent" ||
-    compact === "nrbcabs" ||
-    compact.includes("nrbcabs") ||
     compact.includes("cockcroftgault") ||
     compact === "truesodium" ||
     compact === "verylowdensitylipoprotein" ||
@@ -2940,7 +2941,7 @@ function normalizeCbcInterleaving(lines = []) {
     if (
       aC === "mpv" &&
       bC.includes("nrbc") &&
-      cC.includes("nrbcabsolute") &&
+      cC.includes("nrbcabs") &&
       extractNumberFromLine(d) !== null
     ) {
       out.push(a);
@@ -2963,7 +2964,7 @@ function normalizeCbcInterleaving(lines = []) {
     // NRBC% / NRBC Absolute / 0.0 / /100WBC / 0.000
     if (
       aC.includes("nrbc") &&
-      bC.includes("nrbcabsolute") &&
+      bC.includes("nrbcabs") &&
       extractNumberFromLine(c) !== null
     ) {
       out.push(a);
@@ -3018,6 +3019,70 @@ function mergeDifferentialLabelLines(lines = []) {
   }
 
   return merged;
+}
+
+// Prefer an explicit label/result/range row over numeric heuristics. Never
+// search neighboring tests for a plausible result: their ranges are not values.
+function parseExplicitUmcNumericRows(rawText = "", { requireUmc = true, keys = null } = {}) {
+  if (requireUmc && !isUmcLabText(rawText)) return [];
+  const lines = normalizeCbcInterleaving(String(rawText).split("\n").map((line) => line.trim()).filter(Boolean));
+  const definitions = [...new Map(Object.keys(LAB_ALIAS_INDEX).map((alias) => {
+    const lab = findLabByAlias(alias);
+    return [lab?.key, lab];
+  })).values()].filter((lab) => lab?.resultType === "numeric" && (!keys || keys.has(lab.key)));
+  const aliases = definitions.flatMap((lab) =>
+    [lab.displayName, ...(lab.aliases || [])].map((alias) => ({ lab, alias }))
+  ).sort((a, b) => b.alias.length - a.alias.length);
+  const number = "[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)";
+  const resultPattern = new RegExp(`^([<>]=?|[≤≥])?\\s*(${number})(?:\\s+([HL*]))?(?=\\s|$)`);
+  const rangePattern = new RegExp(`^(${number}\\s*[-–]\\s*${number}|[<>]=?\\s*${number}|[≤≥]\\s*${number})(?:\\s+(.+))?$`);
+  const overrides = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const matched = aliases.find(({ alias }) =>
+      new RegExp(`^${escapeRegex(alias)}(?:\\s|$)`, "i").test(line)
+    );
+    if (!matched) continue;
+    const { lab, alias } = matched;
+    let resultText = line.slice(alias.length).trim();
+    let valueIndex = index;
+    if (!resultText) {
+      resultText = lines[index + 1] || "";
+      valueIndex = index + 1;
+    }
+    const result = resultText.match(resultPattern);
+    if (!result) continue;
+    let tail = resultText.slice(result[0].length).trim();
+    // Only accept a bare result when the label and value are on separate lines,
+    // or a same-line result with an explicit range/unit. Reject range-only rows.
+    if (!tail && valueIndex === index && !result[1] && !keys) continue;
+    if (/^[-–]/.test(tail)) continue;
+    if (!tail && valueIndex !== index) tail = lines[valueIndex + 1] || "";
+    const range = tail.match(rangePattern);
+    const isUnit = /^(?:mg\/dL|g\/dL|mmol\/L|mEq\/L|U\/L|mL\/min(?:\/1\.73m2)?|%|fL|pg|\/100\s*WBC|(?:[x×]?10[\^*]?[369]|K)\/(?:uL|[µμ]L|L))\s*$/i.test(tail);
+    if (tail && !range && !isUnit && valueIndex === index) continue;
+    const comparator = (result[1] || "").replace("≤", "<=").replace("≥", ">=");
+    const value = comparator ? `${comparator}${result[2]}` : Number(result[2]);
+    const parsed = buildParsedLab(lab, line, resultText, value, {
+      parseMethod: "explicit_umc_numeric_row",
+      matchIndex: index,
+      valueLineIndex: valueIndex,
+      valueSourceLine: resultText,
+    });
+    parsed.unit = range?.[2] || (isUnit ? tail : lab.unit || "");
+    if (range) {
+      parsed.referenceRangeText = range[1];
+      parsed.referenceRangeSource = "report";
+      parsed.resultSymbol = comparator ? "" : computeResultSymbol(value, range[1]);
+    }
+    overrides.push(parsed);
+  }
+  return overrides;
+}
+
+export function parseExplicitCbcResults(rawText = "") {
+  return parseExplicitUmcNumericRows(rawText, { requireUmc: false,
+    keys: new Set(["rdw", "rdw_sd", "nrbc_percent", "nrbc_absolute"]) });
 }
 
 export function parseLabsFromText(
@@ -3207,6 +3272,19 @@ if (bestCandidate) {
   const manualDifferentialOverrides = parseUmcManualDifferentialOverrides(rawText);
   for (const overrideLab of manualDifferentialOverrides) {
     deduped = upsertOverrideLab(deduped, overrideLab);
+  }
+
+  for (const lab of parseExplicitUmcNumericRows(rawText)) {
+    deduped = upsertOverrideLab(deduped, lab);
+  }
+  for (const lab of parseExplicitStiResults(rawText)) {
+    deduped = upsertOverrideLab(deduped, lab);
+  }
+  for (const lab of parseExplicitCbcResults(rawText)) {
+    deduped = upsertOverrideLab(deduped, lab);
+  }
+  for (const lab of parseExplicitHepatitisResults(rawText)) {
+    deduped = upsertOverrideLab(deduped, lab);
   }
 
   const expanded = expandPanels(deduped);

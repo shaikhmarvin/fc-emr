@@ -64,6 +64,11 @@ export default function AppSidebar({
         </div>
 
         <nav className="space-y-4 p-4">
+          {(isLeadershipView || userRole === "lab") && (
+            <button onClick={() => handleViewChange("lab-import")} className={getNavItemClass("lab-import")}>
+              Lab Import
+            </button>
+          )}
           {userRole === "lab" ? (
   <div className="space-y-2">
     <SectionLabel>Workflow</SectionLabel>

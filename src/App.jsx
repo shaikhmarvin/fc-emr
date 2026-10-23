@@ -1,3 +1,11 @@
+import { importedLabFlag } from "./lib/labFlags.js";
+import { applyRangeDefaults, learnRangeDefault, suspendConflictingRangeDefaults } from "./lib/labRangeDefaults.js";
+import { repairUnreviewedHepatitisLabs } from "./lib/hepatitisResults.js";
+import { repairUnreviewedCbcLabs } from "./lib/cbcResults.js";
+import { readLabDocument, labFileFingerprint } from "./lib/readLabDocument.js";
+import { repairUnreviewedStiLabs } from "./lib/stiResults.js";
+import { parseLayoutResults, mergeDocumentPackets, labsReadyToSave, documentIdentity, markRepeatedDocumentResults } from "./lib/labDocument.js";
+import { storeLabSource, loadLabSource } from "./lib/labSourceStore.js";
 import { isOphthoEncounter as isOphthalmologyEncounter, existingOphthoVisit, canReopenOphthoNote } from "./utils/ophthalmology.js";
 import { intakeDemographics } from "./utils/patientDemographics.js";
 import { clearWomensHealthTracker } from "./api/programs.js";
@@ -1116,19 +1124,11 @@ async function runGoogleOCR(base64Images) {
     }
   }
 
-  return data?.texts || [];
-}
-
-async function runGoogleOCRInChunks(base64Images = [], chunkSize = 16) {
-  const allTexts = [];
-
-  for (let i = 0; i < base64Images.length; i += chunkSize) {
-    const chunk = base64Images.slice(i, i + chunkSize);
-    const texts = await runGoogleOCR(chunk);
-    allTexts.push(...(texts || []));
+  if (!Array.isArray(data?.texts) || data.texts.length !== base64Images.length) {
+    throw new Error("The scan reader did not return every page. Please retry.");
   }
-
-  return allTexts;
+  return Array.isArray(data.pages) && data.pages.length === base64Images.length
+    ? data.pages : data.texts.map(text => ({ text, words: [] }));
 }
 
 
@@ -2313,6 +2313,27 @@ export default function App() {
   const [labImportLoading, setLabImportLoading] = useState(false);
   const [ocrUploading, setOcrUploading] = useState(false);
   const [ocrError, setOcrError] = useState("");
+  const [labRangeDefaults, setLabRangeDefaults] = useState({});
+  useEffect(() => {
+    try {
+      setLabRangeDefaults(session?.user?.id ? JSON.parse(localStorage.getItem(`lab-range-defaults:${session.user.id}`) || "{}") : {});
+    } catch { setLabRangeDefaults({}); }
+  }, [session?.user?.id]);
+  const [ocrProgress, setOcrProgress] = useState("");
+  const [labSourceFile, setLabSourceFile] = useState(null);
+  const labSourceFiles = useRef(new Map());
+  useEffect(() => {
+    let cancelled = false;
+    const id = labImportPacket?.sourceDocument?.id;
+    setLabSourceFile(null);
+    if (!id || !session?.user?.id) return;
+    const cached = labSourceFiles.current.get(id);
+    if (cached) { setLabSourceFile(cached); return; }
+    loadLabSource(session.user.id, id).then(file => {
+      if (!cancelled) setLabSourceFile(file);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [labImportPacket?.sourceDocument?.id, session?.user?.id]);
   const [intakeTab, setIntakeTab] = useState(0);
   const [intakeForm, setIntakeForm] = useState(EMPTY_FORM);
   const [searchForm, setSearchForm] = useState(EMPTY_SEARCH);
@@ -3100,7 +3121,11 @@ export default function App() {
       }
     }
 
-    if (bestScore >= 120 && bestMatch) {
+    const exactMatches = patients.filter(patient => extractedName && extractedDob &&
+      normalizePatientMatchText(`${patient.firstName || ""} ${patient.lastName || ""}`) === normalizePatientMatchText(extractedName) &&
+      normalizeExtractedDate(patient.dob || "") === normalizeExtractedDate(extractedDob));
+    if (exactMatches.length === 1) {
+      bestMatch = exactMatches[0];
       return {
         status: "matched",
         match: bestMatch,
@@ -3519,7 +3544,7 @@ export default function App() {
     const extractedPatientName = formatPatientName(rawExtractedPatientName);
     const extractedDob = extractDobFromLabText(rawText);
     const collectedDate =
-      extractCollectedDateFromLabText(rawText) || formatClinicDate();
+      extractCollectedDateFromLabText(rawText) || "";
 
     const shouldParseAsStructuredLabs =
       packetType !== "Pathology / PAP" &&
@@ -3942,6 +3967,14 @@ export default function App() {
         .filter(Boolean)
       : [];
 
+    const sourcePages = row.duplicate_summary_json?.sourceDocument?.pages || [];
+    const sourcePage = sourcePages.length === 1 ? sourcePages[0].pageNumber : undefined;
+    let labs = Array.isArray(row.parsed_labs_json) ? row.parsed_labs_json : [];
+    if (row.review_status !== "saved" && row.review_status !== "skipped") {
+      labs = repairUnreviewedStiLabs(labs, row.raw_text || "", sourcePage);
+      labs = repairUnreviewedCbcLabs(labs, row.raw_text || "", sourcePage);
+      labs = repairUnreviewedHepatitisLabs(labs, row.raw_text || "", sourcePage);
+    }
     return {
       packetId: row.id,
       batchId: row.batch_id,
@@ -3951,7 +3984,8 @@ export default function App() {
       packetType: row.packet_type || "unknown",
       rawText: row.raw_text || "",
       sourceRawText: row.raw_text || "",
-      labs: Array.isArray(row.parsed_labs_json) ? row.parsed_labs_json : [],
+      sourceDocument: row.duplicate_summary_json?.sourceDocument || null,
+      labs,
       reviewStatus: row.review_status || "unreviewed",
       savedAt: row.saved_at || null,
       skippedAt: row.skipped_at || null,
@@ -4011,7 +4045,15 @@ export default function App() {
 
       if (packetError) throw packetError;
 
-      const mappedPackets = (packetRows || []).map(mapLabImportDbRowToPacket);
+      const groupedPackets = mergeDocumentPackets((packetRows || []).map(mapLabImportDbRowToPacket));
+      const defaults = suspendConflictingRangeDefaults(labRangeDefaults, groupedPackets);
+      if (defaults !== labRangeDefaults) {
+        setLabRangeDefaults(defaults);
+        try { localStorage.setItem(`lab-range-defaults:${session.user.id}`, JSON.stringify(defaults)); } catch { /* Keep session defaults when storage is unavailable. */ }
+      }
+      const mappedPackets = groupedPackets.map(packet => packet.reviewStatus === "saved" || packet.reviewStatus === "skipped" ? packet : ({
+        ...packet, labs: applyRangeDefaults(packet.labs, packet, defaults, groupedPackets),
+      }));
 
       setActiveLabImportBatchId(activeBatchId);
       setLabImportPackets(mappedPackets);
@@ -4067,7 +4109,7 @@ export default function App() {
       review_status: packet.reviewStatus || "unreviewed",
       raw_text: packet.rawText || packet.sourceRawText || "",
       parsed_labs_json: packet.labs || [],
-      duplicate_summary_json: {},
+      duplicate_summary_json: { sourceDocument: packet.sourceDocument || null },
       match_candidates_json: (packet.possibleMatches || []).map((p) => ({
         id: p.id,
       })),
@@ -4087,60 +4129,51 @@ export default function App() {
     return batchRow.id;
   }
 
+  async function handleRememberLabRange(packetId, lab, reviewedLabs) {
+    try {
+      const packets = labImportPackets.map(packet => packet.packetId === packetId ? { ...packet, labs: reviewedLabs } : packet);
+      const selected = packets.find(packet => packet.packetId === packetId);
+      if (!selected) return;
+      const defaults = learnRangeDefault(labRangeDefaults, selected, lab, packets);
+      setLabRangeDefaults(defaults);
+      if (session?.user?.id) localStorage.setItem(`lab-range-defaults:${session.user.id}`, JSON.stringify(defaults));
+      let filled = 0;
+      for (const packet of packets) {
+        if (packet.reviewStatus === "saved" || packet.reviewStatus === "skipped") continue;
+        const nextLabs = applyRangeDefaults(packet.labs, packet, defaults, packets);
+        filled += nextLabs.filter((item, index) => !packet.labs[index].referenceRangeText && item.referenceRangeText).length;
+        if (JSON.stringify(nextLabs) !== JSON.stringify(labImportPackets.find(item => item.packetId === packet.packetId)?.labs)) {
+          await handleLiveUpdateLabPacketLabs(packet.packetId, nextLabs);
+        }
+      }
+      showToast({ title: "Range remembered", message: `${filled} missing range(s) filled. Reused ranges are marked for review.`, type: "success" });
+    } catch (error) {
+      showToast({ title: "Range not reused", message: error.message, type: "error" });
+    }
+  }
+
   async function updateSharedLabImportPacket(packetId, updates = {}) {
+    const packet = labImportPackets.find(item => item.packetId === packetId);
+    const memberIds = packet?.memberPacketIds?.length ? packet.memberPacketIds : [packetId];
+    const payload = { ...updates };
+    if (memberIds.length > 1 && packet.sourceDocument) {
+      payload.duplicate_summary_json = { sourceDocument: packet.sourceDocument };
+    }
     const { error } = await supabase
       .from("lab_import_packets")
-      .update(updates)
-      .eq("id", packetId);
-
+      .update(payload)
+      .in("id", memberIds);
     if (error) throw error;
   }
 
-  async function cleanupSavedLabImportPacket(packetId, batchId) {
-    if (!packetId) return;
-
-    const { error: packetDeleteError } = await supabase
-      .from("lab_import_packets")
-      .delete()
-      .eq("id", packetId);
-
-    if (packetDeleteError) throw packetDeleteError;
-
-    if (!batchId) {
-      setLabImportPackets((prev) => prev.filter((packet) => packet.packetId !== packetId));
-
-      if (selectedLabImportPacketId === packetId) {
-        setSelectedLabImportPacketId(null);
-        setLabImportPacket(null);
-      }
-
-      return;
+  async function cleanupSavedLabImportPacket(packetId) {
+    // Keep saved packets and their audit/source metadata for duplicate detection.
+    const next = labImportPackets.find(packet => packet.packetId !== packetId &&
+      packet.reviewStatus !== "saved" && packet.reviewStatus !== "skipped");
+    if (next) {
+      setSelectedLabImportPacketId(next.packetId);
+      setLabImportPacket(next);
     }
-
-    const { data: remainingPackets, error: remainingError } = await supabase
-      .from("lab_import_packets")
-      .select("id")
-      .eq("batch_id", batchId)
-      .limit(1);
-
-    if (remainingError) throw remainingError;
-
-    if ((remainingPackets || []).length === 0) {
-      const { error: batchDeleteError } = await supabase
-        .from("lab_import_batches")
-        .delete()
-        .eq("id", batchId);
-
-      if (batchDeleteError) throw batchDeleteError;
-
-      setActiveLabImportBatchId(null);
-      setLabImportPackets([]);
-      setLabImportPacket(null);
-      setSelectedLabImportPacketId(null);
-      return;
-    }
-
-    await loadSharedLabImportBatch(batchId);
   }
 
   async function handleLiveUpdateLabPacketLabs(packetId, reviewedLabs) {
@@ -4251,113 +4284,74 @@ export default function App() {
     }
   }
 
-  async function fileToBase64(file) {
-    return await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-
-      reader.onload = () => {
-        try {
-          const result = String(reader.result || "");
-          const base64 = result.split(",")[1] || "";
-          resolve(base64);
-        } catch (error) {
-          reject(error);
-        }
-      };
-
-      reader.onerror = () => reject(reader.error || new Error("Failed to read file"));
-      reader.readAsDataURL(file);
-    });
-  }
-
-  async function convertPdfToBase64Images(file) {
-    const [pdfjsLib, workerModule] = await Promise.all([
-      import("pdfjs-dist"),
-      import("pdfjs-dist/build/pdf.worker?url"),
-    ]);
-    pdfjsLib.GlobalWorkerOptions.workerSrc = workerModule.default;
-    const arrayBuffer = await file.arrayBuffer();
-
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    const images = [];
-
-    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum += 1) {
-      const page = await pdf.getPage(pageNum);
-
-      const viewport = page.getViewport({ scale: 2.0 });
-
-      const canvas = document.createElement("canvas");
-      const context = canvas.getContext("2d");
-
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-
-      await page.render({
-        canvasContext: context,
-        viewport,
-      }).promise;
-
-      const dataUrl = canvas.toDataURL("image/png");
-      const base64 = dataUrl.split(",")[1] || "";
-      images.push(base64);
-    }
-
-    return images;
-  }
-
   async function handleGoogleOCRImport(file) {
-    if (!file) return;
-
+    if (!file || ocrUploading) return;
     setOcrUploading(true);
     setOcrError("");
-
+    setOcrProgress("Opening report…");
     try {
-      let base64Images = [];
-
-      if (file.type === "application/pdf") {
-        base64Images = await convertPdfToBase64Images(file);
-      } else if (file.type.startsWith("image/")) {
-        base64Images = [await fileToBase64(file)];
-      } else {
-        throw new Error("Only PDF and image files are supported.");
+      const fingerprint = await labFileFingerprint(file);
+      labSourceFiles.current.set(fingerprint, file);
+      await storeLabSource(session?.user?.id, fingerprint, file).catch(() => {
+        setOcrError("Source preview is available now, but this browser could not retain it. Reattach the report after reloading.");
+      });
+      const { data: duplicates, error: duplicateError } = await supabase
+        .from("lab_import_packets")
+        .select("batch_id")
+        .contains("duplicate_summary_json", { sourceDocument: { id: fingerprint } })
+        .limit(1);
+      if (duplicateError) throw duplicateError;
+      if (duplicates?.[0]?.batch_id) {
+        await loadSharedLabImportBatch(duplicates[0].batch_id);
+        setLabSourceFile(file);
+        setOcrError("This exact file was already uploaded. Its existing review batch has been opened.");
+        return;
       }
-
-      const ocrTexts = await runGoogleOCRInChunks(base64Images, 16);
-      const combinedText = ocrTexts.join("\n\n").trim();
-
-      if (!combinedText) {
-        throw new Error("OCR returned no text.");
-      }
-
-      const cleanedText = cleanOcrLabText(combinedText);
-      setLabImportRawText(cleanedText);
-
-      const packets = buildBulkLabImportPacketsFromText(cleanedText);
-
-      if (!packets || packets.length === 0) {
-        throw new Error("OCR worked, but no labs were detected from the extracted text.");
-      }
-
-      setLabImportDebugSnapshot(
-        buildLabImportDebugSnapshot({
-          source: "google_ocr",
-          originalText: combinedText,
-          cleanedText,
-          ocrTexts,
-          file,
-          packets,
-        })
-      );
-
+      const document = await readLabDocument(file, {
+        recognizePages: runGoogleOCR,
+        onProgress: setOcrProgress,
+        fingerprint,
+      });
+      const packetsByPage = document.pages.map(page => {
+        const cleaned = cleanOcrLabText(page.text);
+        const packet = buildLabImportPacketFromText(cleaned, classifyLabPacket(cleaned));
+        const layoutLabs = parseLayoutResults(page);
+        const layoutKeys = new Set(layoutLabs.map(lab => lab.key));
+        // Legacy text parsing is a review aid when no geometric row was found.
+        // It never supplies a verified result or overrides a positioned row.
+        const fallback = packet.labs.filter(lab => !lab.autoFilled && !layoutKeys.has(lab.key)).map(lab => ({
+          ...lab, sourcePage: page.pageNumber, sourceReviewed: false,
+          extractionMethod: "text_fallback", confidence: "low", suspicious: true,
+          referenceRangeText: "", expectedRangeText: "", resultSymbol: "",
+        }));
+        return { ...packet, packetId: `page-${page.pageNumber}`,
+          rawText: cleaned, sourceRawText: cleaned,
+          labs: [...layoutLabs, ...fallback],
+          sourceDocument: { id: document.id, name: document.name, size: document.size,
+            pageCount: document.pageCount, identityConflict: documentIdentity(cleaned).length > 1,
+            pages: [{ pageNumber: page.pageNumber, method: page.method,
+              warning: page.warning || (!layoutLabs.length ? "No table results were confidently located. Check this page for missed results." : ""),
+              resultCount: layoutLabs.length }] },
+        };
+      });
+      // Retain every page, including unreadable and unrecognized pages.
+      const packets = mergeDocumentPackets(packetsByPage).map(packet => ({
+        ...packet, labs: markRepeatedDocumentResults(packet.labs),
+      }));
+      const combinedText = document.pages.map(page => page.text).join("\n\n");
+      setLabImportRawText(combinedText);
+      setLabImportDebugSnapshot(buildLabImportDebugSnapshot({
+        source: "document_layout", originalText: combinedText, cleanedText: combinedText,
+        ocrTexts: document.pages.map(page => page.text), file, packets,
+      }));
       const batchId = await createSharedLabImportBatchWithPackets(packets, "google_ocr");
-
       await loadSharedLabImportBatch(batchId);
       setActiveView("lab-import");
     } catch (error) {
-      console.error("Google OCR import failed:", error);
-      setOcrError(error.message || "OCR failed.");
+      setOcrError(error.message || "Could not read this report. Please retry.");
     } finally {
       setOcrUploading(false);
+      setOcrProgress("");
     }
   }
 
@@ -4453,11 +4447,11 @@ export default function App() {
 
   useEffect(() => {
     if (!session) return;
-    if (!isLeadershipView) return;
+    if (!isLeadershipView && userRole !== "lab") return;
     if (activeView !== "lab-import") return;
 
     loadSharedLabImportBatch(activeLabImportBatchId || null);
-  }, [session, isLeadershipView, activeView]);
+  }, [session, isLeadershipView, userRole, activeView]);
 
   async function handleSelectLabImportPacket(packetId) {
     if (!packetId) return;
@@ -11524,6 +11518,7 @@ async function markSeenBySocialWork(encounterId) {
                 <input
                   type="file"
                   accept="application/pdf,image/*"
+                  disabled={ocrUploading}
                   className="mt-2 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
@@ -11535,7 +11530,7 @@ async function markSeenBySocialWork(encounterId) {
                 />
 
                 {ocrUploading && (
-                  <p className="mt-2 text-sm text-blue-700">Running OCR...</p>
+                  <p className="mt-2 text-sm text-blue-700" role="status">{ocrProgress || "Reading report…"}</p>
                 )}
 
                 {ocrError && (
@@ -11616,10 +11611,21 @@ async function markSeenBySocialWork(encounterId) {
           {activeView === "lab-import" && (
             <LabImportView
               packet={labImportPacket}
+              sourceFile={labSourceFile}
+              patients={patients}
+              onAttachSource={async file => {
+                const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+                const id = Array.from(new Uint8Array(digest), value => value.toString(16).padStart(2, "0")).join("");
+                if (id !== labImportPacket?.sourceDocument?.id) throw new Error("Choose the original file for this report.");
+                labSourceFiles.current.set(id, file);
+                await storeLabSource(session?.user?.id, id, file);
+                setLabSourceFile(file);
+              }}
               packets={labImportPackets}
               selectedPacketId={selectedLabImportPacketId}
               onSelectPacket={handleSelectLabImportPacket}
               onChangeLabs={handleLiveUpdateLabPacketLabs}
+              onRememberRange={handleRememberLabRange}
               onAfterSaveCleanup={cleanupSavedLabImportPacket}
               onBack={() => {
                 setActiveView("dashboard");
@@ -11640,9 +11646,36 @@ async function markSeenBySocialWork(encounterId) {
                 }
 
                 try {
-                  await updateEncounterInSupabase(encounterId, {
-                    importedSendOutLabs: reviewedLabs,
-                  });
+                  const { data: target, error: targetError } = await supabase
+                    .from("encounters")
+                    .select("id, patient_id, imported_send_out_labs")
+                    .eq("id", encounterId)
+                    .eq("patient_id", labImportPacket.confirmedPatient.id)
+                    .single();
+                  if (targetError || !target) throw new Error("Could not verify the selected patient's visit. Please select it again.");
+                  const importPacketIds = labImportPacket.memberPacketIds?.length
+                    ? labImportPacket.memberPacketIds : [labImportPacket.packetId];
+                  const existing = (target.imported_send_out_labs || []).filter(
+                    lab => !importPacketIds.includes(lab.sourceImportPacketId)
+                  );
+                  const incoming = labsReadyToSave(reviewedLabs).map(lab => ({
+                    ...lab,
+                    resultSymbol: importedLabFlag(lab),
+                    sourceImportPacketId: labImportPacket.packetId,
+                    sourceDocumentId: labImportPacket.sourceDocument?.id || null,
+                    sourceFileName: labImportPacket.sourceDocument?.name || "",
+                    collectedDate: lab.collectedDate || labImportPacket.collectedDate || "",
+                  }));
+                  let saveQuery = supabase.from("encounters")
+                    .update({ imported_send_out_labs: [...existing, ...incoming] })
+                    .eq("id", encounterId)
+                    .eq("patient_id", labImportPacket.confirmedPatient.id);
+                  saveQuery = target.imported_send_out_labs === null
+                    ? saveQuery.is("imported_send_out_labs", null)
+                    : saveQuery.eq("imported_send_out_labs", JSON.stringify(target.imported_send_out_labs));
+                  const { data: savedEncounter, error: saveError } = await saveQuery.select("id").maybeSingle();
+                  if (saveError) throw saveError;
+                  if (!savedEncounter) throw new Error("This visit's labs changed during review. Retry saving to preserve the latest results.");
 
                   const savedAt = new Date().toISOString();
 
@@ -11690,9 +11723,11 @@ async function markSeenBySocialWork(encounterId) {
                     message: "Imported labs were saved successfully.",
                     type: "success",
                   });
+                  return true;
                 } catch (error) {
                   console.error("Failed to save imported labs:", error);
                   alert(`Failed to save imported labs: ${error.message}`);
+                  return false;
                 }
               }}
             />

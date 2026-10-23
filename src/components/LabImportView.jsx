@@ -1,3 +1,6 @@
+import { needsExtractionReview } from "../lib/labFlags.js";
+import LabSourceViewer from "./LabSourceViewer.jsx";
+import { labsReadyToSave } from "../lib/labDocument.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import LabReviewPanel from "./LabReviewPanel";
 import { fetchEncountersByPatient } from "../api/encounters";
@@ -8,11 +11,12 @@ function toneForPacket(packet) {
 
   const hasUnresolved = packet.matchStatus === "unresolved";
   const hasPossibleMatch = packet.matchStatus === "possible_match";
-  const suspiciousCount = (packet.labs || []).filter((lab) => lab?.suspicious).length;
+  const suspiciousCount = (packet.labs || []).filter(needsExtractionReview).length;
   const duplicateCount = (packet.labs || []).filter((lab) => !!lab?.duplicateType).length;
   const skipped = packet.reviewStatus === "skipped";
 
-  if (hasUnresolved || suspiciousCount > 0) return "border-red-200 bg-red-50/70";
+  if (hasUnresolved) return "border-red-200 bg-red-50/70";
+  if (suspiciousCount > 0) return "border-blue-200 bg-blue-50/70";
   if (hasPossibleMatch || duplicateCount > 0 || skipped) return "border-amber-200 bg-amber-50/70";
   if (packet.matchStatus === "matched") return "border-emerald-200 bg-emerald-50/70";
 
@@ -23,7 +27,7 @@ function getPacketReviewCounts(packet) {
   const labs = packet?.labs || [];
 
   return {
-    suspiciousCount: labs.filter((lab) => !!lab?.suspicious).length,
+    suspiciousCount: labs.filter(needsExtractionReview).length,
     duplicateCount: labs.filter((lab) => !!lab?.duplicateType).length,
     missingCount: labs.filter((lab) => !!lab?.missing || !!lab?.autoFilled).length,
     totalCount: labs.length,
@@ -99,7 +103,7 @@ function SummaryChip({ children, tone = "slate" }) {
 }
 
 function PacketQueueCard({ packet, isActive, onClick, index }) {
-  const suspiciousCount = (packet.labs || []).filter((lab) => lab?.suspicious).length;
+  const suspiciousCount = (packet.labs || []).filter(needsExtractionReview).length;
   const duplicateCount = (packet.labs || []).filter((lab) => !!lab?.duplicateType).length;
   const missingCount = (packet.labs || []).filter((lab) => lab?.missing || lab?.autoFilled).length;
   const tone = toneForPacket(packet);
@@ -156,6 +160,9 @@ function PacketQueueCard({ packet, isActive, onClick, index }) {
 
       <div className="mt-3 flex flex-wrap gap-2">
         <SummaryChip>{(packet.labs || []).length} labs</SummaryChip>
+        {packet.sourceDocument?.pages?.length > 1 && (
+          <SummaryChip>{packet.sourceDocument.pages.length} pages</SummaryChip>
+        )}
 
         {packet.matchStatus === "unresolved" ? (
           <SummaryChip tone="red">patient unresolved</SummaryChip>
@@ -166,7 +173,7 @@ function PacketQueueCard({ packet, isActive, onClick, index }) {
         ) : null}
 
         {suspiciousCount > 0 ? (
-          <SummaryChip tone="amber">{suspiciousCount} suspicious</SummaryChip>
+          <SummaryChip tone="amber">{suspiciousCount} to verify</SummaryChip>
         ) : null}
 
         {duplicateCount > 0 ? (
@@ -196,8 +203,8 @@ function MatchPanel({
     return (
       <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
         <div className="flex items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold text-emerald-900">Matched Patient</h3>
-          <SummaryChip tone="emerald">confirmed</SummaryChip>
+          <h3 className="text-sm font-semibold text-emerald-900">Suggested Patient</h3>
+          <SummaryChip tone="emerald">verify identity</SummaryChip>
         </div>
 
         <p className="mt-2 text-sm font-medium text-emerald-900">
@@ -296,6 +303,9 @@ function MatchPanel({
 
 export default function LabImportView({
   packet = null,
+  sourceFile = null,
+  patients = [],
+  onAttachSource = null,
   packets = [],
   selectedPacketId = null,
   onSelectPacket = null,
@@ -305,10 +315,17 @@ export default function LabImportView({
   onSkip = null,
   onExportDebug,
   onChangeLabs = null,
+  onRememberRange = null,
 onAfterSaveCleanup = null,
 }) {
   const [reviewedLabsByPacketId, setReviewedLabsByPacketId] = useState({});
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [activeSourceLab, setActiveSourceLab] = useState(null);
+  const [reviewedPagesByPacket, setReviewedPagesByPacket] = useState({});
+  const [confirmedTarget, setConfirmedTarget] = useState("");
+  const [patientSearch, setPatientSearch] = useState("");
+  const [onlyNeedsReview, setOnlyNeedsReview] = useState(false);
   const [encounters, setEncounters] = useState([]);
   const [selectedEncounterId, setSelectedEncounterId] = useState(null);
   const [deletedAuditByPacketId, setDeletedAuditByPacketId] = useState({});
@@ -418,43 +435,27 @@ onAfterSaveCleanup = null,
   }
 
   useEffect(() => {
+    let cancelled = false;
+    setEncounters([]);
+    setSelectedEncounterId(null);
+    setSaveError("");
     async function loadEncounters() {
-      if (!selectedPacket?.confirmedPatient?.id) {
-        setEncounters([]);
-        setSelectedEncounterId(null);
-        return;
-      }
-
+      if (!selectedPacket?.confirmedPatient?.id) return;
       try {
         const data = await fetchEncountersByPatient(selectedPacket.confirmedPatient.id);
+        if (cancelled) return;
         setEncounters(data || []);
-
-        const normalizedCollectedDate = normalizeEncounterDate(selectedPacket.collectedDate);
-
-        const exactDateMatch =
-          (data || []).find(
-            (enc) => normalizeEncounterDate(enc.clinic_date) === normalizedCollectedDate
-          ) || null;
-
-        if (exactDateMatch) {
-          setSelectedEncounterId(exactDateMatch.id);
-          return;
-        }
-
-        if (data && data.length > 0) {
-          setSelectedEncounterId(data[0].id);
-          return;
-        }
-
-        setSelectedEncounterId(null);
-      } catch (error) {
-        console.error("Failed to load encounters for confirmed patient:", error);
-        setEncounters([]);
-        setSelectedEncounterId(null);
+        const date = normalizeEncounterDate(selectedPacket.collectedDate);
+        const matches = date ? (data || []).filter(
+          enc => normalizeEncounterDate(enc.clinic_date) === date
+        ) : [];
+        if (matches.length === 1) setSelectedEncounterId(matches[0].id);
+      } catch {
+        if (!cancelled) setSaveError("Could not load visits. Select the patient again to retry.");
       }
     }
-
     loadEncounters();
+    return () => { cancelled = true; };
   }, [selectedPacket?.confirmedPatient?.id, selectedPacket?.collectedDate, selectedPacket?.packetId]);
 
   if (!selectedPacket) {
@@ -483,7 +484,7 @@ onAfterSaveCleanup = null,
     reviewStatus = "unsaved",
   } = selectedPacket;
 
-  const suspiciousCount = reviewedLabs.filter((lab) => !!lab?.suspicious).length;
+  const suspiciousCount = reviewedLabs.filter(needsExtractionReview).length;
   const duplicateCount = reviewedLabs.filter((lab) => !!lab?.duplicateType).length;
   const missingCount = reviewedLabs.filter((lab) => !!lab?.missing || !!lab?.autoFilled).length;
 
@@ -693,16 +694,23 @@ onAfterSaveCleanup = null,
   }
 
   async function handleSaveLabs() {
-    if (!onSave) return;
+    if (!onSave || saving || saveDisabledReason) return;
 
     try {
       setSaving(true);
-      await onSave(reviewedLabs, selectedEncounterId);
+      setSaveError("");
+      const saved = await onSave(reviewedLabs, selectedEncounterId);
+      if (saved !== true) {
+        setSaveError("Labs were not saved. Your packet is still here for review.");
+        return;
+      }
 await saveLabAuditRows();
 
 if (onAfterSaveCleanup) {
   await onAfterSaveCleanup(selectedPacket.packetId, selectedPacket.batchId);
 }
+    } catch (error) {
+      setSaveError(error.message || "Could not finish saving labs. Your packet is still available.");
     } finally {
       setSaving(false);
     }
@@ -724,14 +732,36 @@ if (onAfterSaveCleanup) {
   const canSeeLabQa = currentUserId === DEV_PROFILE_ID;
   let saveDisabledReason = "";
 
-  if (reviewedLabs.length === 0) {
+  const sourceDocument = selectedPacket.sourceDocument;
+  const reviewedPages = reviewedPagesByPacket[selectedPacket.packetId] || [];
+  const targetKey = `${selectedPacket.packetId}:${confirmedPatient?.id || ""}:${selectedEncounterId || ""}`;
+  const pendingPages = (sourceDocument?.pages || []).filter(page => !reviewedPages.includes(page.pageNumber));
+  const savableLabs = labsReadyToSave(reviewedLabs);
+  const pendingLabs = savableLabs.filter(needsExtractionReview);
+  const patientCandidates = patientSearch.trim().length >= 2 ? patients.filter(patient =>
+    `${patient.firstName || ""} ${patient.lastName || ""} ${patient.mrn || ""} ${patient.dob || ""}`.toLowerCase().includes(patientSearch.toLowerCase().trim())
+  ).slice(0, 10) : [];
+
+  if (sourceDocument?.identityConflict) {
+    saveDisabledReason = "This page contains multiple patient identifiers. Upload separate patient reports before saving.";
+  } else if (savableLabs.length === 0) {
     saveDisabledReason = "No labs to save.";
   } else if (reviewStatus === "skipped") {
     saveDisabledReason = "This packet has been skipped.";
+  } else if (reviewStatus === "saved") {
+    saveDisabledReason = "Already saved to the chart.";
   } else if (!confirmedPatient) {
     saveDisabledReason = "Confirm a patient before saving.";
   } else if (!selectedEncounterId) {
     saveDisabledReason = "Select an encounter before saving.";
+  } else if (confirmedTarget !== targetKey) {
+    saveDisabledReason = "Verify the patient and selected visit below.";
+  } else if (pendingPages.length) {
+    saveDisabledReason = `Check ${pendingPages.length} source page(s) for missing results.`;
+  } else if (pendingLabs.length) {
+    saveDisabledReason = `Verify or remove ${pendingLabs.length} uncertain result(s).`;
+  } else if (savableLabs.some(lab => !String(lab.displayName || "").trim())) {
+    saveDisabledReason = "Give every result a test name.";
   }
 
   return (
@@ -781,13 +811,7 @@ if (onAfterSaveCleanup) {
           <div className="flex flex-col gap-1">
             <button
               onClick={handleSaveLabs}
-              disabled={
-                saving ||
-                reviewedLabs.length === 0 ||
-                reviewStatus === "skipped" ||
-                !confirmedPatient ||
-                !selectedEncounterId
-              }
+              disabled={saving || !!saveDisabledReason}
               className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {saving ? "Saving..." : "Save Imported Labs"}
@@ -808,8 +832,8 @@ if (onAfterSaveCleanup) {
         ) : null}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[320px_minmax(0,1fr)_340px]">
-        <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <div className="space-y-4 xl:col-span-2">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
               <div>
@@ -827,7 +851,7 @@ if (onAfterSaveCleanup) {
               </SummaryChip>
             </div>
 
-            <div className="space-y-3">
+            <div className="grid max-h-64 grid-cols-1 gap-3 overflow-auto md:grid-cols-2 2xl:grid-cols-4">
               {sortedPackets.map((p, index) => (
                 <PacketQueueCard
                   key={p.packetId}
@@ -835,7 +859,7 @@ if (onAfterSaveCleanup) {
                   index={index}
                   isActive={p.packetId === selectedPacketId}
                   onClick={() => {
-                    console.log("SELECT PACKET", p.packetId, p.extractedPatientName);
+                    setActiveSourceLab(null);
                     onSelectPacket?.(p.packetId);
                   }}
                 />
@@ -866,7 +890,7 @@ if (onAfterSaveCleanup) {
                 ) : null}
 
                 {suspiciousCount > 0 ? (
-                  <SummaryChip tone="amber">{suspiciousCount} suspicious</SummaryChip>
+                  <SummaryChip tone="amber">{suspiciousCount} to verify</SummaryChip>
                 ) : null}
 
                 {duplicateCount > 0 ? (
@@ -931,15 +955,53 @@ if (onAfterSaveCleanup) {
               </div>
             </div>
 
-            <LabReviewPanel
-              labs={reviewedLabs}
-              onChangeLabs={updateReviewedLabs}
-              onAuditEvent={handleLabAuditEvent}
-            />
+            {saveError && <p role="alert" className="mb-3 text-sm text-red-700">{saveError}</p>}
+            <details className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <summary className="cursor-pointer text-sm font-medium">Compare with extracted report text</summary>
+              <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs">{selectedPacket.sourceRawText || selectedPacket.rawText || "No source text available."}</pre>
+            </details>
+            <label className="mb-3 flex items-center gap-2 text-sm text-slate-600">
+              <input type="checkbox" checked={onlyNeedsReview} onChange={event => setOnlyNeedsReview(event.target.checked)} />
+              Show results needing verification only ({pendingLabs.length})
+            </label>
+            <div
+              key={selectedPacket.packetId}
+              role="region"
+              aria-label="Detected lab results"
+              tabIndex={0}
+              className="max-h-[75vh] overflow-y-auto overscroll-contain pr-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"
+              style={{ scrollbarGutter: "stable" }}
+            >
+              <LabReviewPanel
+                labs={reviewedLabs}
+                onlyNeedsReview={onlyNeedsReview}
+                onShowSource={lab => setActiveSourceLab(lab)}
+              onRememberRange={lab => onRememberRange?.(selectedPacket.packetId, lab, reviewedLabs)}
+                onChangeLabs={updateReviewedLabs}
+                onAuditEvent={handleLabAuditEvent}
+              />
+            </div>
           </div>
         </div>
 
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
+          <LabSourceViewer key={selectedPacket.packetId} source={sourceDocument} file={sourceFile} activeLab={activeSourceLab}
+            onAttachSource={onAttachSource} reviewedPages={reviewedPages}
+            onReviewPage={(pageNumber, checked) => setReviewedPagesByPacket(prev => ({ ...prev,
+              [selectedPacket.packetId]: checked ? [...new Set([...(prev[selectedPacket.packetId] || []), pageNumber])] :
+                (prev[selectedPacket.packetId] || []).filter(number => number !== pageNumber) }))} />
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <label className="text-sm font-semibold">Find or change patient
+              <input aria-label="Search patients for lab import" value={patientSearch} onChange={event => setPatientSearch(event.target.value)} placeholder="Name, MRN, or date of birth" className="mt-2 w-full rounded-lg border border-slate-300 p-2 font-normal" />
+            </label>
+            {patientSearch.trim().length >= 2 && <div className="mt-2 max-h-60 space-y-2 overflow-auto">
+              {!patientCandidates.length && <p className="text-sm text-slate-500">No matching patients.</p>}
+              {patientCandidates.map(patient => <button key={patient.id} className="block w-full rounded border border-slate-200 p-2 text-left text-sm hover:bg-blue-50" onClick={() => {
+                onConfirmPatient?.(selectedPacket.packetId, patient);
+                setPatientSearch(""); setConfirmedTarget("");
+              }}>{patient.firstName} {patient.lastName} · DOB {patient.dob || "unknown"} · MRN {patient.mrn || "unknown"}</button>)}
+            </div>}
+          </div>
           <MatchPanel
             packet={selectedPacket}
             packetId={selectedPacket?.packetId}
@@ -952,8 +1014,12 @@ if (onAfterSaveCleanup) {
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-900">Encounter Match</h3>
+            <label className="my-3 flex items-start gap-2 text-sm text-slate-700">
+              <input type="checkbox" disabled={!confirmedPatient || !selectedEncounterId} checked={confirmedTarget === targetKey} onChange={event => setConfirmedTarget(event.target.checked ? targetKey : "")} />
+              I verified the report belongs to this patient and the selected visit.
+            </label>
             <p className="mt-1 text-sm text-slate-600">
-              Default target is the encounter whose clinic date matches the collected lab date.
+              A visit is suggested only when exactly one clinic date matches the collection date. Otherwise, choose the correct visit.
             </p>
 
             {confirmedPatient ? (
