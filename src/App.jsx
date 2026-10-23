@@ -1,11 +1,13 @@
+import { LAB_PIPELINE_VERSION, captureImportBaseline, buildLabDiagnostics } from "./lib/labImportDiagnostics.js";
+import { mergeChartLabs } from "./lib/mergeChartLabs.js";
 import { importedLabFlag } from "./lib/labFlags.js";
 import { applyRangeDefaults, learnRangeDefault, suspendConflictingRangeDefaults } from "./lib/labRangeDefaults.js";
 import { repairUnreviewedHepatitisLabs } from "./lib/hepatitisResults.js";
 import { repairUnreviewedCbcLabs } from "./lib/cbcResults.js";
 import { readLabDocument, labFileFingerprint } from "./lib/readLabDocument.js";
 import { repairUnreviewedStiLabs } from "./lib/stiResults.js";
-import { parseLayoutResults, mergeDocumentPackets, labsReadyToSave, documentIdentity, markRepeatedDocumentResults } from "./lib/labDocument.js";
-import { storeLabSource, loadLabSource } from "./lib/labSourceStore.js";
+import { hasResultColumns, parseLayoutResults, mergeDocumentPackets, labsReadyToSave, documentIdentity, markRepeatedDocumentResults } from "./lib/labDocument.js";
+import { storeLabSource, loadLabSource, storeLabTrace, loadLabTrace, appendLabTraceEvent } from "./lib/labSourceStore.js";
 import { isOphthoEncounter as isOphthalmologyEncounter, existingOphthoVisit, canReopenOphthoNote } from "./utils/ophthalmology.js";
 import { intakeDemographics } from "./utils/patientDemographics.js";
 import { clearWomensHealthTracker } from "./api/programs.js";
@@ -1128,7 +1130,7 @@ async function runGoogleOCR(base64Images) {
     throw new Error("The scan reader did not return every page. Please retry.");
   }
   return Array.isArray(data.pages) && data.pages.length === base64Images.length
-    ? data.pages : data.texts.map(text => ({ text, words: [] }));
+    ? data.pages.map(page => ({ ...page, engineVersion: data.pipelineVersion || "unrecorded" })) : data.texts.map(text => ({ text, words: [], engineVersion: "legacy-text-only" }));
 }
 
 
@@ -2306,6 +2308,8 @@ export default function App() {
   const isSubmittingIntakeRef = useRef(false);
   const [labImportRawText, setLabImportRawText] = useState("");
   const [labImportDebugSnapshot, setLabImportDebugSnapshot] = useState(null);
+  const [labImportLastAttempt, setLabImportLastAttempt] = useState(null);
+  const labImportTraces = useRef(new Map());
   const [labImportPacket, setLabImportPacket] = useState(null);
   const [labImportPackets, setLabImportPackets] = useState([]);
   const [selectedLabImportPacketId, setSelectedLabImportPacketId] = useState(null);
@@ -4108,7 +4112,7 @@ export default function App() {
       matched_encounter_id: null,
       review_status: packet.reviewStatus || "unreviewed",
       raw_text: packet.rawText || packet.sourceRawText || "",
-      parsed_labs_json: packet.labs || [],
+      parsed_labs_json: (packet.labs || []).map(captureImportBaseline),
       duplicate_summary_json: { sourceDocument: packet.sourceDocument || null },
       match_candidates_json: (packet.possibleMatches || []).map((p) => ({
         id: p.id,
@@ -4156,7 +4160,7 @@ export default function App() {
     const packet = labImportPackets.find(item => item.packetId === packetId);
     const memberIds = packet?.memberPacketIds?.length ? packet.memberPacketIds : [packetId];
     const payload = { ...updates };
-    if (memberIds.length > 1 && packet.sourceDocument) {
+    if (memberIds.length > 1 && packet.sourceDocument && !payload.duplicate_summary_json) {
       payload.duplicate_summary_json = { sourceDocument: packet.sourceDocument };
     }
     const { error } = await supabase
@@ -4284,13 +4288,17 @@ export default function App() {
     }
   }
 
-  async function handleGoogleOCRImport(file) {
+  async function handleGoogleOCRImport(file, { rerun = false } = {}) {
     if (!file || ocrUploading) return;
     setOcrUploading(true);
     setOcrError("");
     setOcrProgress("Opening report…");
+    const runId = crypto.randomUUID(), events = [];
+    const attempt = { runId, startedAt: new Date().toISOString(), file: { name: file.name, size: file.size, type: file.type }, rerun, status: "reading" };
+    setLabImportLastAttempt(attempt);
     try {
       const fingerprint = await labFileFingerprint(file);
+      attempt.documentId = fingerprint;
       labSourceFiles.current.set(fingerprint, file);
       await storeLabSource(session?.user?.id, fingerprint, file).catch(() => {
         setOcrError("Source preview is available now, but this browser could not retain it. Reattach the report after reloading.");
@@ -4299,35 +4307,46 @@ export default function App() {
         .from("lab_import_packets")
         .select("batch_id")
         .contains("duplicate_summary_json", { sourceDocument: { id: fingerprint } })
+        .order("created_at", { ascending: false })
         .limit(1);
       if (duplicateError) throw duplicateError;
-      if (duplicates?.[0]?.batch_id) {
+      if (duplicates?.[0]?.batch_id && !rerun) {
         await loadSharedLabImportBatch(duplicates[0].batch_id);
         setLabSourceFile(file);
         setOcrError("This exact file was already uploaded. Its existing review batch has been opened.");
+        setLabImportLastAttempt({ ...attempt, status: "reopened_existing", batchId: duplicates[0].batch_id, completedAt: new Date().toISOString() });
         return;
       }
       const document = await readLabDocument(file, {
         recognizePages: runGoogleOCR,
         onProgress: setOcrProgress,
-        fingerprint,
+        fingerprint, runId, onDiagnostic: event => events.push(event),
       });
+      const pageParses = [];
       const packetsByPage = document.pages.map(page => {
         const cleaned = cleanOcrLabText(page.text);
-        const packet = buildLabImportPacketFromText(cleaned, classifyLabPacket(cleaned));
+        const packetType = classifyLabPacket(cleaned);
+        const packet = buildLabImportPacketFromText(cleaned, packetType);
         const layoutLabs = parseLayoutResults(page);
         const layoutKeys = new Set(layoutLabs.map(lab => lab.key));
-        // Legacy text parsing is a review aid when no geometric row was found.
-        // It never supplies a verified result or overrides a positioned row.
-        const fallback = packet.labs.filter(lab => !lab.autoFilled && !layoutKeys.has(lab.key)).map(lab => ({
+        // Only use unpositioned parsing on pages without a recognized table.
+        // A missing table result must never be replaced with a reference limit.
+        const fallback = packet.labs.filter(lab => !hasResultColumns(page) && !lab.autoFilled && !layoutKeys.has(lab.key)).map(lab => ({
           ...lab, sourcePage: page.pageNumber, sourceReviewed: false,
           extractionMethod: "text_fallback", confidence: "low", suspicious: true,
           referenceRangeText: "", expectedRangeText: "", resultSymbol: "",
         }));
-        return { ...packet, packetId: `page-${page.pageNumber}`,
+        pageParses.push({ pageNumber: page.pageNumber, cleanedText: cleaned, packetType,
+          layoutResults: layoutLabs, textParserResults: packet.labs, selectedResults: [...layoutLabs, ...fallback],
+          removedPlaceholders: packet.labs.filter(lab => lab.autoFilled).length });
+        return { ...packet, packetType, packetId: `page-${page.pageNumber}`,
           rawText: cleaned, sourceRawText: cleaned,
           labs: [...layoutLabs, ...fallback],
-          sourceDocument: { id: document.id, name: document.name, size: document.size,
+          sourceDocument: { id: document.id, name: document.name, size: document.size, runId,
+            diagnostics: { pipelineVersion: LAB_PIPELINE_VERSION, startedAt: document.diagnostics.startedAt,
+              completedAt: document.diagnostics.completedAt, durationMs: document.diagnostics.durationMs,
+              ocrRequestCount: events.filter(event => event.stage === "ocr_request_started").length },
+            reprocessedFromBatchId: rerun ? duplicates?.[0]?.batch_id || null : null,
             pageCount: document.pageCount, identityConflict: documentIdentity(cleaned).length > 1,
             pages: [{ pageNumber: page.pageNumber, method: page.method,
               warning: page.warning || (!layoutLabs.length ? "No table results were confidently located. Check this page for missed results." : ""),
@@ -4336,8 +4355,15 @@ export default function App() {
       });
       // Retain every page, including unreadable and unrecognized pages.
       const packets = mergeDocumentPackets(packetsByPage).map(packet => ({
-        ...packet, labs: markRepeatedDocumentResults(packet.labs),
+        ...packet, labs: markRepeatedDocumentResults(packet.labs).map(captureImportBaseline),
       }));
+      const trace = { runId, pipelineVersion: LAB_PIPELINE_VERSION, documentId: document.id, file: attempt.file,
+        reading: document.diagnostics, pages: document.pages, pageParses,
+        grouping: { inputPages: packetsByPage.length, outputPackets: packets.length,
+          assignments: packets.map(packet => ({ packetId: packet.packetId, pages: packet.sourceDocument.pages.map(page => page.pageNumber) })) },
+        initialPackets: packets.map(packet => ({ packetId: packet.packetId, labs: packet.labs })), saveEvents: [] };
+      labImportTraces.current.set(runId, trace);
+      await storeLabTrace(session?.user?.id, runId, trace).catch(() => { attempt.traceStorageUnavailable = true; });
       const combinedText = document.pages.map(page => page.text).join("\n\n");
       setLabImportRawText(combinedText);
       setLabImportDebugSnapshot(buildLabImportDebugSnapshot({
@@ -4346,8 +4372,17 @@ export default function App() {
       }));
       const batchId = await createSharedLabImportBatchWithPackets(packets, "google_ocr");
       await loadSharedLabImportBatch(batchId);
+      setLabImportLastAttempt({ ...attempt, status: "review_ready", batchId, completedAt: new Date().toISOString() });
+      setLabImportDebugSnapshot(previous => ({ ...previous, batchId, runId }));
       setActiveView("lab-import");
     } catch (error) {
+      const failed = { ...attempt, status: "failed", completedAt: new Date().toISOString(), error: error.message, events };
+      setLabImportLastAttempt(failed);
+      if (!labImportTraces.current.has(runId)) {
+        const trace = { ...failed, pipelineVersion: LAB_PIPELINE_VERSION, captureFailed: true };
+        labImportTraces.current.set(runId, trace);
+        await storeLabTrace(session?.user?.id, runId, trace).catch(() => {});
+      }
       setOcrError(error.message || "Could not read this report. Please retry.");
     } finally {
       setOcrUploading(false);
@@ -4473,150 +4508,47 @@ export default function App() {
     }
   }
 
-  function handleExportLabDebug() {
-    try {
-      const packets = labImportPackets || [];
-
-      const currentPacketSummary = packets.map(summarizePacketForDebug);
-      const allCurrentLabs = packets.flatMap((packet) => packet.labs || []);
-      const currentCounts = computeLabCounts(allCurrentLabs);
-
-      const exportData = {
-        schema: "lab-import-debug-v2",
-        timestamp: new Date().toISOString(),
-        overview: {
-          activeBatchId: activeLabImportBatchId || null,
-          selectedPacketId: selectedLabImportPacketId || null,
-          packetCount: packets.length,
-          totalLabCount: allCurrentLabs.length,
-          currentCounts,
-          packetsNeedingReview: currentPacketSummary.filter(
-            (packet) => packet.counts.needs_review_count > 0 || packet.matchStatus !== "matched"
-          ).length,
-          packetsWithNoLabs: currentPacketSummary.filter((packet) => packet.labCount === 0).length,
-        },
-        importSnapshot: labImportDebugSnapshot || null,
-        currentText: {
-          rawText: labImportRawText || "",
-          indexedRawTextLines: buildIndexedLines(labImportRawText || ""),
-        },
-        packetSummary: currentPacketSummary,
-        missingLabsByPacket: currentPacketSummary.map((packet) => ({
-          packetId: packet.packetId,
-          extractedPatientName: packet.extractedPatientName,
-          missingLabs: packet.missingLabs,
-          trueMissingLabs: packet.trueMissingLabs,
-          panelPlaceholders: packet.panelPlaceholders,
-        })),
-
-        packets: packets.map((packet) => {
-          const finalLabs = (packet.labs || []).map(summarizeLabForDebug);
-
-          const counts = computeLabCounts(finalLabs);
-          const categorized = categorizeLabsForExport(finalLabs);
-          const parseMethods = summarizeParseMethods(finalLabs);
-
-          const parsingFails = finalLabs.filter(
-            (lab) =>
-              lab.missing ||
-              lab.suspicious ||
-              lab.autoFilled ||
-              lab.value === null ||
-              lab.value === undefined ||
-              lab.value === ""
-          );
-
-          return {
-            packetId: packet.packetId,
-
-            summary: {
-              total_labs: finalLabs.length,
-              valued_count: counts.valued_count,
-              missing_count: counts.missing_count,
-              autofilled_count: counts.autofilled_count,
-              suspicious_count: counts.suspicious_count,
-              duplicate_count: counts.duplicate_count,
-              needs_review_count: counts.needs_review_count,
-              fill_percent: counts.fill_percent,
-              parseMethods,
-            },
-
-            categorized: {
-              trueMissingLabs: categorized.trueMissingLabs,
-              panelPlaceholders: categorized.panelPlaceholders,
-              suspiciousLabs: categorized.suspiciousLabs,
-            },
-
-            patient: {
-              extractedName: packet.extractedPatientName || "",
-              extractedDob: packet.extractedDob || "",
-              confirmedPatient: packet.confirmedPatient || null,
-              matchStatus: packet.matchStatus || "unresolved",
-              matchedPatient: packet.matchedPatient || null,
-              possibleMatches: packet.possibleMatches || [],
-              unresolvedReason: packet.unresolvedReason || "",
-            },
-
-            metadata: {
-              collectedDate: packet.collectedDate || "",
-              packetType: packet.packetType || "unknown",
-              reviewStatus: packet.reviewStatus || "unsaved",
-              savedAt: packet.savedAt || null,
-              skippedAt: packet.skippedAt || null,
-            },
-
-            finalLabs,
-            parsingFails,
-            missingLabs: finalLabs.filter((lab) => lab.missing || lab.autoFilled),
-
-            finalLabSummary: finalLabs.map((lab) => ({
-              name: lab.displayName,
-              value: lab.value,
-              rawLine: lab.rawLine,
-              suspicious: lab.suspicious,
-              missing: lab.missing,
-              autoFilled: lab.autoFilled,
-              parseMethod: lab.debugMeta?.parseMethod || null,
-              valueLineIndex: lab.debugMeta?.valueLineIndex ?? null,
-            })),
-
-            rawPacket: {
-              extractedPatientName: packet.extractedPatientName || "",
-              extractedDob: packet.extractedDob || "",
-              collectedDate: packet.collectedDate || "",
-              packetType: packet.packetType || "unknown",
-              rawText: packet.rawText || "",
-              sourceRawText: packet.sourceRawText || "",
-              indexedLines: buildIndexedLines(packet.rawText || ""),
-              indexedSourceLines: buildIndexedLines(packet.sourceRawText || ""),
-            },
-          };
-        }),
-      };
-
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-        type: "application/json",
-      });
-
-      const url = URL.createObjectURL(blob);
-
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `lab_debug_${Date.now()}.json`;
-      a.click();
-
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error("Failed to export lab debug:", error);
-      showToast({
-        title: "Export failed",
-        message: "Failed to export lab debug JSON.",
-        type: "error",
-        duration: 5000,
-      });
-    }
+  async function recordLabSaveEvent(packet, details) {
+    const runId = packet.sourceDocument?.runId;
+    if (!runId) return;
+    const event = { eventId: crypto.randomUUID(), timestamp: new Date().toISOString(), packetId: packet.packetId, ...details };
+    const cached = labImportTraces.current.get(runId);
+    if (cached) labImportTraces.current.set(runId, { ...cached, saveEvents: [...(cached.saveEvents || []), event] });
+    await appendLabTraceEvent(session?.user?.id, runId, event).catch(() => {});
   }
 
+  async function handleExportLabDebug(reviewState = {}) {
+    try {
+      const packets = labImportPackets || [];
+      const traces = {};
+      const runIds = [...new Set([...packets.map(packet => packet.sourceDocument?.runId), labImportLastAttempt?.runId].filter(Boolean))];
+      for (const runId of runIds) {
+        traces[runId] = await loadLabTrace(session?.user?.id, runId).catch(() => null) || labImportTraces.current.get(runId) || null;
+      }
+      const ids = [...new Set(packets.flatMap(packet => packet.memberPacketIds || [packet.packetId]))];
+      let auditRows = [], auditError = null;
+      if (ids.length) {
+        const { data, error } = await supabase.from("lab_import_audit_items")
+          .select("id, packet_id, action, analyte_key, original_name, original_value, original_unit, original_raw_line, final_name, final_value, final_unit, confidence, created_at")
+          .in("packet_id", ids).order("created_at", { ascending: true });
+        auditRows = data || [];
+        auditError = error ? "Persisted review audit was unavailable for this export." : null;
+      }
+      const exportData = buildLabDiagnostics({ packets, traces, auditRows, auditError,
+        activeBatchId: activeLabImportBatchId || null, selectedPacketId: selectedLabImportPacketId || null,
+        reviewState, lastAttempt: labImportLastAttempt ? { ...labImportLastAttempt,
+          trace: packets.some(packet => packet.sourceDocument?.runId === labImportLastAttempt.runId) ? undefined : traces[labImportLastAttempt.runId] || null } : null,
+        legacySnapshot: labImportDebugSnapshot?.batchId === activeLabImportBatchId && !labImportDebugSnapshot?.runId ? labImportDebugSnapshot : null });
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob), link = document.createElement("a");
+      link.href = url;
+      link.download = `lab_debug_v3_${Date.now()}.json`;
+      document.body.appendChild(link); link.click(); link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      showToast({ title: "Export failed", message: error.message || "Could not export import diagnostics.", type: "error" });
+    }
+  }
 
   // Program entries realtime disabled to reduce background subscriptions.
   // The Programs view keeps local state in sync after edits and reloads on page open.
@@ -11566,6 +11498,10 @@ async function markSeenBySocialWork(encounterId) {
                 >
                   Clear
                 </button>
+                {(labImportLastAttempt && labImportPackets.length === 0) && <button type="button" onClick={() => handleExportLabDebug()}
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700">
+                  Export import diagnostics
+                </button>}
               </div>
             </div>
           </div>
@@ -11612,6 +11548,8 @@ async function markSeenBySocialWork(encounterId) {
             <LabImportView
               packet={labImportPacket}
               sourceFile={labSourceFile}
+              onRerunOCR={labSourceFile ? () => handleGoogleOCRImport(labSourceFile, { rerun: true }) : null}
+              ocrBusy={ocrUploading}
               patients={patients}
               onAttachSource={async file => {
                 const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
@@ -11645,6 +11583,9 @@ async function markSeenBySocialWork(encounterId) {
                   return;
                 }
 
+                const saveAttemptId = crypto.randomUUID();
+                let chartWriteSucceeded = false;
+                await recordLabSaveEvent(labImportPacket, { stage: "save_started", saveAttemptId, encounterId, reviewedLabCount: reviewedLabs.length });
                 try {
                   const { data: target, error: targetError } = await supabase
                     .from("encounters")
@@ -11655,9 +11596,7 @@ async function markSeenBySocialWork(encounterId) {
                   if (targetError || !target) throw new Error("Could not verify the selected patient's visit. Please select it again.");
                   const importPacketIds = labImportPacket.memberPacketIds?.length
                     ? labImportPacket.memberPacketIds : [labImportPacket.packetId];
-                  const existing = (target.imported_send_out_labs || []).filter(
-                    lab => !importPacketIds.includes(lab.sourceImportPacketId)
-                  );
+                  const existing = target.imported_send_out_labs || [];
                   const incoming = labsReadyToSave(reviewedLabs).map(lab => ({
                     ...lab,
                     resultSymbol: importedLabFlag(lab),
@@ -11666,8 +11605,17 @@ async function markSeenBySocialWork(encounterId) {
                     sourceFileName: labImportPacket.sourceDocument?.name || "",
                     collectedDate: lab.collectedDate || labImportPacket.collectedDate || "",
                   }));
+                  const { data: patientEncounters, error: historyError } = await supabase
+                    .from("encounters").select("id, imported_send_out_labs")
+                    .eq("patient_id", labImportPacket.confirmedPatient.id);
+                  if (historyError) throw historyError;
+                  const knownElsewhere = (patientEncounters || []).filter(enc => enc.id !== encounterId)
+                    .flatMap(enc => enc.imported_send_out_labs || []);
+                  const mergedImport = mergeChartLabs(existing, incoming, importPacketIds, knownElsewhere);
+                  await recordLabSaveEvent(labImportPacket, { stage: "merge_completed", saveAttemptId, encounterId,
+                    added: mergedImport.added, skipped: mergedImport.skipped, previousCount: existing.length, proposedCount: mergedImport.labs.length });
                   let saveQuery = supabase.from("encounters")
-                    .update({ imported_send_out_labs: [...existing, ...incoming] })
+                    .update({ imported_send_out_labs: mergedImport.labs })
                     .eq("id", encounterId)
                     .eq("patient_id", labImportPacket.confirmedPatient.id);
                   saveQuery = target.imported_send_out_labs === null
@@ -11677,10 +11625,15 @@ async function markSeenBySocialWork(encounterId) {
                   if (saveError) throw saveError;
                   if (!savedEncounter) throw new Error("This visit's labs changed during review. Retry saving to preserve the latest results.");
 
+                  chartWriteSucceeded = true;
                   const savedAt = new Date().toISOString();
+                  await recordLabSaveEvent(labImportPacket, { stage: "chart_write_succeeded", saveAttemptId, encounterId,
+                    added: mergedImport.added, skipped: mergedImport.skipped, finalCount: mergedImport.labs.length });
 
                   await updateSharedLabImportPacket(labImportPacket.packetId, {
                     parsed_labs_json: reviewedLabs,
+                    duplicate_summary_json: { sourceDocument: { ...labImportPacket.sourceDocument,
+                      latestSaveOutcome: { savedAt, encounterId, added: mergedImport.added, skipped: mergedImport.skipped, previousCount: existing.length, finalCount: mergedImport.labs.length } } },
                     matched_patient_id: labImportPacket.confirmedPatient.id,
                     matched_encounter_id: encounterId,
                     review_status: "saved",
@@ -11720,11 +11673,13 @@ async function markSeenBySocialWork(encounterId) {
 
                   showToast({
                     title: "Labs saved",
-                    message: "Imported labs were saved successfully.",
+                    message: `${mergedImport.added} new result(s) saved; ${mergedImport.skipped} repeated result(s) skipped. Existing results were preserved.`,
                     type: "success",
                   });
+                  await recordLabSaveEvent(labImportPacket, { stage: "save_completed", saveAttemptId, encounterId });
                   return true;
                 } catch (error) {
+                  await recordLabSaveEvent(labImportPacket, { stage: "save_failed", saveAttemptId, encounterId, chartWriteSucceeded, error: error.message });
                   console.error("Failed to save imported labs:", error);
                   alert(`Failed to save imported labs: ${error.message}`);
                   return false;

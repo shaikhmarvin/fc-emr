@@ -101,7 +101,7 @@ serve(async (req) => {
         );
 
         return new Response(
-            JSON.stringify({ texts, pages }),
+            JSON.stringify({ texts, pages, pipelineVersion: "google-document-layout-v3" }),
             {
                 status: 200,
                 headers: { ...corsHeaders, "Content-Type": "application/json" },

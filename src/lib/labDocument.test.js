@@ -139,3 +139,29 @@ test('saved reports and reports in other files or confirmed charts stay separate
   assert.equal(mergeDocumentPackets([packet({ sourceDocument: { id: 'one' } }), packet({ sourceDocument: { id: 'two' } })]).length, 2);
   assert.equal(mergeDocumentPackets([packet({ confirmedPatient: { id: 'one' } }), packet({ confirmedPatient: { id: 'two' } })]).length, 2);
 });
+
+test('actual OCR columns never substitute reference limits for missing or flagged results', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const pages = JSON.parse(await readFile(new URL('./fixtures/lab-column-regression.json', import.meta.url), 'utf8'));
+  const labs = pages.flatMap(parseLayoutResults);
+  const byKey = Object.fromEntries(labs.map(lab => [lab.key, lab]));
+  for (const [key, expected] of Object.entries({ wbc: 6.9, rbc: 3.82, rdw_sd: 43.9,
+    rdw: 13.6, nrbc_percent: 0, nrbc_absolute: 0, albumin: 4.6, sodium: 137, potassium: 4.3 })) {
+    assert.equal(byKey[key].value, expected, key);
+  }
+  assert.equal(byKey.rbc.reportedFlag, 'L');
+  assert.equal(byKey.rdw_sd.referenceRangeText, '36.4 - 46.3');
+  assert.equal(byKey.hepatitis_a_igm.value.toLowerCase(), 'non-reactive');
+  for (const key of ['glucose', 'alkaline_phosphatase']) {
+    assert.equal(byKey[key].value, '');
+    assert.equal(byKey[key].suspicious, true);
+  }
+  assert.equal(byKey.glucose.referenceRangeText, '65 - 115');
+  assert.equal(labsReadyToSave(labs).some(lab => lab.key === 'glucose'), false);
+});
+
+test('positioned tables disable unsafe unpositioned fallback even with no readable values', async () => {
+  const { hasResultColumns } = await import('./labDocument.js');
+  assert.equal(hasResultColumns(pageFixture()), true);
+  assert.equal(hasResultColumns({ rows: [] }), false);
+});

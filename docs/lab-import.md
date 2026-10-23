@@ -37,9 +37,14 @@ uncertain results.
   suggested when exactly one clinic date matches the extracted collection date.
 - Repeated rows are flagged. Repeat file uploads reopen the existing batch before
   OCR. Saved packets remain available for source history and duplicate detection.
-- Chart saving preserves other imports and uses a conditional update to detect
-  concurrent changes. Retrying a partially completed save replaces only the
-  results carrying that same packet ID. Blank placeholders are not chart results.
+- Chart saving is additive and uses a conditional update to detect concurrent
+  changes to the selected visit. Repeated results from the same document are
+  skipped, including results already saved under another visit in this patient's
+  chart. Changed values and uncertain older source metadata block saving for
+  review. Existing results, reviewer flags, and rows missed by a later OCR run
+  remain intact. Blank placeholders are not chart results.
+- "Re-run OCR into a new review" retains the original file fingerprint and
+  creates a separate review batch. It does not write to the patient chart.
 
 ## Deployment
 
@@ -71,3 +76,29 @@ conflicts, repeated rows, blank values, unreadable pages, and incomplete respons
 These tests do not establish accuracy across every laboratory or scan format.
 Full OCR and chart-saving verification in a test environment remains required.
 Do not use real chart writes as an extraction test.
+
+## Debug export v3
+
+Use **Export Debug JSON** in the review screen. It includes the currently edited
+results immediately, even before the delayed shared save finishes. A failed
+initial import also exposes **Export import diagnostics** above the empty review.
+
+New imports capture a run ID and pipeline version, file fingerprint/type/size,
+page text before and after row reconstruction, word boxes/confidence, native text
+versus OCR decisions, render dimensions, OCR batch timings, page errors, parser
+outputs before selection, and grouping assignments. No file image bytes or API
+credentials are exported. Detailed traces are stored in this browser alongside
+the original source; the shared packet keeps the run ID and a compact summary.
+
+Per-lab original import and review baselines identify changes to test identity,
+name, value, units, range and flags. Aggregate counts distinguish automatic
+adjustments, reviewer modifications, manual additions, removals, verification-only
+actions and reused ranges. `improvementTargets.byTest` summarizes which tests
+needed corrections. It is a review workload metric, not an accuracy estimate.
+
+Save events record duplicate skips, newly added counts, successful chart writes,
+completed packet updates, and failures, including whether the chart write had
+already succeeded. Persisted review audit rows are included when available.
+Unknown older baselines or traces are labeled unavailable instead of reconstructed
+as if they had been captured. Source text and matching identifiers may include
+patient information; unrelated chart notes are excluded.

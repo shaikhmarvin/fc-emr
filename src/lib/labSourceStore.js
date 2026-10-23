@@ -31,3 +31,25 @@ export async function loadLabSource(userId, id) {
     });
   } finally { db.close(); }
 }
+
+export const storeLabTrace = (userId, runId, trace) => storeLabSource(userId, `trace:${runId}`, trace);
+export const loadLabTrace = (userId, runId) => runId ? loadLabSource(userId, `trace:${runId}`) : Promise.resolve(null);
+
+export async function appendLabTraceEvent(userId, runId, event) {
+  if (!userId || !runId) return;
+  const db = await openStore();
+  try {
+    await new Promise((resolve, reject) => {
+      const transaction = db.transaction('documents', 'readwrite');
+      const store = transaction.objectStore('documents'), key = `${userId}:trace:${runId}`;
+      const request = store.get(key);
+      request.onsuccess = () => {
+        const trace = request.result || { runId, captureUnavailable: true };
+        store.put({ ...trace, saveEvents: [...(trace.saveEvents || []), event] }, key);
+      };
+      transaction.oncomplete = resolve;
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+  } finally { db.close(); }
+}

@@ -304,6 +304,8 @@ function MatchPanel({
 export default function LabImportView({
   packet = null,
   sourceFile = null,
+  onRerunOCR = null,
+  ocrBusy = false,
   patients = [],
   onAttachSource = null,
   packets = [],
@@ -503,6 +505,9 @@ onAfterSaveCleanup = null,
         displayName: lab.displayName || "",
         value: unwrapLabAuditValue(lab.value),
         unit: lab.unit || "",
+        referenceRangeText: lab.referenceRangeText || "",
+        manualFlag: lab.manualFlag ?? null,
+        reportedFlag: lab.reportedFlag || "",
         rawLine: lab.rawLine || "",
         autoFilled: !!lab.autoFilled,
         missing: !!lab.missing,
@@ -776,9 +781,14 @@ if (onAfterSaveCleanup) {
           </button>
         ) : null}
 
+        {onRerunOCR && <button type="button" disabled={ocrBusy || saving} onClick={onRerunOCR}
+          className="rounded-xl border border-blue-200 bg-white px-4 py-2 text-sm font-medium text-blue-700 disabled:opacity-50">
+          {ocrBusy ? "Reading report…" : "Re-run OCR into a new review"}
+        </button>}
         {onExportDebug ? (
           <button
-            onClick={onExportDebug}
+            onClick={() => onExportDebug({ packetId: selectedPacket.packetId, labs: reviewedLabs,
+              deletedByPacket: deletedAuditByPacketId, reviewedPages, selectedEncounterId })}
             className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100"
           >
             Export Debug JSON

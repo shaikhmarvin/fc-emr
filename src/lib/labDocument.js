@@ -9,7 +9,7 @@ const resultExpression = new RegExp(`^([<>]=?|[≤≥])?\\s*(${number})(?:\\s*([
 const rangeExpression = new RegExp(`^(${number}\\s*[-–]\\s*${number}|[<>]=?\\s*${number}|[≤≥]\\s*${number}|${number}\\+)\\s*(.*)$`);
 
 export function parseResultCell(text) {
-  const value = clean(text);
+  const value = clean(text).replace(/non\s*-\s*reactive/ig, 'Non-Reactive').replace(/\(\s*([HL*])\s*\)$/i, '$1');
   const match = value.match(resultExpression);
   if (match) return {
     value: match[1] ? `${match[1].replace('≤', '<=').replace('≥', '>=')}${match[2]}` : Number(match[2]),
@@ -62,6 +62,14 @@ export function buildPageRows(words = []) {
   });
 }
 
+export function hasResultColumns(page) {
+  return (page.rows || []).some(row => {
+    const text = (row.words || []).map(word => word.text);
+    return text.some(value => /^(?:value|result|results)$/i.test(value)) &&
+      text.some(value => /^(?:range|reference|interval|units?)$/i.test(value));
+  });
+}
+
 export function parseLayoutResults(page) {
   let columns = null;
   const results = [];
@@ -77,22 +85,30 @@ export function parseLayoutResults(page) {
       continue;
     }
     if (!columns) continue;
-    const valueStart = columns.value - 0.035;
+    const valueStart = columns.value - 0.12;
     const boundaries = [columns.range, columns.unit].filter(value => value !== null && value > columns.value);
-    const valueEnd = boundaries.length ? Math.min(...boundaries) - 0.035 : Infinity;
+    const valueEnd = boundaries.length ? (columns.value + Math.min(...boundaries)) / 2 : Infinity;
     const x = word => word.across ?? word.box.x;
     const name = clean(words.filter(word => x(word) < valueStart).map(word => word.text).join(' '));
-    const valueText = clean(words.filter(word => x(word) >= valueStart && x(word) < valueEnd).map(word => word.text).join(' '));
+    // Vision occasionally merges an entire vertical result column into one word.
+    // Its digits cannot safely be assigned to individual tests.
+    const heights = words.map(word => word.box.height).sort((a, b) => a - b);
+    const typicalHeight = heights[Math.floor(heights.length / 2)] || 0;
+    const valueText = clean(words.filter(word => x(word) >= valueStart && x(word) < valueEnd &&
+      word.box.height <= typicalHeight * 2.5).map(word => word.text).join(' '));
     let definition = identifyHepatitisTest(name) || identifyStiTest(name) || LAB_CATALOG.find(lab => [lab.displayName, ...(lab.aliases || [])].some(alias => normalize(alias) === normalize(name)));
-    const parsed = definition?.key.startsWith('hepatitis_') ? parseHepatitisValue(valueText, definition) : parseResultCell(valueText);
-    if (!name || !parsed || /specimen|collected|received|verified|ordered|printed|patient|comment|page\s*:/i.test(name)) continue;
-    if (definition?.key.startsWith('hepatitis_')) definition = hepatitisDefinitionForValue(definition, parsed);
+    const parsed = definition?.key.startsWith('hepatitis_') ? parseHepatitisValue(valueText.replace(/non\s*-\s*reactive/ig, 'Non-Reactive'), definition) : parseResultCell(valueText);
+    if (!name || (!parsed && !definition) || /specimen|collected|received|verified|ordered|printed|patient|comment|page\s*:/i.test(name)) continue;
+    if (parsed && definition?.key.startsWith('hepatitis_')) definition = hepatitisDefinitionForValue(definition, parsed);
     const trailing = clean(words.filter(word => x(word) >= valueEnd).map(word => word.text).join(' '));
-    let rangeText = trailing, unit = parsed.unit || '';
+    let rangeText = trailing, unit = parsed?.unit || '';
     if (columns.unit !== null && columns.range !== null && columns.unit < columns.range) {
-      unit = clean(words.filter(word => x(word) >= columns.unit - 0.035 && x(word) < columns.range - 0.035).map(word => word.text).join(' '));
-      rangeText = clean(words.filter(word => x(word) >= columns.range - 0.035).map(word => word.text).join(' '));
+      unit = clean(words.filter(word => x(word) >= (columns.value + columns.unit) / 2 && x(word) < (columns.unit + columns.range) / 2).map(word => word.text).join(' '));
+      rangeText = clean(words.filter(word => x(word) >= (columns.unit + columns.range) / 2).map(word => word.text).join(' '));
     }
+    // Some scans omit the short dash between the two reference limits.
+    rangeText = rangeText.replace(new RegExp(`^(${number})\\s+(${number})(?=\\s|$)`), '$1 - $2')
+      .replace(/\s*\/\s*/g, '/');
     const rangeMatch = rangeText.match(rangeExpression);
     if (rangeMatch) { rangeText = rangeMatch[1]; unit ||= rangeMatch[2]; }
     else if (/^(?:mg\/|g\/|mmol\/|mL\/|U\/|%|fL|pg)/i.test(rangeText)) { unit ||= rangeText; rangeText = ''; }
@@ -100,11 +116,11 @@ export function parseLayoutResults(page) {
       key: definition?.key || `outside-${normalize(name)}`,
       displayName: definition?.displayName || name,
       group: definition?.group || 'Other', custom: !definition,
-      value: parsed.value, unit, referenceRangeText: rangeText, referenceRangeSource: rangeText ? "report" : "",
-      reportedFlag: parsed.flag, rawLine: row.text,
+      value: parsed?.value ?? '', unit, referenceRangeText: rangeText, referenceRangeSource: rangeText ? "report" : "",
+      reportedFlag: parsed?.flag || '', rawLine: row.text,
       sourcePage: page.pageNumber, sourceRowId: row.id, sourceBox: row.box,
       extractionMethod: page.method, extractionConfidence: row.confidence,
-      suspicious: row.confidence < 0.85, sourceReviewed: false,
+      suspicious: !parsed || row.confidence < 0.85, sourceReviewed: false,
       missing: false, autoFilled: false, confidence: row.confidence >= 0.85 ? 'high' : 'low',
     });
   }
