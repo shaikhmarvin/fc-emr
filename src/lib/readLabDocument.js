@@ -1,4 +1,5 @@
 import { buildPageRows } from './labDocument.js';
+import { straightenScan, originalWordBoxes } from './straightenScan.js';
 
 function wordsFromPdf(items, viewport) {
   return items.filter(item => item.str?.trim()).flatMap(item => {
@@ -46,13 +47,15 @@ export async function readLabDocument(file, { recognizePages, onProgress = () =>
     }
     pending.forEach((page, index) => {
       const response = recognized[index];
-      const rows = buildPageRows(response.words || []);
+      const rows = buildPageRows(response.words || []).map(row => ({ ...row,
+        words: originalWordBoxes(row.words, page.correction),
+        box: originalWordBoxes([{ box: row.box }], page.correction)[0].box }));
       pages.push({ pageNumber: page.pageNumber, method: 'ocr',
         text: rows.length ? rows.map(row => row.text).join('\n') : response.text || '',
         originalText: response.text || '', rows,
         reading: { engineVersion: response.engineVersion || "unrecorded", wordCount: response.words?.length || 0,
           rowCount: rows.length, width: page.width || null, height: page.height || null,
-          nativeTextCharacters: page.nativeTextCharacters ?? null,
+          nativeTextCharacters: page.nativeTextCharacters ?? null, deskew: page.correction || null,
           responseFormat: response.words?.length ? "word_layout" : "text_only" },
         warning: response.error || (!response.text?.trim() ? 'No readable text. Review this page manually.' :
           !rows.length ? 'Page coordinates are unavailable. Results require manual source verification.' : '') });
@@ -84,8 +87,15 @@ export async function readLabDocument(file, { recognizePages, onProgress = () =>
             canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
             try {
               await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-              pending.push({ pageNumber: number, image: canvas.toDataURL('image/png').split(',')[1],
-                width: canvas.width, height: canvas.height, nativeTextCharacters: text.length });
+              onProgress(`Checking text alignment on page ${number}…`);
+              const prepared = straightenScan(canvas);
+              try {
+                pending.push({ pageNumber: number, image: prepared.canvas.toDataURL('image/png').split(',')[1],
+                  width: canvas.width, height: canvas.height, correction: prepared.correction, nativeTextCharacters: text.length });
+                emit({ stage: 'page_deskewed', pageNumber: number, ...prepared.correction });
+              } finally {
+                if (prepared.canvas !== canvas) { prepared.canvas.width = 0; prepared.canvas.height = 0; }
+              }
               emit({ stage: "page_rendered_for_ocr", pageNumber: number, width: canvas.width, height: canvas.height,
                 nativeTextCharacters: text.length, scale: 2, format: "image/png" });
             } finally { canvas.width = 0; canvas.height = 0; }
@@ -107,7 +117,7 @@ export async function readLabDocument(file, { recognizePages, onProgress = () =>
   } else throw new Error('Choose a PDF or image file.');
   emit({ stage: "read_completed", pageCount: pages.length });
   return { id, name: file.name, size: file.size, pageCount: pages.length,
-    diagnostics: { runId, readerVersion: "positioned-document-reader-v3", startedAt, completedAt: new Date().toISOString(),
+    diagnostics: { runId, readerVersion: "positioned-document-reader-v4", startedAt, completedAt: new Date().toISOString(),
       durationMs: Math.round(performance.now() - started), renderScale: 2, ocrBatchLimit: 4, events },
     pages: pages.sort((a, b) => a.pageNumber - b.pageNumber) };
 }

@@ -22,10 +22,24 @@ export function mergeChartLabs(existing, incoming, memberPacketIds = [], knownEl
       continue;
     }
     if (matches.length) throw new Error(`${lab.displayName || lab.key}: this document already has a different saved result. The chart was not changed. Review the existing result before importing a correction.`);
-    const ambiguous = sameReport.some(old => (old.key || old.displayName) === (lab.key || lab.displayName) &&
-      ((!text(old.collectedDate || old.collectionDate) || !text(lab.collectedDate || lab.collectionDate)) ||
-        !text(old.unit || old.units) || !text(lab.unit || lab.units)));
-    if (ambiguous) throw new Error(`${lab.displayName || lab.key}: a saved result from this document is missing a matching date or units. Review it before adding another copy. The chart was not changed.`);
+    const partialMatches = sameReport.filter(old => {
+      if ((old.key || old.displayName) !== (lab.key || lab.displayName)) return false;
+      const oldDate = text(old.collectedDate || old.collectionDate);
+      const newDate = text(lab.collectedDate || lab.collectionDate);
+      const oldUnit = text(old.unit || old.units).replace(/μ/g, 'µ');
+      const newUnit = text(lab.unit || lab.units).replace(/μ/g, 'µ');
+      // Known differences distinguish specimens/assays even if another field is blank.
+      if (oldDate && newDate && oldDate !== newDate) return false;
+      if (oldUnit && newUnit && oldUnit !== newUnit) return false;
+      return !oldDate || !newDate || !oldUnit || !newUnit;
+    });
+    // One compatible result with the identical value is a safe repeat. Preserve
+    // the original object, including its flags and incomplete source metadata.
+    if (partialMatches.length === 1 && valueKey(partialMatches[0].value) === valueKey(lab.value)) {
+      skipped += 1;
+      continue;
+    }
+    if (partialMatches.length) throw new Error(`${lab.displayName || lab.key}: a saved result from this document has incomplete date or units, and this row cannot be matched safely. Compare it with the saved result and remove this row from the import if it is a repeat. The chart was not changed.`);
     // Old imports may predate document IDs. Do not guess whether they are a new specimen.
     const legacy = merged.some(old => !old.sourceDocumentId && !old.sourceImportPacketId &&
       identity(old) === identity(lab) && valueKey(old.value) === valueKey(lab.value));

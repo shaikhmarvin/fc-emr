@@ -10,6 +10,13 @@ uncertain results.
 - Digital PDFs use their embedded text and positions when available. Scans use
   the existing Google OCR function in groups of four pages, freeing rendered
   canvases between pages instead of holding the entire scanned file in memory.
+- Before scanned PDF pages reach OCR, a local text-line alignment pass estimates
+  tilt up to 12 degrees in either direction. Confident corrections rotate a padded,
+  white-background image without clipping the page; uncertain or nearly level
+  pages stay unchanged. This handles uniform page tilt, not curved pages,
+  perspective distortion, or sideways pages. The original PDF is retained, and
+  OCR highlights are mapped back to its coordinates. Correction angles and
+  confidence are recorded in import diagnostics.
 - Google word positions and confidence are retained. Words are grouped by their
   baseline, then result, units, and reference columns are read separately.
   See [Google's document text response](https://docs.cloud.google.com/vision/docs/fulltext-annotations).
@@ -66,7 +73,7 @@ source metadata uses the existing `duplicate_summary_json` field.
 ## Validation
 
 ```powershell
-node --test src/lib/labParser.test.js src/lib/labDocument.test.js src/lib/readLabDocument.test.js
+node --test src/lib/labParser.test.js src/lib/labDocument.test.js src/lib/readLabDocument.test.js src/lib/straightenScan.test.js
 npm run build
 ```
 

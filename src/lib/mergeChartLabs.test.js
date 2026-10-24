@@ -47,7 +47,22 @@ test('the same source result already saved under another visit is not copied to 
   assert.equal(otherVisit.length, 1);
 });
 
-test('incomplete old source metadata blocks uncertain duplicate matching', () => {
-  assert.throws(() => mergeChartLabs([lab({ collectedDate: '' })], [lab({})]), /missing a matching date or units/);
-  assert.throws(() => mergeChartLabs([lab({ unit: '' })], [lab({})]), /missing a matching date or units/);
+test('unique same-value repeats with incomplete metadata preserve the saved result', () => {
+  for (const missing of [{ collectedDate: '' }, { unit: '' }, { unit: '', collectedDate: '' }]) {
+    const original = lab({ key: 'free_t4', value: 1.2, ...missing });
+    const result = mergeChartLabs([original], [lab({ key: 'free_t4', value: '1.20', sourceImportPacketId: 'rerun' })]);
+    assert.equal(result.skipped, 1);
+    assert.equal(result.added, 0);
+    assert.equal(result.labs[0], original);
+  }
+});
+
+test('incomplete metadata still blocks changed values and multiple possible matches', () => {
+  assert.throws(() => mergeChartLabs([lab({ unit: '' })], [lab({ value: 95 })]), /cannot be matched safely/);
+  assert.throws(() => mergeChartLabs([lab({ unit: '' }), lab({ collectedDate: '' })], [lab({})]), /cannot be matched safely/);
+});
+
+test('known dates or units distinguish results despite another missing field', () => {
+  assert.equal(mergeChartLabs([lab({ unit: '' })], [lab({ collectedDate: '2026-10-21' })]).added, 1);
+  assert.equal(mergeChartLabs([lab({ collectedDate: '' })], [lab({ unit: 'mmol/L' })]).added, 1);
 });

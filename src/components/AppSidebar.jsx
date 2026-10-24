@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import logo from "../assets/free-clinic-logo.png";
 
 function SectionLabel({ children }) {
@@ -28,8 +29,20 @@ export default function AppSidebar({
 }) {
   function handleViewChange(view) {
     setActiveView(view);
-    setSidebarOpen(false);
+    if (!window.matchMedia("(min-width: 1280px)").matches) setSidebarOpen(false);
   }
+
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const handleKeyDown = event => {
+      if (event.key === "Escape") {
+        setSidebarOpen(false);
+        document.getElementById("sidebar-toggle")?.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [sidebarOpen, setSidebarOpen]);
 
   function getNavItemClass(view) {
     const isActive = activeView === view;
@@ -52,23 +65,28 @@ export default function AppSidebar({
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 transform overflow-y-auto border-r border-slate-200 bg-white transition-transform duration-300 xl:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full xl:translate-x-0"
+        id="app-sidebar"
+        aria-label="Main navigation"
+        inert={!sidebarOpen}
+        className={`fixed inset-y-0 left-0 z-50 w-64 transform overflow-y-auto border-r border-slate-200 bg-white transition-transform duration-300 motion-reduce:transition-none ${sidebarOpen ? "translate-x-0" : "-translate-x-full"
           }`}
       >
-        <div className="border-b border-slate-200 px-4 py-4">
+        <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-4">
           <img
             src={logo}
             alt="Free Clinic"
             className="h-10 w-auto max-w-[180px] object-contain object-left"
           />
+          <button type="button" aria-label="Collapse sidebar" onClick={() => {
+            setSidebarOpen(false);
+            document.getElementById("sidebar-toggle")?.focus();
+          }} className="rounded-lg px-2 py-2 text-slate-600 hover:bg-slate-100">
+            <span aria-hidden="true">✕</span>
+          </button>
         </div>
 
         <nav className="space-y-4 p-4">
-          {(isLeadershipView || userRole === "lab") && (
-            <button onClick={() => handleViewChange("lab-import")} className={getNavItemClass("lab-import")}>
-              Lab Import
-            </button>
-          )}
+
           {userRole === "lab" ? (
   <div className="space-y-2">
     <SectionLabel>Workflow</SectionLabel>
@@ -85,6 +103,10 @@ export default function AppSidebar({
       className={getNavItemClass("board")}
     >
       Room Board
+    </button>
+    <SectionLabel>Clinical</SectionLabel>
+    <button onClick={() => handleViewChange("lab-import")} className={getNavItemClass("lab-import")}>
+      Lab Import
     </button>
   </div>
 ) : userRole === "social_work" ? (
@@ -222,6 +244,12 @@ export default function AppSidebar({
                     Formulary
                   </button>
                 )}
+
+          {(isLeadershipView || userRole === "lab") && (
+            <button onClick={() => handleViewChange("lab-import")} className={getNavItemClass("lab-import")}>
+              Lab Import
+            </button>
+          )}
 
                 {canProgramsAccess && (
                   <button

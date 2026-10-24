@@ -2302,7 +2302,7 @@ export default function App() {
   // Global profiles realtime disabled. User Management reloads profiles when opened,
   // and each signed-in user still has their own approval listener in useAuthSession.
 
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.matchMedia("(min-width: 1280px)").matches);
   const [showIntakeModal, setShowIntakeModal] = useState(false);
   const [isSubmittingIntake, setIsSubmittingIntake] = useState(false);
   const isSubmittingIntakeRef = useRef(false);
@@ -11412,7 +11412,7 @@ async function markSeenBySocialWork(encounterId) {
         canAccessResearch={canAccessResearch}
       />
 
-      <div className="min-w-0 flex-1 bg-slate-100 xl:ml-64 xl:flex xl:flex-col">
+      <div className={`min-w-0 flex-1 bg-slate-100 transition-[margin] duration-300 motion-reduce:transition-none xl:flex xl:flex-col ${sidebarOpen ? "xl:ml-64" : ""}`}>
         <AppHeader
           womensHealthDayActive={womensHealthDayToday}
           womensHealthThemeActive={womensHealthThemeActive}
