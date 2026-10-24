@@ -130,7 +130,12 @@ export function calculateBmi(weight, height) {
 }
 
 export function normalizeBp(value) {
-  const digits = String(value || "").replace(/[^\d]/g, "").slice(0, 5);
+  const text = String(value || "");
+  if (text.includes("/")) {
+    const [systolic, ...rest] = text.split("/");
+    return `${systolic.replace(/[^\d]/g, "").slice(0, 3)}/${rest.join("").replace(/[^\d]/g, "").slice(0, 3)}`;
+  }
+  const digits = text.replace(/[^\d]/g, "").slice(0, 6);
   if (!digits) return "";
 
   const firstDigit = digits[0];
@@ -139,7 +144,7 @@ export function normalizeBp(value) {
   if (digits.length < slashAfter) return digits;
   if (digits.length === slashAfter) return `${digits}/`;
 
-  return `${digits.slice(0, slashAfter)}/${digits.slice(slashAfter, slashAfter + 2)}`;
+  return `${digits.slice(0, slashAfter)}/${digits.slice(slashAfter, slashAfter + 3)}`;
 }
 
 export function normalizePain(value) {
