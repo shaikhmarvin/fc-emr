@@ -13,7 +13,7 @@ export function summarizeClinicalMeasure(series) {
     paired: pairs.length, baseline: mean(pairs.map(p => p.first.value)), followup: mean(pairs.map(p => p.last.value)),
     change: mean(pairs.map(p => p.delta)), lower: pairs.filter(p => p.delta < -1e-9).length,
     higher: pairs.filter(p => p.delta > 1e-9).length, unchanged: pairs.filter(p => Math.abs(p.delta) <= 1e-9).length,
-    followupDays: mean(pairs.map(p => p.days)) };
+    followupDays: mean(pairs.map(p => p.days)), series };
 }
 
 export function buildClinicalResearchStats(groups) {
@@ -36,8 +36,20 @@ export function buildClinicalResearchStats(groups) {
         const bp = status.bp.map(value => value.split('/').map(Number));
         return { date, systolic: mean(bp.map(pair => pair[0])), diastolic: mean(bp.map(pair => pair[1])), a1c: mean(status.a1c.map(Number)) };
       });
-      for (const key of Object.keys(series)) series[key].push({ patientId, days: days.filter(day => day[key] !== null).map(day => ({ date: day.date, value: day[key] })) });
+      for (const key of Object.keys(series)) series[key].push({ patientId, patientName: rows[0].patientName, rows, days: days.filter(day => day[key] !== null).map(day => ({ date: day.date, value: day[key] })) });
     }
     return { label: cohort.label, measures: Object.fromEntries(Object.entries(series).filter(([key]) => cohort.keys.includes(key)).map(([key, values]) => [key, summarizeClinicalMeasure(values)])) };
+  });
+}
+
+export function filterClinicalPatients(series, filter) {
+  return series.filter(item => {
+    const count = item.days.length;
+    const delta = count >= 2 ? item.days.at(-1).value - item.days[0].value : null;
+    return filter === 'all' || (filter === 'missing' && !count) || (filter === 'available' && count > 0)
+      || (filter === 'paired' && count >= 2) || (filter === 'noFollowup' && count < 2)
+      || (filter === 'lower' && delta !== null && delta < -1e-9)
+      || (filter === 'higher' && delta !== null && delta > 1e-9)
+      || (filter === 'unchanged' && delta !== null && Math.abs(delta) <= 1e-9);
   });
 }

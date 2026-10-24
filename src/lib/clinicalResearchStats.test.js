@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildClinicalResearchStats, summarizeClinicalMeasure } from './clinicalResearchStats.js';
+import { buildClinicalResearchStats, summarizeClinicalMeasure, filterClinicalPatients } from './clinicalResearchStats.js';
 
 test('summaries weight patients equally and compare only distinct dated follow-up', () => {
   const stats = summarizeClinicalMeasure([
@@ -58,4 +58,18 @@ test('outcomes pool single and dual diagnoses and count each patient once', () =
   assert.equal(cohorts[1].measures.a1c.mean, 8);
   assert.equal(cohorts[0].measures.a1c, undefined);
   assert.equal(cohorts[1].measures.systolic, undefined);
+});
+
+test('detail filters match summary counts, including missing and missing follow-up', () => {
+  const series = [
+    { patientId: 'missing', days: [] },
+    { patientId: 'single', days: [{ date: '2025-01-01', value: 8 }] },
+    ...[-1, 0, 1].map(delta => ({ patientId: String(delta), days: [{ date: '2025-01-01', value: 8 }, { date: '2025-02-01', value: 8 + delta }] })),
+  ];
+  const summary = summarizeClinicalMeasure(series);
+  for (const [filter, count] of [['all', summary.total], ['missing', summary.missing], ['available', summary.available], ['paired', summary.paired], ['noFollowup', summary.total - summary.paired], ['lower', summary.lower], ['unchanged', summary.unchanged], ['higher', summary.higher]]) {
+    assert.equal(filterClinicalPatients(summary.series, filter).length, count, filter);
+  }
+  assert.deepEqual(filterClinicalPatients(series, 'missing').map(item => item.patientId), ['missing']);
+  assert.deepEqual(filterClinicalPatients(series, 'noFollowup').map(item => item.patientId), ['missing', 'single']);
 });

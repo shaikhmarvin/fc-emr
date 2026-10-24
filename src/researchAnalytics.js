@@ -145,7 +145,8 @@ function buildPharmacyGroups(rows) {
 }
 
 export function buildResearchReport(patients, startDate, endDate, clinicEvent = "", eventDate = "") {
-  patients = patientsForClinicEvent(patients, clinicEvent, eventDate);
+  // Current eligibility applies to all tracker data, including historical visits.
+  patients = patientsForClinicEvent(patients.filter(patient => !patient.fired), clinicEvent, eventDate);
   const chronicByPatient = new Map();
   patients.forEach((patient) => {
     const encounters = (patient.encounters || []).filter((encounter) => isGeneralClinicEncounter(encounter) && encounter.status !== "cancelled" && normalizeDate(encounter.clinicDate) && (!endDate || normalizeDate(encounter.clinicDate) <= endDate));

@@ -129,7 +129,7 @@ export default function ResearchView({ patients = [], womensHealthEventDate = ""
         <div className="research-header">
           <div>
             <h2 className="text-xl font-semibold text-slate-900">Research</h2>
-            <p className="mt-1 max-w-3xl text-sm text-slate-600">Language, disease, transportation, screening, and return analyses include general-clinic visits only. Refill visits appear separately in pharmacy use and wait-time comparisons. HTN+ and DM+ carry forward from the patient chronic-condition profile or general-clinic intakes.</p>
+            <p className="mt-1 max-w-3xl text-sm text-slate-600">Language, disease, transportation, screening, and return analyses include general-clinic visits only. Refill visits appear separately in pharmacy use and wait-time comparisons. Currently fired patients are excluded from every tracker tab and included again when their fired status is cleared. HTN+ and DM+ carry forward from the patient chronic-condition profile or general-clinic intakes.</p>
           </div>
           <div className="research-filters">
             <label className="text-xs font-semibold text-slate-600">Clinic statistics
@@ -167,18 +167,19 @@ export default function ResearchView({ patients = [], womensHealthEventDate = ""
           <Metric label="Chronic return rate" value={percent(report.chronicReturns, report.chronicRows.length)} helper="Return visits ÷ chronic visits" onClick={() => showRows("Chronic return-rate denominator", report.chronicRows, "Prior saved general-clinic visit")} />
         </div>
 
-        </section>}
-        {study === "chronic" && <section aria-label="Chronic conditions management">
-          <h2 className="text-lg font-semibold text-slate-900">Chronic conditions management</h2>
-          <p className="mt-1 text-sm text-slate-600">Chronic-condition visit patterns and BP and A1C outcomes for the selected dates and clinic event.</p>
         <div className="mt-6 rounded-xl border border-slate-200">
           <table className="research-table">
             <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Disease group</th><th className="px-4 py-3">Patients</th><th className="px-4 py-3">General visits</th><th className="px-4 py-3">Patients with refill-only visit</th><th className="px-4 py-3">General return visits</th><th className="px-4 py-3">Return rate</th><th className="px-4 py-3">Avg visit minutes</th></tr></thead>
             <tbody className="divide-y divide-slate-200">{report.groups.map((group) => <tr key={group.label} onClick={() => showRows(group.label, group.rows, group.label)} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.currentTarget.click(); } }} className="cursor-pointer hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"><td data-label="Disease group" className="px-4 py-3 font-semibold text-slate-900">{group.label}</td><td data-label="Patients" className="px-4 py-3">{group.patients}</td><td data-label="General visits" className="px-4 py-3">{group.visits}</td><td data-label="Patients with refill-only visit" className="px-4 py-3"><button type="button" className="text-blue-700 hover:underline" onClick={(event) => { event.stopPropagation(); showRows(`${group.label}: patients with refill-only visits`, group.refillRows, "Refill-only visit"); }}>{group.refillPatients}</button></td><td data-label="General return visits" className="px-4 py-3">{group.returns}</td><td data-label="Return rate" className="px-4 py-3">{percent(group.returns, group.visits)}</td><td data-label="Avg visit minutes" className="px-4 py-3">{group.duration}</td></tr>)}</tbody>
           </table>
         </div>
-        <ClinicalResearchStats groups={report.groups} />
         <p className="mt-2 text-xs text-slate-500">Patients with a refill-only visit are unique patients with at least one non-cancelled refill encounter in the selected date range. General return visits require an earlier non-cancelled general-clinic visit in saved history; refill and specialty visits do not qualify. Visit-time comparisons are operational measures and not validated measures of clinical complexity.</p>
+        </section>}
+        {study === "chronic" && <section aria-label="Chronic conditions management">
+          <h2 className="text-lg font-semibold text-slate-900">Chronic conditions management</h2>
+          <p className="mt-1 text-sm text-slate-600">BP and A1C outcomes for the selected dates and clinic event. Click an outcome to inspect patients or find missing readings.</p>
+        <ClinicalResearchStats key={`${clinicEvent}-${startDate}-${endDate}-${report.rows.map(row => row.patientId).join(",")}`} groups={report.groups} patients={patients} onOpenPatientChart={onOpenPatientChart} />
+
 
         </section>}
         {study === "access" && <section aria-label="Language and access">

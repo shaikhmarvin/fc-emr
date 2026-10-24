@@ -26,7 +26,8 @@
 .research-dialog-body { overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
 @container (min-width: 760px) {
   .research-header { grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); }
-  .research-navigation { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .research-navigation { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .375rem; }
+  .research-navigation button { padding-inline: .5rem; }
   .research-screening-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @container (min-width: 1200px) {

@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildResearchReport } from './researchAnalytics.js';
+import { buildResearchStudies } from './researchStudies.js';
+import { buildClinicalResearchStats } from './lib/clinicalResearchStats.js';
 
 const visit = (id, clinicDate, extra = {}) => ({ id, clinicDate, visitType: 'general', status: 'done', createdAt: `${clinicDate}T17:00:00Z`, undergradCompletedAt: `${clinicDate}T17:10:00Z`, visitCompletedAt: `${clinicDate}T18:00:00Z`, ...extra });
 const report = (encounters, patient = {}, start = '2026-01-01') => buildResearchReport([{ id: 'p1', ...patient, encounters }], start, '2026-09-03');
@@ -146,4 +148,27 @@ test('configured event date recovers legacy visits across research without leaki
   assert.equal(event.flow.visits, 2);
   assert.equal(event.papEligibleRows.length, 2);
   assert.equal(patients[0].encounters[0].clinicEvent, '');
+});
+
+test('currently fired patients are excluded from every tracker analysis and restored when unfired', () => {
+  const createPatient = (id, fired) => ({ id, fired, firedAt: '2026-08-01', firedReason: 'Insurance', sex: 'Female', dob: '1970-01-01', chronicConditions: ['Hypertension', 'Diabetes'], encounters: [
+    visit(id + '-first', '2026-01-01', { transportation: 'Bus', vitalsHistory: [{ bp: '160/100' }], inHouseLabs: { core: { a1c: 9 } } }),
+    visit(id + '-return', '2026-02-01', { transportation: 'Bus', vitalsHistory: [{ bp: '140/90' }], inHouseLabs: { core: { a1c: 8 } } }),
+    visit(id + '-refill', '2026-03-01', { visitType: 'refill_only', pharmacyStatus: 'picked_up' }),
+    visit(id + '-event', '2026-04-01', { clinicEvent: 'womens_health_day' }),
+  ] });
+  const active = createPatient('active', false);
+  const fired = createPatient('fired', true);
+  for (const event of ['', 'womens_health_day']) {
+    const build = patients => buildResearchReport(patients, '2026-01-01', '2026-09-03', event);
+    const expected = build([active]);
+    const excluded = build([active, fired]);
+    assert.deepEqual(excluded, expected, 'all report counts, denominators, and source rows exclude fired patients');
+    assert.deepEqual(buildResearchStudies(excluded, '2026-09-03'), buildResearchStudies(expected, '2026-09-03'));
+    assert.deepEqual(buildClinicalResearchStats(excluded.groups), buildClinicalResearchStats(expected.groups));
+    fired.fired = false;
+    assert.deepEqual(build([active, fired]), build([active, { ...fired, firedAt: '', firedReason: '' }]), 'old fired metadata cannot prevent restoration');
+    assert.equal(build([active, fired]).uniquePatients, 2);
+    fired.fired = true;
+  }
 });
