@@ -1,3 +1,4 @@
+import { extractLabDob } from "./lib/labDemographics.js";
 import { saveImportedLabs } from "./lib/saveImportedLabs.js";
 import { uploadSharedLabSource, downloadSharedLabSource, cleanupCompletedLabSources } from "./lib/sharedLabSource.js";
 import { createVitalEntry } from "./lib/vitals.js";
@@ -2797,6 +2798,9 @@ export default function App() {
 
     function cleanName(value = "") {
       let cleaned = String(value || "")
+        .replace(/^name\s*[:.\-]?\s*/i, "")
+        .replace(/\b(?:date\s+of\s+birth|birth\s*date|d\.?o\.?b\.?)\b.*$/i, "")
+        .replace(/\b\d{1,2}\s*\/\s*\d{1,2}\s*\/\s*\d{4}\b/g, "")
         .replace(/\bmedical record number\b.*$/i, "")
         .replace(/\bmrn\b.*$/i, "")
         .replace(/\b\d{3}[-\s]?\d{2}[-\s]?\d{2}\b/g, "")
@@ -2882,31 +2886,7 @@ export default function App() {
   }
 
   function extractDobFromLabText(rawText = "") {
-    const lines = String(rawText || "")
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
-
-    for (const line of lines) {
-      const dobMatch = line.match(/\bdob\s*[:\-]?\s*(\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2})/i);
-      if (dobMatch) {
-        return normalizeExtractedDate(dobMatch[1]);
-      }
-    }
-
-    // fallback for OCR demographic lines like:
-    // "M, 57 yrs, 1/12/1969" or "F. 40 yrs, 5/4/1986"
-    // Do NOT grab dates from specimen/collected/printed lines as DOB.
-    for (const line of lines.slice(0, 12)) {
-      const demographicDateMatch = line.match(
-        /^\s*[MF]\s*[,.]\s*\d{1,3}\s*(?:yr|yrs|years)\b.*?\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/i
-      );
-      if (demographicDateMatch) {
-        return normalizeExtractedDate(demographicDateMatch[1]);
-      }
-    }
-
-    return "";
+    return extractLabDob(rawText, extractPatientNameFromLabText(rawText));
   }
 
   function extractCollectedDateFromLabText(rawText = "") {
@@ -3987,7 +3967,7 @@ export default function App() {
       packetId: row.id,
       batchId: row.batch_id,
       extractedPatientName: row.extracted_name || "",
-      extractedDob: row.extracted_dob || "",
+      extractedDob: row.extracted_dob || extractDobFromLabText(row.raw_text || ""),
       collectedDate: row.collected_date || "",
       packetType: row.packet_type || "unknown",
       rawText: row.raw_text || "",

@@ -1,3 +1,4 @@
+import { recognizeSavedImport } from "../lib/recognizeSavedImport.js";
 import { needsExtractionReview } from "../lib/labFlags.js";
 import LabSourceViewer from "./LabSourceViewer.jsx";
 import { labsReadyToSave } from "../lib/labDocument.js";
@@ -736,9 +737,10 @@ if (onAfterSaveCleanup) {
   const sourceDocument = selectedPacket.sourceDocument;
   const reviewedPages = reviewedPagesByPacket[selectedPacket.packetId] || [];
   const targetKey = `${selectedPacket.packetId}:${confirmedPatient?.id || ""}:${selectedEncounterId || ""}`;
-  const pendingPages = (sourceDocument?.pages || []).filter(page => !reviewedPages.includes(page.pageNumber));
+  const savedRecognition = recognizeSavedImport(reviewedLabs, selectedPacket, encounters, selectedEncounterId);
+  const pendingPages = (sourceDocument?.pages || []).filter(page => !reviewedPages.includes(page.pageNumber) && !savedRecognition.completedPages.includes(page.pageNumber));
   const savableLabs = labsReadyToSave(reviewedLabs);
-  const pendingLabs = savableLabs.filter(needsExtractionReview);
+  const pendingLabs = reviewedLabs.filter((lab, index) => labsReadyToSave([lab]).length && !savedRecognition.matchedIndexes.has(index) && needsExtractionReview(lab));
   const patientCandidates = patientSearch.trim().length >= 2 ? patients.filter(patient =>
     `${patient.firstName || ""} ${patient.lastName || ""} ${patient.mrn || ""} ${patient.dob || ""}`.toLowerCase().includes(patientSearch.toLowerCase().trim())
   ).slice(0, 10) : [];
@@ -964,6 +966,14 @@ if (onAfterSaveCleanup) {
               </div>
             </div>
 
+            <div className="mb-3 rounded-lg bg-blue-50 p-2 text-sm text-blue-900">
+              {savedRecognition.matchedIndexes.size} of {savableLabs.length} results already in the chart. Exact matches do not need another review.
+              {savedRecognition.conflicts.length > 0 && <span className="block">{savedRecognition.conflicts.length} conflicting result(s) still need comparison with the report.</span>}
+              <button type="button" disabled={!confirmedPatient} className="mt-1 font-semibold underline disabled:opacity-50" onClick={async () => {
+                try { setEncounters(await fetchEncountersByPatient(confirmedPatient.id)); setSaveError(""); }
+                catch { setSaveError("Could not check saved labs. Please retry."); }
+              }}>Check chart again</button>
+            </div>
             {saveError && <p role="alert" className="mb-3 text-sm text-red-700">{saveError}</p>}
             <details className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
               <summary className="cursor-pointer text-sm font-medium">Compare with extracted report text</summary>
@@ -984,6 +994,7 @@ if (onAfterSaveCleanup) {
             >
               <LabReviewPanel
                 labs={reviewedLabs}
+                alreadySavedIndexes={savedRecognition.matchedIndexes}
                 onlyNeedsReview={onlyNeedsReview}
                 onShowSource={lab => setActiveSourceLab(lab)}
               onRememberRange={lab => onRememberRange?.(selectedPacket.packetId, lab, reviewedLabs)}

@@ -58,6 +58,7 @@ export default function LabReviewPanel({
   onShowSource = null,
   onRememberRange = null,
   onlyNeedsReview = false,
+  alreadySavedIndexes = new Set(),
 }) {
   const [openGroups, setOpenGroups] = useState(() => {
     const initial = {};
@@ -212,7 +213,7 @@ export default function LabReviewPanel({
 
                 <div className="divide-y divide-slate-100">
                   {rows.map(({ lab, index }) => {
-                    if (onlyNeedsReview && !needsExtractionReview(lab)) return null;
+                    if (onlyNeedsReview && (alreadySavedIndexes.has(index) || !needsExtractionReview(lab))) return null;
                     const displayValue = getDisplayValue(lab.value);
                     const displayRange = lab.referenceRangeText || lab.expectedRangeText || "";
 const flag = importedLabFlag(lab);
@@ -228,6 +229,7 @@ const flag = importedLabFlag(lab);
                       >
                         <div className="flex flex-wrap items-start justify-between gap-4">
                           <div className="min-w-0 flex-1">
+                            {alreadySavedIndexes.has(index) && <p className="mb-1 text-xs font-semibold text-emerald-700">Already in patient chart — will be skipped</p>}
                             {onChangeLabs ? (
                               <LabReviewInput
                                 type="text"
