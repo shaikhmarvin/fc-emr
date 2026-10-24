@@ -9067,7 +9067,10 @@ async function markSeenBySocialWork(encounterId) {
   }
 
 
-  function startEditVitals(entry, index) {
+  function startEditVitals(entry, index, encounterId = selectedEncounterId) {
+    if (encounterId !== selectedEncounterId) {
+      openPatientChart(selectedPatient.id, encounterId);
+    }
     setCurrentVitals({
       bp: entry.bp || "",
       hr: entry.hr || "",
@@ -12024,6 +12027,7 @@ async function markSeenBySocialWork(encounterId) {
 
           {activeView === "research" && canAccessResearch && (
             <ResearchView
+              onOpenPatientChart={openPatientChart}
               patients={patients}
               womensHealthEventDate={womensHealthSettings.eventDate}
               isResearchOwner={isResearchOwner}

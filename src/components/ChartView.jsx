@@ -1,4 +1,4 @@
-import { patientVitalHistory, vitalDateLabel } from "../lib/vitals.js";
+import { patientVitalHistory } from "../lib/vitals.js";
 import LabTrends from "./LabTrends.jsx";
 import { labDateForTrend } from "../lib/labTrends.js";
 import { findLabByKey, findLabByAlias } from "../lib/labCatalog.js";
@@ -2912,21 +2912,21 @@ function getSelectedRoomOptionClass() {
 
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Recent Entries</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">All Visits</p>
                   <h4 className="font-semibold text-slate-900">Vitals History</h4>
                 </div>
                 <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
-                  {selectedEncounter.vitalsHistory?.length || 0} recorded
+                  {vitalsHistory.length} recorded
                 </span>
               </div>
 
-              {selectedEncounter.vitalsHistory?.length > 0 ? (
+              {vitalsHistory.length > 0 ? (
                 <>
                   <div className="hidden overflow-x-auto rounded-xl border border-slate-200 lg:block">
                     <table className="min-w-[700px] w-full text-left text-sm">
                       <thead className="bg-slate-50 text-slate-700">
                         <tr>
-                          <th className="p-3 font-semibold">Recorded</th>
+                          <th className="p-3 font-semibold">Visit Date</th>
                           <th className="p-3 font-semibold">BP</th>
                           <th className="p-3 font-semibold">HR</th>
                           <th className="p-3 font-semibold">Temp</th>
@@ -2940,9 +2940,9 @@ function getSelectedRoomOptionClass() {
                         </tr>
                       </thead>
                       <tbody>
-                        {selectedEncounter.vitalsHistory.map((entry, index) => (
+                        {vitalsHistory.map((entry, index) => (
                           <tr key={index} className="border-t border-slate-200 align-top">
-                            <td className="p-3 text-slate-700">{vitalDateLabel(selectedEncounter, entry)}</td>
+                            <td className="p-3 text-slate-700">{entry.visitLabel}</td>
                             <td className="p-3 font-medium text-slate-900">{entry.bp || "—"}</td>
                             <td className="p-3">{entry.hr || "—"}</td>
                             <td className="p-3">{entry.temp ? `${entry.temp} °F` : "—"}</td>
@@ -2956,7 +2956,7 @@ function getSelectedRoomOptionClass() {
                               <button
                                 onClick={() => {
                                   if (isSupportDataLocked) return;
-                                  startEditVitals(entry, index);
+                                  startEditVitals(entry, entry.entryIndex, entry.encounterId);
                                 }}
                                 className="rounded-lg bg-slate-200 px-3 py-2 text-sm font-medium text-slate-700"
                               >
@@ -2970,17 +2970,17 @@ function getSelectedRoomOptionClass() {
                   </div>
 
                   <div className="space-y-2 lg:hidden">
-                    {selectedEncounter.vitalsHistory.map((entry, index) => (
+                    {vitalsHistory.map((entry, index) => (
                       <div
                         key={index}
                         className="rounded-xl border border-slate-200 bg-white p-3"
                       >
                         <div className="mb-2 flex items-center justify-between gap-2">
-                          <p className="text-sm font-semibold text-slate-800">{vitalDateLabel(selectedEncounter, entry)}</p>
+                          <p className="text-sm font-semibold text-slate-800">{entry.visitLabel}</p>
                           <button
                             onClick={() => {
                               if (isSupportDataLocked) return;
-                              startEditVitals(entry, index);
+                              startEditVitals(entry, entry.entryIndex, entry.encounterId);
                             }}
                             disabled={isSupportDataLocked}
                             className="rounded-lg bg-slate-200 px-3 py-2 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
