@@ -2759,7 +2759,7 @@ function getSelectedRoomOptionClass() {
             </div>
           </div>
 
-          {isLeadershipView ? (
+          {isLeadershipView && getEncounterVisitTypeKey(selectedEncounter) !== "refill_only" ? (
           <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <h3 className="text-lg font-semibold">Vitals</h3>

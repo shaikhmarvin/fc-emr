@@ -9015,6 +9015,7 @@ async function markSeenBySocialWork(encounterId) {
 
   async function saveVitals() {
     if (!selectedPatient || !selectedEncounter) return;
+    if (getEncounterVisitTypeKey(selectedEncounter) === "refill_only") return;
 
     const hasAnyValue = Object.values(currentVitals).some((value) => value.trim() !== "");
     if (!hasAnyValue) return;

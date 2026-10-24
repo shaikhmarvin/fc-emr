@@ -1,3 +1,4 @@
+import ClinicalResearchStats from "./ClinicalResearchStats.jsx";
 import { researchClinicalStatus } from "../lib/researchClinicalStatus.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./ResearchView.css";
@@ -172,6 +173,7 @@ export default function ResearchView({ patients = [], womensHealthEventDate = ""
             <tbody className="divide-y divide-slate-200">{report.groups.map((group) => <tr key={group.label} onClick={() => showRows(group.label, group.rows, group.label)} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.currentTarget.click(); } }} className="cursor-pointer hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"><td data-label="Disease group" className="px-4 py-3 font-semibold text-slate-900">{group.label}</td><td data-label="Patients" className="px-4 py-3">{group.patients}</td><td data-label="General visits" className="px-4 py-3">{group.visits}</td><td data-label="Patients with refill-only visit" className="px-4 py-3"><button type="button" className="text-blue-700 hover:underline" onClick={(event) => { event.stopPropagation(); showRows(`${group.label}: patients with refill-only visits`, group.refillRows, "Refill-only visit"); }}>{group.refillPatients}</button></td><td data-label="General return visits" className="px-4 py-3">{group.returns}</td><td data-label="Return rate" className="px-4 py-3">{percent(group.returns, group.visits)}</td><td data-label="Avg visit minutes" className="px-4 py-3">{group.duration}</td></tr>)}</tbody>
           </table>
         </div>
+        <ClinicalResearchStats groups={report.groups} />
         <p className="mt-2 text-xs text-slate-500">Patients with a refill-only visit are unique patients with at least one non-cancelled refill encounter in the selected date range. General return visits require an earlier non-cancelled general-clinic visit in saved history; refill and specialty visits do not qualify. Visit-time comparisons are operational measures and not validated measures of clinical complexity.</p>
 
         </section>}
