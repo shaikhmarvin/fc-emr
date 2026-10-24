@@ -1,3 +1,4 @@
+import { labNameSuggestionScore } from "./lib/labPatientSuggestions.js";
 import { extractLabDob } from "./lib/labDemographics.js";
 import { saveImportedLabs } from "./lib/saveImportedLabs.js";
 import { uploadSharedLabSource, downloadSharedLabSource, cleanupCompletedLabSources } from "./lib/sharedLabSource.js";
@@ -11,7 +12,7 @@ import { repairUnreviewedCbcLabs } from "./lib/cbcResults.js";
 import { readLabDocument, labFileFingerprint } from "./lib/readLabDocument.js";
 import { repairUnreviewedStiLabs } from "./lib/stiResults.js";
 import { hasResultColumns, parseLayoutResults, mergeDocumentPackets, labsReadyToSave, documentIdentity, markRepeatedDocumentResults } from "./lib/labDocument.js";
-import { storeLabSource, loadLabSource, storeLabTrace, loadLabTrace, appendLabTraceEvent } from "./lib/labSourceStore.js";
+import { storeLabSource, loadLabSource, deleteLabSource, storeLabTrace, loadLabTrace, appendLabTraceEvent } from "./lib/labSourceStore.js";
 import { isOphthoEncounter as isOphthalmologyEncounter, existingOphthoVisit, canReopenOphthoNote } from "./utils/ophthalmology.js";
 import { intakeDemographics } from "./utils/patientDemographics.js";
 import { clearWomensHealthTracker } from "./api/programs.js";
@@ -3104,8 +3105,9 @@ export default function App() {
         bestMatch = patient;
       }
 
-      if (score >= 60) {
-        possibleMatches.push({ patient, score });
+      const nameSuggestionScore = labNameSuggestionScore(extractedName, patient);
+      if (score >= 60 || nameSuggestionScore > 0) {
+        possibleMatches.push({ patient, score: Math.max(score, nameSuggestionScore) });
       }
     }
 
@@ -3128,7 +3130,7 @@ export default function App() {
         match: null,
         possible: possibleMatches
           .sort((a, b) => b.score - a.score)
-          .slice(0, 3)
+          .slice(0, 8)
           .map((entry) => entry.patient),
         reason: "Possible patient matches found.",
       };
@@ -3939,7 +3941,7 @@ export default function App() {
         ? patients.find((p) => String(p.id) === String(row.matched_patient_id)) || null
         : null;
 
-    const possibleMatches = Array.isArray(row.match_candidates_json)
+    const storedPossibleMatches = Array.isArray(row.match_candidates_json)
       ? row.match_candidates_json
         .map((entry) => {
           const id =
@@ -3954,6 +3956,9 @@ export default function App() {
         })
         .filter(Boolean)
       : [];
+
+    const freshSuggestions = findBestPatientMatch(patients, row.extracted_name || "", row.extracted_dob || extractDobFromLabText(row.raw_text || ""));
+    const possibleMatches = [...new Map([...storedPossibleMatches, ...(freshSuggestions.match ? [freshSuggestions.match] : freshSuggestions.possible)].map(patient => [patient.id, patient])).values()];
 
     const sourcePages = row.duplicate_summary_json?.sourceDocument?.pages || [];
     const sourcePage = sourcePages.length === 1 ? sourcePages[0].pageNumber : undefined;
@@ -4017,6 +4022,11 @@ export default function App() {
       }
 
       if (!activeBatchId) {
+        const { data: deferred, error: deferredError } = await supabase.from("lab_import_packets").select("batch_id").eq("review_status", "skipped").order("created_at", { ascending: false }).limit(1);
+        if (deferredError) throw deferredError;
+        activeBatchId = deferred?.[0]?.batch_id || null;
+      }
+      if (!activeBatchId) {
         setActiveLabImportBatchId(null);
         setLabImportPackets([]);
         setLabImportPacket(null);
@@ -4028,13 +4038,22 @@ export default function App() {
       const { data: packetRows, error: packetError } = await supabase
         .from("lab_import_packets")
         .select("*")
-        .eq("batch_id", activeBatchId)
+        .or(`batch_id.eq.${activeBatchId},review_status.eq.skipped`)
         .order("created_at", { ascending: true });
 
       if (packetError) throw packetError;
       await cleanupCompletedLabSources(activeBatchId).catch(() => {});
 
-      const groupedPackets = mergeDocumentPackets((packetRows || []).map(mapLabImportDbRowToPacket));
+      const groupedPackets = mergeDocumentPackets((packetRows || []).filter(row => row.review_status !== "saved").map(mapLabImportDbRowToPacket));
+      const completedSources = (packetRows || []).filter(row => row.batch_id === activeBatchId);
+      if (completedSources.length && completedSources.every(row => row.review_status === "saved")) {
+        for (const row of completedSources) {
+          const source = row.duplicate_summary_json?.sourceDocument;
+          if (source?.id) { labSourceFiles.current.delete(source.id); await deleteLabSource(session.user.id, source.id).catch(() => {}); }
+          if (source?.runId) { labImportTraces.current.delete(source.runId); await deleteLabSource(session.user.id, `trace:${source.runId}`).catch(() => {}); }
+        }
+        setLabSourceFile(null);
+      }
       const defaults = suspendConflictingRangeDefaults(labRangeDefaults, groupedPackets);
       if (defaults !== labRangeDefaults) {
         setLabRangeDefaults(defaults);
@@ -4049,9 +4068,9 @@ export default function App() {
 
       const nextSelectedId =
         selectedLabImportPacketId &&
-          mappedPackets.some((packet) => packet.packetId === selectedLabImportPacketId)
+          mappedPackets.some((packet) => packet.packetId === selectedLabImportPacketId && packet.reviewStatus !== "skipped")
           ? selectedLabImportPacketId
-          : mappedPackets[0]?.packetId || null;
+          : mappedPackets.find(packet => packet.reviewStatus !== "skipped")?.packetId || null;
 
       setSelectedLabImportPacketId(nextSelectedId);
       setLabImportPacket(
@@ -4147,8 +4166,8 @@ export default function App() {
     }
   }
 
-  async function updateSharedLabImportPacket(packetId, updates = {}) {
-    const packet = labImportPackets.find(item => item.packetId === packetId);
+  async function updateSharedLabImportPacket(packetId, updates = {}, packetSnapshot = null) {
+    const packet = packetSnapshot || labImportPackets.find(item => item.packetId === packetId);
     const memberIds = packet?.memberPacketIds?.length ? packet.memberPacketIds : [packetId];
     const payload = { ...updates };
     if (memberIds.length > 1 && packet.sourceDocument && !payload.duplicate_summary_json) {
@@ -4465,6 +4484,7 @@ export default function App() {
           }
           : prev
       );
+      await loadSharedLabImportBatch(activeLabImportBatchId);
     } catch (error) {
       console.error("Failed to skip lab packet:", error);
       showToast({
@@ -11570,71 +11590,77 @@ async function markSeenBySocialWork(encounterId) {
                 if (!packetId || !patient) return;
                 handleConfirmLabImportPatient(packetId, patient);
               }}
+              onResumePacket={async packetId => {
+                const resumeBatchId = labImportPackets.find(packet => packet.packetId === packetId)?.batchId;
+                await updateSharedLabImportPacket(packetId, { review_status: "unreviewed", skipped_at: null });
+                await loadSharedLabImportBatch(resumeBatchId || activeLabImportBatchId);
+              }}
               onSkip={() => {
                 if (!labImportPacket?.packetId) return;
                 handleSkipLabImportPacket(labImportPacket.packetId);
               }}
-              onSave={async (reviewedLabs, encounterId) => {
-                if (!labImportPacket || !labImportPacket.confirmedPatient || !encounterId) {
+              onSave={async (reviewedLabs, encounterId, context) => {
+                const savingPacket = context?.packet || labImportPacket;
+                if (!savingPacket || !savingPacket.confirmedPatient || !encounterId) {
                   alert("Pick a patient and encounter first.");
                   return;
                 }
 
                 const saveAttemptId = crypto.randomUUID();
                 let chartWriteSucceeded = false;
-                await recordLabSaveEvent(labImportPacket, { stage: "save_started", saveAttemptId, encounterId, reviewedLabCount: reviewedLabs.length });
+                await recordLabSaveEvent(savingPacket, { stage: "save_started", saveAttemptId, encounterId, reviewedLabCount: reviewedLabs.length });
                 try {
                   const { data: target, error: targetError } = await supabase
                     .from("encounters")
                     .select("id, patient_id, imported_send_out_labs")
                     .eq("id", encounterId)
-                    .eq("patient_id", labImportPacket.confirmedPatient.id)
+                    .eq("patient_id", savingPacket.confirmedPatient.id)
                     .single();
                   if (targetError || !target) throw new Error("Could not verify the selected patient's visit. Please select it again.");
-                  const importPacketIds = labImportPacket.memberPacketIds?.length
-                    ? labImportPacket.memberPacketIds : [labImportPacket.packetId];
+                  const importPacketIds = savingPacket.memberPacketIds?.length
+                    ? savingPacket.memberPacketIds : [savingPacket.packetId];
                   const existing = target.imported_send_out_labs || [];
                   const incoming = labsReadyToSave(reviewedLabs).map(lab => ({
                     ...lab,
                     resultSymbol: importedLabFlag(lab),
-                    sourceImportPacketId: labImportPacket.packetId,
-                    sourceDocumentId: labImportPacket.sourceDocument?.id || null,
-                    sourceFileName: labImportPacket.sourceDocument?.name || "",
-                    collectedDate: lab.collectedDate || labImportPacket.collectedDate || "",
+                    sourceImportPacketId: savingPacket.packetId,
+                    sourceDocumentId: savingPacket.sourceDocument?.id || null,
+                    sourceFileName: savingPacket.sourceDocument?.name || "",
+                    collectedDate: lab.collectedDate || savingPacket.collectedDate || "",
                   }));
                   const { data: patientEncounters, error: historyError } = await supabase
                     .from("encounters").select("id, imported_send_out_labs")
-                    .eq("patient_id", labImportPacket.confirmedPatient.id);
+                    .eq("patient_id", savingPacket.confirmedPatient.id);
                   if (historyError) throw historyError;
                   const knownElsewhere = (patientEncounters || []).filter(enc => enc.id !== encounterId)
                     .flatMap(enc => enc.imported_send_out_labs || []);
                   const mergedImport = mergeChartLabs(existing, incoming, importPacketIds, knownElsewhere);
-                  await recordLabSaveEvent(labImportPacket, { stage: "merge_completed", saveAttemptId, encounterId,
+                  await recordLabSaveEvent(savingPacket, { stage: "merge_completed", saveAttemptId, encounterId,
                     added: mergedImport.added, skipped: mergedImport.skipped, previousCount: existing.length, proposedCount: mergedImport.labs.length });
-                  await saveImportedLabs(supabase, { encounterId, patientId: labImportPacket.confirmedPatient.id,
+                  await saveImportedLabs(supabase, { encounterId, patientId: savingPacket.confirmedPatient.id,
                     expectedLabs: target.imported_send_out_labs, labs: mergedImport.labs });
 
                   chartWriteSucceeded = true;
                   const savedAt = new Date().toISOString();
-                  await recordLabSaveEvent(labImportPacket, { stage: "chart_write_succeeded", saveAttemptId, encounterId,
+                  await recordLabSaveEvent(savingPacket, { stage: "chart_write_succeeded", saveAttemptId, encounterId,
                     added: mergedImport.added, skipped: mergedImport.skipped, finalCount: mergedImport.labs.length });
 
-                  await updateSharedLabImportPacket(labImportPacket.packetId, {
+                  await updateSharedLabImportPacket(savingPacket.packetId, {
                     parsed_labs_json: reviewedLabs,
-                    duplicate_summary_json: { sourceDocument: { ...labImportPacket.sourceDocument,
+                    duplicate_summary_json: { sourceDocument: { ...savingPacket.sourceDocument,
                       latestSaveOutcome: { savedAt, encounterId, added: mergedImport.added, skipped: mergedImport.skipped, previousCount: existing.length, finalCount: mergedImport.labs.length } } },
-                    matched_patient_id: labImportPacket.confirmedPatient.id,
+                    matched_patient_id: savingPacket.confirmedPatient.id,
                     matched_encounter_id: encounterId,
                     review_status: "saved",
                     saved_at: savedAt,
                     suspicious_count: (reviewedLabs || []).filter((lab) => !!lab?.suspicious).length,
                     missing_count: (reviewedLabs || []).filter((lab) => !!lab?.missing || !!lab?.autoFilled).length,
                     total_lab_count: (reviewedLabs || []).length,
-                  });
+                  }, savingPacket);
 
                   setLabImportPackets((prev) =>
                     prev.map((packet) =>
-                      packet.packetId === labImportPacket.packetId
+                      packet.packetId === savingPacket.packetId
                         ? {
                           ...packet,
                           labs: reviewedLabs,
@@ -11647,7 +11673,7 @@ async function markSeenBySocialWork(encounterId) {
                   );
 
                   setLabImportPacket((prev) =>
-                    prev && prev.packetId === labImportPacket.packetId
+                    prev && prev.packetId === savingPacket.packetId
                       ? {
                         ...prev,
                         labs: reviewedLabs,
@@ -11665,10 +11691,10 @@ async function markSeenBySocialWork(encounterId) {
                     message: `${mergedImport.added} new result(s) saved; ${mergedImport.skipped} repeated result(s) skipped. Existing results were preserved.`,
                     type: "success",
                   });
-                  await recordLabSaveEvent(labImportPacket, { stage: "save_completed", saveAttemptId, encounterId });
+                  await recordLabSaveEvent(savingPacket, { stage: "save_completed", saveAttemptId, encounterId });
                   return true;
                 } catch (error) {
-                  await recordLabSaveEvent(labImportPacket, { stage: "save_failed", saveAttemptId, encounterId, chartWriteSucceeded, error: error.message });
+                  await recordLabSaveEvent(savingPacket, { stage: "save_failed", saveAttemptId, encounterId, chartWriteSucceeded, error: error.message });
                   console.error("Failed to save imported labs:", error);
                   alert(`Failed to save imported labs: ${error.message}`);
                   return false;

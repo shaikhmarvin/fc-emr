@@ -302,6 +302,25 @@ function MatchPanel({
   );
 }
 
+function ImportPiles({ packets, onSelect, onResume, selectedId }) {
+  const active = packets.filter(packet => !['saved', 'skipped'].includes(packet.reviewStatus));
+  const skipped = packets.filter(packet => packet.reviewStatus === 'skipped');
+  return <div className="space-y-4">
+    <section className="rounded-2xl border border-slate-200 bg-white p-4">
+      <h2 className="font-semibold">Labs to review ({active.length})</h2>
+      {!active.length && <p className="mt-2 text-sm text-slate-600">All active packets are complete. Saved results remain in patient charts.</p>}
+      <div className="mt-3 grid max-h-64 gap-3 overflow-auto md:grid-cols-2 2xl:grid-cols-4">{active.map((packet, index) => <PacketQueueCard key={packet.packetId} packet={packet} index={index} isActive={packet.packetId === selectedId} onClick={() => onSelect?.(packet.packetId)} />)}</div>
+    </section>
+    {skipped.length > 0 && <details className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+      <summary className="cursor-pointer font-semibold">Review later — skipped packets ({skipped.length})</summary>
+      <div className="mt-3 grid gap-3 md:grid-cols-2 2xl:grid-cols-4">{skipped.map(packet => <div key={packet.packetId} className="rounded-xl bg-white p-3">
+        <p className="font-medium">{packet.extractedPatientName || 'Unidentified patient'}</p><p className="text-sm">{packet.collectedDate || 'Date unavailable'}</p>
+        <button type="button" onClick={() => onResume?.(packet.packetId)} className="mt-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white">Resume review</button>
+      </div>)}</div>
+    </details>}
+  </div>;
+}
+
 export default function LabImportView({
   packet = null,
   sourceFile = null,
@@ -316,6 +335,7 @@ export default function LabImportView({
   onSave = null,
   onConfirmPatient = null,
   onSkip = null,
+  onResumePacket = null,
   onExportDebug,
   onChangeLabs = null,
   onRememberRange = null,
@@ -457,18 +477,8 @@ onAfterSaveCleanup = null,
     return () => { cancelled = true; };
   }, [selectedPacket?.confirmedPatient?.id, selectedPacket?.collectedDate, selectedPacket?.packetId]);
 
-  if (!selectedPacket) {
-    return (
-      <div className="p-6">
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-xl font-semibold text-slate-900">Lab Import</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            No lab packet selected yet.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  const packetPiles = <ImportPiles packets={sortedPackets} onSelect={onSelectPacket} onResume={onResumePacket} selectedId={selectedPacketId} />;
+  if (!selectedPacket) return <div className="p-4">{packetPiles}</div>;
 
   const {
     extractedPatientName,
@@ -701,7 +711,7 @@ onAfterSaveCleanup = null,
     try {
       setSaving(true);
       setSaveError("");
-      const saved = await onSave(reviewedLabs, selectedEncounterId);
+      const saved = await onSave(reviewedLabs, selectedEncounterId, { packet: selectedPacket });
       if (saved !== true) {
         setSaveError("Labs were not saved. Your packet is still here for review.");
         return;
@@ -841,40 +851,7 @@ if (onAfterSaveCleanup) {
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <div className="space-y-4 xl:col-span-2">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-semibold text-slate-900">Parsed Packets</h2>
-                <p className="text-sm text-slate-500">
-                  {sortedPackets.length} packet{sortedPackets.length === 1 ? "" : "s"}
-                </p>
-              </div>
-              <SummaryChip>
-                {Math.max(
-                  1,
-                  sortedPackets.findIndex((p) => p.packetId === selectedPacketId) + 1
-                )}{" "}
-                / {sortedPackets.length}
-              </SummaryChip>
-            </div>
-
-            <div className="grid max-h-64 grid-cols-1 gap-3 overflow-auto md:grid-cols-2 2xl:grid-cols-4">
-              {sortedPackets.map((p, index) => (
-                <PacketQueueCard
-                  key={p.packetId}
-                  packet={p}
-                  index={index}
-                  isActive={p.packetId === selectedPacketId}
-                  onClick={() => {
-                    setActiveSourceLab(null);
-                    onSelectPacket?.(p.packetId);
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
+        <div className="xl:col-span-2">{packetPiles}</div>
 
         <div className="min-w-0 xl:col-span-2">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

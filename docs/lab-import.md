@@ -29,8 +29,7 @@ uncertain results.
 - Source links show the original page and highlight positioned result rows.
   New uploads store the original in the private `lab-import-sources` bucket.
   Approved leadership and lab users can download it for side-by-side review.
-  The shared file is deleted only after every packet in that upload is saved or
-  skipped; server storage policies enforce the completion check. Cleanup retries
+  The shared file is deleted only after every packet in that upload is saved; server storage policies enforce the completion check. Cleanup retries
   when a batch is reopened. Extracted results and review metadata remain.
   Existing browser-only uploads require reattachment; old sources are not
   automatically migrated. Local browser copies may remain after shared cleanup.
@@ -122,3 +121,14 @@ policies. Verify with two approved reviewer accounts: upload once, open the sour
 on the second account, confirm an unfinished packet prevents deletion, then finish
 or skip every packet and confirm the shared object is removed. No chart writes
 are needed for this storage check; use a synthetic report and skip test packets.
+
+## Completed and deferred imports
+
+Saved packets leave the active queue. Skipped packets appear under **Review later**
+across batches and can be resumed. Their source remains available until all packets
+in that upload are saved. On completion, shared originals, raw import text, parsed
+review copies and source-page metadata are removed; chart results, audit records
+and minimal fingerprint/patient/visit references remain. Browser copies and local
+traces are cleared when that browser loads the completed batch. Other devices may
+retain a cached copy until they revisit that batch. Migration
+`20261024150000_completed_lab_cleanup.sql` enforces the skipped-source retention rule.

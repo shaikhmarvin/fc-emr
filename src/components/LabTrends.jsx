@@ -9,11 +9,11 @@ const formatDate = value => {
 };
 const displayNumber = value => Number(value.toPrecision(6)).toLocaleString('en-US', { maximumFractionDigits: 6 });
 
-export default function LabTrends({ results, filter = 'all' }) {
+export default function LabTrends({ results, filter = 'all', initialSelectedKey = '' }) {
   const series = useMemo(() => buildLabTrendSeries(results).filter(item =>
     filter === 'all' || (filter === 'abnormal' ? item.entries.some(entry => ['H', 'L', 'A'].includes(entry.flag)) : item.group === filter)
   ), [results, filter]);
-  const [selectedKey, setSelectedKey] = useState('');
+  const [selectedKey, setSelectedKey] = useState(initialSelectedKey);
   const selected = series.find(item => item.key === selectedKey) ||
     series.find(item => new Set(item.entries.filter(entry => entry.numeric !== null && entry.timestamp !== null).map(entry => entry.dateKey)).size > 1) || series[0];
   if (!selected) return <p className="text-sm text-slate-500">No results for this view yet.</p>;

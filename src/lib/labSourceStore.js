@@ -53,3 +53,13 @@ export async function appendLabTraceEvent(userId, runId, event) {
     });
   } finally { db.close(); }
 }
+
+export async function deleteLabSource(userId, id) {
+  if (!userId || !id) return;
+  const db = await openStore();
+  try { await new Promise((resolve, reject) => {
+    const transaction = db.transaction("documents", "readwrite");
+    transaction.objectStore("documents").delete(`${userId}:${id}`);
+    transaction.oncomplete = resolve; transaction.onerror = () => reject(transaction.error);
+  }); } finally { db.close(); }
+}

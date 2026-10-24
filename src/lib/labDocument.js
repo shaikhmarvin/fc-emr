@@ -151,6 +151,7 @@ export function mergeDocumentPackets(packets) {
     const name = normalize(packet.extractedPatientName), dob = packet.extractedDob;
     const ids = documentIdentity(packet.rawText);
     const candidates = merged.filter(item => {
+      if (packet.batchId && item.batchId && packet.batchId !== item.batchId) return false;
       if (packet.sourceDocument?.id && item.sourceDocument?.id && packet.sourceDocument.id !== item.sourceDocument.id) return false;
       if ((packet.reviewStatus || 'unsaved') !== (item.reviewStatus || 'unsaved')) return false;
       if (packet.matchedEncounterId && item.matchedEncounterId && packet.matchedEncounterId !== item.matchedEncounterId) return false;
