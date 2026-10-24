@@ -1,3 +1,4 @@
+import { patientVitalHistory, vitalDateLabel } from "../lib/vitals.js";
 import LabTrends from "./LabTrends.jsx";
 import { labDateForTrend } from "../lib/labTrends.js";
 import { findLabByKey, findLabByAlias } from "../lib/labCatalog.js";
@@ -1468,7 +1469,7 @@ function formatLabDateTime(value) {
   const isSoapLocked = selectedEncounter?.soapStatus === "signed" || (isOphtho && (!canUseOphtho || selectedEncounter?.soapStatus === "completed"));
   const isSupportDataLocked = false;
   const clinicAlert = getClinicAlert(new Date());
-  const vitalsHistory = selectedEncounter?.vitalsHistory || [];
+  const vitalsHistory = patientVitalHistory(selectedPatient?.encounters || []);
   const latestVitals = vitalsHistory[0] || null;
   const previousVitals = vitalsHistory[1] || null;
 
@@ -2840,7 +2841,10 @@ function getSelectedRoomOptionClass() {
             </div>
 
             <div className="mt-6">
-              <h4 className="mb-3 font-semibold">Vitals Trend</h4>
+              <h4 className="mb-3 font-semibold">Vitals Trend Across Visits</h4>
+              {latestVitals && <p className="mb-3 text-sm text-slate-500">
+                Latest: {latestVitals.visitLabel}{previousVitals ? " • Previous: " + previousVitals.visitLabel : ""}
+              </p>}
 
               {vitalsHistory.length >= 2 ? (
                 <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
@@ -2938,7 +2942,7 @@ function getSelectedRoomOptionClass() {
                       <tbody>
                         {selectedEncounter.vitalsHistory.map((entry, index) => (
                           <tr key={index} className="border-t border-slate-200 align-top">
-                            <td className="p-3 text-slate-700">{entry.recordedAt}</td>
+                            <td className="p-3 text-slate-700">{vitalDateLabel(selectedEncounter, entry)}</td>
                             <td className="p-3 font-medium text-slate-900">{entry.bp || "—"}</td>
                             <td className="p-3">{entry.hr || "—"}</td>
                             <td className="p-3">{entry.temp ? `${entry.temp} °F` : "—"}</td>
@@ -2972,7 +2976,7 @@ function getSelectedRoomOptionClass() {
                         className="rounded-xl border border-slate-200 bg-white p-3"
                       >
                         <div className="mb-2 flex items-center justify-between gap-2">
-                          <p className="text-sm font-semibold text-slate-800">{entry.recordedAt}</p>
+                          <p className="text-sm font-semibold text-slate-800">{vitalDateLabel(selectedEncounter, entry)}</p>
                           <button
                             onClick={() => {
                               if (isSupportDataLocked) return;

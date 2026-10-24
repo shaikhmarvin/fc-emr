@@ -1,3 +1,4 @@
+import { createVitalEntry } from "./lib/vitals.js";
 import { LAB_PIPELINE_VERSION, captureImportBaseline, buildLabDiagnostics } from "./lib/labImportDiagnostics.js";
 import { mergeChartLabs } from "./lib/mergeChartLabs.js";
 import { importedLabFlag } from "./lib/labFlags.js";
@@ -9018,12 +9019,9 @@ async function markSeenBySocialWork(encounterId) {
     const hasAnyValue = Object.values(currentVitals).some((value) => value.trim() !== "");
     if (!hasAnyValue) return;
 
-    const vitalsEntry = {
-      ...currentVitals,
-      recordedAt: new Date().toLocaleString(),
-    };
-
     const existingHistory = selectedEncounter.vitalsHistory || [];
+    const vitalsEntry = createVitalEntry(currentVitals, selectedEncounter,
+      editingVitalsIndex !== null ? existingHistory[editingVitalsIndex] : null);
 
     const nextVitalsHistory =
       editingVitalsIndex !== null
