@@ -17,7 +17,12 @@ export function summarizeClinicalMeasure(series) {
 }
 
 export function buildClinicalResearchStats(groups) {
-  return groups.filter(group => ['HTN+ only', 'DM+ only', 'HTN+ and DM+'].includes(group.label)).map(group => {
+  const cohorts = [
+    { label: 'All HTN patients', labels: ['HTN+ only', 'HTN+ and DM+'], keys: ['systolic', 'diastolic'] },
+    { label: 'All DM patients', labels: ['DM+ only', 'HTN+ and DM+'], keys: ['a1c'] },
+  ];
+  return cohorts.map(cohort => {
+    const group = { rows: groups.filter(item => cohort.labels.includes(item.label)).flatMap(item => item.rows) };
     const patients = new Map();
     for (const row of group.rows) {
       if (!patients.has(row.patientId)) patients.set(row.patientId, []);
@@ -33,6 +38,6 @@ export function buildClinicalResearchStats(groups) {
       });
       for (const key of Object.keys(series)) series[key].push({ patientId, days: days.filter(day => day[key] !== null).map(day => ({ date: day.date, value: day[key] })) });
     }
-    return { label: group.label, measures: Object.fromEntries(Object.entries(series).filter(([key]) => key === 'a1c' ? group.label.includes('DM') : group.label.includes('HTN')).map(([key, values]) => [key, summarizeClinicalMeasure(values)])) };
+    return { label: cohort.label, measures: Object.fromEntries(Object.entries(series).filter(([key]) => cohort.keys.includes(key)).map(([key, values]) => [key, summarizeClinicalMeasure(values)])) };
   });
 }

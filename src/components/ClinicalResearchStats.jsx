@@ -4,7 +4,7 @@ export default function ClinicalResearchStats({ groups }) {
   const cohorts = buildClinicalResearchStats(groups);
   return <section className="mt-6 space-y-4" aria-label="BP and A1C research summaries">
     <div><h3 className="text-lg font-semibold text-slate-900">BP and A1C Outcomes</h3>
-      <p className="mt-1 text-sm text-slate-600">Updates from saved readings as values are entered. Uses the selected dates and clinic event, with general-clinic visits only.</p></div>
+      <p className="mt-1 text-sm text-slate-600">Updates from saved readings as values are entered. Uses the selected dates and clinic event, with general-clinic visits only. BP includes all patients with HTN; A1C includes all patients with DM. Patients with both conditions contribute to each relevant outcome.</p></div>
     {cohorts.map(cohort => <div key={cohort.label} className="rounded-xl border border-slate-200 p-4">
       <h4 className="font-semibold text-slate-900">{cohort.label}</h4>
       <div className="mt-3 overflow-x-auto"><table className="research-table"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr>

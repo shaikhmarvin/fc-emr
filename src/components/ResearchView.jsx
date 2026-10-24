@@ -150,7 +150,7 @@ export default function ResearchView({ patients = [], womensHealthEventDate = ""
 
         {startDate && endDate && startDate > endDate && <p role="alert" className="text-sm text-red-700">Choose a From date on or before the Through date.</p>}
         <nav aria-label="Research studies" className="research-navigation">
-          {[["patients", "Patients & returns"], ["access", "Language & access"], ["times", "Visit times"], ["pharmacy", "Pharmacy & refills"], ["screening", "Screening"]].map(([key, label]) => (
+          {[["patients", "Patients & returns"], ["chronic", "Chronic conditions management"], ["access", "Language & access"], ["times", "Visit times"], ["pharmacy", "Pharmacy & refills"], ["screening", "Screening"]].map(([key, label]) => (
             <button key={key} type="button" aria-current={study === key ? "page" : undefined} aria-controls="research-study-panel" onClick={() => { setStudy(key); setDailyPage(0); }} className={study === key ? "research-nav-active" : ""}>{label}</button>
           ))}
         </nav>
@@ -167,6 +167,10 @@ export default function ResearchView({ patients = [], womensHealthEventDate = ""
           <Metric label="Chronic return rate" value={percent(report.chronicReturns, report.chronicRows.length)} helper="Return visits ÷ chronic visits" onClick={() => showRows("Chronic return-rate denominator", report.chronicRows, "Prior saved general-clinic visit")} />
         </div>
 
+        </section>}
+        {study === "chronic" && <section aria-label="Chronic conditions management">
+          <h2 className="text-lg font-semibold text-slate-900">Chronic conditions management</h2>
+          <p className="mt-1 text-sm text-slate-600">Chronic-condition visit patterns and BP and A1C outcomes for the selected dates and clinic event.</p>
         <div className="mt-6 rounded-xl border border-slate-200">
           <table className="research-table">
             <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Disease group</th><th className="px-4 py-3">Patients</th><th className="px-4 py-3">General visits</th><th className="px-4 py-3">Patients with refill-only visit</th><th className="px-4 py-3">General return visits</th><th className="px-4 py-3">Return rate</th><th className="px-4 py-3">Avg visit minutes</th></tr></thead>
