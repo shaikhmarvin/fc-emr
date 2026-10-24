@@ -418,12 +418,8 @@ onAfterSaveCleanup = null,
     if (reviewedJson === incomingJson) return;
     if (reviewedJson === lastPushedJson) return;
 
-    const timeout = window.setTimeout(() => {
-      lastPushedLabsJsonRef.current[packetId] = reviewedJson;
-      onChangeLabs(packetId, reviewedLabs);
-    }, 500);
-
-    return () => window.clearTimeout(timeout);
+    lastPushedLabsJsonRef.current[packetId] = reviewedJson;
+    onChangeLabs(packetId, reviewedLabs);
   }, [selectedPacket?.packetId, reviewedLabs, onChangeLabs]);
 
 
@@ -878,7 +874,7 @@ if (onAfterSaveCleanup) {
           </div>
         </div>
 
-        <div className="space-y-4">
+        <div className="min-w-0 xl:col-span-2">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
@@ -955,7 +951,10 @@ if (onAfterSaveCleanup) {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        </div>
+        <div className="grid min-w-0 grid-cols-2 items-stretch gap-4 xl:col-span-2">
+          <div className="flex h-[85vh] min-h-[32rem] min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="h-44 shrink-0 overflow-auto pb-3">
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">Detected Labs</h2>
@@ -974,12 +973,13 @@ if (onAfterSaveCleanup) {
               <input type="checkbox" checked={onlyNeedsReview} onChange={event => setOnlyNeedsReview(event.target.checked)} />
               Show results needing verification only ({pendingLabs.length})
             </label>
+            </div>
             <div
               key={selectedPacket.packetId}
               role="region"
               aria-label="Detected lab results"
               tabIndex={0}
-              className="max-h-[75vh] overflow-y-auto overscroll-contain pr-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"
+              className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"
               style={{ scrollbarGutter: "stable" }}
             >
               <LabReviewPanel
@@ -991,15 +991,16 @@ if (onAfterSaveCleanup) {
                 onAuditEvent={handleLabAuditEvent}
               />
             </div>
+            <p className="flex h-16 shrink-0 items-center text-xs text-slate-500">Edits update the review when you leave a field. Use Save Imported Lab to save to the chart.</p>
           </div>
-        </div>
-
-        <div className="min-w-0 space-y-4">
           <LabSourceViewer key={selectedPacket.packetId} source={sourceDocument} file={sourceFile} activeLab={activeSourceLab}
             onAttachSource={onAttachSource} reviewedPages={reviewedPages}
             onReviewPage={(pageNumber, checked) => setReviewedPagesByPacket(prev => ({ ...prev,
               [selectedPacket.packetId]: checked ? [...new Set([...(prev[selectedPacket.packetId] || []), pageNumber])] :
                 (prev[selectedPacket.packetId] || []).filter(number => number !== pageNumber) }))} />
+        </div>
+
+        <div className="min-w-0 space-y-4 xl:col-span-2">
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <label className="text-sm font-semibold">Find or change patient
               <input aria-label="Search patients for lab import" value={patientSearch} onChange={event => setPatientSearch(event.target.value)} placeholder="Name, MRN, or date of birth" className="mt-2 w-full rounded-lg border border-slate-300 p-2 font-normal" />

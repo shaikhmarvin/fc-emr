@@ -27,9 +27,13 @@ uncertain results.
   without recognized tests. A page check is required so omitted rows can be
   entered manually. A page check alone is not a proof of extraction accuracy.
 - Source links show the original page and highlight positioned result rows.
-  Original files are retained in this browser's IndexedDB, scoped by signed-in
-  user and file fingerprint. They are not uploaded to a new shared file store.
-  Another device must reattach the exact original file; its SHA-256 is checked.
+  New uploads store the original in the private `lab-import-sources` bucket.
+  Approved leadership and lab users can download it for side-by-side review.
+  The shared file is deleted only after every packet in that upload is saved or
+  skipped; server storage policies enforce the completion check. Cleanup retries
+  when a batch is reopened. Extracted results and review metadata remain.
+  Existing browser-only uploads require reattachment; old sources are not
+  automatically migrated. Local browser copies may remain after shared cleanup.
 - Page merging requires consistent identifiers and compatible collection dates.
   Continuation pages may omit a date or part of the patient name. An undated
   page joins only one unambiguous patient/report group, and cannot bridge reports
@@ -109,3 +113,12 @@ already succeeded. Persisted review audit rows are included when available.
 Unknown older baselines or traces are labeled unavailable instead of reconstructed
 as if they had been captured. Source text and matching identifiers may include
 patient information; unrelated chart notes are excluded.
+
+## Shared original report deployment
+
+Apply `supabase/migrations/20261024130000_shared_lab_sources.sql` before publishing
+the frontend. This creates a private bucket (100 MiB per file) and reviewer access
+policies. Verify with two approved reviewer accounts: upload once, open the source
+on the second account, confirm an unfinished packet prevents deletion, then finish
+or skip every packet and confirm the shared object is removed. No chart writes
+are needed for this storage check; use a synthetic report and skip test packets.

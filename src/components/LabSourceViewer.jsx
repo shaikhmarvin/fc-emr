@@ -70,12 +70,13 @@ export default function LabSourceViewer({ source, file, activeLab, onAttachSourc
     return () => { cancelled = true; task?.cancel(); };
   }, [pageNumber, loading, file]);
 
-  if (!source) return <p className="text-sm text-slate-500">This older import has extracted text only. New uploads include source page review.</p>;
+  if (!source) return <section className="h-[85vh] min-h-[32rem] min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><h2 className="text-lg font-semibold">Original report</h2><p className="mt-3 text-sm text-slate-500">This older import has extracted text only. New uploads include source page review.</p></section>;
   const page = source.pages?.find(item => item.pageNumber === pageNumber);
   const box = activeLab?.sourcePage === pageNumber ? activeLab.sourceBox : null;
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <h2 className="text-base font-semibold">Original report</h2>
+    <section className="flex h-[85vh] min-h-[32rem] min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="h-44 shrink-0 overflow-auto pb-3">
+      <h2 className="text-lg font-semibold">Original report</h2>
       <p className="mt-1 break-words text-xs text-slate-500">{source.name}</p>
       <div className="my-3 flex flex-wrap items-center gap-2">
         <label className="text-sm">Page
@@ -87,8 +88,9 @@ export default function LabSourceViewer({ source, file, activeLab, onAttachSourc
       </div>
       {page?.warning && <p className="mb-3 rounded bg-amber-50 p-2 text-sm text-amber-800">{page.warning}</p>}
       {error && <p role="alert" className="mb-2 text-sm text-red-700">{error}</p>}
+      </div>
       {!file ? <div className="space-y-2 text-sm text-slate-600">
-        <p>Reattach the original file to view it on this device. Source files are retained locally in this browser.</p>
+        <p>The shared original is unavailable or has been removed after review completion. You can reattach the original file to view it.</p>
         <input aria-label="Reattach original report" type="file" accept="application/pdf,image/*" onChange={async event => {
           const selected = event.target.files?.[0];
           if (!selected) return;
@@ -97,13 +99,13 @@ export default function LabSourceViewer({ source, file, activeLab, onAttachSourc
         }} />
       </div> : <>
         {loading && <p role="status" className="mb-2 text-sm">Opening source…</p>}
-        <div className="max-h-[75vh] overflow-auto rounded border border-slate-200 bg-slate-100">
+        <div className="min-h-0 flex-1 overflow-auto overscroll-contain rounded border border-slate-200 bg-slate-100">
           <div className="relative">
             {imageUrl ? <img src={imageUrl} alt={`Original report page ${pageNumber}`} className="block w-full" /> : <canvas ref={canvasRef} aria-label={`Original report page ${pageNumber}`} className="block w-full" />}
             {box && <div aria-label="Selected result on source page" className="pointer-events-none absolute border-2 border-blue-600 bg-yellow-300/30" style={{ left: `${box.x * 100}%`, top: `${box.y * 100}%`, width: `${box.width * 100}%`, height: `${box.height * 100}%` }} />}
           </div>
         </div>
-        <label className="mt-3 flex items-start gap-2 text-sm text-slate-700">
+        <label className="flex h-16 shrink-0 items-center gap-2 text-sm text-slate-700">
           <input type="checkbox" checked={reviewedPages.includes(pageNumber)} onChange={event => onReviewPage?.(pageNumber, event.target.checked)} />
           I checked this page for missing results and patient details.
         </label>

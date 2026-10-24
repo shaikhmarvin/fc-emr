@@ -1,23 +1,8 @@
+import { labsBySourcePage } from "../lib/labReviewOrder.js";
+import LabReviewInput from "./LabReviewInput.jsx";
 import { importedLabFlag, needsExtractionReview, labFlagChoices, toggleLabFlag } from "../lib/labFlags.js";
 import { useMemo, useState } from "react";
 import { findLabByAlias } from "../lib/labCatalog.js";
-
-const GROUP_ORDER = [
-  "CBC",
-  "Differential",
-  "Chemistry",
-  "Renal",
-  "Liver",
-  "Lipids",
-  "Diabetes / Endocrine",
-  "Thyroid",
-  "Iron Studies",
-  "Vitamins",
-  "Infectious Disease / STD",
-  "Hepatitis / Antibodies",
-  "Urine",
-  "Other",
-];
 
 function unwrapLabValue(value) {
   if (value === null || value === undefined) return value;
@@ -35,30 +20,6 @@ function normalizeValueForStorage(value) {
   if (value === null || value === undefined) return null;
   const text = String(value).trim();
   return text === "" ? null : text;
-}
-
-function sortGroups(entries = []) {
-  return [...entries].sort(([a], [b]) => {
-    const aIndex = GROUP_ORDER.indexOf(a);
-    const bIndex = GROUP_ORDER.indexOf(b);
-
-    if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);
-    if (aIndex === -1) return 1;
-    if (bIndex === -1) return -1;
-    return aIndex - bIndex;
-  });
-}
-
-function groupLabs(labs = []) {
-  const grouped = {};
-
-  labs.forEach((lab, index) => {
-    const group = lab?.group || "Other";
-    if (!grouped[group]) grouped[group] = [];
-    grouped[group].push({ lab, index });
-  });
-
-  return sortGroups(Object.entries(grouped));
 }
 
 function badgeClasses(kind) {
@@ -101,13 +62,13 @@ export default function LabReviewPanel({
   const [openGroups, setOpenGroups] = useState(() => {
     const initial = {};
     labs.forEach((lab) => {
-      const group = lab?.group || "Other";
+      const group = lab.sourcePage ? `Page ${lab.sourcePage}` : "Results without a page";
       initial[group] = true;
     });
     return initial;
   });
 
-  const groupedLabs = useMemo(() => groupLabs(labs), [labs]);
+  const groupedLabs = useMemo(() => labsBySourcePage(labs), [labs]);
 
   function applyLabs(updater) {
     if (!onChangeLabs) return;
@@ -169,13 +130,16 @@ export default function LabReviewPanel({
       group: definition?.group || 'Other', custom: !definition });
   }
 
-  function addLab(group) {
+  function addLab(pageLabel = "Results without a page") {
+    const sourcePage = Number(pageLabel.match(/^Page (\d+)$/)?.[1]) || undefined;
+    const group = sourcePage ? `Page ${sourcePage}` : "Results without a page";
     applyLabs((prev) => [
       ...prev,
       {
         key: `custom-${Date.now()}`,
         displayName: "",
-        group,
+        group: "Other",
+        sourcePage,
         value: null,
         rawLine: "manual",
         suspicious: false,
@@ -212,7 +176,7 @@ export default function LabReviewPanel({
 
   return (
     <div className="space-y-4">
-      <button type="button" onClick={() => addLab("Other")} className="text-sm font-medium text-blue-700">+ Add a missing result</button>
+      <button type="button" onClick={() => addLab()} className="text-sm font-medium text-blue-700">+ Add a missing result</button>
       {groupedLabs.map(([group, rows]) => {
         const isOpen = openGroups[group] ?? true;
 
@@ -220,7 +184,11 @@ export default function LabReviewPanel({
           <section key={group} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <button
               type="button"
-              onClick={() => toggleGroup(group)}
+              onClick={() => {
+                toggleGroup(group);
+                const page = rows.find(row => row.lab.sourcePage)?.lab;
+                if (page) onShowSource?.(page);
+              }}
               className="flex w-full items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3 text-left"
             >
               <div>
@@ -261,10 +229,10 @@ const flag = importedLabFlag(lab);
                         <div className="flex flex-wrap items-start justify-between gap-4">
                           <div className="min-w-0 flex-1">
                             {onChangeLabs ? (
-                              <input
+                              <LabReviewInput
                                 type="text"
                                 value={lab.displayName || ""}
-                                onChange={(e) => updateLabName(index, e.target.value)}
+                                onCommit={value => updateLabName(index, value)}
                                 aria-label="Lab name"
                                 placeholder="Lab name"
                                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-900 outline-none focus:border-blue-500"
@@ -281,10 +249,10 @@ const flag = importedLabFlag(lab);
                             </div>
                             <div className="mt-2 flex flex-wrap gap-2">
                               <label className="text-xs text-slate-600">Units
-                                <input aria-label={`Units for ${lab.displayName || "lab"}`} value={lab.unit || ""} onChange={e => updateLab(index, { unit: e.target.value })} className="ml-2 w-28 rounded border border-slate-300 px-2 py-1" />
+                                <LabReviewInput aria-label={`Units for ${lab.displayName || "lab"}`} value={lab.unit || ""} onCommit={value => updateLab(index, { unit: value })} className="ml-2 w-28 rounded border border-slate-300 px-2 py-1" />
                               </label>
                               <label className="text-xs text-slate-600">Report range
-                                <input aria-label={`Range for ${lab.displayName || "lab"}`} value={lab.referenceRangeText || ""} onChange={e => updateLab(index, { referenceRangeText: e.target.value, referenceRangeSource: "manual", referenceRangeNeedsReview: false, referenceRangeCleared: !e.target.value.trim() })} className="ml-2 w-32 rounded border border-slate-300 px-2 py-1" />
+                                <LabReviewInput aria-label={`Range for ${lab.displayName || "lab"}`} value={lab.referenceRangeText || ""} onCommit={value => updateLab(index, { referenceRangeText: value, referenceRangeSource: "manual", referenceRangeNeedsReview: false, referenceRangeCleared: !value.trim() })} className="ml-2 w-32 rounded border border-slate-300 px-2 py-1" />
                               </label>
                             </div>
                             {onRememberRange && lab.referenceRangeText?.trim() && !lab.referenceRangeNeedsReview && (
@@ -321,11 +289,11 @@ const flag = importedLabFlag(lab);
 
                           <div className="flex items-center gap-2">
                             <div className="min-w-[92px]">
-                              <input
+                              <LabReviewInput
                                 type="text"
                                 aria-label={`Result for ${lab.displayName || "lab"}`}
                                 value={displayValue === "—" ? "" : displayValue}
-                                onChange={(e) => updateLabValue(index, e.target.value)}
+                                onCommit={value => updateLabValue(index, value)}
                                 className={`w-full rounded-lg border px-3 py-2 text-right text-sm font-semibold outline-none ${isAbnormal ? "border-red-300 bg-red-50 text-red-700" : "border-slate-300 bg-white text-slate-900"}`}
                               />
                               <div role="group" aria-label={`Flag for ${lab.displayName || "lab"}`} className="mt-2 flex items-center justify-end gap-1">

@@ -34,8 +34,12 @@ test('new dates/files remain separate and retrying a packet with old metadata st
   assert.equal(mergeChartLabs([old], [lab({})], ['packet']).skipped, 1);
 });
 
-test('legacy results with no source tracking are preserved and flagged for review', () => {
-  assert.throws(() => mergeChartLabs([lab({ sourceDocumentId: undefined, sourceImportPacketId: undefined })], [lab({})]), /matching older result/);
+test("exact dated legacy repeats are skipped while incomplete repeats still need review", () => {
+  const original = lab({ sourceDocumentId: undefined, sourceImportPacketId: undefined });
+  const result = mergeChartLabs([original], [lab({})]);
+  assert.equal(result.skipped, 1);
+  assert.equal(result.labs[0], original);
+  assert.throws(() => mergeChartLabs([{ ...original, collectedDate: "" }], [lab({ collectedDate: "" })]), /matching older result/);
 });
 
 test('the same source result already saved under another visit is not copied to this visit', () => {

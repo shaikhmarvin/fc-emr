@@ -1,3 +1,5 @@
+import { saveImportedLabs } from "./lib/saveImportedLabs.js";
+import { uploadSharedLabSource, downloadSharedLabSource, cleanupCompletedLabSources } from "./lib/sharedLabSource.js";
 import { createVitalEntry } from "./lib/vitals.js";
 import { LAB_PIPELINE_VERSION, captureImportBaseline, buildLabDiagnostics } from "./lib/labImportDiagnostics.js";
 import { mergeChartLabs } from "./lib/mergeChartLabs.js";
@@ -2334,11 +2336,12 @@ export default function App() {
     if (!id || !session?.user?.id) return;
     const cached = labSourceFiles.current.get(id);
     if (cached) { setLabSourceFile(cached); return; }
-    loadLabSource(session.user.id, id).then(file => {
+    loadLabSource(session.user.id, id).catch(() => null).then(async local => {
+      const file = local || await downloadSharedLabSource(labImportPacket.sourceDocument);
       if (!cancelled) setLabSourceFile(file);
     }).catch(() => {});
     return () => { cancelled = true; };
-  }, [labImportPacket?.sourceDocument?.id, session?.user?.id]);
+  }, [labImportPacket?.sourceDocument?.id, labImportPacket?.sourceDocument?.sharedFile?.path, session?.user?.id]);
   const [intakeTab, setIntakeTab] = useState(0);
   const [intakeForm, setIntakeForm] = useState(EMPTY_FORM);
   const [searchForm, setSearchForm] = useState(EMPTY_SEARCH);
@@ -4049,6 +4052,7 @@ export default function App() {
         .order("created_at", { ascending: true });
 
       if (packetError) throw packetError;
+      await cleanupCompletedLabSources(activeBatchId).catch(() => {});
 
       const groupedPackets = mergeDocumentPackets((packetRows || []).map(mapLabImportDbRowToPacket));
       const defaults = suspendConflictingRangeDefaults(labRangeDefaults, groupedPackets);
@@ -4086,7 +4090,7 @@ export default function App() {
     }
   }
 
-  async function createSharedLabImportBatchWithPackets(packets, source = "manual") {
+  async function createSharedLabImportBatchWithPackets(packets, source = "manual", sourceFile = null) {
     if (!session?.user?.id) {
       throw new Error("No signed-in user found.");
     }
@@ -4102,6 +4106,9 @@ export default function App() {
       .single();
 
     if (batchError) throw batchError;
+
+    const sharedFile = sourceFile ? await uploadSharedLabSource(batchRow.id, sourceFile) : null;
+    if (sharedFile) packets = packets.map(packet => ({ ...packet, sourceDocument: { ...packet.sourceDocument, sharedFile } }));
 
     const rowsToInsert = (packets || []).map((packet) => ({
       batch_id: batchRow.id,
@@ -4129,7 +4136,10 @@ export default function App() {
       .from("lab_import_packets")
       .insert(rowsToInsert);
 
-    if (insertError) throw insertError;
+    if (insertError) {
+      if (sharedFile) await supabase.storage.from(sharedFile.bucket).remove([sharedFile.path]);
+      throw insertError;
+    }
 
     return batchRow.id;
   }
@@ -4169,6 +4179,11 @@ export default function App() {
       .update(payload)
       .in("id", memberIds);
     if (error) throw error;
+    if (["saved", "skipped"].includes(payload.review_status)) {
+      await cleanupCompletedLabSources(packet?.batchId || activeLabImportBatchId).catch(error => {
+        showToast({ title: "Review saved; source cleanup will retry", message: error.message, type: "error" });
+      });
+    }
   }
 
   async function cleanupSavedLabImportPacket(packetId) {
@@ -4371,7 +4386,7 @@ export default function App() {
         source: "document_layout", originalText: combinedText, cleanedText: combinedText,
         ocrTexts: document.pages.map(page => page.text), file, packets,
       }));
-      const batchId = await createSharedLabImportBatchWithPackets(packets, "google_ocr");
+      const batchId = await createSharedLabImportBatchWithPackets(packets, "google_ocr", file);
       await loadSharedLabImportBatch(batchId);
       setLabImportLastAttempt({ ...attempt, status: "review_ready", batchId, completedAt: new Date().toISOString() });
       setLabImportDebugSnapshot(previous => ({ ...previous, batchId, runId }));
@@ -11616,16 +11631,8 @@ async function markSeenBySocialWork(encounterId) {
                   const mergedImport = mergeChartLabs(existing, incoming, importPacketIds, knownElsewhere);
                   await recordLabSaveEvent(labImportPacket, { stage: "merge_completed", saveAttemptId, encounterId,
                     added: mergedImport.added, skipped: mergedImport.skipped, previousCount: existing.length, proposedCount: mergedImport.labs.length });
-                  let saveQuery = supabase.from("encounters")
-                    .update({ imported_send_out_labs: mergedImport.labs })
-                    .eq("id", encounterId)
-                    .eq("patient_id", labImportPacket.confirmedPatient.id);
-                  saveQuery = target.imported_send_out_labs === null
-                    ? saveQuery.is("imported_send_out_labs", null)
-                    : saveQuery.eq("imported_send_out_labs", JSON.stringify(target.imported_send_out_labs));
-                  const { data: savedEncounter, error: saveError } = await saveQuery.select("id").maybeSingle();
-                  if (saveError) throw saveError;
-                  if (!savedEncounter) throw new Error("This visit's labs changed during review. Retry saving to preserve the latest results.");
+                  await saveImportedLabs(supabase, { encounterId, patientId: labImportPacket.confirmedPatient.id,
+                    expectedLabs: target.imported_send_out_labs, labs: mergedImport.labs });
 
                   chartWriteSucceeded = true;
                   const savedAt = new Date().toISOString();

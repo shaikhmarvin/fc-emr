@@ -172,3 +172,26 @@ test('currently fired patients are excluded from every tracker analysis and rest
     fired.fired = true;
   }
 });
+
+test('average days between general visits uses distinct eligible dates within the filter', () => {
+  const patients = [
+    { id: 'a', chronicConditions: ['Hypertension'], encounters: [
+      visit('outside', '2025-12-31'), visit('a1', '2026-01-01'), visit('same-day', '2026-01-01'),
+      visit('refill', '2026-01-04', { visitType: 'refill_only' }),
+      visit('specialty', '2026-01-05', { visitType: 'specialty_only' }),
+      visit('cancelled', '2026-01-06', { status: 'cancelled' }),
+      visit('other-event', '2026-01-07', { clinicEvent: 'womens_health_day' }),
+      visit('a2', '2026-01-11', { visitType: 'both' }), visit('a3', '2026-01-31'),
+      visit('future', '2026-02-01'),
+    ] },
+    { id: 'b', chronicConditions: ['Hypertension'], encounters: [visit('b1', '2026-01-01'), visit('b2', '2026-01-06')] },
+    { id: 'single', chronicConditions: ['Hypertension'], encounters: [visit('s1', '2026-01-03')] },
+    { id: 'fired', fired: true, chronicConditions: ['Hypertension'], encounters: [visit('f1', '2026-01-01'), visit('f2', '2026-01-02')] },
+  ];
+  const result = buildResearchReport(patients, '2026-01-01', '2026-01-31');
+  const group = result.groups.find(item => item.label === 'HTN+ only');
+  assert.deepEqual(group.visitIntervals.map(row => row.daysBetween), [10, 20, 5]);
+  assert.equal(group.averageDaysBetweenVisits, 11.7);
+  assert.equal(result.groups.find(item => item.label === 'DM+ only').averageDaysBetweenVisits, '—');
+  assert.equal(buildResearchReport(patients, '2026-01-11', '2026-01-11').groups[0].averageDaysBetweenVisits, '—');
+});

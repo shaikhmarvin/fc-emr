@@ -21,7 +21,11 @@ export function mergeChartLabs(existing, incoming, memberPacketIds = [], knownEl
       skipped += 1;
       continue;
     }
-    if (matches.length) throw new Error(`${lab.displayName || lab.key}: this document already has a different saved result. The chart was not changed. Review the existing result before importing a correction.`);
+    if (matches.length) {
+      const savedValues = [...new Set(matches.map(old => text(old.value && typeof old.value === "object" ? old.value.value : old.value)))].join(", ");
+      const incomingValue = text(lab.value && typeof lab.value === "object" ? lab.value.value : lab.value);
+      throw new Error(`${lab.displayName || lab.key}: this document already has a different saved result. Saved: "${savedValues}"; importing: "${incomingValue}". The chart was not changed. Compare both with the original report. If the saved value is correct, remove this row from Detected Labs and save the remaining results. If the saved value is wrong, correct the existing chart result before retrying.`);
+    }
     const partialMatches = sameReport.filter(old => {
       if ((old.key || old.displayName) !== (lab.key || lab.displayName)) return false;
       const oldDate = text(old.collectedDate || old.collectionDate);
@@ -43,6 +47,10 @@ export function mergeChartLabs(existing, incoming, memberPacketIds = [], knownEl
     // Old imports may predate document IDs. Do not guess whether they are a new specimen.
     const legacy = merged.some(old => !old.sourceDocumentId && !old.sourceImportPacketId &&
       identity(old) === identity(lab) && valueKey(old.value) === valueKey(lab.value));
+    if (legacy && text(lab.collectedDate || lab.collectionDate) && text(lab.unit || lab.units)) {
+      skipped += 1;
+      continue;
+    }
     if (legacy) throw new Error(`${lab.displayName || lab.key}: a matching older result is already in this visit. Remove this repeated row from the import before saving. The existing result will be preserved.`);
     merged.push(lab); added += 1;
   }

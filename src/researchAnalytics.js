@@ -230,6 +230,18 @@ export function buildResearchReport(patients, startDate, endDate, clinicEvent = 
   const groups = groupDefinitions.map(([label, matches]) => {
     const groupRows = rows.filter((row) => matches(row.chronic));
     const refillRows = refillAnalyticsRows.filter((row) => matches(row.chronic));
+    const datesByPatient = new Map();
+    for (const row of groupRows) {
+      const milliseconds = Date.parse(row.date + 'T00:00:00Z');
+      if (!Number.isFinite(milliseconds) || new Date(milliseconds).toISOString().slice(0, 10) !== row.date) continue;
+      if (!datesByPatient.has(row.patientId)) datesByPatient.set(row.patientId, new Map());
+      datesByPatient.get(row.patientId).set(row.date, row);
+    }
+    const visitIntervals = [...datesByPatient.values()].flatMap(dates => {
+      const ordered = [...dates.values()].sort((a, b) => a.date.localeCompare(b.date));
+      return ordered.slice(1).map((row, index) => ({ ...row, previousDate: ordered[index].date,
+        daysBetween: (Date.parse(row.date + 'T00:00:00Z') - Date.parse(ordered[index].date + 'T00:00:00Z')) / 86400000 }));
+    });
     return {
       label,
       rows: groupRows,
@@ -239,6 +251,8 @@ export function buildResearchReport(patients, startDate, endDate, clinicEvent = 
       refillPatients: unique(refillRows),
       returns: groupRows.filter((row) => row.returning).length,
       duration: average(groupRows.map((row) => row.duration)),
+      visitIntervals,
+      averageDaysBetweenVisits: visitIntervals.length ? Math.round(visitIntervals.reduce((sum, row) => sum + row.daysBetween, 0) / visitIntervals.length * 10) / 10 : '—',
     };
   });
   const dailyGroups = generalAnalyticsRows.reduce((groupsByDate, row) => {
