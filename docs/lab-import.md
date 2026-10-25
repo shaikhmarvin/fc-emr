@@ -132,3 +132,22 @@ and minimal fingerprint/patient/visit references remain. Browser copies and loca
 traces are cleared when that browser loads the completed batch. Other devices may
 retain a cached copy until they revisit that batch. Migration
 `20261024150000_completed_lab_cleanup.sql` enforces the skipped-source retention rule.
+## Review recovery and lab destinations
+
+The encounter picker includes general, refill-only, specialty and combined visits,
+with explicit type labels. Refill-only visits can receive imported labs while their
+vitals entry section remains hidden. A single matching clinic date may be suggested;
+multiple same-day visits still require a selection.
+
+Review edits are queued in order and backed up locally before transmission, scoped
+by signed-in user and packet. Pending drafts are recovered and retried on reopening.
+Checked source pages and the confirmed patient/encounter are shared through
+`review_progress_json`; source verification flags stay with the saved review rows.
+Changing the destination clears its verification. The browser remembers the last
+active batch/packet, and validates that the batch is still active before reopening it.
+An older write acknowledgment cannot clear a newer pending recovery copy.
+
+Migration `20261025120000_persist_lab_review_progress.sql` adds the progress field.
+The footer distinguishes pending review saves from saved review state. Patient chart
+writes still require Save Imported Labs. Recovery assumes browser storage is available;
+if storage is unavailable, the review shows a warning to wait for the shared save.

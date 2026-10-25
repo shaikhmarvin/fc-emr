@@ -7,7 +7,7 @@ export default function LabReviewInput({ value, onCommit, ...props }) {
   useEffect(() => {
     if (!focused.current) setDraft(String(value ?? ''));
   }, [value]);
-  return <input {...props} value={draft}
+  return <input {...props} data-lab-review-input value={draft}
     onFocus={() => { focused.current = true; }}
     onChange={event => setDraft(event.target.value)}
     onBlur={event => {

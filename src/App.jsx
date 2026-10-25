@@ -1,3 +1,4 @@
+import { removeLabReviewDraft } from "./lib/labReviewProgress.js";
 import { labNameSuggestionScore } from "./lib/labPatientSuggestions.js";
 import { extractLabDob } from "./lib/labDemographics.js";
 import { saveImportedLabs } from "./lib/saveImportedLabs.js";
@@ -3994,6 +3995,7 @@ export default function App() {
         ? ""
         : "No confident patient match found.",
       matchedEncounterId: row.matched_encounter_id || null,
+      reviewProgress: row.review_progress_json || {},
       suspiciousCount: row.suspicious_count || 0,
       missingCount: row.missing_count || 0,
       totalLabCount: row.total_lab_count || 0,
@@ -4006,7 +4008,13 @@ export default function App() {
     setLabImportLoading(true);
 
     try {
+      let rememberedReview = null;
+      try { rememberedReview = JSON.parse(localStorage.getItem(`lab-review-location:${session.user.id}`) || "null"); } catch {}
       let activeBatchId = batchId;
+      if (!activeBatchId && rememberedReview?.batchId) {
+        const { data: rememberedBatch } = await supabase.from("lab_import_batches").select("id").eq("id", rememberedReview.batchId).eq("status", "active").maybeSingle();
+        activeBatchId = rememberedBatch?.id || null;
+      }
 
       if (!activeBatchId) {
         const { data: batchRows, error: batchError } = await supabase
@@ -4066,12 +4074,14 @@ export default function App() {
       setActiveLabImportBatchId(activeBatchId);
       setLabImportPackets(mappedPackets);
 
+      const preferredPacketId = selectedLabImportPacketId || (rememberedReview?.batchId === activeBatchId ? rememberedReview.packetId : null);
       const nextSelectedId =
-        selectedLabImportPacketId &&
-          mappedPackets.some((packet) => packet.packetId === selectedLabImportPacketId && packet.reviewStatus !== "skipped")
-          ? selectedLabImportPacketId
+        preferredPacketId &&
+          mappedPackets.some((packet) => packet.packetId === preferredPacketId && packet.reviewStatus !== "skipped")
+          ? preferredPacketId
           : mappedPackets.find(packet => packet.reviewStatus !== "skipped")?.packetId || null;
 
+      try { localStorage.setItem(`lab-review-location:${session.user.id}`, JSON.stringify({ batchId: activeBatchId, packetId: nextSelectedId })); } catch {}
       setSelectedLabImportPacketId(nextSelectedId);
       setLabImportPacket(
         mappedPackets.find((packet) => packet.packetId === nextSelectedId) || null
@@ -4195,19 +4205,8 @@ export default function App() {
     }
   }
 
-  async function handleLiveUpdateLabPacketLabs(packetId, reviewedLabs) {
+  async function handleLiveUpdateLabPacketLabs(packetId, reviewedLabs, packetSnapshot = null) {
     if (!packetId) return;
-
-    const existingPacket = labImportPackets.find(
-      (packet) => String(packet.packetId) === String(packetId)
-    );
-
-    const existingJson = JSON.stringify(existingPacket?.labs || []);
-    const nextJson = JSON.stringify(reviewedLabs || []);
-
-    if (existingJson === nextJson) {
-      return;
-    }
 
     try {
       await updateSharedLabImportPacket(packetId, {
@@ -4217,7 +4216,7 @@ export default function App() {
           (lab) => !!lab?.missing || !!lab?.autoFilled
         ).length,
         total_lab_count: (reviewedLabs || []).length,
-      });
+      }, packetSnapshot);
 
       setLabImportPackets((prev) =>
         prev.map((packet) =>
@@ -4250,6 +4249,7 @@ export default function App() {
       );
     } catch (error) {
       console.error("Failed to live-update lab packet labs:", error);
+      throw error;
     }
   }
 
@@ -4507,6 +4507,7 @@ export default function App() {
   async function handleSelectLabImportPacket(packetId) {
     if (!packetId) return;
 
+    try { localStorage.setItem(`lab-review-location:${session.user.id}`, JSON.stringify({ batchId: activeLabImportBatchId, packetId })); } catch {}
     setSelectedLabImportPacketId(packetId);
 
     const found = labImportPackets.find((packet) => packet.packetId === packetId) || null;
@@ -11563,6 +11564,10 @@ async function markSeenBySocialWork(encounterId) {
 
           {activeView === "lab-import" && (
             <LabImportView
+              reviewUserId={session?.user?.id}
+              onChangeProgress={async (packetId, progress, packetSnapshot) => {
+                await updateSharedLabImportPacket(packetId, { review_progress_json: progress }, packetSnapshot);
+              }}
               packet={labImportPacket}
               sourceFile={labSourceFile}
               onRerunOCR={labSourceFile ? () => handleGoogleOCRImport(labSourceFile, { rerun: true }) : null}
@@ -11684,6 +11689,7 @@ async function markSeenBySocialWork(encounterId) {
                       : prev
                   );
 
+                  try { for (const id of importPacketIds) removeLabReviewDraft(session.user.id, id); } catch {}
                   await loadSharedLabImportBatch(activeLabImportBatchId || null);
 
                   showToast({

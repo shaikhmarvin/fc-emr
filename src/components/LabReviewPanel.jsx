@@ -73,8 +73,7 @@ export default function LabReviewPanel({
 
   function applyLabs(updater) {
     if (!onChangeLabs) return;
-    const nextLabs = typeof updater === "function" ? updater(labs) : updater;
-    onChangeLabs(nextLabs);
+    onChangeLabs(updater);
   }
 
   function toggleGroup(group) {
@@ -138,6 +137,7 @@ export default function LabReviewPanel({
       ...prev,
       {
         key: `custom-${Date.now()}`,
+        _reviewId: crypto.randomUUID(),
         displayName: "",
         group: "Other",
         sourcePage,
@@ -176,7 +176,7 @@ export default function LabReviewPanel({
 }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" style={{ overflowAnchor: "none" }}>
       <button type="button" onClick={() => addLab()} className="text-sm font-medium text-blue-700">+ Add a missing result</button>
       {groupedLabs.map(([group, rows]) => {
         const isOpen = openGroups[group] ?? true;
@@ -224,7 +224,7 @@ const flag = importedLabFlag(lab);
 
                     return (
                       <div
-                        key={`${lab.key || "lab"}-${index}`}
+                        key={lab.sourceResultId || lab._reviewId || `lab-row-${index}`}
                         className={`px-4 py-3 ${duplicateSame ? "bg-red-50/60" : duplicateRecent ? "bg-blue-50/60" : suspicious ? "bg-blue-50/40" : "bg-white"}`}
                       >
                         <div className="flex flex-wrap items-start justify-between gap-4">

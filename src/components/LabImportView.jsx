@@ -1,3 +1,5 @@
+import { labEncounterLabel, restoreLabEncounter, readLabReviewDraft, writeLabReviewDraft, acknowledgeLabReviewDraft } from "../lib/labReviewProgress.js";
+import { LabReviewSync } from "../lib/labReviewSync.js";
 import { recognizeSavedImport } from "../lib/recognizeSavedImport.js";
 import { needsExtractionReview } from "../lib/labFlags.js";
 import LabSourceViewer from "./LabSourceViewer.jsx";
@@ -323,6 +325,8 @@ function ImportPiles({ packets, onSelect, onResume, selectedId }) {
 
 export default function LabImportView({
   packet = null,
+  reviewUserId = null,
+  onChangeProgress = null,
   sourceFile = null,
   onRerunOCR = null,
   ocrBusy = false,
@@ -352,8 +356,10 @@ onAfterSaveCleanup = null,
   const [encounters, setEncounters] = useState([]);
   const [selectedEncounterId, setSelectedEncounterId] = useState(null);
   const [deletedAuditByPacketId, setDeletedAuditByPacketId] = useState({});
-  const lastIncomingLabsJsonRef = useRef({});
-  const lastPushedLabsJsonRef = useRef({});
+  const reviewSync = useRef(new LabReviewSync());
+  const progressSync = useRef(new LabReviewSync());
+  const initializedDrafts = useRef(new Set());
+  const [pendingReviewSaves, setPendingReviewSaves] = useState(0);
   const DEV_PROFILE_ID = "33647838-c015-40a4-9c0a-4ccd9e584b87";
   const [currentUserId, setCurrentUserId] = useState(null);
   const [showQaModal, setShowQaModal] = useState(false);
@@ -405,44 +411,56 @@ onAfterSaveCleanup = null,
     return reviewedLabsByPacketId[selectedPacket.packetId] || selectedPacket.labs || [];
   }, [selectedPacket?.packetId, selectedPacket?.labs, reviewedLabsByPacketId]);
 
-  useEffect(() => {
-    if (!selectedPacket?.packetId) return;
-
-    const incomingLabs = attachAuditBaseline(selectedPacket.labs || []);
-    const incomingJson = JSON.stringify(incomingLabs);
-
-    lastIncomingLabsJsonRef.current[selectedPacket.packetId] = incomingJson;
-
-    setReviewedLabsByPacketId((prev) => {
-      const currentJson = JSON.stringify(prev[selectedPacket.packetId] || []);
-
-      if (currentJson === incomingJson) {
-        return prev;
-      }
-
-      return {
-        ...prev,
-        [selectedPacket.packetId]: incomingLabs,
-      };
+  function persistReviewValue(packet, field, value) {
+    try { writeLabReviewDraft(reviewUserId, packet.packetId, field, value); }
+    catch { setSaveError("Browser recovery storage is unavailable. Wait for the shared save before refreshing."); }
+    const sync = field === 'labs' ? reviewSync : progressSync;
+    setPendingReviewSaves(count => count + 1);
+    const operation = sync.current.edit(packet.packetId, value, async (id, next) => {
+      if (field === 'labs') await onChangeLabs?.(id, next, packet);
+      else await onChangeProgress?.(id, next, packet);
+      try { acknowledgeLabReviewDraft(reviewUserId, id, field, next); } catch {}
     });
-  }, [selectedPacket?.packetId, selectedPacket?.labs]);
+    operation.then(() => setPendingReviewSaves(count => count - 1), error => {
+      setPendingReviewSaves(count => count - 1);
+      setSaveError(error.message || "Review save failed. Your changes are kept on this browser for recovery.");
+    });
+    return operation;
+  }
 
   useEffect(() => {
-    if (!selectedPacket?.packetId) return;
-    if (!onChangeLabs) return;
-
+    if (!selectedPacket?.packetId || !reviewUserId) return;
     const packetId = selectedPacket.packetId;
-    const reviewedJson = JSON.stringify(reviewedLabs || []);
-    const incomingJson = lastIncomingLabsJsonRef.current[packetId] || "";
-    const lastPushedJson = lastPushedLabsJsonRef.current[packetId] || "";
+    const incomingLabs = attachAuditBaseline(selectedPacket.labs || []);
+    const firstLoad = !initializedDrafts.current.has(packetId);
+    const draft = firstLoad ? readLabReviewDraft(reviewUserId, packetId) : null;
+    reviewSync.current.receive(packetId, incomingLabs);
+    progressSync.current.receive(packetId, selectedPacket.reviewProgress || {});
+    initializedDrafts.current.add(packetId);
+    if (draft?.labsPending && Array.isArray(draft.labs)) persistReviewValue(selectedPacket, 'labs', draft.labs);
+    if (draft?.progressPending && draft.progress) persistReviewValue(selectedPacket, 'progress', draft.progress);
+    const labs = reviewSync.current.get(packetId);
+    const progress = progressSync.current.get(packetId) || {};
+    setReviewedLabsByPacketId(previous => previous[packetId] === labs ? previous : { ...previous, [packetId]: labs });
+    setReviewedPagesByPacket(previous => ({ ...previous, [packetId]: progress.reviewedPages || [] }));
+    const patientId = selectedPacket.confirmedPatient?.id;
+    setConfirmedTarget(progress.targetVerified && progress.patientId === patientId && progress.encounterId
+      ? packetId + ':' + patientId + ':' + progress.encounterId : '');
+  }, [selectedPacket?.packetId, selectedPacket?.labs, selectedPacket?.reviewProgress, reviewUserId]);
 
-    if (reviewedJson === incomingJson) return;
-    if (reviewedJson === lastPushedJson) return;
+  useEffect(() => {
+    const commitFocusedField = () => {
+      const field = document.activeElement;
+      if (field?.matches?.('[data-lab-review-input]')) field.blur();
+    };
+    window.addEventListener('beforeunload', commitFocusedField);
+    return () => window.removeEventListener('beforeunload', commitFocusedField);
+  }, []);
 
-    lastPushedLabsJsonRef.current[packetId] = reviewedJson;
-    onChangeLabs(packetId, reviewedLabs);
-  }, [selectedPacket?.packetId, reviewedLabs, onChangeLabs]);
-
+  function updateReviewProgress(patch) {
+    const progress = { ...(progressSync.current.get(selectedPacket.packetId) || {}), ...patch };
+    persistReviewValue(selectedPacket, 'progress', progress);
+  }
 
   function normalizeEncounterDate(value) {
     if (!value) return "";
@@ -465,10 +483,8 @@ onAfterSaveCleanup = null,
         if (cancelled) return;
         setEncounters(data || []);
         const date = normalizeEncounterDate(selectedPacket.collectedDate);
-        const matches = date ? (data || []).filter(
-          enc => normalizeEncounterDate(enc.clinic_date) === date
-        ) : [];
-        if (matches.length === 1) setSelectedEncounterId(matches[0].id);
+        const progress = progressSync.current.get(selectedPacket.packetId) || selectedPacket.reviewProgress;
+        setSelectedEncounterId(restoreLabEncounter(data || [], progress, selectedPacket.confirmedPatient.id, date, selectedPacket.matchedEncounterId));
       } catch {
         if (!cancelled) setSaveError("Could not load visits. Select the patient again to retry.");
       }
@@ -711,7 +727,10 @@ onAfterSaveCleanup = null,
     try {
       setSaving(true);
       setSaveError("");
-      const saved = await onSave(reviewedLabs, selectedEncounterId, { packet: selectedPacket });
+      await reviewSync.current.flush(selectedPacket.packetId);
+      await progressSync.current.flush(selectedPacket.packetId);
+      const latestLabs = reviewSync.current.get(selectedPacket.packetId) || reviewedLabs;
+      const saved = await onSave(latestLabs, selectedEncounterId, { packet: selectedPacket });
       if (saved !== true) {
         setSaveError("Labs were not saved. Your packet is still here for review.");
         return;
@@ -733,13 +752,15 @@ if (onAfterSaveCleanup) {
 
     const nextLabs =
       typeof nextLabsOrUpdater === "function"
-        ? nextLabsOrUpdater(reviewedLabs)
+        ? nextLabsOrUpdater(reviewSync.current.get(selectedPacket.packetId) || reviewedLabs)
         : nextLabsOrUpdater;
 
     setReviewedLabsByPacketId((prev) => ({
       ...prev,
       [selectedPacket.packetId]: nextLabs,
     }));
+    setSaveError("");
+    persistReviewValue(selectedPacket, 'labs', nextLabs);
   }
   const canSeeLabQa = currentUserId === DEV_PROFILE_ID;
   let saveDisabledReason = "";
@@ -967,7 +988,7 @@ if (onAfterSaveCleanup) {
               aria-label="Detected lab results"
               tabIndex={0}
               className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"
-              style={{ scrollbarGutter: "stable" }}
+              style={{ scrollbarGutter: "stable", overflowAnchor: "none" }}
             >
               <LabReviewPanel
                 labs={reviewedLabs}
@@ -979,13 +1000,16 @@ if (onAfterSaveCleanup) {
                 onAuditEvent={handleLabAuditEvent}
               />
             </div>
-            <p className="flex h-16 shrink-0 items-center text-xs text-slate-500">Edits update the review when you leave a field. Use Save Imported Lab to save to the chart.</p>
+            <p className="flex h-16 shrink-0 items-center text-xs text-slate-500">{pendingReviewSaves > 0 ? "Saving review… A local recovery copy is kept while the save is pending." : saveError ? "Check the review message above. Unsynced edits are kept in this browser when recovery storage is available." : "Review progress saved. Use Save Imported Lab to save results to the chart."}</p>
           </div>
           <LabSourceViewer key={selectedPacket.packetId} source={sourceDocument} file={sourceFile} activeLab={activeSourceLab}
             onAttachSource={onAttachSource} reviewedPages={reviewedPages}
-            onReviewPage={(pageNumber, checked) => setReviewedPagesByPacket(prev => ({ ...prev,
-              [selectedPacket.packetId]: checked ? [...new Set([...(prev[selectedPacket.packetId] || []), pageNumber])] :
-                (prev[selectedPacket.packetId] || []).filter(number => number !== pageNumber) }))} />
+            onReviewPage={(pageNumber, checked) => {
+              const current = progressSync.current.get(selectedPacket.packetId)?.reviewedPages || reviewedPages;
+              const pages = checked ? [...new Set([...current, pageNumber])] : current.filter(number => number !== pageNumber);
+              setReviewedPagesByPacket(prev => ({ ...prev, [selectedPacket.packetId]: pages }));
+              updateReviewProgress({ reviewedPages: pages });
+            }} />
         </div>
 
         <div className="min-w-0 space-y-4 xl:col-span-2">
@@ -1014,7 +1038,7 @@ if (onAfterSaveCleanup) {
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-900">Encounter Match</h3>
             <label className="my-3 flex items-start gap-2 text-sm text-slate-700">
-              <input type="checkbox" disabled={!confirmedPatient || !selectedEncounterId} checked={confirmedTarget === targetKey} onChange={event => setConfirmedTarget(event.target.checked ? targetKey : "")} />
+              <input type="checkbox" disabled={!confirmedPatient || !selectedEncounterId} checked={confirmedTarget === targetKey} onChange={event => { setConfirmedTarget(event.target.checked ? targetKey : ""); updateReviewProgress({ patientId: confirmedPatient.id, encounterId: selectedEncounterId, targetVerified: event.target.checked }); }} />
               I verified the report belongs to this patient and the selected visit.
             </label>
             <p className="mt-1 text-sm text-slate-600">
@@ -1025,13 +1049,13 @@ if (onAfterSaveCleanup) {
               <>
                 <select
                   value={selectedEncounterId || ""}
-                  onChange={(e) => setSelectedEncounterId(e.target.value)}
+                  onChange={(e) => { setSelectedEncounterId(e.target.value); setConfirmedTarget(""); updateReviewProgress({ patientId: confirmedPatient.id, encounterId: e.target.value, targetVerified: false }); }}
                   className="mt-3 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
                 >
                   <option value="">Select encounter</option>
                   {encounters.map((enc) => (
                     <option key={enc.id} value={enc.id}>
-                      {(enc.clinic_date || "No date")} — {(enc.chief_complaint || "No complaint")}
+                      {labEncounterLabel(enc)}
                     </option>
                   ))}
                 </select>

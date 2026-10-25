@@ -1,3 +1,4 @@
+import { mergeLabReviewProgress } from "./labReviewProgress.js";
 import { LAB_CATALOG } from './labCatalog.js';
 import { identifyStiTest } from './stiResults.js';
 import { identifyHepatitisTest, parseHepatitisValue, hepatitisDefinitionForValue } from './hepatitisResults.js';
@@ -182,6 +183,7 @@ export function mergeDocumentPackets(packets) {
     existing._firstPageIndex = Math.min(existing._firstPageIndex, index);
     existing.rawText = [...new Set([existing.rawText, packet.rawText].filter(Boolean))].join('\n\n');
     existing.sourceRawText = existing.rawText;
+    existing.reviewProgress = mergeLabReviewProgress(existing.reviewProgress, packet.reviewProgress);
     existing.extractedDob ||= dob;
     existing.extractedPatientName ||= packet.extractedPatientName;
     existing.collectedDate ||= packet.collectedDate;
