@@ -1,3 +1,4 @@
+import { refreshLabPacketPatient } from "./lib/labPacketPatients.js";
 import { removeLabReviewDraft } from "./lib/labReviewProgress.js";
 import { labNameSuggestionScore } from "./lib/labPatientSuggestions.js";
 import { extractLabDob } from "./lib/labDemographics.js";
@@ -2372,6 +2373,9 @@ export default function App() {
     isBoardDisplayMode,
   });
 
+  const labPatientDirectoryRef = useRef(patients);
+  labPatientDirectoryRef.current = patients;
+
   function rememberDashboardScrollPosition() {
     if (activeView !== "dashboard") return;
 
@@ -3937,9 +3941,11 @@ export default function App() {
   }
 
   function mapLabImportDbRowToPacket(row) {
+    const directory = labPatientDirectoryRef.current;
+    const extractedName = row.extracted_name?.trim() || extractPatientNameFromLabText(row.raw_text || "");
     const matchedPatient =
       row.matched_patient_id
-        ? patients.find((p) => String(p.id) === String(row.matched_patient_id)) || null
+        ? directory.find((p) => String(p.id) === String(row.matched_patient_id)) || null
         : null;
 
     const storedPossibleMatches = Array.isArray(row.match_candidates_json)
@@ -3953,12 +3959,12 @@ export default function App() {
 
           if (!id) return null;
 
-          return patients.find((p) => String(p.id) === String(id)) || null;
+          return directory.find((p) => String(p.id) === String(id)) || null;
         })
         .filter(Boolean)
       : [];
 
-    const freshSuggestions = findBestPatientMatch(patients, row.extracted_name || "", row.extracted_dob || extractDobFromLabText(row.raw_text || ""));
+    const freshSuggestions = findBestPatientMatch(directory, extractedName, row.extracted_dob || extractDobFromLabText(row.raw_text || ""));
     const possibleMatches = [...new Map([...storedPossibleMatches, ...(freshSuggestions.match ? [freshSuggestions.match] : freshSuggestions.possible)].map(patient => [patient.id, patient])).values()];
 
     const sourcePages = row.duplicate_summary_json?.sourceDocument?.pages || [];
@@ -3969,10 +3975,12 @@ export default function App() {
       labs = repairUnreviewedCbcLabs(labs, row.raw_text || "", sourcePage);
       labs = repairUnreviewedHepatitisLabs(labs, row.raw_text || "", sourcePage);
     }
-    return {
+    return refreshLabPacketPatient({
       packetId: row.id,
       batchId: row.batch_id,
-      extractedPatientName: row.extracted_name || "",
+      extractedPatientName: extractedName,
+      matchedPatientId: row.matched_patient_id || null,
+      possibleMatchIds: (row.match_candidates_json || []).map(entry => entry?.id || entry?.patient_id || entry?.patientId).filter(Boolean),
       extractedDob: row.extracted_dob || extractDobFromLabText(row.raw_text || ""),
       collectedDate: row.collected_date || "",
       packetType: row.packet_type || "unknown",
@@ -3999,7 +4007,7 @@ export default function App() {
       suspiciousCount: row.suspicious_count || 0,
       missingCount: row.missing_count || 0,
       totalLabCount: row.total_lab_count || 0,
-    };
+    }, directory, findBestPatientMatch);
   }
 
   async function loadSharedLabImportBatch(batchId = null) {
@@ -4495,6 +4503,11 @@ export default function App() {
       });
     }
   }
+
+  useEffect(() => {
+    setLabImportPackets(previous => previous.map(packet => refreshLabPacketPatient(packet, patients, findBestPatientMatch)));
+    setLabImportPacket(previous => previous ? refreshLabPacketPatient(previous, patients, findBestPatientMatch) : previous);
+  }, [patients]);
 
   useEffect(() => {
     if (!session) return;

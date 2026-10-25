@@ -202,6 +202,8 @@ function MatchPanel({
 }) {
   const displayMatchedPatient = confirmedPatient || matchedPatient;
 
+  if (packet.matchStatus === "loading_patients") return <div role="status" className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">Loading patient suggestions… Your review progress is retained.</div>;
+
   if (packet.matchStatus === "matched" && displayMatchedPatient) {
     return (
       <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
