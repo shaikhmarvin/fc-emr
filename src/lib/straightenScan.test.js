@@ -34,3 +34,14 @@ test('highlight boxes map back to the source center after rotation and padding',
   assert.equal(word.across, 0.5);
   assert.equal(originalWordBoxes(words, { angle: 0 }), words);
 });
+
+test('faint text and heavy table grids do not hide larger text tilt', () => {
+  for (const angle of [-19, 0.3, 18]) {
+    const input = scan(angle);
+    for (let i = 0; i < input.data.length; i += 4) if (input.data[i] === 0) input.data[i] = input.data[i + 1] = input.data[i + 2] = 190;
+    const set = (x, y) => { if (x < 0 || y < 0 || x >= input.width || y >= input.height) return; const i = (y * input.width + x) * 4; input.data[i] = input.data[i + 1] = input.data[i + 2] = 0; };
+    for (let y = 35; y < 620; y++) for (let offset = 0; offset < 3; offset++) { set(35 + offset, y); set(650 + offset, y); }
+    for (const base of [60, 210, 360, 510]) for (let x = 35; x < 653; x++) for (let dy = 0; dy < 2; dy++) set(x, Math.round(base + (x - input.width / 2) * Math.tan(angle * Math.PI / 180)) + dy);
+    assert.ok(Math.abs(estimateTextSkew(input).angle - angle) <= 0.4, `faint grid angle ${angle}: ${estimateTextSkew(input).angle}`);
+  }
+});

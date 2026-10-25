@@ -1,3 +1,5 @@
+import { encounterFromPatientSearch } from "./utils/patientEncounterSelection.js";
+import { normalizePapLab, parsePapReport, isPapLab } from "./lib/papResults.js";
 import { refreshLabPacketPatient } from "./lib/labPacketPatients.js";
 import { removeLabReviewDraft } from "./lib/labReviewProgress.js";
 import { labNameSuggestionScore } from "./lib/labPatientSuggestions.js";
@@ -8,7 +10,7 @@ import { createVitalEntry } from "./lib/vitals.js";
 import { LAB_PIPELINE_VERSION, captureImportBaseline, buildLabDiagnostics } from "./lib/labImportDiagnostics.js";
 import { mergeChartLabs } from "./lib/mergeChartLabs.js";
 import { importedLabFlag } from "./lib/labFlags.js";
-import { applyRangeDefaults, learnRangeDefault, suspendConflictingRangeDefaults } from "./lib/labRangeDefaults.js";
+import { applyRangeDefaults, learnRangeDefault, suspendConflictingRangeDefaults, learnVerifiedLipidDefaults } from "./lib/labRangeDefaults.js";
 import { repairUnreviewedHepatitisLabs } from "./lib/hepatitisResults.js";
 import { repairUnreviewedCbcLabs } from "./lib/cbcResults.js";
 import { readLabDocument, labFileFingerprint } from "./lib/readLabDocument.js";
@@ -3548,6 +3550,8 @@ export default function App() {
     const parsedLabs = shouldParseAsStructuredLabs
       ? window.testLabParser(rawText, [], collectedDate)
       : [];
+    const papLabs = parsePapReport(rawText);
+    const combinedLabs = [...parsedLabs.filter(lab => !papLabs.length || normalizePapLab(lab).key !== "pap_smear"), ...papLabs].map(normalizePapLab);
 
     const matchResult = findBestPatientMatch(
       patients,
@@ -3564,7 +3568,7 @@ export default function App() {
       possibleMatches: matchResult.possible || [],
       unresolvedReason: matchResult.reason || "",
       confirmedPatient: matchResult.match || null,
-      labs: parsedLabs,
+      labs: combinedLabs,
       rawText,
       reviewStatus: "unsaved",
       savedAt: null,
@@ -3969,7 +3973,7 @@ export default function App() {
 
     const sourcePages = row.duplicate_summary_json?.sourceDocument?.pages || [];
     const sourcePage = sourcePages.length === 1 ? sourcePages[0].pageNumber : undefined;
-    let labs = Array.isArray(row.parsed_labs_json) ? row.parsed_labs_json : [];
+    let labs = (Array.isArray(row.parsed_labs_json) ? row.parsed_labs_json : []).map(normalizePapLab);
     if (row.review_status !== "saved" && row.review_status !== "skipped") {
       labs = repairUnreviewedStiLabs(labs, row.raw_text || "", sourcePage);
       labs = repairUnreviewedCbcLabs(labs, row.raw_text || "", sourcePage);
@@ -4070,7 +4074,7 @@ export default function App() {
         }
         setLabSourceFile(null);
       }
-      const defaults = suspendConflictingRangeDefaults(labRangeDefaults, groupedPackets);
+      const defaults = learnVerifiedLipidDefaults(suspendConflictingRangeDefaults(labRangeDefaults, groupedPackets), groupedPackets);
       if (defaults !== labRangeDefaults) {
         setLabRangeDefaults(defaults);
         try { localStorage.setItem(`lab-range-defaults:${session.user.id}`, JSON.stringify(defaults)); } catch { /* Keep session defaults when storage is unavailable. */ }
@@ -4351,20 +4355,20 @@ export default function App() {
         const packetType = classifyLabPacket(cleaned);
         const packet = buildLabImportPacketFromText(cleaned, packetType);
         const layoutLabs = parseLayoutResults(page);
-        const layoutKeys = new Set(layoutLabs.map(lab => lab.key));
+        const layoutKeys = new Set(layoutLabs.filter(lab => !isPapLab(lab) || String(lab.value ?? "").trim()).map(lab => lab.key));
         // Only use unpositioned parsing on pages without a recognized table.
         // A missing table result must never be replaced with a reference limit.
-        const fallback = packet.labs.filter(lab => !hasResultColumns(page) && !lab.autoFilled && !layoutKeys.has(lab.key)).map(lab => ({
+        const fallback = packet.labs.filter(lab => (!hasResultColumns(page) || isPapLab(lab)) && !lab.autoFilled && !layoutKeys.has(lab.key)).map(lab => ({
           ...lab, sourcePage: page.pageNumber, sourceReviewed: false,
           extractionMethod: "text_fallback", confidence: "low", suspicious: true,
           referenceRangeText: "", expectedRangeText: "", resultSymbol: "",
         }));
         pageParses.push({ pageNumber: page.pageNumber, cleanedText: cleaned, packetType,
-          layoutResults: layoutLabs, textParserResults: packet.labs, selectedResults: [...layoutLabs, ...fallback],
+          layoutResults: layoutLabs, textParserResults: packet.labs, selectedResults: [...layoutLabs.filter(lab => !isPapLab(lab) || !fallback.some(isPapLab)), ...fallback],
           removedPlaceholders: packet.labs.filter(lab => lab.autoFilled).length });
         return { ...packet, packetType, packetId: `page-${page.pageNumber}`,
           rawText: cleaned, sourceRawText: cleaned,
-          labs: [...layoutLabs, ...fallback],
+          labs: [...layoutLabs.filter(lab => !isPapLab(lab) || !fallback.some(isPapLab)), ...fallback],
           sourceDocument: { id: document.id, name: document.name, size: document.size, runId,
             diagnostics: { pipelineVersion: LAB_PIPELINE_VERSION, startedAt: document.diagnostics.startedAt,
               completedAt: document.diagnostics.completedAt, durationMs: document.diagnostics.durationMs,
@@ -7730,18 +7734,17 @@ export default function App() {
   }
 
 
-  function openPatientFromFilteredView(patientId) {
+  function openPatientFromFilteredView(patientId, visitType = 'all') {
     setDashboardSelectedPatientId(patientId);
-
-    const matchingRows = visibleEncounterRows.filter(
-      ({ patient }) => patient.id === patientId
-    );
-
-    if (matchingRows.length > 0) {
-      openPatientChart(patientId, matchingRows[0].encounter.id);
+    const encounter = encounterFromPatientSearch(dashboardEncounterRows, patientId, dashboardClinicDate, visitType);
+    if (encounter) {
+      openPatientChart(patientId, encounter.id);
       return;
     }
-
+    if (dashboardClinicDate) {
+      showToast({ title: "Visit no longer available", message: "No encounter matches the selected clinic date and visit type. Refresh the patient search and try again.", type: "error" });
+      return;
+    }
     openPatientChart(patientId);
   }
 
@@ -11659,6 +11662,9 @@ async function markSeenBySocialWork(encounterId) {
                     expectedLabs: target.imported_send_out_labs, labs: mergedImport.labs });
 
                   chartWriteSucceeded = true;
+                  setPatients(previous => previous.map(patient => String(patient.id) !== String(savingPacket.confirmedPatient.id) ? patient : {
+                    ...patient, encounters: (patient.encounters || []).map(encounter => String(encounter.id) !== String(encounterId) ? encounter : { ...encounter, importedSendOutLabs: mergedImport.labs }),
+                  }));
                   const savedAt = new Date().toISOString();
                   await recordLabSaveEvent(savingPacket, { stage: "chart_write_succeeded", saveAttemptId, encounterId,
                     added: mergedImport.added, skipped: mergedImport.skipped, finalCount: mergedImport.labs.length });
@@ -12168,6 +12174,7 @@ async function markSeenBySocialWork(encounterId) {
         intakeTab={intakeTab}
         setIntakeTab={setIntakeTab}
         intakeForm={intakeForm}
+        papHistoryPatient={patients.find(patient => patient.id === (isEditingIntake ? editingPatientId : autoFilledMatchPatientId)) || null}
         updateIntakeField={updateIntakeField}
         submitPatient={submitPatient}
         isSubmittingIntake={isSubmittingIntake}

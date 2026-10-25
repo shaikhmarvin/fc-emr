@@ -1,25 +1,14 @@
 import { buildPageRows } from './labDocument.js';
-import { straightenScan, originalWordBoxes } from './straightenScan.js';
-
-function wordsFromPdf(items, viewport) {
-  return items.filter(item => item.str?.trim()).flatMap(item => {
-    const [x, y] = viewport.convertToViewportPoint(item.transform[4], item.transform[5]);
-    const height = Math.abs(item.height * viewport.scale) || 10;
-    const width = Math.abs(item.width * viewport.scale);
-    const tokens = [...item.str.matchAll(/\S+/g)];
-    return tokens.map(token => ({ text: token[0], confidence: tokens.length > 1 ? 0.8 : 1,
-      box: { x: (x + width * token.index / item.str.length) / viewport.width,
-        y: (y - height) / viewport.height,
-        width: width * token[0].length / item.str.length / viewport.width, height: height / viewport.height } }));
-  });
-}
+import { straightenScan, originalWordBoxes, prepareScanImage } from './straightenScan.js';
+import { wordsFromPdf } from './pdfTextWords.js';
+import { alignRecognizedPage } from './alignRecognizedPage.js';
 
 export async function labFileFingerprint(file) {
   const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
   return Array.from(new Uint8Array(digest), value => value.toString(16).padStart(2, '0')).join('');
 }
 
-export async function readLabDocument(file, { recognizePages, onProgress = () => {}, fingerprint, runId = crypto.randomUUID(), onDiagnostic = () => {} }) {
+export async function readLabDocument(file, { recognizePages, onProgress = () => {}, fingerprint, runId = crypto.randomUUID(), onDiagnostic = () => {}, prepareImage = prepareScanImage }) {
   const startedAt = new Date().toISOString(), started = performance.now(), events = [];
   const emit = event => {
     const entry = { timestamp: new Date().toISOString(), elapsedMs: Math.round(performance.now() - started), ...event };
@@ -45,21 +34,23 @@ export async function readLabDocument(file, { recognizePages, onProgress = () =>
       emit({ stage: "ocr_request_failed", pageNumbers, durationMs: Math.round(performance.now() - batchStarted), error: error.message });
       throw error;
     }
-    pending.forEach((page, index) => {
-      const response = recognized[index];
+    for (let index = 0; index < pending.length; index++) {
+      const page = pending[index];
+      const aligned = await alignRecognizedPage(page, recognized[index], { recognizePages, prepareImage, emit, onProgress });
+      const response = aligned.response;
       const rows = buildPageRows(response.words || []).map(row => ({ ...row,
-        words: originalWordBoxes(row.words, page.correction),
-        box: originalWordBoxes([{ box: row.box }], page.correction)[0].box }));
+        words: originalWordBoxes(row.words, aligned.correction),
+        box: originalWordBoxes([{ box: row.box }], aligned.correction)[0].box }));
       pages.push({ pageNumber: page.pageNumber, method: 'ocr',
         text: rows.length ? rows.map(row => row.text).join('\n') : response.text || '',
         originalText: response.text || '', rows,
         reading: { engineVersion: response.engineVersion || "unrecorded", wordCount: response.words?.length || 0,
           rowCount: rows.length, width: page.width || null, height: page.height || null,
-          nativeTextCharacters: page.nativeTextCharacters ?? null, deskew: page.correction || null,
+          nativeTextCharacters: page.nativeTextCharacters ?? null, deskew: aligned.correction || null,
           responseFormat: response.words?.length ? "word_layout" : "text_only" },
-        warning: response.error || (!response.text?.trim() ? 'No readable text. Review this page manually.' :
+        warning: response.error || aligned.warning || (!response.text?.trim() ? 'No readable text. Review this page manually.' :
           !rows.length ? 'Page coordinates are unavailable. Results require manual source verification.' : '') });
-    });
+    }
     pending = [];
   }
   const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
@@ -112,12 +103,16 @@ export async function readLabDocument(file, { recognizePages, onProgress = () =>
       reader.onerror = () => reject(new Error('Could not open the image.'));
       reader.readAsDataURL(file);
     });
-    pending.push({ pageNumber: 1, image });
+    onProgress("Checking image text alignment…");
+    const prepared = await prepareImage(image);
+    pending.push({ pageNumber: 1, image: prepared.image, correction: prepared.correction,
+      width: prepared.correction?.sourceWidth, height: prepared.correction?.sourceHeight });
+    emit({ stage: "page_deskewed", pageNumber: 1, ...(prepared.correction || {}), inputType: "image" });
     await flush();
   } else throw new Error('Choose a PDF or image file.');
   emit({ stage: "read_completed", pageCount: pages.length });
   return { id, name: file.name, size: file.size, pageCount: pages.length,
-    diagnostics: { runId, readerVersion: "positioned-document-reader-v4", startedAt, completedAt: new Date().toISOString(),
+    diagnostics: { runId, readerVersion: "positioned-document-reader-v5", startedAt, completedAt: new Date().toISOString(),
       durationMs: Math.round(performance.now() - started), renderScale: 2, ocrBatchLimit: 4, events },
     pages: pages.sort((a, b) => a.pageNumber - b.pageNumber) };
 }

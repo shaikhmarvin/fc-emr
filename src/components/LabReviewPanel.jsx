@@ -1,3 +1,4 @@
+import { isPapLab, normalizePapLab } from "../lib/papResults.js";
 import { labsBySourcePage } from "../lib/labReviewOrder.js";
 import LabReviewInput from "./LabReviewInput.jsx";
 import { importedLabFlag, needsExtractionReview, labFlagChoices, toggleLabFlag } from "../lib/labFlags.js";
@@ -92,7 +93,7 @@ export default function LabReviewPanel({
         (patch.key !== undefined || patch.unit !== undefined) && patch.referenceRangeText === undefined
         ? { referenceRangeText: "", referenceRangeSource: "", referenceRangeNeedsReview: false } : {};
 
-      return {
+      return normalizePapLab({
         ...lab,
         ...clearReusedRange,
         ...patch,
@@ -113,7 +114,7 @@ export default function LabReviewPanel({
           missing: !!lab.missing,
           confidence: lab.confidence || "",
         },
-      };
+      });
     })
   );
 }
@@ -127,7 +128,7 @@ export default function LabReviewPanel({
     const definition = findLabByAlias(displayName);
     updateLab(index, { displayName,
       key: definition?.key || `outside-${displayName.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
-      group: definition?.group || 'Other', custom: !definition });
+      group: definition?.group || 'Other', custom: !definition, ...(definition?.key === 'pap_smear' ? { unit: '', expectedRangeText: '' } : {}) });
   }
 
   function addLab(pageLabel = "Results without a page") {
@@ -245,21 +246,22 @@ const flag = importedLabFlag(lab);
 
                             <div className="my-2 flex flex-wrap items-center gap-3 text-xs">
                               {lab.sourcePage && <button type="button" onClick={() => onShowSource?.(lab)} className="font-medium text-blue-700">View page {lab.sourcePage}</button>}
-                              {(lab.suspicious || lab.custom || lab.extractionMethod === "text_fallback" || lab.referenceRangeNeedsReview) && <label className="flex items-center gap-1 text-slate-700">
-                                <input type="checkbox" checked={!!lab.sourceReviewed} onChange={event => updateLab(index, { sourceReviewed: event.target.checked, referenceRangeNeedsReview: !event.target.checked && lab.referenceRangeSource === "verified_default" })} /> Verified result and range
+                              {(lab.suspicious || lab.custom || lab.extractionMethod === "text_fallback" || lab.referenceRangeNeedsReview || lab.unitNeedsReview) && <label className="flex items-center gap-1 text-slate-700">
+                                <input type="checkbox" checked={!!lab.sourceReviewed} onChange={event => updateLab(index, { sourceReviewed: event.target.checked, referenceRangeNeedsReview: !event.target.checked && lab.referenceRangeSource === "verified_default", unitNeedsReview: !event.target.checked && lab.unitSource === "verified_default" })} /> Verified result and range
                               </label>}
                             </div>
                             <div className="mt-2 flex flex-wrap gap-2">
-                              <label className="text-xs text-slate-600">Units
-                                <LabReviewInput aria-label={`Units for ${lab.displayName || "lab"}`} value={lab.unit || ""} onCommit={value => updateLab(index, { unit: value })} className="ml-2 w-28 rounded border border-slate-300 px-2 py-1" />
-                              </label>
+                              {isPapLab(lab) ? <span className="text-xs text-slate-500">Text interpretation · no units</span> : <label className="text-xs text-slate-600">Units
+                                <LabReviewInput aria-label={`Units for ${lab.displayName || "lab"}`} value={lab.unit || ""} onCommit={value => updateLab(index, { unit: value, unitSource: "manual", unitNeedsReview: false, unitCleared: !value.trim() })} className="ml-2 w-28 rounded border border-slate-300 px-2 py-1" />
+                              </label>}
                               <label className="text-xs text-slate-600">Report range
                                 <LabReviewInput aria-label={`Range for ${lab.displayName || "lab"}`} value={lab.referenceRangeText || ""} onCommit={value => updateLab(index, { referenceRangeText: value, referenceRangeSource: "manual", referenceRangeNeedsReview: false, referenceRangeCleared: !value.trim() })} className="ml-2 w-32 rounded border border-slate-300 px-2 py-1" />
                               </label>
                             </div>
                             {onRememberRange && lab.referenceRangeText?.trim() && !lab.referenceRangeNeedsReview && (
-                              <button type="button" onClick={() => onRememberRange(lab)} className="mt-2 text-xs font-medium text-blue-700">Verify &amp; reuse this range</button>
+                              <button type="button" onClick={() => onRememberRange(lab)} className="mt-2 text-xs font-medium text-blue-700">Verify &amp; reuse units / range</button>
                             )}
+                            {lab.unitSource === "verified_default" && <p className="mt-1 text-xs text-amber-700">Units reused from a verified result — check this report.</p>}
                             {lab.referenceRangeSource === "verified_default" && <p className="mt-1 text-xs text-amber-700">Reused range{lab.referenceRangeNeedsReview ? " — verify for this report" : " — verified"}</p>}
                             <div className="mt-1 flex flex-wrap items-center gap-2">
                               {flag === "H" && pill("HIGH", "high")}
@@ -290,13 +292,15 @@ const flag = importedLabFlag(lab);
                           </div>
 
                           <div className="flex items-center gap-2">
-                            <div className="min-w-[92px]">
+                            <div className={isPapLab(lab) ? "w-80 max-w-full min-w-0" : "min-w-[92px]"}>
                               <LabReviewInput
                                 type="text"
+                                multiline={isPapLab(lab)}
+                                rows={isPapLab(lab) ? 3 : undefined}
                                 aria-label={`Result for ${lab.displayName || "lab"}`}
                                 value={displayValue === "—" ? "" : displayValue}
                                 onCommit={value => updateLabValue(index, value)}
-                                className={`w-full rounded-lg border px-3 py-2 text-right text-sm font-semibold outline-none ${isAbnormal ? "border-red-300 bg-red-50 text-red-700" : "border-slate-300 bg-white text-slate-900"}`}
+                                className={`w-full rounded-lg border px-3 py-2 ${isPapLab(lab) ? "text-left leading-relaxed" : "text-right"} text-sm font-semibold outline-none ${isAbnormal ? "border-red-300 bg-red-50 text-red-700" : "border-slate-300 bg-white text-slate-900"}`}
                               />
                               <div role="group" aria-label={`Flag for ${lab.displayName || "lab"}`} className="mt-2 flex items-center justify-end gap-1">
                                 <span className="mr-1 text-xs text-slate-500">Flag</span>

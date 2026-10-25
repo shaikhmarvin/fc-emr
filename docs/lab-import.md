@@ -10,11 +10,13 @@ uncertain results.
 - Digital PDFs use their embedded text and positions when available. Scans use
   the existing Google OCR function in groups of four pages, freeing rendered
   canvases between pages instead of holding the entire scanned file in memory.
-- Before scanned PDF pages reach OCR, a local text-line alignment pass estimates
-  tilt up to 12 degrees in either direction. Confident corrections rotate a padded,
+- Before scanned PDF pages and image uploads reach OCR, a local text-line alignment pass estimates
+  tilt up to 25 degrees in either direction. Confident corrections rotate a padded,
   white-background image without clipping the page; uncertain or nearly level
   pages stay unchanged. This handles uniform page tilt, not curved pages,
-  perspective distortion, or sideways pages. The original PDF is retained, and
+  perspective distortion or curved text. A second alignment check uses OCR word
+  angles to identify remaining tilt (including sideways orientation) and attempts
+  one corrected reread when the estimate is reliable. The original PDF is retained, and
   OCR highlights are mapped back to its coordinates. Correction angles and
   confidence are recorded in import diagnostics.
 - Google word positions and confidence are retained. Words are grouped by their
@@ -151,3 +153,35 @@ Migration `20261025120000_persist_lab_review_progress.sql` adds the progress fie
 The footer distinguishes pending review saves from saved review state. Patient chart
 writes still require Save Imported Labs. Recovery assumes browser storage is available;
 if storage is unavailable, the review shows a warning to wait for the shared save.
+
+## Pap interpretations and lipid defaults
+
+Pap Smear is a categorical, unitless test. The review preserves full narrative NILM
+wording when actually stated in the report, permits other interpretations, and never
+assumes a missing result is negative. Narrative Pap results can be extracted even
+when a page also contains numeric tables; report verification remains required.
+Leadership intake shows the latest saved Pap date and result for its selected patient,
+using collection date first and labeling a visit-date fallback. It does not set a
+screening interval or change the intake UTD/Interested decision automatically.
+
+Verified lipid results can seed reporting-laboratory-specific unit/range defaults.
+Missing lipid units are reused only when exactly one verified unit is available and
+no observed same-laboratory units conflict. Printed values and deliberately cleared
+fields are preserved. Reused units/ranges require source verification. Units and
+ranges are never copied from another laboratory or inferred from universal targets.
+
+## Alignment reader v5
+
+Faint fax text is retained with adaptive thresholding and connected-component
+filtering removes table grids, scanner borders, and large graphics from the tilt
+estimate. Scanned PDF and standalone-image inputs use the same straightening path.
+Digital PDFs retain embedded-text orientation when constructing word positions.
+
+After OCR, reliable remaining word tilt triggers at most one reread for that page.
+A retry must retain sufficient words and show a smaller measured tilt to be used;
+otherwise the first reading stays available and the page receives a warning. Both
+rotation steps are included when mapping source highlights back to the original.
+Alignment decisions and retry counts are included in diagnostics. These synthetic
+regressions do not establish accuracy on camera perspective, page curls or every
+scan format. Existing review packets require the explicit Re-run OCR action to
+use the updated extraction; reopening an import alone does not rerun OCR.

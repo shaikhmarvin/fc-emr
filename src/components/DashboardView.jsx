@@ -1132,7 +1132,7 @@ export default function DashboardView({
         patients={visitTypeFilteredPatients}
         getPatientVisitTypeSummary={getPatientVisitTypeSummary}
         getPatientClinicContext={canRefillAccess ? getPatientTodayContext : null}
-        onSelectPatient={openPatientFromFilteredView}
+        onSelectPatient={patientId => openPatientFromFilteredView(patientId, visitTypeFilter)}
         getFullPatientName={getFullPatientName}
         canEditMrn={canEditMrn}
         canEditPatient={canEditPatient}

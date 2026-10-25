@@ -29,7 +29,7 @@ export function importedLabFlag(lab) {
   if (['L', 'LL', 'LOW'].includes(reported)) return 'L';
   if (['A', 'ABNORMAL'].includes(reported)) return 'A';
   if (['N', 'NORMAL'].includes(reported)) return '';
-  if (lab.referenceRangeNeedsReview) return '';
+  if (lab.referenceRangeNeedsReview || lab.unitNeedsReview) return '';
 
   const traceableRange = lab.referenceRangeSource === 'report' || lab.referenceRangeSource === 'manual' ||
     (lab.referenceRangeSource === 'verified_default' && lab.sourceReviewed) ||
@@ -60,7 +60,7 @@ export function toggleLabFlag(lab, flag) {
 }
 
 export function needsExtractionReview(lab) {
-  return !lab.sourceReviewed && !!(lab.suspicious || lab.custom || lab.extractionMethod === 'text_fallback' || lab.referenceRangeNeedsReview);
+  return !lab.sourceReviewed && !!(lab.suspicious || lab.custom || lab.extractionMethod === 'text_fallback' || lab.referenceRangeNeedsReview || lab.unitNeedsReview);
 }
 import { findLabByKey } from './labCatalog.js';
 

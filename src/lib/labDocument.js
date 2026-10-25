@@ -1,3 +1,4 @@
+import { PAP_NILM, normalizePapLab } from "./papResults.js";
 import { mergeLabReviewProgress } from "./labReviewProgress.js";
 import { LAB_CATALOG } from './labCatalog.js';
 import { identifyStiTest } from './stiResults.js';
@@ -11,6 +12,7 @@ const rangeExpression = new RegExp(`^(${number}\\s*[-–]\\s*${number}|[<>]=?\\s
 
 export function parseResultCell(text) {
   const value = clean(text).replace(/non\s*-\s*reactive/ig, 'Non-Reactive').replace(/\(\s*([HL*])\s*\)$/i, '$1');
+  if (/^negative for intraepithelial lesion or malignancy[.]?$/i.test(value)) return { value: PAP_NILM, flag: "" };
   const match = value.match(resultExpression);
   if (match) return {
     value: match[1] ? `${match[1].replace('≤', '<=').replace('≥', '>=')}${match[2]}` : Number(match[2]),
@@ -125,7 +127,7 @@ export function parseLayoutResults(page) {
       missing: false, autoFilled: false, confidence: row.confidence >= 0.85 ? 'high' : 'low',
     });
   }
-  return results;
+  return results.map(normalizePapLab);
 }
 
 export function documentIdentity(text) {

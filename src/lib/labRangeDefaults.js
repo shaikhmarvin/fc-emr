@@ -1,3 +1,4 @@
+const lipidKeys = new Set(["total_cholesterol", "hdl", "ldl", "triglycerides", "non_hdl", "chol_hdl_ratio"]);
 const clean = value => String(value || '').trim().replace(/\s+/g, ' ');
 const normalizedRange = value => clean(value).replace(/[–−]/g, '-').replace(/\s/g, '').toLowerCase();
 // SI prefixes are case-sensitive (mIU and MIU must not share a default).
@@ -28,7 +29,18 @@ export function learnRangeDefault(defaults, packet, lab, packets) {
 
 export function applyRangeDefaults(labs, packet, defaults, packets = []) {
   const scope = rangeScope(packet);
-  return labs.map(lab => {
+  return labs.map(original => {
+    let lab = original;
+    if (lipidKeys.has(lab.key) && !clean(lab.unit) && !lab.unitCleared) {
+      const candidates = Object.entries(defaults || {}).filter(([key, item]) => {
+        try { const [savedScope, test] = JSON.parse(key); return savedScope === scope && test === lab.key && !item.disabled && clean(item.unit); } catch { return false; }
+      }).map(([, item]) => item);
+      const units = [...new Set(candidates.map(item => normalizedUnit(item.unit)))];
+      const observedUnits = packets.filter(packet => rangeScope(packet) === scope).flatMap(packet => (packet.labs || []).filter(item => item.key === lab.key && clean(item.unit)).map(item => normalizedUnit(item.unit)));
+      if (units.length === 1 && observedUnits.every(unit => unit === units[0])) {
+        lab = { ...lab, unit: candidates[0].unit, unitSource: 'verified_default', unitNeedsReview: true, sourceReviewed: false };
+      }
+    }
     const key = rangeDefaultKey(scope, lab), template = defaults?.[key];
     if (template?.disabled && lab.referenceRangeSource === 'verified_default' && !lab.sourceReviewed) {
       return { ...lab, referenceRangeText: '', referenceRangeSource: '', referenceRangeNeedsReview: false };
@@ -55,6 +67,20 @@ export function suspendConflictingRangeDefaults(defaults, packets) {
         next = { ...next, [key]: { ...template, disabled: true } };
       }
     }
+  }
+  return next;
+}
+
+export function learnVerifiedLipidDefaults(defaults, packets) {
+  let next = defaults;
+  for (const packet of packets) for (const lab of packet.labs || []) {
+    if (!lipidKeys.has(lab.key) || !lab.sourceReviewed || !clean(lab.referenceRangeText)) continue;
+    const key = rangeDefaultKey(rangeScope(packet), lab);
+    if (!key || next[key]?.disabled) continue;
+    try {
+      const learned = learnRangeDefault(next, packet, lab, packets);
+      if (JSON.stringify(learned[key]) !== JSON.stringify(next[key])) next = learned;
+    } catch { /* Conflicting report ranges must remain report-specific. */ }
   }
   return next;
 }

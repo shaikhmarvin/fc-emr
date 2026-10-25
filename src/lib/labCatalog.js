@@ -69,6 +69,9 @@ export const CATEGORICAL_VALUE_SETS = {
 };
 
 export const LAB_CATALOG = [
+  createCategoricalLab({ key: "pap_smear", group: "Cervical Screening", displayName: "Pap Smear",
+    aliases: ["pap", "pap test", "pap smear", "cervical cytology", "thinprep pap", "gynecologic cytology", "papanicolaou"],
+    allowedValues: [], panelMemberships: [] }),
   // =========================
   // CBC
   // =========================

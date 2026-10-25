@@ -1,3 +1,4 @@
+import { latestPapHistory } from "../lib/papResults.js";
 import { isClinicResourceAvailable } from "../utils/clinicResourceEligibility";
 
 export default function IntakeModal({
@@ -16,6 +17,7 @@ export default function IntakeModal({
   applyMatchedPatientToIntake,
   clinicResourceSettings = [],
   programEntries = [],
+  papHistoryPatient = null,
 }) {
   const SEX_OPTIONS = ["Male", "Female", "Other", "Prefer not to say"];
 
@@ -54,7 +56,8 @@ function isResourceAvailable(resourceKey) {
   return isClinicResourceAvailable(resourceKey, clinicResourceSettings, intakeForm);
 }
 
-const showPapScreening = isResourceAvailable("pap");
+const savedPap = latestPapHistory(papHistoryPatient);
+const showPapScreening = isResourceAvailable("pap") || !!savedPap;
 const showMammogramScreening = isResourceAvailable("mammogram");
 const showFluShotScreening = isResourceAvailable("flu_shot");
 const showCounselingService = isResourceAvailable("counseling");
@@ -456,6 +459,12 @@ function renderExistingProgramWarning(programType) {
 
                   {showPapScreening && (
                     <Field label="Pap Smear">
+                      {savedPap ? <div className="mb-3 rounded-xl border border-teal-200 bg-teal-50 p-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-teal-800">Latest Pap in chart</p>
+                        <p className="mt-1 font-semibold text-slate-900">{savedPap.date ? new Date(savedPap.date + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : 'Date unavailable'}</p>
+                        {savedPap.results.map(result => <p key={result} className="mt-1 text-sm text-slate-700">{result}</p>)}
+                        <p className="mt-2 text-xs text-slate-500">{savedPap.dateSource === 'visit' ? 'Visit date used; collection date not recorded. ' : ''}Review screening history before choosing UTD or Interested.</p>
+                      </div> : papHistoryPatient ? <p className="mb-2 text-xs text-slate-500">No saved Pap result found in this chart.</p> : null}
                       <select
                         className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
                         value={intakeForm.papStatus}

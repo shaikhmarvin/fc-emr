@@ -51,3 +51,28 @@ test('unit prefixes with different case never share defaults', () => {
   const changed = { ...antibody, unit: 'MIU/mL', referenceRangeText: '' };
   assert.equal(applyRangeDefaults([changed], report([]), defaults)[0].referenceRangeText, '');
 });
+
+test('verified lipid units and ranges fill together and preserve report-specific values', async () => {
+  const { learnVerifiedLipidDefaults } = await import('./labRangeDefaults.js');
+  const lipid = { key: 'ldl', displayName: 'LDL', unit: 'mg/dL', referenceRangeText: '<100', referenceRangeSource: 'report', sourceReviewed: true };
+  const defaults = learnVerifiedLipidDefaults({}, [report([lipid])]);
+  const [filled] = applyRangeDefaults([{ key: 'ldl', unit: '', referenceRangeText: '' }], report([]), defaults);
+  assert.equal(filled.unit, 'mg/dL');
+  assert.equal(filled.referenceRangeText, '<100');
+  assert.equal(filled.unitNeedsReview, true);
+  assert.equal(filled.referenceRangeNeedsReview, true);
+  assert.equal(filled.sourceReviewed, false);
+  const [printed] = applyRangeDefaults([{ ...lipid, referenceRangeText: '<130' }], report([]), defaults);
+  assert.equal(printed.referenceRangeText, '<130');
+  assert.deepEqual(applyRangeDefaults([{ key: 'ldl', unit: '', unitCleared: true, referenceRangeText: '' }], report([]), defaults)[0].unit, '');
+  assert.equal(Object.keys(learnVerifiedLipidDefaults({}, [report([{ ...lipid, sourceReviewed: false }])])).length, 0);
+});
+
+test('lipid units are not guessed when verified templates or observed report units conflict', () => {
+  const lipid = { key: 'ldl', displayName: 'LDL', unit: 'mg/dL', referenceRangeText: '<100' };
+  let defaults = learnRangeDefault({}, report([lipid]), lipid, [report([lipid])]);
+  const si = { ...lipid, unit: 'mmol/L', referenceRangeText: '<2.6' };
+  defaults = learnRangeDefault(defaults, report([si]), si, [report([si])]);
+  const [missing] = applyRangeDefaults([{ key: 'ldl', unit: '', referenceRangeText: '' }], report([]), defaults);
+  assert.equal(missing.unit, '');
+});
