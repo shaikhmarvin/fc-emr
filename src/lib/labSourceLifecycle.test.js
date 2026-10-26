@@ -7,4 +7,7 @@ test('shared source survives until every packet is terminal', () => {
   assert.deepEqual(completedLabSourcePaths([]), []);
   assert.deepEqual(completedLabSourcePaths([row('saved'), row('saved')]), ['batch/original']);
   assert.deepEqual(completedLabSourcePaths([{ review_status: 'saved' }]), []);
+  assert.deepEqual(completedLabSourcePaths([row('saved'), row('deleted')]), ['batch/original']);
+  assert.deepEqual(completedLabSourcePaths([row('deleted')]), ['batch/original']);
+  assert.deepEqual(completedLabSourcePaths([row('deleted'), row('skipped')]), []);
 });

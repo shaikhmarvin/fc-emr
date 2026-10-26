@@ -27,7 +27,7 @@ export function importedLabFlag(lab) {
   const reported = String(lab.reportedFlag ?? (lab.flagSource === 'report' ? lab.flag : '') ?? '').trim().toUpperCase();
   if (['H', 'HH', 'HIGH'].includes(reported)) return 'H';
   if (['L', 'LL', 'LOW'].includes(reported)) return 'L';
-  if (['A', 'ABNORMAL'].includes(reported)) return 'A';
+  if (['A', 'AA', 'ABNORMAL'].includes(reported)) return 'A';
   if (['N', 'NORMAL'].includes(reported)) return '';
   if (lab.referenceRangeNeedsReview || lab.unitNeedsReview) return '';
 

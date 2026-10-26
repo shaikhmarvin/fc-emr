@@ -15,7 +15,11 @@ test('Pap interpretation is preserved in full with no units and never assumed fo
 
 test('narrative Pap reports read a stated result and do not copy a reference interpretation', () => {
   assert.equal(parsePapReport('Pap Test\nInterpretation: Negative for intraepithelial\nlesion or malignancy')[0].value, PAP_NILM);
-  assert.equal(parsePapReport('Pap Test\nInterpretation: ASC-US\nReference: ' + PAP_NILM).length, 0);
+  assert.equal(parsePapReport('Pap Test\nInterpretation: ASC-US\nReference: ' + PAP_NILM)[0].value, 'ASC-US');
+  assert.equal(parsePapReport('Pap Test\nInterpretation\nUnsatisfactory For Evaluation\nElectronically signed by reviewer')[0].value, 'Unsatisfactory For Evaluation');
+  const abnormal = parsePapReport('Pap Test\nInterpretation (Abnormal)\nAtypical squamous cells of undetermined significance\nElectronically signed by reviewer')[0];
+  assert.equal(abnormal.value, 'Atypical squamous cells of undetermined significance');
+  assert.equal(abnormal.reportedFlag, 'A');
   assert.equal(parsePapReport('Glucose\n' + PAP_NILM).length, 0);
 });
 

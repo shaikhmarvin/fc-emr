@@ -1,4 +1,5 @@
 import { getEncounterVisitTypeKey } from '../constants.js';
+import { PATIENT_CHART_TARGET, nearbyLabEncounters, suggestLabSaveTarget } from './labSaveTarget.js';
 export function labEncounterLabel(encounter) {
   const labels = { general: 'General clinic', refill_only: 'Refill visit', specialty_only: 'Specialty visit', both: 'General + specialty' };
   const date = encounter.clinic_date || encounter.clinicDate || 'No date';
@@ -7,16 +8,17 @@ export function labEncounterLabel(encounter) {
 }
 export function restoreLabEncounter(encounters, progress, patientId, collectedDate, previousId = null) {
   const savedId = progress?.patientId === patientId ? progress.encounterId : previousId;
-  if (savedId && encounters.some(enc => String(enc.id) === String(savedId))) return String(savedId);
-  const matches = collectedDate ? encounters.filter(enc => String(enc.clinic_date || enc.clinicDate || '').slice(0, 10) === collectedDate.slice(0, 10)) : [];
-  return matches.length === 1 ? String(matches[0].id) : null;
+  if (savedId === PATIENT_CHART_TARGET && suggestLabSaveTarget([], collectedDate) === PATIENT_CHART_TARGET) return savedId;
+  if (savedId && nearbyLabEncounters(encounters, collectedDate).some(enc => String(enc.id) === String(savedId))) return String(savedId);
+  return suggestLabSaveTarget(encounters, collectedDate);
 }
 export function mergeLabReviewProgress(a = {}, b = {}) {
   const pages = [...new Set([...(a.reviewedPages || []), ...(b.reviewedPages || [])])];
   if (!b.patientId && !b.encounterId) return { ...a, ...b, reviewedPages: pages, targetVerified: !!a.targetVerified };
   if (!a.patientId && !a.encounterId) return { ...a, ...b, reviewedPages: pages };
-  const sameTarget = a.patientId === b.patientId && a.encounterId === b.encounterId;
-  return { ...a, ...b, reviewedPages: pages, targetVerified: sameTarget && !!(a.targetVerified || b.targetVerified) };
+  const sameTarget = a.patientId === b.patientId && a.encounterId === b.encounterId &&
+    (a.collectionDate || '') === (b.collectionDate ?? a.collectionDate ?? '');
+  return { ...a, ...b, reviewedPages: pages, targetVerified: sameTarget && !!(b.targetVerified ?? a.targetVerified) };
 }
 const keyFor = (userId, packetId) => `lab-review-draft-v1:${userId}:${packetId}`;
 export function readLabReviewDraft(userId, packetId, storage = globalThis.localStorage) {

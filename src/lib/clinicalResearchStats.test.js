@@ -1,6 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildClinicalResearchStats, summarizeClinicalMeasure, filterClinicalPatients } from './clinicalResearchStats.js';
+import { buildClinicalResearchStats, summarizeClinicalMeasure, filterClinicalPatients, compareClinicalFollowup } from './clinicalResearchStats.js';
+
+test('follow-up comparison uses one latest reading per patient and excludes missing BP from the single-reading group', () => {
+  const rows = [
+    { days: [{ value: 180 }, { value: 130 }] },
+    { days: [{ value: 140 }, { value: 110 }, { value: 120 }] },
+    { days: [{ value: 150 }] }, { days: [{ value: 170 }] }, { days: [{ value: 160 }] }, { days: [] },
+  ];
+  const comparison = compareClinicalFollowup(rows);
+  assert.deepEqual(comparison.withFollowup, { count: 2, mean: 125, median: 125, min: 120, max: 130, baseline: 160, change: -35 });
+  assert.deepEqual(comparison.withoutFollowup, { count: 3, mean: 160, median: 160, min: 150, max: 170, baseline: 160, change: null });
+  assert.equal(comparison.missing, 1);
+  assert.equal(filterClinicalPatients(rows, 'single').length, 3);
+  assert.deepEqual(compareClinicalFollowup([]).withFollowup, { count: 0, mean: null, median: null, min: null, max: null, baseline: null, change: null });
+});
 
 test('summaries weight patients equally and compare only distinct dated follow-up', () => {
   const stats = summarizeClinicalMeasure([
@@ -28,6 +42,8 @@ test('same-day encounters merge without creating a follow-up and missing values 
   assert.equal(cohort.measures.systolic.mean, 150);
   assert.equal(cohort.measures.diastolic.mean, 95);
   assert.equal(cohort.measures.systolic.paired, 0);
+  assert.equal(cohort.measures.systolic.followupComparison.withFollowup.count, 0);
+  assert.equal(cohort.measures.diastolic.followupComparison.withoutFollowup.count, 1);
   assert.equal(dmCohort.measures.a1c.mean, 8);
   assert.equal(dmCohort.measures.a1c.missing, 1);
 });

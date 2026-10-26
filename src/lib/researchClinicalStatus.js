@@ -1,4 +1,5 @@
 import { trendNumber, labDateForTrend } from './labTrends.js';
+import { patientLabSources } from './labSaveTarget.js';
 const day = value => String(value || '').slice(0, 10);
 const a1cName = lab => /^(?:a1c|hba1c|hemoglobina1c|hgba1c|hemoglobina1chemoglobintotal)$/.test(String(lab.key || lab.testKey || lab.name || lab.displayName || lab.testName || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
 export function researchClinicalStatus(patient, date) {
@@ -12,7 +13,9 @@ export function researchClinicalStatus(patient, date) {
       const value = encounter.inHouseLabs?.core?.a1c;
       if (trendNumber(value) !== null) a1c.push(String(value?.value ?? value));
     }
-    for (const lab of encounter.importedSendOutLabs || []) {
+  }
+  for (const { encounter, labs } of patientLabSources(patient)) {
+    for (const lab of labs) {
       if (a1cName(lab) && day(labDateForTrend(lab, encounter).value) === date && trendNumber(lab.value) !== null) a1c.push(String(lab.value?.value ?? lab.value));
     }
   }

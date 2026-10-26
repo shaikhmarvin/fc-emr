@@ -1,16 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { labEncounterLabel, restoreLabEncounter, mergeLabReviewProgress, readLabReviewDraft, writeLabReviewDraft, acknowledgeLabReviewDraft, removeLabReviewDraft } from './labReviewProgress.js';
+import { PATIENT_CHART_TARGET } from './labSaveTarget.js';
 const storage = () => { const values = new Map(); return { getItem: key => values.get(key) || null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) }; };
 
 test('refill encounters are labeled and can be selected and restored with general visits', () => {
   const visits = [{ id: 'refill', clinic_date: '2026-10-24', intake_data: { visitType: 'refill_only' }, chief_complaint: 'Refill' }, { id: 'general', clinic_date: '2026-10-24', visitType: 'general' }];
   assert.match(labEncounterLabel(visits[0]), /2026-10-24 — Refill visit/);
   assert.match(labEncounterLabel(visits[1]), /General clinic/);
-  assert.equal(restoreLabEncounter(visits, {}, 'patient', '2026-10-24'), null);
+  assert.equal(restoreLabEncounter(visits, {}, 'patient', '2026-10-24'), PATIENT_CHART_TARGET);
   assert.equal(restoreLabEncounter(visits, { patientId: 'patient', encounterId: 'refill' }, 'patient', '2026-10-24'), 'refill');
-  assert.equal(restoreLabEncounter(visits, { patientId: 'someone-else', encounterId: 'refill' }, 'patient', '2026-10-24'), null);
-  assert.equal(restoreLabEncounter(visits, { patientId: 'patient', encounterId: 'deleted-visit' }, 'patient', '2026-10-24'), null);
+  assert.equal(restoreLabEncounter(visits, { patientId: 'someone-else', encounterId: 'refill' }, 'patient', '2026-10-24'), PATIENT_CHART_TARGET);
+  assert.equal(restoreLabEncounter(visits, { patientId: 'patient', encounterId: 'deleted-visit' }, 'patient', '2026-10-24'), PATIENT_CHART_TARGET);
 });
 
 test('pending edits and review checks survive refresh without an old acknowledgement erasing new work', () => {

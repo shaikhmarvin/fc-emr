@@ -750,7 +750,7 @@ export const LAB_CATALOG = [
     key: "total_cholesterol",
     group: "Lipids",
     displayName: "Total Cholesterol",
-    aliases: ["cholesterol", "total cholesterol", "chol"],
+    aliases: ["cholesterol", "total cholesterol", "cholesterol total", "chol"],
     unit: "mg/dL",
     plausibilityMin: 20,
     plausibilityMax: 1000,
@@ -790,6 +790,7 @@ export const LAB_CATALOG = [
     expectedRangeText: "~0-200",
     panelMemberships: ["Lipid Panel"],
   }),
+  createNumericLab({ key: "vldl", group: "Lipids", displayName: "VLDL", aliases: ["vldl", "very low density lipoprotein", "vldl cholesterol"], unit: "mg/dL", panelMemberships: ["Lipid Panel"] }),
   createNumericLab({
     key: "non_hdl",
     group: "Lipids",

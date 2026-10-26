@@ -18,7 +18,7 @@ export async function cleanupCompletedLabSources(batchId) {
   const { data, error } = await supabase.from('lab_import_packets').select('review_status, duplicate_summary_json').eq('batch_id', batchId);
   if (error) throw error;
   const paths = completedLabSourcePaths(data || []);
-  if (!(data || []).length || data.some(row => row.review_status !== 'saved')) return;
+  if (!(data || []).length || data.some(row => !['saved', 'deleted'].includes(row.review_status))) return;
   if (paths.length) {
     const { error: removeError } = await supabase.storage.from(LAB_SOURCE_BUCKET).remove(paths);
     if (removeError) throw removeError;

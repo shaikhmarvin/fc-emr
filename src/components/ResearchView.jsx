@@ -178,7 +178,7 @@ export default function ResearchView({ patients = [], womensHealthEventDate = ""
         {study === "chronic" && <section aria-label="Chronic conditions management">
           <h2 className="text-lg font-semibold text-slate-900">Chronic conditions management</h2>
           <p className="mt-1 text-sm text-slate-600">BP and A1C outcomes for the selected dates and clinic event. Click an outcome to inspect patients or find missing readings.</p>
-        <ClinicalResearchStats key={`${clinicEvent}-${startDate}-${endDate}-${report.rows.map(row => row.patientId).join(",")}`} groups={report.groups} patients={patients} onOpenPatientChart={onOpenPatientChart} />
+        <ClinicalResearchStats key={`${clinicEvent}-${startDate}-${endDate}-${report.rows.map(row => row.patientId).join(",")}`} groups={report.groups} patients={patients} dateRange={{ startDate, endDate, clinicEvent }} onOpenPatientChart={onOpenPatientChart} />
 
 
         </section>}

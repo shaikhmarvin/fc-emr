@@ -5,6 +5,7 @@ import { removeLabReviewDraft } from "./lib/labReviewProgress.js";
 import { labNameSuggestionScore } from "./lib/labPatientSuggestions.js";
 import { extractLabDob } from "./lib/labDemographics.js";
 import { saveImportedLabs } from "./lib/saveImportedLabs.js";
+import { validateLabDestination } from "./lib/labSaveTarget.js";
 import { uploadSharedLabSource, downloadSharedLabSource, cleanupCompletedLabSources } from "./lib/sharedLabSource.js";
 import { createVitalEntry } from "./lib/vitals.js";
 import { LAB_PIPELINE_VERSION, captureImportBaseline, buildLabDiagnostics } from "./lib/labImportDiagnostics.js";
@@ -4064,9 +4065,9 @@ export default function App() {
       if (packetError) throw packetError;
       await cleanupCompletedLabSources(activeBatchId).catch(() => {});
 
-      const groupedPackets = mergeDocumentPackets((packetRows || []).filter(row => row.review_status !== "saved").map(mapLabImportDbRowToPacket));
+      const groupedPackets = mergeDocumentPackets((packetRows || []).filter(row => !["saved", "deleted"].includes(row.review_status)).map(mapLabImportDbRowToPacket));
       const completedSources = (packetRows || []).filter(row => row.batch_id === activeBatchId);
-      if (completedSources.length && completedSources.every(row => row.review_status === "saved")) {
+      if (completedSources.length && completedSources.every(row => ["saved", "deleted"].includes(row.review_status))) {
         for (const row of completedSources) {
           const source = row.duplicate_summary_json?.sourceDocument;
           if (source?.id) { labSourceFiles.current.delete(source.id); await deleteLabSource(session.user.id, source.id).catch(() => {}); }
@@ -4461,6 +4462,29 @@ export default function App() {
         type: "error",
         duration: 5000,
       });
+    }
+  }
+
+  async function handleDeleteLabImportPacket(packetId) {
+    const packet = labImportPackets.find(item => item.packetId === packetId);
+    if (!packet || packet.reviewStatus === 'saved') return false;
+    const label = [packet.extractedPatientName || 'Unidentified patient', packet.collectedDate || 'Date unavailable'].join(' · ');
+    if (!window.confirm(`Delete this unwanted lab packet?\n\n${label}\n\nThis removes its extracted results and review data. Shared originals remain until other packets from that upload are finished. Saved chart results cannot be deleted here.`)) return false;
+    try {
+      const ids = packet.memberPacketIds?.length ? packet.memberPacketIds : [packet.packetId];
+      const { data: batchId, error } = await supabase.rpc('delete_unwanted_lab_packets', { packet_ids: ids });
+      if (error) throw error;
+      for (const id of ids) removeLabReviewDraft(session.user.id, id);
+      setLabImportPackets(previous => previous.filter(item => item.packetId !== packetId));
+      if (labImportPacket?.packetId === packetId) { setLabImportPacket(null); setSelectedLabImportPacketId(null); }
+      let cleanupError = null;
+      await cleanupCompletedLabSources(batchId).catch(error => { cleanupError = error; });
+      await loadSharedLabImportBatch(batchId);
+      showToast({ title: 'Packet deleted', message: cleanupError ? 'The packet was removed. Original-file cleanup will retry when the batch is reopened.' : 'The unwanted packet has been removed.', type: 'success' });
+      return true;
+    } catch (error) {
+      showToast({ title: 'Could not delete packet', message: error.message, type: 'error' });
+      return false;
     }
   }
 
@@ -11616,14 +11640,15 @@ async function markSeenBySocialWork(encounterId) {
                 await updateSharedLabImportPacket(packetId, { review_status: "unreviewed", skipped_at: null });
                 await loadSharedLabImportBatch(resumeBatchId || activeLabImportBatchId);
               }}
+              onDeletePacket={handleDeleteLabImportPacket}
               onSkip={() => {
                 if (!labImportPacket?.packetId) return;
                 handleSkipLabImportPacket(labImportPacket.packetId);
               }}
               onSave={async (reviewedLabs, encounterId, context) => {
                 const savingPacket = context?.packet || labImportPacket;
-                if (!savingPacket || !savingPacket.confirmedPatient || !encounterId) {
-                  alert("Pick a patient and encounter first.");
+                if (!savingPacket || !savingPacket.confirmedPatient) {
+                  alert("Pick a patient first.");
                   return;
                 }
 
@@ -11631,12 +11656,12 @@ async function markSeenBySocialWork(encounterId) {
                 let chartWriteSucceeded = false;
                 await recordLabSaveEvent(savingPacket, { stage: "save_started", saveAttemptId, encounterId, reviewedLabCount: reviewedLabs.length });
                 try {
-                  const { data: target, error: targetError } = await supabase
-                    .from("encounters")
-                    .select("id, patient_id, imported_send_out_labs")
-                    .eq("id", encounterId)
-                    .eq("patient_id", savingPacket.confirmedPatient.id)
-                    .single();
+                  const { data: chart, error: chartError } = await supabase.from("patients")
+                    .select("id, imported_send_out_labs").eq("id", savingPacket.confirmedPatient.id).single();
+                  if (chartError || !chart) throw new Error("Could not verify the selected patient. Please select the patient again.");
+                  const { data: target, error: targetError } = encounterId ? await supabase
+                    .from("encounters").select("id, patient_id, clinic_date, status, imported_send_out_labs")
+                    .eq("id", encounterId).eq("patient_id", savingPacket.confirmedPatient.id).single() : { data: chart };
                   if (targetError || !target) throw new Error("Could not verify the selected patient's visit. Please select it again.");
                   const importPacketIds = savingPacket.memberPacketIds?.length
                     ? savingPacket.memberPacketIds : [savingPacket.packetId];
@@ -11647,14 +11672,15 @@ async function markSeenBySocialWork(encounterId) {
                     sourceImportPacketId: savingPacket.packetId,
                     sourceDocumentId: savingPacket.sourceDocument?.id || null,
                     sourceFileName: savingPacket.sourceDocument?.name || "",
-                    collectedDate: lab.collectedDate || savingPacket.collectedDate || "",
+                    collectedDate: lab.collectedDate || context?.collectionDate || savingPacket.collectedDate || "",
                   }));
+                  validateLabDestination(incoming, encounterId ? target : null);
                   const { data: patientEncounters, error: historyError } = await supabase
                     .from("encounters").select("id, imported_send_out_labs")
                     .eq("patient_id", savingPacket.confirmedPatient.id);
                   if (historyError) throw historyError;
-                  const knownElsewhere = (patientEncounters || []).filter(enc => enc.id !== encounterId)
-                    .flatMap(enc => enc.imported_send_out_labs || []);
+                  const knownElsewhere = [...(patientEncounters || []).filter(enc => enc.id !== encounterId)
+                    .flatMap(enc => enc.imported_send_out_labs || []), ...(encounterId ? chart.imported_send_out_labs || [] : [])];
                   const mergedImport = mergeChartLabs(existing, incoming, importPacketIds, knownElsewhere);
                   await recordLabSaveEvent(savingPacket, { stage: "merge_completed", saveAttemptId, encounterId,
                     added: mergedImport.added, skipped: mergedImport.skipped, previousCount: existing.length, proposedCount: mergedImport.labs.length });
@@ -11663,7 +11689,9 @@ async function markSeenBySocialWork(encounterId) {
 
                   chartWriteSucceeded = true;
                   setPatients(previous => previous.map(patient => String(patient.id) !== String(savingPacket.confirmedPatient.id) ? patient : {
-                    ...patient, encounters: (patient.encounters || []).map(encounter => String(encounter.id) !== String(encounterId) ? encounter : { ...encounter, importedSendOutLabs: mergedImport.labs }),
+                    ...patient,
+                    ...(encounterId ? { encounters: (patient.encounters || []).map(encounter => String(encounter.id) !== String(encounterId) ? encounter : { ...encounter, importedSendOutLabs: mergedImport.labs }) }
+                      : { importedSendOutLabs: mergedImport.labs }),
                   }));
                   const savedAt = new Date().toISOString();
                   await recordLabSaveEvent(savingPacket, { stage: "chart_write_succeeded", saveAttemptId, encounterId,
@@ -11674,7 +11702,7 @@ async function markSeenBySocialWork(encounterId) {
                     duplicate_summary_json: { sourceDocument: { ...savingPacket.sourceDocument,
                       latestSaveOutcome: { savedAt, encounterId, added: mergedImport.added, skipped: mergedImport.skipped, previousCount: existing.length, finalCount: mergedImport.labs.length } } },
                     matched_patient_id: savingPacket.confirmedPatient.id,
-                    matched_encounter_id: encounterId,
+                    matched_encounter_id: encounterId || null,
                     review_status: "saved",
                     saved_at: savedAt,
                     suspicious_count: (reviewedLabs || []).filter((lab) => !!lab?.suspicious).length,

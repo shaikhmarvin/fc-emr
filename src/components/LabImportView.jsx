@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import LabReviewPanel from "./LabReviewPanel";
 import { fetchEncountersByPatient } from "../api/encounters";
 import { supabase } from "../lib/supabase";
+import { PATIENT_CHART_TARGET, nearbyLabEncounters } from "../lib/labSaveTarget.js";
 
 function toneForPacket(packet) {
   if (!packet) return "border-slate-200 bg-white";
@@ -306,20 +307,21 @@ function MatchPanel({
   );
 }
 
-function ImportPiles({ packets, onSelect, onResume, selectedId }) {
-  const active = packets.filter(packet => !['saved', 'skipped'].includes(packet.reviewStatus));
+function ImportPiles({ packets, onSelect, onResume, onDelete, deleting, selectedId }) {
+  const active = packets.filter(packet => !['saved', 'skipped', 'deleted'].includes(packet.reviewStatus));
   const skipped = packets.filter(packet => packet.reviewStatus === 'skipped');
   return <div className="space-y-4">
     <section className="rounded-2xl border border-slate-200 bg-white p-4">
       <h2 className="font-semibold">Labs to review ({active.length})</h2>
       {!active.length && <p className="mt-2 text-sm text-slate-600">All active packets are complete. Saved results remain in patient charts.</p>}
-      <div className="mt-3 grid max-h-64 gap-3 overflow-auto md:grid-cols-2 2xl:grid-cols-4">{active.map((packet, index) => <PacketQueueCard key={packet.packetId} packet={packet} index={index} isActive={packet.packetId === selectedId} onClick={() => onSelect?.(packet.packetId)} />)}</div>
+      <div className="mt-3 grid max-h-64 gap-3 overflow-auto md:grid-cols-2 2xl:grid-cols-4">{active.map((packet, index) => <div key={packet.packetId}><PacketQueueCard packet={packet} index={index} isActive={packet.packetId === selectedId} onClick={() => onSelect?.(packet.packetId)} />{onDelete && <button type="button" disabled={!!deleting} onClick={() => onDelete(packet.packetId)} className="mt-1 rounded px-2 py-1 text-sm font-semibold text-red-700 disabled:opacity-50">Delete packet</button>}</div>)}</div>
     </section>
     {skipped.length > 0 && <details className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
       <summary className="cursor-pointer font-semibold">Review later — skipped packets ({skipped.length})</summary>
       <div className="mt-3 grid gap-3 md:grid-cols-2 2xl:grid-cols-4">{skipped.map(packet => <div key={packet.packetId} className="rounded-xl bg-white p-3">
         <p className="font-medium">{packet.extractedPatientName || 'Unidentified patient'}</p><p className="text-sm">{packet.collectedDate || 'Date unavailable'}</p>
         <button type="button" onClick={() => onResume?.(packet.packetId)} className="mt-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white">Resume review</button>
+        {onDelete && <button type="button" disabled={!!deleting} onClick={() => onDelete(packet.packetId)} className="ml-2 mt-2 rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 disabled:opacity-50">Delete packet</button>}
       </div>)}</div>
     </details>}
   </div>;
@@ -342,6 +344,7 @@ export default function LabImportView({
   onConfirmPatient = null,
   onSkip = null,
   onResumePacket = null,
+  onDeletePacket = null,
   onExportDebug,
   onChangeLabs = null,
   onRememberRange = null,
@@ -349,6 +352,7 @@ onAfterSaveCleanup = null,
 }) {
   const [reviewedLabsByPacketId, setReviewedLabsByPacketId] = useState({});
   const [saving, setSaving] = useState(false);
+  const [deletingPacketId, setDeletingPacketId] = useState(null);
   const [saveError, setSaveError] = useState("");
   const [activeSourceLab, setActiveSourceLab] = useState(null);
   const [reviewedPagesByPacket, setReviewedPagesByPacket] = useState({});
@@ -357,6 +361,8 @@ onAfterSaveCleanup = null,
   const [onlyNeedsReview, setOnlyNeedsReview] = useState(false);
   const [encounters, setEncounters] = useState([]);
   const [selectedEncounterId, setSelectedEncounterId] = useState(null);
+  const [collectionDate, setCollectionDate] = useState("");
+  const [patientChartLabs, setPatientChartLabs] = useState([]);
   const [deletedAuditByPacketId, setDeletedAuditByPacketId] = useState({});
   const reviewSync = useRef(new LabReviewSync());
   const progressSync = useRef(new LabReviewSync());
@@ -447,7 +453,7 @@ onAfterSaveCleanup = null,
     setReviewedPagesByPacket(previous => ({ ...previous, [packetId]: progress.reviewedPages || [] }));
     const patientId = selectedPacket.confirmedPatient?.id;
     setConfirmedTarget(progress.targetVerified && progress.patientId === patientId && progress.encounterId
-      ? packetId + ':' + patientId + ':' + progress.encounterId : '');
+      ? packetId + ':' + patientId + ':' + progress.encounterId + ':' + normalizeEncounterDate(selectedPacket.collectedDate || progress.collectionDate) : '');
   }, [selectedPacket?.packetId, selectedPacket?.labs, selectedPacket?.reviewProgress, reviewUserId]);
 
   useEffect(() => {
@@ -481,11 +487,17 @@ onAfterSaveCleanup = null,
     async function loadEncounters() {
       if (!selectedPacket?.confirmedPatient?.id) return;
       try {
-        const data = await fetchEncountersByPatient(selectedPacket.confirmedPatient.id);
+        const [data, chart] = await Promise.all([
+          fetchEncountersByPatient(selectedPacket.confirmedPatient.id),
+          supabase.from('patients').select('id, imported_send_out_labs').eq('id', selectedPacket.confirmedPatient.id).single(),
+        ]);
         if (cancelled) return;
+        if (chart.error) throw chart.error;
         setEncounters(data || []);
-        const date = normalizeEncounterDate(selectedPacket.collectedDate);
+        setPatientChartLabs(chart.data.imported_send_out_labs || []);
         const progress = progressSync.current.get(selectedPacket.packetId) || selectedPacket.reviewProgress;
+        const date = normalizeEncounterDate(selectedPacket.collectedDate || progress?.collectionDate);
+        setCollectionDate(date);
         setSelectedEncounterId(restoreLabEncounter(data || [], progress, selectedPacket.confirmedPatient.id, date, selectedPacket.matchedEncounterId));
       } catch {
         if (!cancelled) setSaveError("Could not load visits. Select the patient again to retry.");
@@ -495,7 +507,17 @@ onAfterSaveCleanup = null,
     return () => { cancelled = true; };
   }, [selectedPacket?.confirmedPatient?.id, selectedPacket?.collectedDate, selectedPacket?.packetId]);
 
-  const packetPiles = <ImportPiles packets={sortedPackets} onSelect={onSelectPacket} onResume={onResumePacket} selectedId={selectedPacketId} />;
+  async function deletePacket(packetId) {
+    if (!onDeletePacket || saving || deletingPacketId) return;
+    setDeletingPacketId(packetId);
+    try {
+      await reviewSync.current.flush(packetId);
+      await progressSync.current.flush(packetId);
+      await onDeletePacket(packetId);
+    } catch (error) { setSaveError(error.message || 'Could not delete packet.'); }
+    finally { setDeletingPacketId(null); }
+  }
+  const packetPiles = <ImportPiles packets={sortedPackets} onSelect={onSelectPacket} onResume={onResumePacket} onDelete={onDeletePacket ? deletePacket : null} deleting={deletingPacketId || saving} selectedId={selectedPacketId} />;
   if (!selectedPacket) return <div className="p-4">{packetPiles}</div>;
 
   const {
@@ -579,7 +601,7 @@ onAfterSaveCleanup = null,
 
       return {
         packet_id: selectedPacket.packetId,
-        encounter_id: selectedEncounterId || null,
+        encounter_id: selectedEncounterId === PATIENT_CHART_TARGET ? null : selectedEncounterId || null,
         patient_id: patientId,
         analyte_key: lab.key || original.key || "",
         action: getAuditAction(lab),
@@ -613,7 +635,7 @@ onAfterSaveCleanup = null,
 
       return {
         packet_id: selectedPacket.packetId,
-        encounter_id: selectedEncounterId || null,
+        encounter_id: selectedEncounterId === PATIENT_CHART_TARGET ? null : selectedEncounterId || null,
         patient_id: patientId,
         analyte_key: lab.key || original.key || "",
         action: "deleted",
@@ -732,7 +754,7 @@ onAfterSaveCleanup = null,
       await reviewSync.current.flush(selectedPacket.packetId);
       await progressSync.current.flush(selectedPacket.packetId);
       const latestLabs = reviewSync.current.get(selectedPacket.packetId) || reviewedLabs;
-      const saved = await onSave(latestLabs, selectedEncounterId, { packet: selectedPacket });
+      const saved = await onSave(latestLabs, selectedEncounterId === PATIENT_CHART_TARGET ? null : selectedEncounterId, { packet: selectedPacket, collectionDate });
       if (saved !== true) {
         setSaveError("Labs were not saved. Your packet is still here for review.");
         return;
@@ -769,8 +791,8 @@ if (onAfterSaveCleanup) {
 
   const sourceDocument = selectedPacket.sourceDocument;
   const reviewedPages = reviewedPagesByPacket[selectedPacket.packetId] || [];
-  const targetKey = `${selectedPacket.packetId}:${confirmedPatient?.id || ""}:${selectedEncounterId || ""}`;
-  const savedRecognition = recognizeSavedImport(reviewedLabs, selectedPacket, encounters, selectedEncounterId);
+  const targetKey = `${selectedPacket.packetId}:${confirmedPatient?.id || ""}:${selectedEncounterId || ""}:${collectionDate}`;
+  const savedRecognition = recognizeSavedImport(reviewedLabs, { ...selectedPacket, collectedDate: collectionDate }, encounters, selectedEncounterId, patientChartLabs);
   const pendingPages = (sourceDocument?.pages || []).filter(page => !reviewedPages.includes(page.pageNumber) && !savedRecognition.completedPages.includes(page.pageNumber));
   const savableLabs = labsReadyToSave(reviewedLabs);
   const pendingLabs = reviewedLabs.filter((lab, index) => labsReadyToSave([lab]).length && !savedRecognition.matchedIndexes.has(index) && needsExtractionReview(lab));
@@ -789,9 +811,9 @@ if (onAfterSaveCleanup) {
   } else if (!confirmedPatient) {
     saveDisabledReason = "Confirm a patient before saving.";
   } else if (!selectedEncounterId) {
-    saveDisabledReason = "Select an encounter before saving.";
+    saveDisabledReason = "Enter a collection date and choose where to save.";
   } else if (confirmedTarget !== targetKey) {
-    saveDisabledReason = "Verify the patient and selected visit below.";
+    saveDisabledReason = "Verify the patient and save destination below.";
   } else if (pendingPages.length) {
     saveDisabledReason = `Check ${pendingPages.length} source page(s) for missing results.`;
   } else if (pendingLabs.length) {
@@ -842,17 +864,19 @@ if (onAfterSaveCleanup) {
         {onSkip ? (
           <button
             onClick={onSkip}
+            disabled={saving || !!deletingPacketId}
             className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100"
           >
             Skip Packet
           </button>
         ) : null}
+        {onDeletePacket && !['saved', 'deleted'].includes(reviewStatus) && <button type="button" disabled={saving || !!deletingPacketId} onClick={() => deletePacket(selectedPacket.packetId)} className="rounded-xl border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 disabled:opacity-50">{deletingPacketId ? 'Deleting…' : 'Delete packet'}</button>}
 
         {onSave ? (
           <div className="flex flex-col gap-1">
             <button
               onClick={handleSaveLabs}
-              disabled={saving || !!saveDisabledReason}
+              disabled={saving || !!deletingPacketId || !!saveDisabledReason}
               className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {saving ? "Saving..." : "Save Imported Labs"}
@@ -1038,13 +1062,21 @@ if (onAfterSaveCleanup) {
           />
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-900">Encounter Match</h3>
+            <h3 className="text-sm font-semibold text-slate-900">Save destination</h3>
+            <label className="mt-3 block text-sm text-slate-700">Collection date
+              <input type="date" value={collectionDate} readOnly={!!selectedPacket.collectedDate} onChange={event => {
+                const date = event.target.value;
+                const target = restoreLabEncounter(encounters, {}, confirmedPatient?.id, date);
+                setCollectionDate(date); setSelectedEncounterId(target); setConfirmedTarget("");
+                updateReviewProgress({ collectionDate: date, patientId: confirmedPatient?.id, encounterId: target, targetVerified: false });
+              }} className="mt-1 block rounded-lg border border-slate-300 px-3 py-2" />
+            </label>
             <label className="my-3 flex items-start gap-2 text-sm text-slate-700">
               <input type="checkbox" disabled={!confirmedPatient || !selectedEncounterId} checked={confirmedTarget === targetKey} onChange={event => { setConfirmedTarget(event.target.checked ? targetKey : ""); updateReviewProgress({ patientId: confirmedPatient.id, encounterId: selectedEncounterId, targetVerified: event.target.checked }); }} />
-              I verified the report belongs to this patient and the selected visit.
+              I verified this patient, collection date, and save destination.
             </label>
             <p className="mt-1 text-sm text-slate-600">
-              A visit is suggested only when exactly one clinic date matches the collection date. Otherwise, choose the correct visit.
+              The nearest visit within two days is suggested when the match is clear. Otherwise, results save directly to the patient chart by collection date.
             </p>
 
             {confirmedPatient ? (
@@ -1054,8 +1086,9 @@ if (onAfterSaveCleanup) {
                   onChange={(e) => { setSelectedEncounterId(e.target.value); setConfirmedTarget(""); updateReviewProgress({ patientId: confirmedPatient.id, encounterId: e.target.value, targetVerified: false }); }}
                   className="mt-3 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
                 >
-                  <option value="">Select encounter</option>
-                  {encounters.map((enc) => (
+                  <option value="">Choose destination</option>
+                  <option value={PATIENT_CHART_TARGET} disabled={!collectionDate}>Patient chart — collection date (no visit)</option>
+                  {nearbyLabEncounters(encounters, collectionDate).map((enc) => (
                     <option key={enc.id} value={enc.id}>
                       {labEncounterLabel(enc)}
                     </option>
@@ -1064,17 +1097,17 @@ if (onAfterSaveCleanup) {
 
                 {selectedEncounterId ? (
                   <p className="mt-2 text-xs font-medium text-emerald-700">
-                    Encounter selected for save.
+                    {selectedEncounterId === PATIENT_CHART_TARGET ? "Results will appear in the patient’s lab history under their collection dates." : "Nearby visit selected. The original collection date stays with each result."}
                   </p>
                 ) : (
                   <p className="mt-2 text-xs font-medium text-amber-700">
-                    No matching encounter found yet. Select one before saving.
+                    Enter the collection date to save directly to the patient chart.
                   </p>
                 )}
               </>
             ) : (
               <p className="mt-3 text-sm text-slate-500">
-                Confirm a patient first to choose an encounter.
+                Confirm a patient first to choose where to save.
               </p>
             )}
           </div>

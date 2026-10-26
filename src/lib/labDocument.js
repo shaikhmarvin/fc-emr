@@ -7,11 +7,12 @@ import { identifyHepatitisTest, parseHepatitisValue, hepatitisDefinitionForValue
 const clean = value => String(value || '').replace(/\s+/g, ' ').trim();
 const normalize = value => clean(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 const number = '(?:[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+))';
-const resultExpression = new RegExp(`^([<>]=?|[≤≥])?\\s*(${number})(?:\\s*([HL*]))?$`, 'i');
+const resultExpression = new RegExp(`^([<>]=?|[≤≥])?\\s*(${number})(?:\\s*([HL]{1,2}|A{1,2}|\\*))?$`, 'i');
 const rangeExpression = new RegExp(`^(${number}\\s*[-–]\\s*${number}|[<>]=?\\s*${number}|[≤≥]\\s*${number}|${number}\\+)\\s*(.*)$`);
 
 export function parseResultCell(text) {
-  const value = clean(text).replace(/non\s*-\s*reactive/ig, 'Non-Reactive').replace(/\(\s*([HL*])\s*\)$/i, '$1');
+  const original = clean(text).replace(/non\s*-\s*reactive/ig, 'Non-Reactive');
+  const value = /^(?:[<>]=?|[≤≥])?\s*[+-]?(?:\d|\.)/.test(original) ? original.replace(/\(\s*([HL]{1,2}|A{1,2}|\*)\s*\)$/i, '$1') : original;
   if (/^negative for intraepithelial lesion or malignancy[.]?$/i.test(value)) return { value: PAP_NILM, flag: "" };
   const match = value.match(resultExpression);
   if (match) return {
@@ -19,7 +20,8 @@ export function parseResultCell(text) {
     flag: (match[3] || '').toUpperCase(),
   };
   if (/^(?:non[- ]?reactive|reactive|not detected|detected|negative|positive|normal|abnormal|trace|equivocal|inconclusive|pending|cancelled|canceled|see comment)(?:\s*\([^)]+\))?$/i.test(value)) {
-    return { value, flag: '' };
+    const reported = value.match(/\s*\(\s*(AA|A|HH|H|LL|L)\s*\)$/i);
+    return { value: reported ? value.slice(0, reported.index).trim() : value, flag: reported?.[1].toUpperCase() || '' };
   }
   return null;
 }
@@ -111,10 +113,14 @@ export function parseLayoutResults(page) {
     }
     // Some scans omit the short dash between the two reference limits.
     rangeText = rangeText.replace(new RegExp(`^(${number})\\s+(${number})(?=\\s|$)`), '$1 - $2')
-      .replace(/\s*\/\s*/g, '/');
+      .replace(/\s*\/\s*/g, '/').replace(/([<>])\s*=/g, '$1=');
     const rangeMatch = rangeText.match(rangeExpression);
     if (rangeMatch) { rangeText = rangeMatch[1]; unit ||= rangeMatch[2]; }
     else if (/^(?:mg\/|g\/|mmol\/|mL\/|U\/|%|fL|pg)/i.test(rangeText)) { unit ||= rangeText; rangeText = ''; }
+    else {
+      const suffix = rangeText.match(/\s+((?:[A-Za-zµμ]+\/[A-Za-z0-9./]+|%))$/);
+      if (suffix) { unit ||= suffix[1]; rangeText = rangeText.slice(0, suffix.index).trim(); }
+    }
     results.push({
       key: definition?.key || `outside-${normalize(name)}`,
       displayName: definition?.displayName || name,

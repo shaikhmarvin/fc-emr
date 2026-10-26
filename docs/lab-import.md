@@ -2,10 +2,18 @@
 
 Lab Import is available in the sidebar to leadership and lab staff. It accepts
 PDFs and images. It does not save results to a chart until a reviewer chooses a
-patient and visit, verifies that target, checks every source page, and verifies
+patient and collection date, verifies the destination, checks every source page, and verifies
 uncertain results.
 
 ## Extraction and review
+
+- Unwanted faxes can be deleted from the active queue or Review Later after a
+  confirmation showing the packet identity. This clears extracted identifying
+  information and review data while retaining a minimal deleted marker to block
+  stale edits and repeat reviews. Saved chart results cannot be deleted through
+  this action. The shared original stays while other packets need review, then
+  is removed when every packet is saved or deleted. Skipped packets still retain
+  their source. Approved leadership and lab staff can perform this action.
 
 - Digital PDFs use their embedded text and positions when available. Scans use
   the existing Google OCR function in groups of four pages, freeing rendered
@@ -45,12 +53,16 @@ uncertain results.
   names/DOBs are never used as shared identity keys. Multiple MRNs on a page block
   chart saving; split the original into separate patient reports first.
 - Exact name plus DOB can suggest a patient; ambiguous matches require selection.
-  The reviewer still explicitly verifies the patient and visit. Visits are only
-  suggested when exactly one clinic date matches the extracted collection date.
+  The reviewer explicitly verifies the patient, collection date, and destination.
+  The unique nearest visit within two calendar days is suggested, including refill
+  visits. Equally close matches, multiple visits on the same day, and reports with
+  no nearby visit default to the patient chart without a visit. The original
+  collection date remains on every result. Results saved directly to the patient
+  chart appear in lab history, trends, and Pap history; no artificial visit is created.
 - Repeated rows are flagged. Repeat file uploads reopen the existing batch before
   OCR. Saved packets remain available for source history and duplicate detection.
 - Chart saving is additive and uses a conditional update to detect concurrent
-  changes to the selected visit. Repeated results from the same document are
+  changes to the selected visit or patient chart. Repeated results from the same document are
   skipped, including results already saved under another visit in this patient's
   chart. Changed values and uncertain older source metadata block saving for
   review. Existing results, reviewer flags, and rows missed by a later OCR run

@@ -920,11 +920,11 @@ function formatLabDateTime(value) {
       .filter(Boolean);
   }
 
-  function buildLongitudinalLabData(encounters = []) {
-    const allResults = encounters.flatMap((encounter) => [
+  function buildLongitudinalLabData(encounters = [], patientLabs = []) {
+    const allResults = [...flattenImportedLabs({ importedSendOutLabs: patientLabs }), ...encounters.flatMap((encounter) => [
       ...flattenInHouseLabs(encounter),
       ...flattenImportedLabs(encounter),
-    ]);
+    ])];
 
     const dateKeys = [...new Set(allResults.map((result) => result.dateKey).filter(Boolean))].sort(
       (a, b) => new Date(b).getTime() - new Date(a).getTime()
@@ -1440,8 +1440,8 @@ function formatLabDateTime(value) {
   });
 
   const longitudinalLabData = useMemo(() => {
-    return buildLongitudinalLabData(sortedEncounters);
-  }, [sortedEncounters]);
+    return buildLongitudinalLabData(sortedEncounters, selectedPatient?.importedSendOutLabs || []);
+  }, [sortedEncounters, selectedPatient?.importedSendOutLabs]);
 
   const approvedRefillHistory = (refillRequests || [])
     .filter((req) => {
@@ -2037,6 +2037,7 @@ function getSelectedRoomOptionClass() {
 
       </div>
 
+      {!selectedEncounter && <ChartLabResults key={selectedPatient?.id} results={longitudinalLabData.results} />}
       {selectedEncounter && (
         <>
           <div className="flex flex-wrap gap-2">

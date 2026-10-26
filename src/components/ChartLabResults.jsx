@@ -34,7 +34,7 @@ export default function ChartLabResults({ results = [] }) {
     <header className="border-b border-slate-200 bg-gradient-to-br from-slate-900 to-slate-800 p-5 text-white sm:p-6">
       <p className="text-xs font-semibold uppercase tracking-widest text-teal-300">Patient laboratory</p>
       <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
-        <div><h3 className="text-2xl font-semibold tracking-tight">Results at a glance</h3><p className="mt-1 text-sm text-slate-300">Across all visits · latest dated results first</p></div>
+        <div><h3 className="text-2xl font-semibold tracking-tight">Results at a glance</h3><p className="mt-1 text-sm text-slate-300">All patient results · latest collection dates first</p></div>
         <div className="flex flex-wrap gap-x-7 gap-y-3">
           {[[series.length, 'Tests tracked'], [dates.size, 'Collection / visit dates'], [flaggedCount, 'Flagged results in history']].map(([value, label]) => <div key={label}><p className="text-2xl font-semibold tabular-nums">{value}</p><p className="text-xs text-slate-300">{label}</p></div>)}
         </div>

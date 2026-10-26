@@ -67,6 +67,7 @@ function mapPatientFromSupabase(row) {
   firedReason: row.fired_reason ?? "",
   firedAt: row.fired_at ?? "",
     medications: [],
+    importedSendOutLabs: row.imported_send_out_labs || [],
     encounters: [],
   };
 }

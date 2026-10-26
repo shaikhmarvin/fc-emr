@@ -7,7 +7,7 @@ export function trendNumber(value) {
   return Number.isFinite(number) ? number : null;
 }
 
-export function labDateForTrend(lab, encounter) {
+export function labDateForTrend(lab, encounter = {}) {
   const collected = lab.collectedDate || lab.collectionDate || lab.collectedAt || lab.date;
   return collected ? { value: collected, source: 'collection' } :
     { value: encounter.clinicDate || encounter.createdAt || '', source: 'visit' };

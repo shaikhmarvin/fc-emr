@@ -1,4 +1,5 @@
 import { labDateForTrend } from './labTrends.js';
+import { patientLabSources } from './labSaveTarget.js';
 export const PAP_NILM = 'Negative for intraepithelial lesion or malignancy';
 export function isPapLab(lab = {}) {
   return [lab.key, lab.displayName, lab.normalizedName].some(value => /^(?:pap|paptest|papsmear|cervicalcytology|gyncytology|gynecologiccytology|thinpreppap|papanicolaou)$/.test(String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '')));
@@ -13,6 +14,22 @@ export function normalizePapLab(lab) {
 export function parsePapReport(text) {
   if (!/\b(?:pap(?:\s+smear|\s+test)?|thinprep|cervical\s+cytology|gynecologic\s+cytology)\b/i.test(text)) return [];
   const lines = String(text).split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  for (let i = 0; i < lines.length; i++) {
+    const heading = lines[i].match(/^Interpretation(?:\s*\(\s*Abnormal\s*\))?\s*[:\-]?\s*(.*)$/i);
+    if (!heading) continue;
+    const parts = heading[1] ? [heading[1]] : [];
+    for (const next of lines.slice(i + 1, i + 5)) {
+      if (/^(?:electronically|reference\b|expected\b|normal range|clinical information|specimen adequacy|specimens|order diagnosis|comment|microscopic|resulting lab)/i.test(next)) break;
+      parts.push(next);
+    }
+    const interpretation = parts.join(' ').trim();
+    if (!interpretation || /^(?:reference|expected|normal range)/i.test(interpretation)) continue;
+    return [{ key: 'pap_smear', displayName: 'Pap Smear', group: 'Cervical Screening', resultType: 'categorical',
+      value: /negative\s+for\s+intraepithelial\s+lesion\s+or\s+malignancy/i.test(interpretation) ? PAP_NILM : interpretation,
+      unit: '', rawLine: lines[i] + ' ' + interpretation, referenceRangeText: '', expectedRangeText: '',
+      reportedFlag: /abnormal/i.test(lines[i]) ? 'A' : '', suspicious: true, sourceReviewed: false, extractionMethod: 'text_fallback', missing: false }];
+  }
+
   for (let i = 0; i < lines.length; i++) {
     if (!/^(?:negative\s+for|(?:interpretation|diagnosis|result)\s*[:\-])/i.test(lines[i])) continue;
     const segment = lines.slice(i, i + 3).join(' ');
@@ -31,7 +48,7 @@ const dateKey = value => {
   return /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === date ? date : '';
 };
 export function latestPapHistory(patient) {
-  const entries = (patient?.encounters || []).flatMap(encounter => (encounter.importedSendOutLabs || encounter.imported_send_out_labs || []).filter(isPapLab).flatMap(lab => {
+  const entries = patientLabSources(patient).flatMap(({ encounter, labs }) => labs.filter(isPapLab).flatMap(lab => {
     const value = lab.value && typeof lab.value === 'object' ? lab.value.value : lab.value;
     if (value === null || value === undefined || !String(value).trim()) return [];
     const date = labDateForTrend(lab, encounter);
