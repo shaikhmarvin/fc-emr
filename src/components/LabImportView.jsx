@@ -999,10 +999,6 @@ if (onAfterSaveCleanup) {
               }}>Check chart again</button>
             </div>
             {saveError && <p role="alert" className="mb-3 text-sm text-red-700">{saveError}</p>}
-            <details className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <summary className="cursor-pointer text-sm font-medium">Compare with extracted report text</summary>
-              <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs">{selectedPacket.sourceRawText || selectedPacket.rawText || "No source text available."}</pre>
-            </details>
             <label className="mb-3 flex items-center gap-2 text-sm text-slate-600">
               <input type="checkbox" checked={onlyNeedsReview} onChange={event => setOnlyNeedsReview(event.target.checked)} />
               Show results needing verification only ({pendingLabs.length})

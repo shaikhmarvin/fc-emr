@@ -1,4 +1,6 @@
 import ClinicalResearchStats from "./ClinicalResearchStats.jsx";
+import ResearchDetailSort from "./ResearchDetailSort.jsx";
+import { sortResearchDetails } from "../lib/researchDetailSort.js";
 import { researchClinicalStatus } from "../lib/researchClinicalStatus.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./ResearchView.css";
@@ -37,6 +39,8 @@ export default function ResearchView({ patients = [], womensHealthEventDate = ""
   const [startDate, setStartDate] = useState(`${today.slice(0, 4)}-01-01`);
   const [endDate, setEndDate] = useState(today);
   const [drilldown, setDrilldown] = useState(null);
+  const [detailSort, setDetailSort] = useState('newest');
+  const sortedDetailRows = useMemo(() => sortResearchDetails(drilldown?.rows || [], detailSort), [drilldown, detailSort]);
   const [clinicEvent, setClinicEvent] = useState("");
   const [study, setStudy] = useState("patients");
   const [dailyPage, setDailyPage] = useState(0);
@@ -99,13 +103,14 @@ export default function ResearchView({ patients = [], womensHealthEventDate = ""
               <div><h2 id="research-detail-title" className="text-lg font-bold text-slate-900">{drilldown.title}</h2><p className="text-sm text-slate-500">{drilldown.rows.length} contributing data point(s).</p></div>
               <button type="button" onClick={() => setDrilldown(null)} className="shrink-0 rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">Close</button>
             </div>
+            <div className="border-b border-slate-200 p-4"><ResearchDetailSort value={detailSort} onChange={setDetailSort} /></div>
             <div className="research-dialog-body">
               {drilldown.clinical ? (
                 <table className="research-table">
                   <thead className="sticky top-0 bg-slate-50 text-xs uppercase text-slate-500"><tr>
                     {['Patient', 'MRN', 'Clinic date', ...(drilldown.clinical.includes('HTN') ? ['BP entered'] : []), ...(drilldown.clinical.includes('DM') ? ['A1C entered'] : []), 'Chart'].map(label => <th key={label} className="px-4 py-3">{label}</th>)}
                   </tr></thead>
-                  <tbody className="divide-y divide-slate-200">{drilldown.rows.map((row, index) => {
+                  <tbody className="divide-y divide-slate-200">{sortedDetailRows.map((row, index) => {
                     const patient = patients.find(item => String(item.id) === row.patientId);
                     const status = researchClinicalStatus(patient, row.date);
                     const openChart = () => { setDrilldown(null); onOpenPatientChart?.(patient.id, row.encounterId); };
@@ -120,7 +125,7 @@ export default function ResearchView({ patients = [], womensHealthEventDate = ""
                     </tr>;
                   })}</tbody>
                 </table>
-              ) : (<table className="research-table"><thead className="sticky top-0 bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Patient</th><th className="px-4 py-3">Clinic date</th><th className="px-4 py-3">Encounter</th><th className="px-4 py-3">Recorded value</th><th className="px-4 py-3">How recorded</th></tr></thead><tbody className="divide-y divide-slate-200">{drilldown.rows.map((row, index) => <tr key={`${row.encounterId}-${index}`}><td data-label="Patient" className="px-4 py-3 font-medium text-slate-900">{row.patient}</td><td data-label="Clinic date" className="whitespace-nowrap px-4 py-3">{row.date || "—"}</td><td data-label="Encounter" className="px-4 py-3 text-xs text-slate-500">{row.encounterId || "—"}</td><td data-label="Recorded value" className="px-4 py-3">{row.value}</td><td data-label="How recorded" className="px-4 py-3 text-slate-600">{row.source}</td></tr>)}</tbody></table>)}
+              ) : (<table className="research-table"><thead className="sticky top-0 bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Patient</th><th className="px-4 py-3">Clinic date</th><th className="px-4 py-3">Encounter</th><th className="px-4 py-3">Recorded value</th><th className="px-4 py-3">How recorded</th></tr></thead><tbody className="divide-y divide-slate-200">{sortedDetailRows.map((row, index) => <tr key={`${row.encounterId}-${index}`}><td data-label="Patient" className="px-4 py-3 font-medium text-slate-900">{row.patient}</td><td data-label="Clinic date" className="whitespace-nowrap px-4 py-3">{row.date || "—"}</td><td data-label="Encounter" className="px-4 py-3 text-xs text-slate-500">{row.encounterId || "—"}</td><td data-label="Recorded value" className="px-4 py-3">{row.value}</td><td data-label="How recorded" className="px-4 py-3 text-slate-600">{row.source}</td></tr>)}</tbody></table>)}
             </div>
           </div>
         </dialog>

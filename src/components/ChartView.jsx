@@ -3099,6 +3099,7 @@ function getSelectedRoomOptionClass() {
                         <input
                           type="number"
                           step="any"
+                          onWheel={(event) => event.currentTarget.blur()}
                           className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm sm:text-base"
                           value={normalizeInHouseLabEntry(selectedEncounter.inHouseLabs?.istat?.[key]).value}
                           onChange={(e) => {
@@ -3131,6 +3132,7 @@ function getSelectedRoomOptionClass() {
                       <input
                         type="number"
                         step="any"
+                        onWheel={(event) => event.currentTarget.blur()}
                         className="min-h-[44px] w-full rounded-lg border px-3 py-2"
                         value={normalizeInHouseLabEntry(selectedEncounter.inHouseLabs?.core?.bloodGlucose).value}
                         onChange={(e) => {
@@ -3154,6 +3156,7 @@ function getSelectedRoomOptionClass() {
                       <input
                         type="number"
                         step="any"
+                        onWheel={(event) => event.currentTarget.blur()}
                         className="min-h-[44px] w-full rounded-lg border px-3 py-2"
                         value={normalizeInHouseLabEntry(selectedEncounter.inHouseLabs?.core?.a1c).value}
                         onChange={(e) => {
@@ -3226,6 +3229,7 @@ function getSelectedRoomOptionClass() {
                             <input
                               type="number"
                               step="any"
+                              onWheel={(event) => event.currentTarget.blur()}
                               className="min-h-[44px] w-full rounded-lg border px-3 py-2"
                               value={normalizeInHouseLabEntry(selectedEncounter.inHouseLabs?.microalbumin?.[key]).value}
                               onChange={(e) => {
@@ -3277,6 +3281,7 @@ function getSelectedRoomOptionClass() {
                           <input
                             type="number"
                             step="any"
+                            onWheel={(event) => event.currentTarget.blur()}
                             className="min-h-[44px] w-full rounded-lg border px-3 py-2"
                             value={normalizeInHouseLabEntry(selectedEncounter.inHouseLabs?.lipids?.[key]).value}
                             onChange={(e) => {
