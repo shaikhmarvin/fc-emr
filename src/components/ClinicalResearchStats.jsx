@@ -1,3 +1,4 @@
+import ResearchCalculations from "./ResearchCalculations.jsx";
 import { useEffect, useRef, useState } from 'react';
 import { buildClinicalResearchStats, filterClinicalPatients } from '../lib/clinicalResearchStats.js';
 import ResearchDetailSort from './ResearchDetailSort.jsx';
@@ -11,6 +12,7 @@ export default function ClinicalResearchStats({ groups, patients = [], dateRange
     {detail && <OutcomeDetails detail={detail} patients={patients} onOpenPatientChart={onOpenPatientChart} onClose={() => setDetail(null)} />}
     <div><h3 className="text-lg font-semibold text-slate-900">BP and A1C Outcomes</h3>
       <p className="mt-1 text-sm text-slate-600">Uses patients from the selected general-clinic visits and filters. A1C also includes results saved directly to their charts by collection date within the selected dates. BP includes patients with HTN; A1C includes patients with DM.</p></div>
+    <ResearchCalculations section="clinical" />
     {cohorts.map(cohort => <div key={cohort.label} className="rounded-xl border border-slate-200 p-4">
       <h4 className="font-semibold text-slate-900">{cohort.label}</h4>
       <div className="mt-3 overflow-x-auto"><table className="research-table"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr>

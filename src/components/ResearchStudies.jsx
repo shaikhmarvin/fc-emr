@@ -1,3 +1,4 @@
+import ResearchCalculations from "./ResearchCalculations.jsx";
 import { useMemo, useState } from 'react';
 import { buildResearchStudies } from '../researchStudies.js';
 import { percent } from '../researchAnalytics.js';
@@ -28,7 +29,7 @@ export default function ResearchStudies({ report, endDate, study, onInspect }) {
   });
 
   if (study === 'patients') return <section aria-label="Follow-up research" className="mb-6 rounded-xl border border-blue-200 bg-blue-50/30 p-4">
-    <h2 className="text-lg font-semibold text-slate-900">30 / 60 / 90-day follow-up</h2>
+    <h2 className="text-lg font-semibold text-slate-900">30 / 60 / 90-day follow-up</h2><ResearchCalculations section="followup" />
     <p className="mt-1 text-sm text-slate-600">Question: How does observed return to general clinic differ by transportation and recorded HTN/DM group?</p>
     <label className="mt-3 block text-sm font-medium">Follow-up window <select className="ml-2 rounded-lg border bg-white p-2" value={windowDays} onChange={event => setWindowDays(Number(event.target.value))}>{[30, 60, 90].map(days => <option key={days} value={days}>{days} days</option>)}</select></label>
     <p className="mt-3 text-sm text-slate-700">{count('All index visits', followup.rows)} index patients · {count('Missing index transportation', data.missingTransport)} missing transportation · {count('Invalid clinic dates excluded', data.invalidDates)} invalid clinic dates excluded</p>
@@ -37,7 +38,7 @@ export default function ResearchStudies({ report, endDate, study, onInspect }) {
   </section>;
 
   if (study === 'times') return <section aria-label="Workflow bottleneck research" className="mb-6 rounded-xl border border-blue-200 bg-blue-50/30 p-4">
-    <h2 className="text-lg font-semibold text-slate-900">Workflow bottlenecks</h2>
+    <h2 className="text-lg font-semibold text-slate-900">Workflow bottlenecks</h2><ResearchCalculations section="workflow" />
     <p className="mt-1 text-sm text-slate-600">Question: Which recorded workflow stage takes longest, and does this differ across clinic dates?</p>
     <label className="mt-3 block text-sm font-medium">Compare clinic date <select className="ml-2 rounded-lg border bg-white p-2" value={clinicDate} onChange={event => setClinicDate(event.target.value)}><option value="">All selected dates</option>{data.daily.map(day => <option key={day.date}>{day.date}</option>)}</select></label>
     <p className="mt-3 text-sm text-slate-700">{bottleneck ? `Longest observed median: ${bottleneck.label} (${bottleneck.median} min, ${bottleneck.valid} usable visits).` : 'No usable workflow intervals for this selection.'}</p>
@@ -46,7 +47,7 @@ export default function ResearchStudies({ report, endDate, study, onInspect }) {
   </section>;
 
   if (study === 'pharmacy') return <section aria-label="Refill pattern research" className="mb-6 rounded-xl border border-blue-200 bg-blue-50/30 p-4">
-    <h2 className="text-lg font-semibold text-slate-900">Medication pickup comparison</h2>
+    <h2 className="text-lg font-semibold text-slate-900">Medication pickup comparison</h2><ResearchCalculations section="pharmacy" />
     <p className="mt-1 text-sm text-slate-600">Question: How do resolved pickup outcomes differ between general and refill-only visits?</p>
     <StudyTable columns={['Visit type', 'Visits', 'Picked up', 'Resolved outcomes', 'Pickup share', 'Not picked up', 'Pending', 'No medication needed', 'Not recorded']} rows={pickupGroups.map(group => [group.label, count(`${group.label}: all visits`, group.rows), count(`${group.label}: picked up`, group.pickedUp), count(`${group.label}: resolved`, group.resolved), percent(group.pickedUp.length, group.resolved.length), count(`${group.label}: not picked up`, group.notPickedUp), count(`${group.label}: pending`, group.pending), count(`${group.label}: no medication needed`, group.noMeds), count(`${group.label}: not recorded`, group.unrecorded)])} />
     <p className="mt-3 mb-5 text-xs text-slate-600">Pickup share = picked up ÷ resolved outcomes (picked up or not picked up). Pending, missing outcomes, and no-medication visits are excluded from that denominator. A pickup timestamp takes precedence over status. Counts represent encounters, not individual prescriptions or medication adherence. Cancelled and specialty-only visits are excluded.</p>

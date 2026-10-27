@@ -1,3 +1,4 @@
+import ResearchCalculations from "./ResearchCalculations.jsx";
 import ClinicalResearchStats from "./ClinicalResearchStats.jsx";
 import ResearchDetailSort from "./ResearchDetailSort.jsx";
 import { sortResearchDetails } from "../lib/researchDetailSort.js";
@@ -161,7 +162,7 @@ export default function ResearchView({ patients = [], womensHealthEventDate = ""
         </nav>
         <div id="research-study-panel" className="research-study-panel">
         <ResearchStudies key={`${clinicEvent}-${startDate}-${endDate}`} report={report} endDate={endDate} study={study} onInspect={setDrilldown} />
-        {study === "patients" && <section aria-label="Patients and return visits">
+        {study === "patients" && <section aria-label="Patients and return visits"><ResearchCalculations section="patients" />
 <h2 className="text-lg font-semibold text-slate-900">Patients and return visits</h2>
 <p className="mt-1 text-sm text-slate-600">Disease groups and follow-up patterns for general-clinic visits.</p>
         <div className="research-metrics mt-5">
@@ -187,7 +188,7 @@ export default function ResearchView({ patients = [], womensHealthEventDate = ""
 
 
         </section>}
-        {study === "access" && <section aria-label="Language and access">
+        {study === "access" && <section aria-label="Language and access"><ResearchCalculations section="access" />
           <h2 className="text-lg font-semibold text-slate-900">Language and access</h2>
           <p className="mt-1 text-sm text-slate-600">Recorded language indicators, visit duration, and transportation patterns for general-clinic visits.</p>
           <div className="rounded-xl border border-slate-200 p-4">
@@ -204,7 +205,7 @@ export default function ResearchView({ patients = [], womensHealthEventDate = ""
             <p className="mt-2 text-xs text-slate-500">Unique-patient columns should not be summed across modes. Observed return share is observational and does not establish causation.</p>
           </div>
         </section>}
-        {study === "times" && <section aria-label="Visit times">
+        {study === "times" && <section aria-label="Visit times"><ResearchCalculations section="times" />
 <h2 className="text-lg font-semibold text-slate-900">Visit times</h2>
 <div className="research-time-comparisons">          <div className="min-w-0 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
             <h3 className="font-semibold text-indigo-950">General vs. refill patient wait times</h3>
@@ -287,7 +288,7 @@ export default function ResearchView({ patients = [], womensHealthEventDate = ""
         </section>
 
         </>}
-        {study === "screening" && <section aria-label="Screening">
+        {study === "screening" && <section aria-label="Screening"><ResearchCalculations section="screening" />
 <h2 className="text-lg font-semibold text-slate-900">Preventive screening</h2>
 <p className="mt-1 text-sm text-slate-600">Recorded screening responses from eligible general-clinic visits.</p>
 <div className="research-screening-grid">          <Breakdown title="PAP smear response — females ages 21–65" values={report.pap} total={report.papEligibleRows.length} onSelect={(value) => showRows(`PAP smear: ${value} (females ages 21–65)`, report.papEligibleRows.filter((row) => row.pap === value), "PAP smear")} />
