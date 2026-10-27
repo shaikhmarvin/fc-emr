@@ -9,6 +9,7 @@ import LabReviewPanel from "./LabReviewPanel";
 import { fetchEncountersByPatient } from "../api/encounters";
 import { supabase } from "../lib/supabase";
 import { PATIENT_CHART_TARGET, nearbyLabEncounters } from "../lib/labSaveTarget.js";
+import { matchesLabPatientSearch } from "../lib/labPatientSuggestions.js";
 
 function toneForPacket(packet) {
   if (!packet) return "border-slate-200 bg-white";
@@ -797,7 +798,7 @@ if (onAfterSaveCleanup) {
   const savableLabs = labsReadyToSave(reviewedLabs);
   const pendingLabs = reviewedLabs.filter((lab, index) => labsReadyToSave([lab]).length && !savedRecognition.matchedIndexes.has(index) && needsExtractionReview(lab));
   const patientCandidates = patientSearch.trim().length >= 2 ? patients.filter(patient =>
-    `${patient.firstName || ""} ${patient.lastName || ""} ${patient.mrn || ""} ${patient.dob || ""}`.toLowerCase().includes(patientSearch.toLowerCase().trim())
+    matchesLabPatientSearch(patient, patientSearch)
   ).slice(0, 10) : [];
 
   if (sourceDocument?.identityConflict) {
@@ -1037,7 +1038,7 @@ if (onAfterSaveCleanup) {
         <div className="min-w-0 space-y-4 xl:col-span-2">
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <label className="text-sm font-semibold">Find or change patient
-              <input aria-label="Search patients for lab import" value={patientSearch} onChange={event => setPatientSearch(event.target.value)} placeholder="Name, MRN, or date of birth" className="mt-2 w-full rounded-lg border border-slate-300 p-2 font-normal" />
+              <input aria-label="Search patients for lab import" value={patientSearch} onChange={event => setPatientSearch(event.target.value)} placeholder="Name, MRN, or DOB (MM/DD/YYYY)" className="mt-2 w-full rounded-lg border border-slate-300 p-2 font-normal" />
             </label>
             {patientSearch.trim().length >= 2 && <div className="mt-2 max-h-60 space-y-2 overflow-auto">
               {!patientCandidates.length && <p className="text-sm text-slate-500">No matching patients.</p>}

@@ -1,7 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { labNameSuggestionScore } from './labPatientSuggestions.js';
+import { labNameSuggestionScore, matchesLabPatientSearch } from './labPatientSuggestions.js';
 import { mergeDocumentPackets } from './labDocument.js';
+
+test('lab patient search accepts US birth dates without reversing month and day', () => {
+  const patient = { firstName: 'Jane', lastName: 'Smith', mrn: '12345', dob: '1980-03-07' };
+  for (const query of ['03-07-1980', '03/07/1980', '3/7/1980', '3-7-1980', '1980-03-07', ' JANE ', '12345']) {
+    assert.equal(matchesLabPatientSearch(patient, query), true, query);
+  }
+  for (const query of ['07/03/1980', '03/08/1980', '03/07/1981']) {
+    assert.equal(matchesLabPatientSearch(patient, query), false, query);
+  }
+  assert.equal(matchesLabPatientSearch({ firstName: 'Jane' }, '03/07/1980'), false);
+});
 
 test('name suggestions tolerate OCR typos, order, accents, and omitted middle names', () => {
   const patient = { firstName: 'Maria Elena', lastName: 'Gonzalez' };

@@ -613,52 +613,7 @@ export default function ChartView({
     });
   }
 
-  function getLabTypeLabel(value) {
-  switch (value) {
-    case "in_house":
-      return "In-house";
-    case "out_of_house":
-      return "Out-of-house";
-    case "both":
-      return "Both";
-    case "not_needed":
-      return "No labs";
-    default:
-      return "Not set";
-  }
-}
 
-function getLabStatusLabel(value) {
-  switch (value) {
-    case "pending":
-      return "Pending";
-    case "collected":
-      return "Specimen collected";
-    case "unable_to_collect":
-      return "Unable to collect";
-    case "resulted":
-      return "Resulted";
-    case "not_needed":
-      return "No labs";
-    default:
-      return "Not started";
-  }
-}
-
-function formatLabDateTime(value) {
-  if (!value) return "—";
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "—";
-
-  return parsed.toLocaleString([], {
-    month: "2-digit",
-    day: "2-digit",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
 
 
   function hasMeaningfulLabValue(value) {
@@ -3012,50 +2967,7 @@ function getSelectedRoomOptionClass() {
           ) : null}
 
 
-          <details className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-            <summary className="flex cursor-pointer list-none flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">Lab Collection</h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  Specimen tracking · expand to view collection details
-                </p>
-              </div>
 
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                {getLabStatusLabel(selectedEncounter?.labStatus)}
-              </span>
-            </summary>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Lab type</p>
-                <p className="mt-1 text-sm font-semibold text-slate-900">
-                  {getLabTypeLabel(selectedEncounter?.labType)}
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</p>
-                <p className="mt-1 text-sm font-semibold text-slate-900">
-                  {getLabStatusLabel(selectedEncounter?.labStatus)}
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Collected at</p>
-                <p className="mt-1 text-sm font-semibold text-slate-900">
-                  {formatLabDateTime(selectedEncounter?.labCollectedAt)}
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Unable at</p>
-                <p className="mt-1 text-sm font-semibold text-slate-900">
-                  {formatLabDateTime(selectedEncounter?.labUnableAt)}
-                </p>
-              </div>
-            </div>
-          </details>
 
           <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
             <button
@@ -3378,8 +3290,8 @@ function getSelectedRoomOptionClass() {
 
 
 
-          {onSaveHistoricalLab && <HistoricalLabEntry key={selectedPatient.id} onSave={onSaveHistoricalLab} />}
-          <ChartLabResults key={selectedPatient?.id} results={longitudinalLabData.results} />
+          {onSaveHistoricalLab && <HistoricalLabEntry key={`historical-lab-${selectedPatient.id}`} onSave={onSaveHistoricalLab} />}
+          <ChartLabResults key={`chart-labs-${selectedPatient?.id}`} results={longitudinalLabData.results} />
 
           {(isOphtho ? canUseOphtho : medicalSoapEnabled) ? (
             <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
