@@ -5,6 +5,7 @@ import { removeLabReviewDraft } from "./lib/labReviewProgress.js";
 import { labNameSuggestionScore } from "./lib/labPatientSuggestions.js";
 import { extractLabDob } from "./lib/labDemographics.js";
 import { saveImportedLabs } from "./lib/saveImportedLabs.js";
+import { prepareHistoricalLab, hasHistoricalLabDuplicate } from "./lib/historicalLabs.js";
 import { validateLabDestination } from "./lib/labSaveTarget.js";
 import { uploadSharedLabSource, downloadSharedLabSource, cleanupCompletedLabSources } from "./lib/sharedLabSource.js";
 import { createVitalEntry } from "./lib/vitals.js";
@@ -11894,6 +11895,7 @@ async function markSeenBySocialWork(encounterId) {
               getStatusClasses={getStatusClasses}
               assignEncounterToRoom={assignEncounterToRoom}
               selectedPatient={selectedPatient}
+
               selectedEncounter={selectedEncounter}
               openPatientChart={openPatientChart}
               isLeadershipView={canManageRooms}
@@ -11956,6 +11958,20 @@ async function markSeenBySocialWork(encounterId) {
             <ChartView
               key={`${selectedPatient.id}:${selectedEncounterId || ""}`}
               selectedPatient={selectedPatient}
+              onSaveHistoricalLab={canLabQueueAccess ? async draft => {
+                const patientId = selectedPatient.id;
+                const now = new Date();
+                const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                const lab = prepareHistoricalLab(draft, { today, actorId: session.user.id, id: crypto.randomUUID(), enteredAt: now.toISOString() });
+                const { data: chart, error } = await supabase.from('patients').select('imported_send_out_labs').eq('id', patientId).single();
+                if (error) throw error;
+                const { data: encounters, error: encounterError } = await supabase.from('encounters').select('imported_send_out_labs').eq('patient_id', patientId);
+                if (encounterError) throw encounterError;
+                if (hasHistoricalLabDuplicate({ importedSendOutLabs: chart.imported_send_out_labs || [], encounters }, lab)) throw new Error('This test, collection date, result, and units are already saved in the chart.');
+                const labs = [...(chart.imported_send_out_labs || []), lab];
+                await saveImportedLabs(supabase, { patientId, expectedLabs: chart.imported_send_out_labs, labs });
+                setPatients(previous => previous.map(patient => String(patient.id) === String(patientId) ? { ...patient, importedSendOutLabs: labs } : patient));
+              } : undefined}
               selectedEncounter={selectedEncounter}
               selectedEncounterId={selectedEncounterId}
               normalizeClinicDate={normalizeClinicDate}

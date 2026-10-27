@@ -1,5 +1,6 @@
 import { patientVitalHistory } from "../lib/vitals.js";
 import ChartLabResults from "./ChartLabResults.jsx";
+import HistoricalLabEntry from "./HistoricalLabEntry.jsx";
 import { labDateForTrend } from "../lib/labTrends.js";
 import { findLabByKey, findLabByAlias } from "../lib/labCatalog.js";
 import { importedLabFlag } from "../lib/labFlags.js";
@@ -300,6 +301,7 @@ function GroupNoteChart({
 
 export default function ChartView({
   selectedPatient,
+  onSaveHistoricalLab,
   selectedEncounter,
   selectedEncounterId,
   normalizeClinicDate,
@@ -904,7 +906,7 @@ function formatLabDateTime(value) {
           valueText: truncateLabValue(rawValue),
           fullValueText: String(rawValue ?? "").trim(),
           unitText: String(lab?.units || lab?.unit || "").trim(),
-          sourceLabel: "Outside",
+          sourceLabel: lab.sourceType === 'historical_manual' ? `Historical · ${lab.sourceFileName || 'Manual entry'}` : "Outside",
           flag: importedLabFlag(lab),
           referenceRange: String(
             lab?.referenceRangeText ||
@@ -3376,6 +3378,7 @@ function getSelectedRoomOptionClass() {
 
 
 
+          {onSaveHistoricalLab && <HistoricalLabEntry key={selectedPatient.id} onSave={onSaveHistoricalLab} />}
           <ChartLabResults key={selectedPatient?.id} results={longitudinalLabData.results} />
 
           {(isOphtho ? canUseOphtho : medicalSoapEnabled) ? (
