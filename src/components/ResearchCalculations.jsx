@@ -52,11 +52,11 @@ const formulas = {
 };
 
 export default function ResearchCalculations({ section }) {
-  return <aside aria-label="How these numbers are calculated" className="my-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-    <h3 className="font-semibold text-slate-900">How these numbers are calculated</h3>
+  return <details className="my-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+    <summary className="cursor-pointer font-semibold text-slate-900">How these numbers are calculated</summary>
     <dl className="mt-3 space-y-3 text-sm text-slate-600">
       {formulas[section].map(([label, formula]) => <div key={label}><dt className="font-semibold text-slate-700">{label}</dt><dd className="mt-1">{formula}</dd></div>)}
     </dl>
     <p className="mt-3 text-xs text-slate-500">Uses the selected dates, clinic event, and the section’s eligibility rules. Percentages = numerator ÷ denominator × 100, displayed to 2 decimals. A dash (—) means no eligible denominator or no valid values; it does not mean zero.</p>
-  </aside>;
+  </details>;
 }
