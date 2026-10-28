@@ -1,3 +1,4 @@
+import { downloadEncounterPdf } from "../utils/pdfGenerator.js";
 import { patientVitalHistory } from "../lib/vitals.js";
 import ChartLabResults from "./ChartLabResults.jsx";
 import HistoricalLabEntry from "./HistoricalLabEntry.jsx";
@@ -1355,7 +1356,7 @@ export default function ChartView({
   async function handleExportEncounterPdf() {
     if (!selectedPatient || !selectedEncounter) return;
 
-    const { downloadEncounterPdf } = await import("../utils/pdfGenerator");
+
     await downloadEncounterPdf({
       patient: selectedPatient,
       encounter: selectedEncounter,
@@ -1372,7 +1373,7 @@ export default function ChartView({
   async function handleExportSocialWorkPdf(note) {
     if (!selectedPatient || !note || note.status !== "completed") return;
 
-    const { downloadEncounterPdf } = await import("../utils/pdfGenerator");
+
     await downloadEncounterPdf({
       patient: selectedPatient,
       encounter: {

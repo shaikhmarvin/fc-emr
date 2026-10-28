@@ -1,3 +1,4 @@
+import { downloadCompletedRecordsPdf, printCompletedRecordsPdf } from "../utils/pdfGenerator.js";
 import { isWomensHealthEncounter } from "../utils/clinicEvents.js";
 import { isCompletedRecordForExport, RECORD_TYPE_OPTIONS, filterRecordTypes } from "../utils/completedRecords.js";
 import { useState } from "react";
@@ -179,7 +180,7 @@ export default function DashboardView({
 
       const rowsForExport = filterRecordTypes([...signedEncounterRows, ...completedSocialWorkRows], selectedRecordTypes);
 
-      const { downloadCompletedRecordsPdf, printCompletedRecordsPdf } = await import("../utils/pdfGenerator");
+
       const outputRecords = mode === "print" ? printCompletedRecordsPdf : downloadCompletedRecordsPdf;
       await outputRecords({
         rows: rowsForExport,
