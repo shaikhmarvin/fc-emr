@@ -25,6 +25,8 @@ const formulas = {
     ['Language share', 'General visits in the language category ÷ all qualifying general visits × 100.'],
     ['Language average visit time', 'Sum of valid (completion time − undergrad-complete time) minutes in the language category ÷ visits in that category with valid timing. Intervals and averages are rounded to whole minutes; only intervals of 1–480 minutes qualify. Completion uses medication pickup, then visit-complete, then done time, in that order.'],
     ['Transportation visit share', 'General visits reporting the transportation mode ÷ all qualifying general visits × 100.'],
+    ['Transportation return-visit counts', 'For each patient and mode, count distinct general-visit dates after their earliest visit reporting that mode within the selected period and clinic event. Patients with returns are split into exactly 1, 2, 3, or 4+ later dates. Later visits may use another mode. Same-day encounters count once; refill, specialty-only, and cancelled visits are excluded.'],
+    ['Transportation average days between general visits', 'Average days from a general visit reporting the mode to the patient’s next distinct general-visit date within the selected dates and clinic event. The next visit may report a different mode. Same-day visits count once per mode; visits without a later general visit do not contribute. Refill, specialty-only, and cancelled visits are excluded. Displayed to 1 decimal.'],
     ['Transportation observed return share', 'Distinct patients reporting the mode who have a later general visit in the selected period ÷ distinct patients reporting that mode × 100. The later visit may report a different mode. A patient can appear in multiple transportation groups.'],
   ],
   times: [

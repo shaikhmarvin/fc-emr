@@ -209,13 +209,33 @@ export function buildResearchReport(patients, startDate, endDate, clinicEvent = 
   });
   const transportationReturnStats = countBy("transportation").map(([label]) => {
     const modeRows = rows.filter((row) => row.transportation === label);
+    const visitIntervals = modeRows.flatMap((row) => {
+      const next = rows.filter((later) => later.patientId === row.patientId && later.date > row.date)
+        .sort((a, b) => a.date.localeCompare(b.date))[0];
+      if (!next) return [];
+      const start = Date.parse(row.date + 'T00:00:00Z');
+      const end = Date.parse(next.date + 'T00:00:00Z');
+      if (!Number.isFinite(start) || !Number.isFinite(end) ||
+        new Date(start).toISOString().slice(0, 10) !== row.date ||
+        new Date(end).toISOString().slice(0, 10) !== next.date) return [];
+      return [{ ...next, previousDate: row.date, daysBetween: (end - start) / 86400000 }];
+    }).filter((interval, index, intervals) => intervals.findIndex((other) =>
+      other.patientId === interval.patientId && other.previousDate === interval.previousDate) === index);
     const patientIds = new Set(modeRows.map((row) => row.patientId));
-    const returnedPatientIds = new Set(
-      modeRows
-        .filter((row) => rows.some((later) => later.patientId === row.patientId && later.date > row.date))
-        .map((row) => row.patientId)
-    );
-    return { label, rows: modeRows, patients: patientIds.size, visits: modeRows.length, returnedPatients: returnedPatientIds.size, rate: percent(returnedPatientIds.size, patientIds.size) };
+    const patientReturns = [...patientIds].map((patientId) => {
+      const first = modeRows.filter(row => row.patientId === patientId)
+        .sort((a, b) => a.date.localeCompare(b.date))[0];
+      const returnCount = new Set(rows.filter(row => row.patientId === patientId && row.date > first.date)
+        .map(row => row.date)).size;
+      return { ...first, returnCount };
+    });
+    const returnedPatients = patientReturns.filter(row => row.returnCount > 0).length;
+    const returnBreakdown = [1, 2, 3, 4].map(count => ({
+      label: count === 4 ? '4+ return visits' : `${count} return visit${count === 1 ? '' : 's'}`,
+      rows: patientReturns.filter(row => count === 4 ? row.returnCount >= 4 : row.returnCount === count),
+    }));
+    return { label, rows: modeRows, patients: patientIds.size, visits: modeRows.length, returnedPatients, returnBreakdown, rate: percent(returnedPatients, patientIds.size), visitIntervals,
+      averageDaysBetweenVisits: visitIntervals.length ? Math.round(visitIntervals.reduce((sum, row) => sum + row.daysBetween, 0) / visitIntervals.length * 10) / 10 : '—' };
   });
   const generalAnalyticsRows = analyticsRows.filter((row) => ["general", "both"].includes(row.visitType));
   const refillAnalyticsRows = analyticsRows

@@ -7,6 +7,44 @@ import { buildClinicalResearchStats } from './lib/clinicalResearchStats.js';
 const visit = (id, clinicDate, extra = {}) => ({ id, clinicDate, visitType: 'general', status: 'done', createdAt: `${clinicDate}T17:00:00Z`, undergradCompletedAt: `${clinicDate}T17:10:00Z`, visitCompletedAt: `${clinicDate}T18:00:00Z`, ...extra });
 const report = (encounters, patient = {}, start = '2026-01-01') => buildResearchReport([{ id: 'p1', ...patient, encounters }], start, '2026-09-03');
 
+test('transportation return buckets count unique patients and distinct later general dates', () => {
+  const patients = [0, 1, 2, 3, 4, 5].map(count => ({ id: `p${count}`, encounters: [
+    visit(`first-${count}`, '2026-01-01', { transportation: 'Bus' }),
+    visit(`duplicate-${count}`, '2026-01-01', { transportation: 'Bus' }),
+    ...Array.from({ length: count }, (_, index) => visit(`return-${count}-${index}`, `2026-02-0${index + 1}`, { transportation: 'Car' })),
+    visit(`refill-${count}`, '2026-03-01', { visitType: 'refill_only' }),
+    visit(`cancel-${count}`, '2026-03-02', { status: 'cancelled' }),
+    visit(`specialty-${count}`, '2026-03-03', { visitType: 'specialty_only' }),
+  ] }));
+  const result = buildResearchReport(patients, '2026-01-01', '2026-09-03');
+  const bus = result.transportationReturnStats.find(mode => mode.label === 'Bus');
+  assert.equal(bus.patients, 6);
+  assert.equal(bus.returnedPatients, 5);
+  assert.deepEqual(bus.returnBreakdown.map(bucket => bucket.rows.length), [1, 1, 1, 2]);
+  assert.deepEqual(bus.returnBreakdown[3].rows.map(row => row.returnCount), [4, 5]);
+});
+
+test('transportation averages consecutive general dates by earlier mode and excludes ineligible visits', () => {
+  const result = report([
+    visit('before', '2025-12-20', { transportation: 'Bus' }),
+    visit('a', '2026-01-01', { transportation: 'Bus' }),
+    visit('duplicate', '2026-01-01', { transportation: 'Bus' }),
+    visit('refill', '2026-01-03', { visitType: 'refill_only' }),
+    visit('specialty', '2026-01-04', { visitType: 'specialty_only' }),
+    visit('cancelled', '2026-01-05', { status: 'cancelled' }),
+    visit('b', '2026-01-11', { transportation: 'Car' }),
+    visit('c', '2026-01-31', { transportation: 'Bus' }),
+    visit('d', '2026-03-02', { transportation: 'Car' }),
+  ]);
+  const bus = result.transportationReturnStats.find(mode => mode.label === 'Bus');
+  const car = result.transportationReturnStats.find(mode => mode.label === 'Car');
+  assert.equal(bus.averageDaysBetweenVisits, 20);
+  assert.deepEqual(bus.visitIntervals.map(row => row.daysBetween), [10, 30]);
+  assert.equal(car.averageDaysBetweenVisits, 20);
+  const single = report([visit('only', '2026-01-01', { transportation: 'Walk' })]);
+  assert.equal(single.transportationReturnStats[0].averageDaysBetweenVisits, '—');
+});
+
 test('refills and specialty visits cannot contribute to general research or return history', () => {
   const result = report([
     visit('r', '2026-01-01', { visitType: undefined, intake_data: { visit_type: 'refill_only', htn: true }, pharmacyPickedUpAt: '2026-01-01T17:25:00Z', transportation: 'Refill transport', spanishSpeaking: true }),
