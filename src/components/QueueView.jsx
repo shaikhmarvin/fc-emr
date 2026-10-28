@@ -30,6 +30,7 @@ export default function QueueView({
   activeUpperLevels,
   ROOM_OPTIONS,
   onAssignFromQueue,
+  onMarkLwobs,
   onMarkMedicationsReady,
   onMarkPatientSentToPharmacy,
   onClearPharmacyStatus,
@@ -81,6 +82,7 @@ export default function QueueView({
   const [directApproveBusyId, setDirectApproveBusyId] = useState(null);
   const [deleteRefillBusyId, setDeleteRefillBusyId] = useState(null);
   const [assignmentBusyId, setAssignmentBusyId] = useState(null);
+  const [lwobsBusyId, setLwobsBusyId] = useState(null);
   const [completingSocialWorkNoteId, setCompletingSocialWorkNoteId] = useState(null);
   const refillPrintStorageKey = `pharmacy-refill-print:${selectedClinicDate || "undated"}`;
   const [lastRefillPrintAt, setLastRefillPrintAt] = useState(() => {
@@ -98,6 +100,30 @@ export default function QueueView({
       setLastRefillPrintAt("");
     }
   }, [refillPrintStorageKey]);
+
+  function lwobsButton(patient, encounter) {
+    if (queueMode !== "general" || userRole !== "leadership" || !onMarkLwobs ||
+      encounter.status === "cancelled" || isGeneralVisitComplete(encounter)) return null;
+    return (
+      <button
+        type="button"
+        disabled={lwobsBusyId !== null}
+        onClick={async () => {
+          if (lwobsBusyId !== null) return;
+          setLwobsBusyId(encounter.id);
+          try {
+            await onMarkLwobs(patient.id, encounter.id);
+          } finally {
+            setLwobsBusyId(null);
+          }
+        }}
+        title="Left without being seen"
+        className="min-h-[40px] rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-800 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {lwobsBusyId === encounter.id ? "Saving..." : "LWOBS"}
+      </button>
+    );
+  }
 
   function getDraftSocialWorkNote(patient) {
     return (patient?.socialWorkNotes || []).find((note) => note.status === "draft") || null;
@@ -1995,6 +2021,7 @@ const canMarkSeenBySocialWork =
                     >
                       {assignmentBusyId === encounter.id ? "Assigning..." : "Assign / Start"}
                     </button>
+                    {lwobsButton(patient, encounter)}
                   </div>
                 )}
               </div>
@@ -2059,6 +2086,7 @@ const canMarkSeenBySocialWork =
                   <p className="text-xs font-medium text-slate-800">
                     Student: {encounter.assignedStudent || "—"} • Upper: {encounter.assignedUpperLevel || "—"}
                   </p>
+                  <div>{lwobsButton(patient, encounter)}</div>
 
                   <div className="flex flex-wrap gap-2">
                     {dualVisitBadge(encounter)}

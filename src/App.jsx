@@ -5053,6 +5053,30 @@ export default function App() {
       .sort(sortRowsByDailyNumberThenTime);
   }, [allEncounterRows, selectedClinicDate, userRole, isLeadershipView]);
 
+  async function markQueuePatientLwobs(patientId, encounterId) {
+    if (userRole !== "leadership") return;
+    const patient = patients.find((entry) => entry.id === patientId);
+    const encounter = patient?.encounters.find((entry) => entry.id === encounterId);
+    if (!encounter || encounter.status === "cancelled") return;
+
+    const confirmed = window.confirm(
+      `Mark ${getPatientBoardName(patient)} as LWOBS (left without being seen)? This will cancel this encounter and remove the patient from the queue. The patient chart will be retained.`
+    );
+    if (!confirmed) return;
+
+    try {
+      const cancelledAt = new Date().toISOString();
+      await updateEncounterInSupabase(encounterId, { status: "cancelled", cancelledAt });
+      setPatients((prev) => prev.map((entry) => entry.id === patientId
+        ? { ...entry, encounters: entry.encounters.map((visit) => visit.id === encounterId
+          ? { ...visit, status: "cancelled", cancelledAt } : visit) }
+        : entry));
+    } catch (error) {
+      console.error("Failed to mark patient LWOBS:", error);
+      alert(`Failed to mark patient LWOBS: ${error.message}`);
+    }
+  }
+
   async function removeFromRegistration(patientId, encounterId) {
     const confirmed = window.confirm(
       "Remove this patient from registration? This will mark the encounter as cancelled."
@@ -11854,6 +11878,7 @@ async function markSeenBySocialWork(encounterId) {
               activeUpperLevels={activeUpperLevels}
               ROOM_OPTIONS={roomDropdownOptions}
               onAssignFromQueue={assignEncounterFromQueue}
+              onMarkLwobs={markQueuePatientLwobs}
               onMarkMedicationsReady={markMedicationsReady}
               onMarkPatientSentToPharmacy={markPatientSentToPharmacy}
               onClearPharmacyStatus={clearPharmacyStatus}
