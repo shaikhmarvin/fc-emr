@@ -1148,7 +1148,7 @@ export default function ChartView({
     },
     core: {
       bloodGlucose: "",
-      a1c: "",
+      a1c: "<5.7%",
       hiv: "",
     },
     microalbumin: {
@@ -1207,6 +1207,10 @@ export default function ChartView({
 
     const numeric = parseNumeric(text);
     if (numeric === null) return "";
+
+    if (sectionKey === "core" && fieldKey === "a1c") {
+      return numeric >= 5.7 ? "H" : "";
+    }
 
     if (sectionKey === "istat") {
       switch (fieldKey) {

@@ -122,7 +122,7 @@ const IN_HOUSE_LAB_EXPORT_CONFIG = [
   { section: "iSTAT", sectionKey: "istat", fieldKey: "anGap", label: "AnGap", reference: "", type: "text" },
 
   { section: "Core", sectionKey: "core", fieldKey: "bloodGlucose", label: "Blood Glucose", reference: "", type: "text" },
-  { section: "Core", sectionKey: "core", fieldKey: "a1c", label: "HbA1C", reference: "", type: "text" },
+  { section: "Core", sectionKey: "core", fieldKey: "a1c", label: "HbA1C", reference: "<5.7%", type: "numeric", high: 5.7 },
   { section: "Core", sectionKey: "core", fieldKey: "hiv", label: "HIV", reference: "", type: "categorical" },
 
   { section: "Microalbumin / Creatinine", sectionKey: "microalbumin", fieldKey: "albumin", label: "Albumin", reference: "", type: "text" },
@@ -211,7 +211,7 @@ function inHouseLabRows(encounter) {
       config.label,
       displayValue,
       normalizeText(automaticInHouseFlag(config, rawValue, entry.flag)),
-      normalizeText(entry.referenceRange || config.reference),
+      normalizeText(config.fieldKey === "a1c" ? config.reference : entry.referenceRange || config.reference),
     ]);
   });
 
