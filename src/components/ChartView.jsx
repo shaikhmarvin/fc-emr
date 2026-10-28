@@ -4,7 +4,7 @@ import HistoricalLabEntry from "./HistoricalLabEntry.jsx";
 import { labDateForTrend } from "../lib/labTrends.js";
 import { findLabByKey, findLabByAlias } from "../lib/labCatalog.js";
 import { importedLabFlag } from "../lib/labFlags.js";
-import { existingOphthoVisit } from "../utils/ophthalmology.js";
+import { existingOphthoVisit, isOphthoEncounter } from "../utils/ophthalmology.js";
 import { getStatusClasses, getStatusLabel } from "../utils";
 import { useEffect, useMemo, useState } from "react";
 import OphthalmologySoapForm from "./OphthalmologySoapForm";
@@ -1424,7 +1424,7 @@ export default function ChartView({
   const importedSendOutLabs = Array.isArray(selectedEncounter?.importedSendOutLabs)
     ? selectedEncounter.importedSendOutLabs
     : [];
-  const isOphtho = selectedEncounter?.noteType === "ophthalmology" || selectedEncounter?.specialtyType === "ophthalmology";
+  const isOphtho = isOphthoEncounter(selectedEncounter);
   const isSoapLocked = selectedEncounter?.soapStatus === "signed" || (isOphtho && (!canUseOphtho || selectedEncounter?.soapStatus === "completed"));
   const isSupportDataLocked = false;
   const clinicAlert = getClinicAlert(new Date());
@@ -1836,7 +1836,7 @@ function getSelectedRoomOptionClass() {
           </button>
         ) : null}
 
-        {canUseOphtho && !existingOphthoVisit(selectedPatient) && <button type="button" onClick={() => onStartGroupNote?.("ophthalmology")} className="rounded-lg bg-violet-600 px-4 py-2 text-white">Start Ophtho Visit</button>}
+        {canUseOphtho && !isOphtho && !existingOphthoVisit(selectedPatient) && <button type="button" onClick={() => onStartGroupNote?.("ophthalmology")} className="rounded-lg bg-violet-600 px-4 py-2 text-white">Start Ophtho Visit</button>}
         {canCreatePhysicalTherapyNote ? (
           <button
             type="button"
