@@ -62,7 +62,7 @@ test('leadership completion interval starts at registration, including daily sum
     undergradCompletedAt: '2026-01-01T12:10:00Z',
     leadershipIntakeCompletedAt: '2026-01-01T12:30:00Z',
   })] }]);
-  assert.equal(data.stages[1].label, 'Registration → leadership complete');
+  assert.equal(data.stages[1].label, 'Patient Checked In → Leadership Registration Complete');
   assert.equal(data.stages[1].median, 30);
   assert.equal(data.daily[0].stages[1].median, 30);
   assert.match(data.stages[1].rows[0].researchSource, /12:00:00Z/);

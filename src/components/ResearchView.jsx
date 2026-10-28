@@ -1,3 +1,5 @@
+import { fetchAttendingArrivals } from "../api/clinicStaffRoster.js";
+import { supabase } from "../lib/supabase";
 import ResearchCalculations from "./ResearchCalculations.jsx";
 import ClinicalResearchStats from "./ClinicalResearchStats.jsx";
 import ResearchDetailSort from "./ResearchDetailSort.jsx";
@@ -60,7 +62,26 @@ export default function ResearchView({ patients = [], womensHealthEventDate = ""
     };
   }, [drilldown]);
 
-  const report = useMemo(() => buildResearchReport(patients, startDate, endDate, clinicEvent, womensHealthEventDate), [patients, startDate, endDate, clinicEvent, womensHealthEventDate]);
+  const [attendingArrivals, setAttendingArrivals] = useState({});
+  const [arrivalError, setArrivalError] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    async function loadArrivals() {
+      try {
+        const arrivals = await fetchAttendingArrivals(startDate, endDate);
+        if (!cancelled) { setAttendingArrivals(arrivals); setArrivalError(""); }
+      } catch (error) {
+        if (!cancelled) { setAttendingArrivals({}); setArrivalError("Attending arrival times could not be loaded. Student timing is using recorded assignment times."); }
+        console.error("Failed to load attending arrivals:", error);
+      }
+    }
+    loadArrivals();
+    const channel = supabase.channel("research-attending-arrivals")
+      .on("postgres_changes", { event: "*", schema: "public", table: "clinic_staff_roster" }, loadArrivals).subscribe();
+    return () => { cancelled = true; supabase.removeChannel(channel); };
+  }, [startDate, endDate]);
+
+  const report = useMemo(() => buildResearchReport(patients, startDate, endDate, clinicEvent, womensHealthEventDate, attendingArrivals), [patients, startDate, endDate, clinicEvent, womensHealthEventDate, attendingArrivals]);
 
   function showRows(title, sourceRows, recordedField = "Encounter included") {
     setDrilldown({
@@ -193,7 +214,7 @@ export default function ResearchView({ patients = [], womensHealthEventDate = ""
           <p className="mt-1 text-sm text-slate-600">Recorded language indicators, visit duration, and transportation patterns for general-clinic visits.</p>
           <div className="rounded-xl border border-slate-200 p-4">
             <h3 className="font-semibold text-slate-900">Language and average visit time</h3>
-            <p className="mt-1 text-xs text-slate-500">General clinic only: undergrad complete → visit completion.</p>
+            <p className="mt-1 text-xs text-slate-500">General clinic only: Undergrad Registration Complete → Visit Complete.</p>
             <div className="mt-3 space-y-2">{!report.languageStats.length && <p className="text-sm text-slate-500">No general-clinic visits in this date range.</p>}{report.languageStats.map(([label, count, avgMinutes]) => <button type="button" key={label} onClick={() => showTiming(`${label} general-clinic visit times`, report.rows.filter((row) => row.language === label), "undergradCompletedAt")} className="grid w-full grid-cols-1 gap-1 rounded-lg px-1 py-2 text-left text-sm hover:bg-blue-50 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:gap-3"><span className="break-words text-slate-600">{label}</span><span className="font-semibold text-slate-900">{count} <span className="font-normal text-slate-400">({percent(count, report.rows.length)})</span></span><span className="font-semibold text-blue-700 sm:min-w-20 sm:text-right">{avgMinutes === "—" ? "—" : `${avgMinutes} min avg`}</span></button>)}</div>
           </div>
           <div className="mt-6 min-w-0 rounded-xl border border-slate-200 p-4">
@@ -211,15 +232,15 @@ export default function ResearchView({ patients = [], womensHealthEventDate = ""
             <h3 className="font-semibold text-indigo-950">General vs. refill patient wait times</h3>
             <p className="mt-1 text-sm text-indigo-800">Kept separate so refill encounters never affect general-clinic averages.</p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <Metric label="General clinic average" value={report.flow.totalClinic === "—" ? "—" : `${report.flow.totalClinic} min`} helper={`Undergrad complete → visit completion · Range: ${report.flow.totalClinicRange}`} onClick={() => showTiming("General clinic wait-time data", report.generalAnalyticsRows, "undergradCompletedAt")} />
+              <Metric label="General clinic average" value={report.flow.totalClinic === "—" ? "—" : `${report.flow.totalClinic} min`} helper={`Undergrad Registration Complete → Visit Complete · Range: ${report.flow.totalClinicRange}`} onClick={() => showTiming("General clinic wait-time data", report.generalAnalyticsRows, "undergradCompletedAt")} />
               <Metric label="Refill patient average" value={report.refillFlow.refillPickup === "—" ? "—" : `${report.refillFlow.refillPickup} min`} helper={`${report.refillFlow.visits} refill encounter(s) · Range: ${report.refillFlow.refillPickupRange}`} onClick={() => showTiming("Refill wait-time data", report.refillAnalyticsRows, (encounter) => encounter.undergradCompletedAt || encounter.createdAt)} />
             </div>
           </div>
 
 </div>        <div className="mt-6 min-w-0">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">Clinic Flow Analytics</h2>
-            <p className="mt-1 text-sm text-slate-600">General-clinic workflow times across the selected period, followed by a clinic-date comparison.</p>
+            <h2 className="text-lg font-semibold text-slate-900">Clinic Flow Analytics</h2>{arrivalError && <p role="alert" className="text-sm text-amber-800">{arrivalError}</p>}
+            <p className="mt-1 text-sm text-slate-600">General-clinic workflow times across the selected period, followed by a clinic-date comparison. Patient Checked In is the recorded check-in time. Undergrad Registration Complete and Leadership Registration Complete mark the end of each registration step. Student Start Time is recorded when the first attending is saved on the room board when students are allowed to begin seeing patients. Dates without recorded arrival use the saved student assignment time.</p>
             <p className="mt-1 text-xs text-slate-500">Timing values must be between 1 minute and 8 hours. Values outside that range are marked Not calculable and excluded from averages and ranges.</p>
           </div>
           <div className="research-metrics mt-4">
@@ -227,11 +248,11 @@ export default function ResearchView({ patients = [], womensHealthEventDate = ""
             <Metric label="Completed visits" value={report.flow.completed} onClick={() => showRows("Completed general visits", report.generalAnalyticsRows.filter((row) => isComplete(row.encounter)), "Completed workflow status")} />
             <Metric label="LWOBS / cancelled" value={report.flow.cancelled} onClick={() => showRows("Cancelled general visits", report.generalAnalyticsRows.filter((row) => row.encounter.status === "cancelled"), "Cancelled status")} />
             <Metric label="Average total clinic time" value={report.flow.totalClinic === "—" ? "—" : `${report.flow.totalClinic} min`} helper={`Range: ${report.flow.totalClinicRange}`} onClick={() => showTiming("General total clinic time", report.generalAnalyticsRows, "undergradCompletedAt")} />
-            <Metric label="Started → undergrad complete" value={report.flow.startedToUndergrad === "—" ? "—" : `${report.flow.startedToUndergrad} min`} helper={`Range: ${report.flow.startedToUndergradRange}`} onClick={() => showTiming("Started to undergrad complete", report.generalAnalyticsRows, "createdAt", "undergradCompletedAt")} />
-            <Metric label="Started → leadership complete" value={report.flow.startedToLeadership === "—" ? "—" : `${report.flow.startedToLeadership} min`} helper={`Range: ${report.flow.startedToLeadershipRange}`} onClick={() => showTiming("Started to leadership complete", report.generalAnalyticsRows, "createdAt", "leadershipIntakeCompletedAt")} />
-            <Metric label="Leadership → student assigned" value={report.flow.leadershipToStudent === "—" ? "—" : `${report.flow.leadershipToStudent} min`} helper={`Range: ${report.flow.leadershipToStudentRange}`} onClick={() => showTiming("Leadership complete to student assigned", report.generalAnalyticsRows, "leadershipIntakeCompletedAt", "studentAssignedAt")} />
-            <Metric label="Student → upper-level assigned" value={report.flow.studentToUpper === "—" ? "—" : `${report.flow.studentToUpper} min`} helper={`Range: ${report.flow.studentToUpperRange}`} onClick={() => showTiming("Student to upper-level assigned", report.generalAnalyticsRows, "studentAssignedAt", "upperLevelAssignedAt")} />
-            <Metric label="Assigned → complete" value={report.flow.assignedToComplete === "—" ? "—" : `${report.flow.assignedToComplete} min`} helper={`Range: ${report.flow.assignedToCompleteRange}`} onClick={() => showTiming("Assigned to complete", report.generalAnalyticsRows, "studentAssignedAt")} />
+            <Metric label="Patient Checked In → Undergrad Registration Complete" value={report.flow.startedToUndergrad === "—" ? "—" : `${report.flow.startedToUndergrad} min`} helper={`Range: ${report.flow.startedToUndergradRange}`} onClick={() => showTiming("Patient Checked In to Undergrad Registration Complete", report.generalAnalyticsRows, "createdAt", "undergradCompletedAt")} />
+            <Metric label="Patient Checked In → Leadership Registration Complete" value={report.flow.startedToLeadership === "—" ? "—" : `${report.flow.startedToLeadership} min`} helper={`Range: ${report.flow.startedToLeadershipRange}`} onClick={() => showTiming("Patient Checked In to Leadership Registration Complete", report.generalAnalyticsRows, "createdAt", "leadershipIntakeCompletedAt")} />
+            <Metric label="Leadership Registration Complete → Student Start Time" value={report.flow.leadershipToStudent === "—" ? "—" : `${report.flow.leadershipToStudent} min`} helper={`Range: ${report.flow.leadershipToStudentRange}`} onClick={() => showTiming("Leadership Registration Complete to Student Start Time", report.generalAnalyticsRows, "leadershipIntakeCompletedAt", "studentStartAt")} />
+            <Metric label="Student Start Time → Upper-Level Assigned" value={report.flow.studentToUpper === "—" ? "—" : `${report.flow.studentToUpper} min`} helper={`Range: ${report.flow.studentToUpperRange}`} onClick={() => showTiming("Student Start Time to Upper-Level Assigned", report.generalAnalyticsRows, "studentStartAt", "upperLevelAssignedAt")} />
+            <Metric label="Student Start Time → Complete" value={report.flow.assignedToComplete === "—" ? "—" : `${report.flow.assignedToComplete} min`} helper={`Range: ${report.flow.assignedToCompleteRange}`} onClick={() => showTiming("Student Start Time to Complete", report.generalAnalyticsRows, "studentStartAt")} />
             <Metric label="Visit complete → pickup" value={report.flow.pharmacyDelay === "—" ? "—" : `${report.flow.pharmacyDelay} min`} helper={`Range: ${report.flow.pharmacyDelayRange}`} onClick={() => showTiming("Visit complete to medication pickup", report.generalAnalyticsRows, "visitCompletedAt", "pharmacyPickedUpAt")} />
           </div>
 
@@ -245,8 +266,8 @@ export default function ResearchView({ patients = [], womensHealthEventDate = ""
           </div>
           <div className="rounded-xl border border-slate-200">
             <table className="research-table">
-              <thead className="sticky top-0 bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-3 py-3">Clinic date</th><th className="px-3 py-3">Patients</th><th className="px-3 py-3">Complete</th><th className="px-3 py-3">LWOBS</th><th className="px-3 py-3">Total clinic</th><th className="px-3 py-3">Start → UG</th><th className="px-3 py-3">Start → leadership</th><th className="px-3 py-3">Leadership → assigned</th><th className="px-3 py-3">Assigned → complete</th></tr></thead>
-              <tbody className="divide-y divide-slate-200">{report.dailyFlow.slice(dailyPage * 10, (dailyPage + 1) * 10).map((day) => <tr key={day.date} onClick={() => showRows(`General clinic encounters: ${day.date}`, report.generalAnalyticsRows.filter((row) => row.date === day.date))} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.currentTarget.click(); } }} className="cursor-pointer hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"><td data-label="Clinic date" className="whitespace-nowrap px-3 py-3 font-semibold text-slate-900">{day.date}</td><td data-label="Patients" className="px-3 py-3">{day.patients}</td><td data-label="Complete" className="px-3 py-3">{day.completed}</td><td data-label="LWOBS" className="px-3 py-3">{day.cancelled}</td><td data-label="Total clinic" className="px-3 py-3">{day.totalClinic === "—" ? "—" : `${day.totalClinic}m`}</td><td data-label="Start → UG" className="px-3 py-3">{day.startedToUndergrad === "—" ? "—" : `${day.startedToUndergrad}m`}</td><td data-label="Start → leadership" className="px-3 py-3">{day.startedToLeadership === "—" ? "—" : `${day.startedToLeadership}m`}</td><td data-label="Leadership → assigned" className="px-3 py-3">{day.leadershipToStudent === "—" ? "—" : `${day.leadershipToStudent}m`}</td><td data-label="Assigned → complete" className="px-3 py-3">{day.assignedToComplete === "—" ? "—" : `${day.assignedToComplete}m`}</td></tr>)}</tbody>
+              <thead className="sticky top-0 bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-3 py-3">Clinic date</th><th className="px-3 py-3">Student Start Time</th><th className="px-3 py-3">Patients</th><th className="px-3 py-3">Complete</th><th className="px-3 py-3">LWOBS</th><th className="px-3 py-3">Total clinic</th><th className="px-3 py-3">Patient Checked In → Undergrad Registration Complete</th><th className="px-3 py-3">Patient Checked In → Leadership Registration Complete</th><th className="px-3 py-3">Leadership Registration Complete → Student Start Time</th><th className="px-3 py-3">Student Start Time → Complete</th></tr></thead>
+              <tbody className="divide-y divide-slate-200">{report.dailyFlow.slice(dailyPage * 10, (dailyPage + 1) * 10).map((day) => <tr key={day.date} onClick={() => showRows(`General clinic encounters: ${day.date}`, report.generalAnalyticsRows.filter((row) => row.date === day.date))} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.currentTarget.click(); } }} className="cursor-pointer hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"><td data-label="Clinic date" className="whitespace-nowrap px-3 py-3 font-semibold text-slate-900">{day.date}</td><td data-label="Student Start Time" className="px-3 py-3">{attendingArrivals[day.date] ? new Date(attendingArrivals[day.date]).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" }) : "—"}</td><td data-label="Patients" className="px-3 py-3">{day.patients}</td><td data-label="Complete" className="px-3 py-3">{day.completed}</td><td data-label="LWOBS" className="px-3 py-3">{day.cancelled}</td><td data-label="Total clinic" className="px-3 py-3">{day.totalClinic === "—" ? "—" : `${day.totalClinic}m`}</td><td data-label="Patient Checked In → Undergrad Registration Complete" className="px-3 py-3">{day.startedToUndergrad === "—" ? "—" : `${day.startedToUndergrad}m`}</td><td data-label="Patient Checked In → Leadership Registration Complete" className="px-3 py-3">{day.startedToLeadership === "—" ? "—" : `${day.startedToLeadership}m`}</td><td data-label="Leadership Registration Complete → Student Start Time" className="px-3 py-3">{day.leadershipToStudent === "—" ? "—" : `${day.leadershipToStudent}m`}</td><td data-label="Student Start Time → Complete" className="px-3 py-3">{day.assignedToComplete === "—" ? "—" : `${day.assignedToComplete}m`}</td></tr>)}</tbody>
             </table>
           </div>
         </div>

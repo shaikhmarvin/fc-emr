@@ -7,6 +7,26 @@ import { buildClinicalResearchStats } from './lib/clinicalResearchStats.js';
 const visit = (id, clinicDate, extra = {}) => ({ id, clinicDate, visitType: 'general', status: 'done', createdAt: `${clinicDate}T17:00:00Z`, undergradCompletedAt: `${clinicDate}T17:10:00Z`, visitCompletedAt: `${clinicDate}T18:00:00Z`, ...extra });
 const report = (encounters, patient = {}, start = '2026-01-01') => buildResearchReport([{ id: 'p1', ...patient, encounters }], start, '2026-09-03');
 
+test('attending arrival anchors student timing without overwriting actual assignment or other dates', () => {
+  const encounter = visit('arrival-day', '2026-01-01', {
+    leadershipIntakeCompletedAt: '2026-01-01T17:15:00Z',
+    studentAssignedAt: '2026-01-01T17:40:00Z',
+    upperLevelAssignedAt: '2026-01-01T17:50:00Z',
+  });
+  const patients = [{ id: 'p1', encounters: [encounter] }];
+  const result = buildResearchReport(patients, '2026-01-01', '2026-09-03', '', '', { '2026-01-01': '2026-01-01T17:20:00Z' });
+  assert.equal(result.flow.leadershipToStudent, 5);
+  assert.equal(result.flow.studentToUpper, 30);
+  assert.equal(result.flow.assignedToComplete, 40);
+  assert.equal(result.dailyFlow[0].assignedToComplete, 40);
+  assert.equal(result.generalAnalyticsRows[0].encounter.studentAssignedAt, '2026-01-01T17:40:00Z');
+  assert.equal(encounter.studentStartAt, undefined);
+  assert.equal(buildResearchReport(patients, '2026-01-01', '2026-09-03').flow.assignedToComplete, 20);
+  assert.equal(buildResearchReport(patients, '2026-01-01', '2026-09-03', '', '', { '2026-01-02': '2026-01-02T17:20:00Z' }).flow.assignedToComplete, 20);
+  const stages = buildResearchStudies(result, '2026-09-03').stages;
+  assert.equal(stages.find(stage => stage.label === 'Student Start Time → Upper-Level Assigned').median, 30);
+});
+
 test('transportation return buckets count unique patients and distinct later general dates', () => {
   const patients = [0, 1, 2, 3, 4, 5].map(count => ({ id: `p${count}`, encounters: [
     visit(`first-${count}`, '2026-01-01', { transportation: 'Bus' }),

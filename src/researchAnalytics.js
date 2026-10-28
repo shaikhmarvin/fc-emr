@@ -77,7 +77,7 @@ function flowMetrics(rows) {
   const refills = rows.filter(({ encounter }) => getEncounterVisitTypeKey(encounter) === "refill_only");
   const averageBetween = (source, start, end) => average(source.map(({ encounter }) => minutesBetween(encounter?.[start], encounter?.[end])));
   const rangeBetween = (source, start, end) => minuteRange(source.map(({ encounter }) => minutesBetween(encounter?.[start], encounter?.[end])));
-  const assignedToCompleteValues = general.map(({ encounter }) => minutesBetween(encounter.studentAssignedAt, completionTime(encounter)));
+  const assignedToCompleteValues = general.map(({ encounter }) => minutesBetween(encounter.studentStartAt, completionTime(encounter)));
   const totalClinicValues = general.map(({ encounter }) => minutesBetween(encounter.undergradCompletedAt, completionTime(encounter)));
   const refillPickupValues = refills.map(({ encounter }) => minutesBetween(encounter.undergradCompletedAt || encounter.createdAt, completionTime(encounter)));
   const pharmacyDelayValues = general.map(({ encounter }) => minutesBetween(encounter.visitCompletedAt, encounter.pharmacyPickedUpAt));
@@ -90,10 +90,10 @@ function flowMetrics(rows) {
     startedToUndergradRange: rangeBetween(general, "createdAt", "undergradCompletedAt"),
     startedToLeadership: averageBetween(general, "createdAt", "leadershipIntakeCompletedAt"),
     startedToLeadershipRange: rangeBetween(general, "createdAt", "leadershipIntakeCompletedAt"),
-    leadershipToStudent: averageBetween(general, "leadershipIntakeCompletedAt", "studentAssignedAt"),
-    leadershipToStudentRange: rangeBetween(general, "leadershipIntakeCompletedAt", "studentAssignedAt"),
-    studentToUpper: averageBetween(general, "studentAssignedAt", "upperLevelAssignedAt"),
-    studentToUpperRange: rangeBetween(general, "studentAssignedAt", "upperLevelAssignedAt"),
+    leadershipToStudent: averageBetween(general, "leadershipIntakeCompletedAt", "studentStartAt"),
+    leadershipToStudentRange: rangeBetween(general, "leadershipIntakeCompletedAt", "studentStartAt"),
+    studentToUpper: averageBetween(general, "studentStartAt", "upperLevelAssignedAt"),
+    studentToUpperRange: rangeBetween(general, "studentStartAt", "upperLevelAssignedAt"),
     assignedToComplete: average(assignedToCompleteValues),
     assignedToCompleteRange: minuteRange(assignedToCompleteValues),
     totalClinic: average(totalClinicValues),
@@ -144,9 +144,14 @@ function buildPharmacyGroups(rows) {
   });
 }
 
-export function buildResearchReport(patients, startDate, endDate, clinicEvent = "", eventDate = "") {
+export function buildResearchReport(patients, startDate, endDate, clinicEvent = "", eventDate = "", attendingArrivals = {}) {
   // Current eligibility applies to all tracker data, including historical visits.
   patients = patientsForClinicEvent(patients.filter(patient => !patient.fired), clinicEvent, eventDate);
+  patients = patients.map(patient => ({ ...patient, encounters: (patient.encounters || []).map(encounter => ({
+    ...encounter,
+    attendingArrivedAt: attendingArrivals[normalizeDate(encounter.clinicDate)] || null,
+    studentStartAt: attendingArrivals[normalizeDate(encounter.clinicDate)] || encounter.studentAssignedAt || encounter.student_assigned_at || null,
+  })) }));
   const chronicByPatient = new Map();
   patients.forEach((patient) => {
     const encounters = (patient.encounters || []).filter((encounter) => isGeneralClinicEncounter(encounter) && encounter.status !== "cancelled" && normalizeDate(encounter.clinicDate) && (!endDate || normalizeDate(encounter.clinicDate) <= endDate));

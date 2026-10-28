@@ -7,14 +7,15 @@ function dayNumber(date) {
 }
 
 function timestamp(encounter, key) {
+  if (key === 'studentStartAt') return encounter.studentStartAt || encounter.studentAssignedAt || encounter.student_assigned_at;
   return encounter[key] || encounter[key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)];
 }
 
 export const workflowStages = [
-  ['Registration → undergrad complete', 'createdAt', 'undergradCompletedAt'],
-  ['Registration → leadership complete', 'createdAt', 'leadershipIntakeCompletedAt'],
-  ['Leadership → student assigned', 'leadershipIntakeCompletedAt', 'studentAssignedAt'],
-  ['Student → upper-level assigned', 'studentAssignedAt', 'upperLevelAssignedAt'],
+  ['Patient Checked In → Undergrad Registration Complete', 'createdAt', 'undergradCompletedAt'],
+  ['Patient Checked In → Leadership Registration Complete', 'createdAt', 'leadershipIntakeCompletedAt'],
+  ['Leadership Registration Complete → Student Start Time', 'leadershipIntakeCompletedAt', 'studentStartAt'],
+  ['Student Start Time → Upper-Level Assigned', 'studentStartAt', 'upperLevelAssignedAt'],
   ['Upper-level → visit complete', 'upperLevelAssignedAt', encounter => timestamp(encounter, 'visitCompletedAt') || timestamp(encounter, 'doneAt')],
   ['Visit complete → medication pickup', 'visitCompletedAt', 'pharmacyPickedUpAt'],
 ];

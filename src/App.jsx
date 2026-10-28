@@ -5188,10 +5188,11 @@ export default function App() {
 
   async function handleSaveTodayStaffRoster(nextRoster = todayStaffRoster) {
     try {
-      await saveStaffRoster(boardClinicDate, nextRoster);
+      const savedRoster = await saveStaffRoster(boardClinicDate, nextRoster);
+      setTodayStaffRoster((current) => ({ ...current, attendingArrivedAt: savedRoster.attendingArrivedAt }));
     } catch (error) {
       console.error("Failed to save staff roster:", error);
-      showToast?.("Unable to save staff roster.", "error");
+      showToast({ title: "Unable to save staff roster", message: error.message, type: "error" });
     }
   }
 

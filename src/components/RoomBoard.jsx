@@ -211,6 +211,12 @@ export default function RoomBoard({
 
       {isLeadershipView && (
         <div className="rounded-2xl bg-white p-3 shadow">
+          <p className="mb-3 text-sm font-semibold text-slate-800">
+            Attending arrival time: {todayStaffRoster?.attendingArrivedAt
+              ? new Date(todayStaffRoster.attendingArrivedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" })
+              : "Not recorded"}
+            <span className="ml-2 text-xs font-normal text-slate-500">Recorded when the first attending is saved. Used as the student start time.</span>
+          </p>
           <div className="grid grid-cols-1 gap-2 lg:grid-cols-3">
             {[
               { key: "attendings", label: "Attendings here today", placeholder: "Dr. Prabhu, Dr. Bennett" },

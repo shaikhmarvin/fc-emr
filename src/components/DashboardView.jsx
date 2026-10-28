@@ -1,7 +1,9 @@
 import { downloadCompletedRecordsPdf, printCompletedRecordsPdf } from "../utils/pdfGenerator.js";
 import { isWomensHealthEncounter } from "../utils/clinicEvents.js";
 import { isCompletedRecordForExport, RECORD_TYPE_OPTIONS, filterRecordTypes } from "../utils/completedRecords.js";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { fetchAttendingArrivals } from "../api/clinicStaffRoster.js";
+import { supabase } from "../lib/supabase";
 import PatientSearch from "./PatientSearch";
 import PatientTable from "./PatientTable";
 import logo from "../assets/free-clinic-logo.png";
@@ -106,6 +108,25 @@ export default function DashboardView({
   const [visitTypeFilter, setVisitTypeFilter] = useState("all");
 
   const [showAnalytics, setShowAnalytics] = useState(false);
+  const [attendingArrivals, setAttendingArrivals] = useState({});
+  const [arrivalError, setArrivalError] = useState("");
+  useEffect(() => {
+    if (!showAnalytics || !canViewAnalytics) return;
+    let cancelled = false;
+    async function loadArrivals() {
+      try {
+        const arrivals = await fetchAttendingArrivals(selectedClinicDate, selectedClinicDate);
+        if (!cancelled) { setAttendingArrivals(arrivals); setArrivalError(""); }
+      } catch (error) {
+        if (!cancelled) { setAttendingArrivals({}); setArrivalError("Student Start Time could not be loaded. Timing uses recorded student assignment times."); }
+        console.error("Failed to load attending arrivals:", error);
+      }
+    }
+    loadArrivals();
+    const channel = supabase.channel("dashboard-attending-arrivals")
+      .on("postgres_changes", { event: "*", schema: "public", table: "clinic_staff_roster" }, loadArrivals).subscribe();
+    return () => { cancelled = true; supabase.removeChannel(channel); };
+  }, [showAnalytics, canViewAnalytics, selectedClinicDate]);
 
   const [showFinalizeReview, setShowFinalizeReview] = useState(false);
 
@@ -470,7 +491,10 @@ export default function DashboardView({
   const canOpenAnalyticsForSelectedDate =
     Boolean(selectedClinicDate) && finalizeCandidateRows.length === 0;
 
-  const analyticsRows = showAnalytics ? getAnalyticsRows() : [];
+  const analyticsRows = showAnalytics ? getAnalyticsRows().map(row => ({ ...row, encounter: {
+    ...row.encounter,
+    studentStartAt: attendingArrivals[String(row.encounter.clinicDate || "").slice(0, 10)] || row.encounter.studentAssignedAt || row.encounter.student_assigned_at || null,
+  } })) : [];
 
   const generalAnalyticsRows = showAnalytics
     ? analyticsRows.filter(({ encounter }) => isGeneralClinicEncounter(encounter))
@@ -516,20 +540,20 @@ export default function DashboardView({
     ? getAverageFor(
       generalAnalyticsRows,
       "leadershipIntakeCompletedAt",
-      "studentAssignedAt"
+      "studentStartAt"
     )
     : null;
 
   const avgAssignedToUpperLevelAssigned = showAnalytics
-    ? getAverageFor(generalAnalyticsRows, "studentAssignedAt", "upperLevelAssignedAt")
+    ? getAverageFor(generalAnalyticsRows, "studentStartAt", "upperLevelAssignedAt")
     : null;
 
   const avgUpperLevelAssignedToComplete = showAnalytics
     ? getAverageToCompletion(generalAnalyticsRows, "upperLevelAssignedAt")
     : null;
 
-  const avgGeneralAssignedToComplete = showAnalytics
-    ? getAverageToCompletion(generalAnalyticsRows, "studentAssignedAt")
+  const avgStudentStartToComplete = showAnalytics
+    ? getAverageToCompletion(generalAnalyticsRows, "studentStartAt")
     : null;
 
   const avgRefillOnlyCheckInToPickup = showAnalytics
@@ -789,19 +813,19 @@ export default function DashboardView({
                   subtext="General clinic: undergrad complete → visit complete or meds picked up"
                 />
                 <AnalyticsMetric
-                  label="Started → Undergrad Complete"
+                  label="Patient Checked In → Undergrad Registration Complete"
                   value={formatMinutes(avgUndergradIntakeToUndergradComplete)}
                 />
                 <AnalyticsMetric
-                  label="Started → Leadership Complete"
+                  label="Patient Checked In → Leadership Registration Complete"
                   value={formatMinutes(avgUndergradIntakeToLeadershipComplete)}
                 />
                 <AnalyticsMetric
-                  label="Leadership Complete → Student Assigned"
+                  label="Leadership Registration Complete → Student Start Time"
                   value={formatMinutes(avgLeadershipCompleteToStudentAssigned)}
                 />
                 <AnalyticsMetric
-                  label="Assigned → Upper-Level Assigned"
+                  label="Student Start Time → Upper-Level Assigned"
                   value={formatMinutes(avgAssignedToUpperLevelAssigned)}
                 />
                 <AnalyticsMetric
@@ -809,9 +833,9 @@ export default function DashboardView({
                   value={formatMinutes(avgUpperLevelAssignedToComplete)}
                 />
                 <AnalyticsMetric
-                  label="Assigned → Complete"
-                  value={formatMinutes(avgGeneralAssignedToComplete)}
-                  subtext="General clinic total visit time"
+                  label="Student Start Time → Complete"
+                  value={formatMinutes(avgStudentStartToComplete)}
+                  subtext={arrivalError || "First attending arrival → completion. Dates without arrival use recorded student assignment time."}
                 />
                 <AnalyticsMetric
                   label="Refill Check-In → Meds Picked Up"
