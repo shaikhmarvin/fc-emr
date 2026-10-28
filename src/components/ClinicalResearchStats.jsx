@@ -16,45 +16,47 @@ export default function ClinicalResearchStats({ groups, patients = [], dateRange
     {cohorts.map(cohort => <div key={cohort.label} className="rounded-xl border border-slate-200 p-4">
       <h4 className="font-semibold text-slate-900">{cohort.label}</h4>
       <div className="mt-3 overflow-x-auto"><table className="research-table"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr>
-        {['Measure', 'Patients with data', 'Latest average', 'Latest range', 'Patients with follow-up', 'Paired first → latest', 'Average change', 'Lower / same / higher', 'Average follow-up'].map(label => <th key={label} className="px-3 py-3">{label}</th>)}
+        {['Measure', 'Patients with data', 'Follow-up latest value', 'Follow-up latest range', 'Patients with follow-up', 'Paired first → latest', 'Average change', 'Lower / same / higher', 'Average follow-up'].map(label => <th key={label} className="px-3 py-3">{label}</th>)}
       </tr></thead><tbody>{Object.entries(cohort.measures).map(([key, stats]) => {
         const label = key === 'a1c' ? 'A1C' : key === 'systolic' ? 'Systolic BP' : 'Diastolic BP';
         const link = (value, filter = 'available') => <button type="button" className="text-blue-700 hover:underline" onClick={() => inspect(cohort, key, stats, filter)}>{value}</button>;
         const unit = key === 'a1c' ? '%' : 'mmHg';
+        const followup = stats.followupComparison.withFollowup;
         return <tr key={key} className="border-t border-slate-200">
           <td data-label="Measure" className="px-3 py-3 font-medium">{link(`${label} (${unit})`, 'all')}</td>
           <td data-label="Patients with data" className="px-3 py-3">{link(stats.available)} / {link(stats.total, 'all')}<span className="block text-xs text-slate-500">{link(`${stats.missing} missing`, 'missing')}</span></td>
-          <td data-label="Latest average" className="px-3 py-3">{link(number(stats.mean))}</td>
-          <td data-label="Latest range" className="px-3 py-3">{link(`${number(stats.min)} – ${number(stats.max)}`)}</td>
+          <td data-label="Follow-up latest value" className="px-3 py-3">{stats.paired ? link(number(followup.mean), 'paired') : '—'}<span className="block text-xs text-slate-500">{stats.paired > 1 ? `Average across ${stats.paired} patients` : stats.paired === 1 ? 'One patient with follow-up' : 'Needs two reading dates'}</span></td>
+          <td data-label="Follow-up latest range" className="px-3 py-3">{stats.paired > 1 ? link(`${number(followup.min)} – ${number(followup.max)}`, 'paired') : '—'}</td>
           <td data-label="Patients with follow-up" className="px-3 py-3">{link(stats.paired, 'paired')}</td>
-          <td data-label="Paired first → latest" className="px-3 py-3">{link(`${number(stats.baseline)} → ${number(stats.followup)}`, 'paired')}</td>
-          <td data-label="Average change" className="px-3 py-3">{link(`${stats.change > 0 ? '+' : ''}${number(stats.change)}${key === 'a1c' ? ' percentage points' : ' mmHg'}`, 'paired')}</td>
+          <td data-label="Paired first → latest" className="px-3 py-3">{stats.paired ? link(`${number(stats.baseline)} → ${number(stats.followup)}`, 'paired') : '—'}</td>
+          <td data-label="Average change" className="px-3 py-3">{stats.paired ? link(`${stats.change > 0 ? '+' : ''}${number(stats.change)}${key === 'a1c' ? ' percentage points' : ' mmHg'}`, 'paired') : 'Needs two reading dates'}</td>
           <td data-label="Lower / same / higher" className="px-3 py-3">{link(stats.lower, 'lower')} / {link(stats.unchanged, 'unchanged')} / {link(stats.higher, 'higher')}</td>
-          <td data-label="Average follow-up" className="px-3 py-3">{link(`${number(stats.followupDays)} days`, 'paired')}</td>
+          <td data-label="Average follow-up" className="px-3 py-3">{stats.paired ? link(`${number(stats.followupDays)} days`, 'paired') : '—'}</td>
         </tr>;
       })}</tbody></table></div>
       {cohort.measures.systolic && <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50/40 p-3 sm:p-4">
         <h5 className="font-semibold text-slate-900">HTN follow-up comparison</h5>
-        <p className="mt-1 text-sm text-slate-600">Follow-up means BP recorded on at least two distinct dates within the selected filters. The comparison group has one dated BP. Patients without any BP are excluded from both groups.</p>
+        <p className="mt-1 text-sm text-slate-600">Follow-up means BP recorded on at least two distinct dates within the selected filters. Patients with only one dated reading are listed separately and do not contribute to these comparisons.</p>
         <div className="mt-3 overflow-x-auto"><table className="research-table"><thead className="bg-white text-xs uppercase text-slate-500"><tr>
-          {['Measure', 'Follow-up readings', 'Patients', 'First average', 'Latest average', 'Latest median', 'Latest range', 'Average change'].map(label => <th key={label} className="px-3 py-3">{label}</th>)}
-        </tr></thead><tbody>{['systolic', 'diastolic'].flatMap(key => ['withFollowup', 'withoutFollowup'].map(group => {
-          const stats = cohort.measures[key], comparison = stats.followupComparison[group];
-          return <tr key={key + group} className="border-t border-blue-100">
+          {['Measure', 'Follow-up readings', 'Patients', 'First value', 'Latest value', 'Latest median', 'Latest range', 'Change'].map(label => <th key={label} className="px-3 py-3">{label}</th>)}
+        </tr></thead><tbody>{['systolic', 'diastolic'].map(key => {
+          const stats = cohort.measures[key], comparison = stats.followupComparison.withFollowup;
+          return <tr key={key} className="border-t border-blue-100">
             <td className="px-3 py-3">{key === 'systolic' ? 'Systolic' : 'Diastolic'} (mmHg)</td>
-            <td className="px-3 py-3">{group === 'withFollowup' ? 'Two or more dates' : 'One date'}</td>
-            <td className="px-3 py-3"><button type="button" className="font-semibold text-blue-700 hover:underline" onClick={() => inspect(cohort, key, stats, group === 'withFollowup' ? 'paired' : 'single')}>{comparison.count}</button></td>
+            <td className="px-3 py-3">Two or more dates</td>
+            <td className="px-3 py-3"><button type="button" className="font-semibold text-blue-700 hover:underline" onClick={() => inspect(cohort, key, stats, 'paired')}>{comparison.count}</button></td>
             <td className="px-3 py-3">{number(comparison.baseline)}</td>
             <td className="px-3 py-3">{number(comparison.mean)}</td>
-            <td className="px-3 py-3">{number(comparison.median)}</td>
-            <td className="px-3 py-3">{number(comparison.min)} – {number(comparison.max)}</td>
+            <td className="px-3 py-3">{comparison.count > 1 ? number(comparison.median) : '—'}</td>
+            <td className="px-3 py-3">{comparison.count > 1 ? `${number(comparison.min)} – ${number(comparison.max)}` : '—'}</td>
             <td className="px-3 py-3">{number(comparison.change)}</td>
           </tr>;
-        }))}</tbody></table></div>
-        <p className="mt-2 text-xs text-slate-600">Each patient contributes one latest BP. First-to-latest change is available only with follow-up. These groups may differ in starting BP and other factors; the comparison describes an association and does not establish that follow-up caused better control.</p>
+        })}</tbody></table></div>
+        <div className="mt-3 space-y-1 text-sm text-slate-600">{['systolic', 'diastolic'].map(key => <p key={key}><button type="button" className="font-semibold text-blue-700 hover:underline" onClick={() => inspect(cohort, key, cohort.measures[key], 'single')}>{cohort.measures[key].followupComparison.withoutFollowup.count} patients with one dated {key === 'systolic' ? 'systolic' : 'diastolic'} reading</button> · No follow-up comparison available.</p>)}</div>
+        <p className="mt-2 text-xs text-slate-600">Values are averages across patients only when more than one patient has follow-up. Median and range require more than one patient. Each patient contributes one latest BP. First-to-latest change is available only with follow-up. These summaries describe observed readings and do not establish that clinic care caused the changes.</p>
       </div>}
     </div>)}
-    <p className="text-xs text-slate-500">Each patient contributes one latest dated value to averages and ranges. Multiple distinct readings on the same day are averaged; identical values on that day count once. Changes compare each patient's first and latest dates within the filter, using only patients with at least two distinct dates. A1C uses collection date when available. Missing and nonnumeric values are excluded. Lower values describe observed change, not confirmed clinical improvement or an effect of clinic care. Retrospective entry and incomplete follow-up may affect these summaries.</p>
+    <p className="text-xs text-slate-500">Patients with one dated reading remain available in the patient list, but are excluded from follow-up averages, ranges, and changes. Each patient with follow-up contributes one latest dated value. Multiple distinct readings on the same day are averaged; identical values on that day count once. Changes compare each patient's first and latest dates within the filter, using only patients with at least two distinct dates. A1C uses collection date when available. Missing and nonnumeric values are excluded. Lower values describe observed change, not confirmed clinical improvement or an effect of clinic care. Retrospective entry and incomplete follow-up may affect these summaries.</p>
   </section>;
 }
 
@@ -84,7 +86,7 @@ function OutcomeDetails({ detail, patients, onOpenPatientChart, onClose }) {
         {[['all', 'All patients'], ['missing', 'Missing reading'], ['available', 'With reading'], ['paired', 'With follow-up'], ['single', 'One dated reading; no follow-up'], ['noFollowup', 'Missing follow-up (fewer than 2 dates)'], ['lower', 'Lower'], ['unchanged', 'Same'], ['higher', 'Higher']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select></label><p className="mt-2 text-xs text-slate-500">Missing means no valid reading in the selected dates and clinic event. Follow-up requires readings on two distinct dates.</p></div>
       <div className="research-dialog-body"><table className="research-table">
-        <thead><tr>{['Patient', 'MRN', 'Reading status', 'First reading', 'Latest reading', 'Change', 'Chart'].map(label => <th key={label} className="p-3">{label}</th>)}</tr></thead>
+        <thead><tr>{['Patient', 'MRN', 'Reading status', 'First / only reading', 'Latest follow-up reading', 'Change', 'Chart'].map(label => <th key={label} className="p-3">{label}</th>)}</tr></thead>
         <tbody>{rows.map(item => {
           const patient = patients.find(candidate => String(candidate.id) === String(item.patientId));
           const first = item.days[0], latest = item.days.at(-1);
@@ -93,10 +95,10 @@ function OutcomeDetails({ detail, patients, onOpenPatientChart, onClose }) {
           return <tr key={item.patientId} className="border-t border-slate-200">
             <td data-label="Patient" className="p-3">{item.patientName || patient?.name || item.patientId}</td>
             <td data-label="MRN" className="p-3">{patient?.mrn || '—'}</td>
-            <td data-label="Reading status" className="p-3">{!first ? 'Missing reading' : item.days.length < 2 ? 'Missing follow-up' : 'With follow-up'}</td>
-            <td data-label="First reading" className="p-3">{reading(first)}</td>
-            <td data-label="Latest reading" className="p-3">{reading(latest)}</td>
-            <td data-label="Change" className="p-3">{item.days.length >= 2 ? number(latest.value - first.value) : '—'}</td>
+            <td data-label="Reading status" className="p-3">{!first ? 'Missing reading' : item.days.length < 2 ? 'One dated reading' : 'With follow-up'}</td>
+            <td data-label="First / only reading" className="p-3">{reading(first)}</td>
+            <td data-label="Latest follow-up reading" className="p-3">{item.days.length >= 2 ? reading(latest) : '—'}</td>
+            <td data-label="Change" className="p-3">{item.days.length >= 2 ? number(latest.value - first.value) : first ? 'Needs another dated reading' : '—'}</td>
             <td data-label="Chart" className="p-3"><button type="button" disabled={!patient || !onOpenPatientChart} className="rounded-lg bg-blue-600 px-3 py-2 text-white disabled:opacity-50" onClick={() => { onClose(); onOpenPatientChart?.(patient.id, source?.encounter.id); }}>Open visit</button></td>
           </tr>;
         })}{!rows.length && <tr><td colSpan={7} className="p-4 text-slate-500">No patients match this reading status.</td></tr>}</tbody>

@@ -13,12 +13,12 @@ const formulas = {
   clinical: [
     ['Daily patient reading', 'Sum of distinct valid readings for a patient on a date ÷ number of distinct valid readings that day. Identical readings on the same date count once. BP components and A1C are calculated separately.'],
     ['Patients with data / missing', 'With data = patients with at least one valid dated reading; missing = total cohort patients − patients with data. With follow-up = patients with readings on at least two distinct dates.'],
-    ['Latest average and range', 'Latest average = sum of each patient’s latest daily reading ÷ patients with a valid reading. Latest range = lowest to highest of those latest readings. Each patient contributes once.'],
+    ['Follow-up latest value and range', 'Only patients with readings on at least two distinct dates contribute. Latest value = sum of their latest daily readings ÷ patients with follow-up. With one eligible patient, this is shown as their reading, not an average. Range is shown only with more than one eligible patient. Average and mean are the same calculation.'],
     ['Paired first → latest', 'For patients with at least two reading dates: first average = sum of their first daily readings ÷ paired patients; latest average = sum of their latest daily readings ÷ the same paired patients.'],
     ['Average change', 'Sum of (latest daily reading − first daily reading) for paired patients ÷ number of paired patients. BP change is in mmHg; A1C change is in percentage points.'],
     ['Lower / same / higher', 'Counts of paired patients whose latest − first reading is negative, zero, or positive (differences within 0.000000001 are treated as zero).'],
     ['Average follow-up', 'Sum of (latest reading date − first reading date) in days for paired patients ÷ number of paired patients.'],
-    ['HTN follow-up comparison', 'Calculated separately for patients with two or more reading dates and patients with one date. First / latest averages = sum of the group’s first / latest daily readings ÷ group patients. Latest median = middle latest reading after sorting, or mean of the two middle readings for an even count. Latest range = minimum to maximum latest reading. Average change uses paired patients only; one-date patients have no change.'],
+    ['HTN follow-up comparison', 'Only patients with two or more reading dates contribute to first / latest values and change. Patients with one dated reading appear in a separate count and patient list; they have no first-to-latest comparison. Values are averages when more than one patient has follow-up. Median and range are shown only for more than one patient. Latest median is the middle latest reading after sorting, or the average of the two middle readings for an even count.'],
     ['Display precision', 'Clinical averages, ranges, medians, changes, and average follow-up days are displayed to 1 decimal; calculations use the underlying values before display rounding.'],
   ],
   access: [
