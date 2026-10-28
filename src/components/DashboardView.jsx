@@ -528,10 +528,6 @@ export default function DashboardView({
     )
     : [];
 
-  const avgUndergradIntakeToUndergradComplete = showAnalytics
-    ? getAverageFor(generalAnalyticsRows, "createdAt", "undergradCompletedAt")
-    : null;
-
   const avgUndergradIntakeToLeadershipComplete = showAnalytics
     ? getAverageFor(generalAnalyticsRows, "createdAt", "leadershipIntakeCompletedAt")
     : null;
@@ -811,10 +807,6 @@ export default function DashboardView({
                   label="Total Clinic Time"
                   value={formatMinutes(avgGeneralTotalClinicTime)}
                   subtext="General clinic: undergrad complete → visit complete or meds picked up"
-                />
-                <AnalyticsMetric
-                  label="Patient Checked In → Undergrad Registration Complete"
-                  value={formatMinutes(avgUndergradIntakeToUndergradComplete)}
                 />
                 <AnalyticsMetric
                   label="Patient Checked In → Leadership Registration Complete"

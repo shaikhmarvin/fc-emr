@@ -12,7 +12,6 @@ function timestamp(encounter, key) {
 }
 
 export const workflowStages = [
-  ['Patient Checked In → Undergrad Registration Complete', 'createdAt', 'undergradCompletedAt'],
   ['Patient Checked In → Leadership Registration Complete', 'createdAt', 'leadershipIntakeCompletedAt'],
   ['Leadership Registration Complete → Student Start Time', 'leadershipIntakeCompletedAt', 'studentStartAt'],
   ['Student Start Time → Upper-Level Assigned', 'studentStartAt', 'upperLevelAssignedAt'],

@@ -33,8 +33,8 @@ test('follow-up excludes cancelled, specialty, refill, and other-event returns',
 });
 
 test('workflow reports median, nearest-rank p90, missing and invalid separately with aliases', () => {
-  const encounters = [10, 20, 30, 100].map((minutes, i) => visit(`v${i}`, '2026-01-01', { created_at: '2026-01-01T12:00:00Z', undergrad_completed_at: new Date(Date.parse('2026-01-01T12:00:00Z') + minutes * 60000).toISOString() }));
-  encounters.push(visit('missing', '2026-01-01'), visit('invalid', '2026-01-01', { createdAt: 'bad', undergradCompletedAt: 'bad' }), visit('cancelled', '2026-01-01', { status: 'cancelled' }));
+  const encounters = [10, 20, 30, 100].map((minutes, i) => visit(`v${i}`, '2026-01-01', { created_at: '2026-01-01T12:00:00Z', leadership_intake_completed_at: new Date(Date.parse('2026-01-01T12:00:00Z') + minutes * 60000).toISOString() }));
+  encounters.push(visit('missing', '2026-01-01'), visit('invalid', '2026-01-01', { createdAt: 'bad', leadershipIntakeCompletedAt: 'bad' }), visit('cancelled', '2026-01-01', { status: 'cancelled' }));
   const data = build([{ id: 'a', encounters }]);
   const stage = data.stages[0];
   assert.equal(stage.valid, 4);
@@ -62,10 +62,10 @@ test('leadership completion interval starts at registration, including daily sum
     undergradCompletedAt: '2026-01-01T12:10:00Z',
     leadershipIntakeCompletedAt: '2026-01-01T12:30:00Z',
   })] }]);
-  assert.equal(data.stages[1].label, 'Patient Checked In → Leadership Registration Complete');
-  assert.equal(data.stages[1].median, 30);
-  assert.equal(data.daily[0].stages[1].median, 30);
-  assert.match(data.stages[1].rows[0].researchSource, /12:00:00Z/);
+  assert.equal(data.stages[0].label, 'Patient Checked In → Leadership Registration Complete');
+  assert.equal(data.stages[0].median, 30);
+  assert.equal(data.daily[0].stages[0].median, 30);
+  assert.match(data.stages[0].rows[0].researchSource, /12:00:00Z/);
 });
 
 test('same-day ambiguity never invents a visit order', () => {
