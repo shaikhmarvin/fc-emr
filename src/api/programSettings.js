@@ -1,13 +1,14 @@
 import { supabase } from "../lib/supabase";
 import { withCounselingSchedule } from "../utils/counselingSchedule.js";
 
-export async function fetchProgramSettings() {
+export async function fetchProgramSettings({ throwOnError = false } = {}) {
   const { data, error } = await supabase
     .from("program_settings")
     .select("*");
 
   if (error) {
     console.error("Error fetching program settings:", error);
+    if (throwOnError) throw error;
     return [];
   }
 

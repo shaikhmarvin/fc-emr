@@ -2969,6 +2969,60 @@ function getSelectedRoomOptionClass() {
 
 
 
+          {(isOphtho ? canUseOphtho : medicalSoapEnabled) ? (
+            <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900">
+                    {selectedEncounter?.noteType === "ophthalmology" || selectedEncounter?.specialtyType === "ophthalmology"
+                      ? "Ophthalmology Note"
+                      : "Medical SOAP Note"}
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">Author: {soapAuthorName || "Not assigned"} · Autosaves after you pause typing</p>
+                </div>
+                <span className={`rounded-full px-3 py-1 text-xs font-semibold ${soapStatusInfo.color}`}>{soapStatusInfo.label}</span>
+              </div>
+
+              <div className="mt-5">
+                {selectedEncounter?.noteType === "ophthalmology" || selectedEncounter?.specialtyType === "ophthalmology" ? (
+                  <OphthalmologySoapForm soapDraft={soapDraft} updateSoapDraftField={updateSoapDraftField} isSoapLocked={isSoapLocked} />
+                ) : (
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    {[
+                      ["soapSubjective", "Subjective"],
+                      ["soapObjective", "Objective"],
+                      ["soapAssessment", "Assessment"],
+                      ["soapPlan", "Plan"],
+                    ].map(([field, label]) => (
+                      <div key={field}>
+                        <label className="mb-1 block text-sm font-semibold text-slate-700">{label}</label>
+                        <textarea value={soapDraft?.[field] || ""} onChange={(event) => updateSoapDraftField(field, event.target.value)} disabled={isSoapLocked} className="min-h-[150px] w-full rounded-xl border border-slate-300 p-3 text-sm leading-6 disabled:bg-slate-100" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {soapUiMessage ? <p className="mt-3 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700">{soapUiMessage}</p> : null}
+
+              <div className="mt-5 flex flex-wrap gap-2">
+                <button type="button" onClick={handleExportEncounterPdf} className="rounded-lg border border-slate-400 px-4 py-2 font-semibold text-slate-700">Export PDF</button>
+                {!isSoapLocked ? <button type="button" onClick={saveSoapNote} disabled={soapBusy} className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white disabled:opacity-50">Save Draft</button> : null}
+                {isOphtho && !isSoapLocked && <button type="button" onClick={onSubmitOphthoFinal} disabled={soapBusy} className="rounded-lg bg-emerald-700 px-4 py-2 font-semibold text-white disabled:opacity-50">Submit Final</button>}
+                {!isOphtho && canSubmitForUpperLevel ? <button type="button" onClick={submitSoapForUpperLevel} disabled={soapBusy} className="rounded-lg bg-violet-600 px-4 py-2 font-semibold text-white disabled:opacity-50">Submit to Upper Level</button> : null}
+                {!isOphtho && canSubmitForAttending ? <button type="button" onClick={submitSoapForAttending} disabled={soapBusy} className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white disabled:opacity-50">Submit to Attending</button> : null}
+                {!isOphtho && canSignAsUpperLevel ? <button type="button" onClick={signSoapAsUpperLevel} disabled={soapBusy} className="rounded-lg bg-purple-700 px-4 py-2 font-semibold text-white disabled:opacity-50">Upper-Level Sign</button> : null}
+                {!isOphtho && canSignAsAttending ? <button type="button" onClick={signSoapAsAttending} disabled={soapBusy} className="rounded-lg bg-emerald-700 px-4 py-2 font-semibold text-white disabled:opacity-50">Attending Sign</button> : null}
+                {!isOphtho && canSignWithAttendingPin && activeAttendings?.length ? <button type="button" onClick={() => setShowSignModal(true)} disabled={soapBusy} className="rounded-lg border border-emerald-700 px-4 py-2 font-semibold text-emerald-800 disabled:opacity-50">Attending Sign with PIN</button> : null}
+                {canReopenSoap ? <button type="button" onClick={reopenSoapNote} disabled={soapBusy} className="rounded-lg border border-amber-500 px-4 py-2 font-semibold text-amber-800 disabled:opacity-50">Reopen Note</button> : null}
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+              Medical SOAP charting is turned off by leadership. Social Work and Physical Therapy notes remain available as separate encounters.
+            </div>
+          )}
+
           <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
             <button
               type="button"
@@ -3292,60 +3346,6 @@ function getSelectedRoomOptionClass() {
 
           {onSaveHistoricalLab && <HistoricalLabEntry key={`historical-lab-${selectedPatient.id}`} onSave={onSaveHistoricalLab} />}
           <ChartLabResults key={`chart-labs-${selectedPatient?.id}`} results={longitudinalLabData.results} />
-
-          {(isOphtho ? canUseOphtho : medicalSoapEnabled) ? (
-            <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-900">
-                    {selectedEncounter?.noteType === "ophthalmology" || selectedEncounter?.specialtyType === "ophthalmology"
-                      ? "Ophthalmology Note"
-                      : "Medical SOAP Note"}
-                  </h3>
-                  <p className="mt-1 text-sm text-slate-500">Author: {soapAuthorName || "Not assigned"} · Autosaves after you pause typing</p>
-                </div>
-                <span className={`rounded-full px-3 py-1 text-xs font-semibold ${soapStatusInfo.color}`}>{soapStatusInfo.label}</span>
-              </div>
-
-              <div className="mt-5">
-                {selectedEncounter?.noteType === "ophthalmology" || selectedEncounter?.specialtyType === "ophthalmology" ? (
-                  <OphthalmologySoapForm soapDraft={soapDraft} updateSoapDraftField={updateSoapDraftField} isSoapLocked={isSoapLocked} />
-                ) : (
-                  <div className="grid gap-4 lg:grid-cols-2">
-                    {[
-                      ["soapSubjective", "Subjective"],
-                      ["soapObjective", "Objective"],
-                      ["soapAssessment", "Assessment"],
-                      ["soapPlan", "Plan"],
-                    ].map(([field, label]) => (
-                      <div key={field}>
-                        <label className="mb-1 block text-sm font-semibold text-slate-700">{label}</label>
-                        <textarea value={soapDraft?.[field] || ""} onChange={(event) => updateSoapDraftField(field, event.target.value)} disabled={isSoapLocked} className="min-h-[150px] w-full rounded-xl border border-slate-300 p-3 text-sm leading-6 disabled:bg-slate-100" />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {soapUiMessage ? <p className="mt-3 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700">{soapUiMessage}</p> : null}
-
-              <div className="mt-5 flex flex-wrap gap-2">
-                <button type="button" onClick={handleExportEncounterPdf} className="rounded-lg border border-slate-400 px-4 py-2 font-semibold text-slate-700">Export PDF</button>
-                {!isSoapLocked ? <button type="button" onClick={saveSoapNote} disabled={soapBusy} className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white disabled:opacity-50">Save Draft</button> : null}
-                {isOphtho && !isSoapLocked && <button type="button" onClick={onSubmitOphthoFinal} disabled={soapBusy} className="rounded-lg bg-emerald-700 px-4 py-2 font-semibold text-white disabled:opacity-50">Submit Final</button>}
-                {!isOphtho && canSubmitForUpperLevel ? <button type="button" onClick={submitSoapForUpperLevel} disabled={soapBusy} className="rounded-lg bg-violet-600 px-4 py-2 font-semibold text-white disabled:opacity-50">Submit to Upper Level</button> : null}
-                {!isOphtho && canSubmitForAttending ? <button type="button" onClick={submitSoapForAttending} disabled={soapBusy} className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white disabled:opacity-50">Submit to Attending</button> : null}
-                {!isOphtho && canSignAsUpperLevel ? <button type="button" onClick={signSoapAsUpperLevel} disabled={soapBusy} className="rounded-lg bg-purple-700 px-4 py-2 font-semibold text-white disabled:opacity-50">Upper-Level Sign</button> : null}
-                {!isOphtho && canSignAsAttending ? <button type="button" onClick={signSoapAsAttending} disabled={soapBusy} className="rounded-lg bg-emerald-700 px-4 py-2 font-semibold text-white disabled:opacity-50">Attending Sign</button> : null}
-                {!isOphtho && canSignWithAttendingPin && activeAttendings?.length ? <button type="button" onClick={() => setShowSignModal(true)} disabled={soapBusy} className="rounded-lg border border-emerald-700 px-4 py-2 font-semibold text-emerald-800 disabled:opacity-50">Attending Sign with PIN</button> : null}
-                {canReopenSoap ? <button type="button" onClick={reopenSoapNote} disabled={soapBusy} className="rounded-lg border border-amber-500 px-4 py-2 font-semibold text-amber-800 disabled:opacity-50">Reopen Note</button> : null}
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
-              Medical SOAP charting is turned off by leadership. Social Work and Physical Therapy notes remain available as separate encounters.
-            </div>
-          )}
 
           <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
             <button

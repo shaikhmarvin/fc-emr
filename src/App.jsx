@@ -1,3 +1,4 @@
+import { generalRoomReservation } from "./utils/roomReservations.js";
 import { encounterFromPatientSearch } from "./utils/patientEncounterSelection.js";
 import { normalizePapLab, parsePapReport, isPapLab } from "./lib/papResults.js";
 import { refreshLabPacketPatient } from "./lib/labPacketPatients.js";
@@ -8571,6 +8572,26 @@ async function markSeenBySocialWork(encounterId) {
     refreshClinicData?.();
   }
 
+  async function checkGeneralRoomReservation(encounter, roomNumber) {
+    if (!isGeneralClinicEncounter(encounter)) return true;
+    try {
+      const settings = await fetchProgramSettings({ throwOnError: true });
+      setProgramSettings(settings);
+      const reservation = generalRoomReservation(
+        encounter, roomNumber, settings,
+        normalizeClinicDate(encounter.clinicDate) || boardClinicDate
+      );
+      if (!reservation) return true;
+      showToast({
+        title: "Room reserved",
+        message: `Room ${roomNumber} is reserved for ${reservation.program_type}. Clear the specialty reservation before assigning a general patient.`,
+        type: "warning",
+      });
+    } catch (error) {
+      showToast({ title: "Unable to check room reservations", message: error.message, type: "error" });
+    }
+    return false;
+  }
   async function assignEncounterFromQueue(encounterId, updates) {
     if (!canManageRooms) return;
 
@@ -8615,6 +8636,8 @@ async function markSeenBySocialWork(encounterId) {
     }
 
     const numericRoom = Number(nextRoomNumber);
+
+    if (!(await checkGeneralRoomReservation(encounter, numericRoom))) return;
 
     if (!canAssignRoom(encounter, numericRoom)) {
       showToast({
@@ -8705,6 +8728,8 @@ async function markSeenBySocialWork(encounterId) {
 
     const roomNumber = Number(assignmentForm.roomNumber);
 
+    if (!(await checkGeneralRoomReservation(selectedEncounter, roomNumber))) return;
+
     if (!canAssignRoom(selectedEncounter, roomNumber)) {
       showToast({
         title: "Room restriction",
@@ -8787,6 +8812,8 @@ async function markSeenBySocialWork(encounterId) {
     }
 
     const numericRoom = Number(roomNumber);
+
+    if (!(await checkGeneralRoomReservation(selectedEncounter, numericRoom))) return;
 
     if (!canAssignRoom(selectedEncounter, numericRoom)) {
       showToast({
