@@ -95,6 +95,8 @@ export default function ProgramsView({
   ophthoClinicMode,
   setOphthoClinicMode,
   onProgramSettingsChange,
+  clinicResourceSettings = [],
+  onSaveClinicResourceSetting,
   womensHealthSettings,
   onSaveWomensHealthSettings,
   isActive = false,
@@ -1934,6 +1936,8 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
         {canEditProgramSettings && (
           <Card>
             <div className="space-y-4">
+{["Mental Health", "Addiction Medicine"].includes(programType) && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={clinicResourceSettings.find(row => row.resource_key === "mental_health_addiction_undergrad")?.enabled !== false} onChange={event => onSaveClinicResourceSetting?.("mental_health_addiction_undergrad", { enabled: event.target.checked })} />Show Mental Health/Addiction Medicine in undergrad intake</label>}
+
               <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div className="grid flex-1 grid-cols-1 gap-4 md:grid-cols-3">
                   <Field label={programType === "Counseling" ? "Counseling — every Wednesday" : `Next ${programType} Clinic Date`}>

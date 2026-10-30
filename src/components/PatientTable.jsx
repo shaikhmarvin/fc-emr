@@ -13,6 +13,7 @@ export default function PatientTable({
   selectedPatientId,
   getPatientVisitTypeSummary,
   getPatientClinicContext,
+  renderPatientBadges,
 }) {
   return (
     <div className="rounded-2xl bg-white shadow">
@@ -49,7 +50,7 @@ export default function PatientTable({
                 <td className="px-4 py-3">
   <div className="flex flex-col gap-1">
     <span className="font-semibold text-slate-800">
-      {getFullPatientName(patient)}
+      {getFullPatientName(patient)} {renderPatientBadges?.(patient)}
     </span>
 
     {getPatientVisitTypeSummary && (
@@ -134,7 +135,7 @@ export default function PatientTable({
           >
             <div className="space-y-2">
               <p className="text-base font-semibold text-slate-900">
-                {getFullPatientName(patient)}
+                {getFullPatientName(patient)} {renderPatientBadges?.(patient)}
               </p>
               {getPatientVisitTypeSummary && (
   <span

@@ -1,3 +1,4 @@
+import { mentalHealthRegistrationEnabled } from "../utils/mentalHealthAvailability.js";
 import { SEX_OPTIONS, ETHNICITY_OPTIONS } from "../utils/patientDemographics.js";
 import { womensHealthAppointments } from "../utils/womensHealthIntake.js";
 import { whdSlotLabel } from "../utils/womensHealthSchedule.js";
@@ -434,6 +435,7 @@ const EMPTY_FORM = {
 };
 
 export default function UndergradIntakeView({
+  clinicResourceSettings = [],
   onSave,
   womensHealthDayActive = false,
   womensHealthEventDate = "",
@@ -573,6 +575,11 @@ export default function UndergradIntakeView({
   }
 
   async function submitEncounterAfterFiredReview() {
+    if (["mental_health", "addiction"].includes(form.specialtyType) && !mentalHealthRegistrationEnabled(clinicResourceSettings, true)) {
+      alert("Mental Health/Addiction Medicine registration is disabled. Please choose another specialty or visit type.");
+      return;
+    }
+
     if (isSubmitting) return;
 
     const payload = {
@@ -988,9 +995,9 @@ export default function UndergradIntakeView({
                     <option value="pt">Physical Therapy</option>
                     <option value="dermatology">Dermatology</option>
                     <option value="ophthalmology">Ophthalmology</option>
-                    <option value="mental_health">Mental Health</option>
+                    {mentalHealthRegistrationEnabled(clinicResourceSettings, true) && <option value="mental_health">Mental Health</option>}
                       <option value="counseling">Counseling</option>
-                    <option value="addiction">Addiction Medicine</option>
+                    {mentalHealthRegistrationEnabled(clinicResourceSettings, true) && <option value="addiction">Addiction Medicine</option>}
                   </select>
                 </div>
               )}

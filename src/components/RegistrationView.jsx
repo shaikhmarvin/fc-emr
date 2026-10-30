@@ -185,7 +185,7 @@ export default function RegistrationView({
     </div>
 
     <div className="space-y-3">
-      {clinicResourceSettings.map((setting) => (
+      {clinicResourceSettings.filter(setting => setting.resource_key !== "mental_health_addiction_undergrad").map((setting) => (
         <div
           key={setting.resource_key}
           className="rounded-xl border border-slate-200 bg-white p-3"
@@ -195,7 +195,7 @@ export default function RegistrationView({
               <div className="font-semibold text-slate-900">
                 {setting.resource_key === "mammogram" ? "Mammogram/Breast Exam" : setting.display_name}
               </div>
-              <div className="mt-1 text-xs text-slate-500">
+              {setting.resource_key !== "mental_health_addiction" && <div className="mt-1 text-xs text-slate-500">
                 {setting.sex_restriction !== "any"
                   ? `Sex: ${setting.sex_restriction}`
                   : "Sex: any"}
@@ -204,7 +204,7 @@ export default function RegistrationView({
                 {setting.seasonal
   ? ` • Seasonal: ${MONTH_NAMES[setting.season_start_month] || setting.season_start_month} to ${MONTH_NAMES[setting.season_end_month] || setting.season_end_month}`
   : ""}
-              </div>
+              </div>}
             </div>
 
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:items-center">
@@ -221,6 +221,7 @@ export default function RegistrationView({
                 Enabled
               </label>
 
+              {setting.resource_key !== "mental_health_addiction" && <>
               <select
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 value={setting.sex_restriction || "any"}
@@ -314,6 +315,7 @@ export default function RegistrationView({
     </select>
   </>
 )}
+              </>}
             </div>
           </div>
         </div>

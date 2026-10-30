@@ -37,7 +37,7 @@ function Breakdown({ title, values, total, onSelect }) {
   );
 }
 
-export default function ResearchView({ patients = [], womensHealthEventDate = "", isResearchOwner = false, leadershipAccessEnabled = false, onLeadershipAccessChange, onOpenPatientChart }) {
+export default function ResearchView({ isActive = true, patients = [], womensHealthEventDate = "", isResearchOwner = false, leadershipAccessEnabled = false, onLeadershipAccessChange, onOpenPatientChart }) {
   const today = new Date().toISOString().slice(0, 10);
   const [startDate, setStartDate] = useState(`${today.slice(0, 4)}-01-01`);
   const [endDate, setEndDate] = useState(today);
@@ -48,23 +48,27 @@ export default function ResearchView({ patients = [], womensHealthEventDate = ""
   const [study, setStudy] = useState("patients");
   const [dailyPage, setDailyPage] = useState(0);
   const dialogRef = useRef(null);
+  const detailScrollRef = useRef(0);
   useEffect(() => {
-    if (!drilldown) return;
+    if (!drilldown || !isActive) return;
     const previousFocus = document.activeElement;
     const dialog = dialogRef.current;
     dialog.showModal();
+    dialog.querySelector(".research-dialog-body").scrollTop = detailScrollRef.current;
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
+      detailScrollRef.current = dialog.querySelector(".research-dialog-body").scrollTop;
       dialog.close();
       document.body.style.overflow = overflow;
       previousFocus?.focus();
     };
-  }, [drilldown]);
+  }, [drilldown, isActive]);
 
   const [attendingArrivals, setAttendingArrivals] = useState({});
   const [arrivalError, setArrivalError] = useState("");
   useEffect(() => {
+    if (!isActive) return;
     let cancelled = false;
     async function loadArrivals() {
       try {
@@ -79,11 +83,12 @@ export default function ResearchView({ patients = [], womensHealthEventDate = ""
     const channel = supabase.channel("research-attending-arrivals")
       .on("postgres_changes", { event: "*", schema: "public", table: "clinic_staff_roster" }, loadArrivals).subscribe();
     return () => { cancelled = true; supabase.removeChannel(channel); };
-  }, [startDate, endDate]);
+  }, [startDate, endDate, isActive]);
 
   const report = useMemo(() => buildResearchReport(patients, startDate, endDate, clinicEvent, womensHealthEventDate, attendingArrivals), [patients, startDate, endDate, clinicEvent, womensHealthEventDate, attendingArrivals]);
 
   function showRows(title, sourceRows, recordedField = "Encounter included") {
+    detailScrollRef.current = 0;
     setDrilldown({
       title,
       clinical: ["HTN+ only", "DM+ only", "HTN+ and DM+"].includes(recordedField) ? recordedField : null,
@@ -105,6 +110,7 @@ export default function ResearchView({ patients = [], womensHealthEventDate = ""
   }
 
   function showTiming(title, sourceRows, startField, endSelector = completionTime) {
+    detailScrollRef.current = 0;
     setDrilldown({
       title,
       rows: sourceRows.map((row) => {
@@ -135,7 +141,7 @@ export default function ResearchView({ patients = [], womensHealthEventDate = ""
                   <tbody className="divide-y divide-slate-200">{sortedDetailRows.map((row, index) => {
                     const patient = patients.find(item => String(item.id) === row.patientId);
                     const status = researchClinicalStatus(patient, row.date);
-                    const openChart = () => { setDrilldown(null); onOpenPatientChart?.(patient.id, row.encounterId); };
+                    const openChart = () => { onOpenPatientChart?.(patient.id, row.encounterId); };
                     return <tr key={row.encounterId + '-' + index}>
                       <td data-label="Patient" className="px-4 py-3 font-medium">{row.patient}</td>
                       <td data-label="MRN" className="px-4 py-3">{patient?.mrn || '—'}</td>
@@ -205,7 +211,7 @@ export default function ResearchView({ patients = [], womensHealthEventDate = ""
         {study === "chronic" && <section aria-label="Chronic conditions management">
           <h2 className="text-lg font-semibold text-slate-900">Chronic conditions management</h2>
           <p className="mt-1 text-sm text-slate-600">BP and A1C outcomes for the selected dates and clinic event. Click an outcome to inspect patients or find missing readings.</p>
-        <ClinicalResearchStats key={`${clinicEvent}-${startDate}-${endDate}-${report.rows.map(row => row.patientId).join(",")}`} groups={report.groups} patients={patients} dateRange={{ startDate, endDate, clinicEvent }} onOpenPatientChart={onOpenPatientChart} />
+        <ClinicalResearchStats isActive={isActive} key={`${clinicEvent}-${startDate}-${endDate}-${report.rows.map(row => row.patientId).join(",")}`} groups={report.groups} patients={patients} dateRange={{ startDate, endDate, clinicEvent }} onOpenPatientChart={onOpenPatientChart} />
 
 
         </section>}

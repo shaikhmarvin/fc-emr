@@ -1145,6 +1145,14 @@ export default function DashboardView({
 
 
       <PatientTable
+        renderPatientBadges={patient => [ ["htn", "HTN", "bg-rose-100 text-rose-700"], ["dm", "DM", "bg-orange-100 text-orange-700"] ].map(([key, label, color]) => {
+          const positive = (patient.encounters || []).some(encounter => {
+            if (encounter.status === "cancelled") return false;
+            const value = encounter[key] ?? (encounter.intakeData || encounter.intake_data || {})[key];
+            return value === true || ["true", "yes"].includes(String(value).toLowerCase());
+          });
+          return positive ? <span key={key} className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${color}`}>{label}</span> : null;
+        })}
         title={patientRecordsTitle}
         patients={visitTypeFilteredPatients}
         getPatientVisitTypeSummary={getPatientVisitTypeSummary}

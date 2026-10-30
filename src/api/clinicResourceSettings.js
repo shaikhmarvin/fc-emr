@@ -12,6 +12,8 @@ const WOMENS_HEALTH_DAY_RESOURCE = {
   season_end_month: null,
 };
 
+const DEFAULT_RESOURCES = [WOMENS_HEALTH_DAY_RESOURCE, ...[ ["mental_health_addiction", "Mental Health/Addiction Medicine"], ["mental_health_addiction_undergrad", "Mental Health/Addiction Medicine in undergrad intake"] ].map(([resource_key, display_name]) => ({ ...WOMENS_HEALTH_DAY_RESOURCE, resource_key, display_name, sex_restriction: "any" }))];
+
 export async function fetchClinicResourceSettings() {
   const { data, error } = await supabase
     .from("clinic_resource_settings")
@@ -20,15 +22,12 @@ export async function fetchClinicResourceSettings() {
 
   if (error) throw error;
   const rows = data || [];
-  return rows.some((row) => row.resource_key === WOMENS_HEALTH_DAY_RESOURCE.resource_key)
-    ? rows
-    : [...rows, { ...WOMENS_HEALTH_DAY_RESOURCE, is_unsaved_default: true }]
-      .sort((a, b) => String(a.display_name).localeCompare(String(b.display_name)));
+  return [...rows, ...DEFAULT_RESOURCES.filter(setting => !rows.some(row => row.resource_key === setting.resource_key)).map(setting => ({ ...setting, is_unsaved_default: true }))].sort((a,b) => a.display_name.localeCompare(b.display_name));
 }
 
 export async function updateClinicResourceSetting(resourceKey, updates, currentSetting = null) {
-  if (resourceKey === WOMENS_HEALTH_DAY_RESOURCE.resource_key && currentSetting?.is_unsaved_default) {
-    const setting = { ...WOMENS_HEALTH_DAY_RESOURCE, ...currentSetting, ...updates };
+  if (DEFAULT_RESOURCES.some(setting => setting.resource_key === resourceKey) && currentSetting?.is_unsaved_default) {
+    const setting = { ...DEFAULT_RESOURCES.find(setting => setting.resource_key === resourceKey), ...currentSetting, ...updates };
     const { data, error } = await supabase
       .from("clinic_resource_settings")
       .upsert({

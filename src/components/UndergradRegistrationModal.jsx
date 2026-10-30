@@ -1,3 +1,4 @@
+import { mentalHealthRegistrationEnabled } from "../utils/mentalHealthAvailability.js";
 import { useMemo, useState } from "react";
 
 const STATES = [
@@ -44,6 +45,7 @@ function formatPhoneNumber(value) {
 }
 
 export default function UndergradRegistrationModal({
+  clinicResourceSettings = [],
   show,
   form,
   setForm,
@@ -73,6 +75,11 @@ export default function UndergradRegistrationModal({
 
   async function handleSafeSubmit() {
     if (isSaving) return;
+    if (["mental_health", "addiction"].includes(form.specialtyType) && !mentalHealthRegistrationEnabled(clinicResourceSettings, true)) {
+      alert("Mental Health/Addiction Medicine registration is disabled. Please choose another specialty or visit type.");
+      return;
+    }
+
 
     try {
       setIsSaving(true);
@@ -266,9 +273,9 @@ const displayMrn =
                     <option value="pt">Physical Therapy</option>
                     <option value="dermatology">Dermatology</option>
                     <option value="ophthalmology">Ophthalmology</option>
-                    <option value="mental_health">Mental Health</option>
+                    {mentalHealthRegistrationEnabled(clinicResourceSettings, true) && <option value="mental_health">Mental Health</option>}
                     <option value="counseling">Counseling</option>
-                    <option value="addiction">Addiction Medicine</option>
+                    {mentalHealthRegistrationEnabled(clinicResourceSettings, true) && <option value="addiction">Addiction Medicine</option>}
                   </select>
                   {tonightSpecialtyNames.length > 0 && (
                     <p className="mt-1 text-xs text-blue-700">

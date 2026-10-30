@@ -4,12 +4,12 @@ import { buildClinicalResearchStats, filterClinicalPatients } from '../lib/clini
 import ResearchDetailSort from './ResearchDetailSort.jsx';
 import { sortResearchDetails } from '../lib/researchDetailSort.js';
 const number = value => value === null ? '—' : value.toFixed(1);
-export default function ClinicalResearchStats({ groups, patients = [], dateRange, onOpenPatientChart }) {
+export default function ClinicalResearchStats({ isActive = true, groups, patients = [], dateRange, onOpenPatientChart }) {
   const [detail, setDetail] = useState(null);
   const inspect = (cohort, key, stats, filter = 'all') => setDetail({ title: cohort.label + ': ' + (key === 'a1c' ? 'A1C' : key === 'systolic' ? 'Systolic BP' : 'Diastolic BP'), stats, filter });
   const cohorts = buildClinicalResearchStats(groups, patients, dateRange);
   return <section className="mt-6 space-y-4" aria-label="BP and A1C research summaries">
-    {detail && <OutcomeDetails detail={detail} patients={patients} onOpenPatientChart={onOpenPatientChart} onClose={() => setDetail(null)} />}
+    {detail && <OutcomeDetails isActive={isActive} detail={detail} patients={patients} onOpenPatientChart={onOpenPatientChart} onClose={() => setDetail(null)} />}
     <div><h3 className="text-lg font-semibold text-slate-900">BP and A1C Outcomes</h3>
       <p className="mt-1 text-sm text-slate-600">Uses patients from the selected general-clinic visits and filters. A1C also includes results saved directly to their charts by collection date within the selected dates. BP includes patients with HTN; A1C includes patients with DM.</p></div>
     <ResearchCalculations section="clinical" />
@@ -60,18 +60,21 @@ export default function ClinicalResearchStats({ groups, patients = [], dateRange
   </section>;
 }
 
-function OutcomeDetails({ detail, patients, onOpenPatientChart, onClose }) {
+function OutcomeDetails({ isActive, detail, patients, onOpenPatientChart, onClose }) {
   const dialogRef = useRef(null);
+  const detailScrollRef = useRef(0);
   const [filter, setFilter] = useState(detail.filter);
   const [sort, setSort] = useState('newest');
   useEffect(() => {
+    if (!isActive) return;
     const previousFocus = document.activeElement;
     const dialog = dialogRef.current;
     dialog.showModal();
+    dialog.querySelector(".research-dialog-body").scrollTop = detailScrollRef.current;
     const overflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    return () => { dialog.close(); document.body.style.overflow = overflow; previousFocus?.focus(); };
-  }, []);
+    return () => { detailScrollRef.current = dialog.querySelector(".research-dialog-body").scrollTop; dialog.close(); document.body.style.overflow = overflow; previousFocus?.focus(); };
+  }, [isActive]);
   const rows = sortResearchDetails(filterClinicalPatients(detail.stats.series, filter), sort,
     item => item.days.at(-1)?.date || item.rows.reduce((latest, row) => row.date > latest ? row.date : latest, ''),
     item => item.patientName || patients.find(patient => String(patient.id) === String(item.patientId))?.name || item.patientId);
@@ -86,7 +89,7 @@ function OutcomeDetails({ detail, patients, onOpenPatientChart, onClose }) {
         {[['all', 'All patients'], ['missing', 'Missing reading'], ['available', 'With reading'], ['paired', 'With follow-up'], ['single', 'One dated reading; no follow-up'], ['noFollowup', 'Missing follow-up (fewer than 2 dates)'], ['lower', 'Lower'], ['unchanged', 'Same'], ['higher', 'Higher']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select></label><p className="mt-2 text-xs text-slate-500">Missing means no valid reading in the selected dates and clinic event. Follow-up requires readings on two distinct dates.</p></div>
       <div className="research-dialog-body"><table className="research-table">
-        <thead><tr>{['Patient', 'MRN', 'Reading status', 'First / only reading', 'Latest follow-up reading', 'Change', 'Chart'].map(label => <th key={label} className="p-3">{label}</th>)}</tr></thead>
+        <thead><tr>{['Patient', 'MRN', 'Visit date', 'Reading status', 'First / only reading', 'Latest follow-up reading', 'Change', 'Chart'].map(label => <th key={label} className="p-3">{label}</th>)}</tr></thead>
         <tbody>{rows.map(item => {
           const patient = patients.find(candidate => String(candidate.id) === String(item.patientId));
           const first = item.days[0], latest = item.days.at(-1);
@@ -95,13 +98,14 @@ function OutcomeDetails({ detail, patients, onOpenPatientChart, onClose }) {
           return <tr key={item.patientId} className="border-t border-slate-200">
             <td data-label="Patient" className="p-3">{item.patientName || patient?.name || item.patientId}</td>
             <td data-label="MRN" className="p-3">{patient?.mrn || '—'}</td>
+            <td data-label="Visit date" className="whitespace-nowrap p-3">{source?.date || "—"}</td>
             <td data-label="Reading status" className="p-3">{!first ? 'Missing reading' : item.days.length < 2 ? 'One dated reading' : 'With follow-up'}</td>
             <td data-label="First / only reading" className="p-3">{reading(first)}</td>
             <td data-label="Latest follow-up reading" className="p-3">{item.days.length >= 2 ? reading(latest) : '—'}</td>
             <td data-label="Change" className="p-3">{item.days.length >= 2 ? number(latest.value - first.value) : first ? 'Needs another dated reading' : '—'}</td>
-            <td data-label="Chart" className="p-3"><button type="button" disabled={!patient || !onOpenPatientChart} className="rounded-lg bg-blue-600 px-3 py-2 text-white disabled:opacity-50" onClick={() => { onClose(); onOpenPatientChart?.(patient.id, source?.encounter.id); }}>Open visit</button></td>
+            <td data-label="Chart" className="p-3"><button type="button" disabled={!patient || !onOpenPatientChart} className="rounded-lg bg-blue-600 px-3 py-2 text-white disabled:opacity-50" onClick={() => { onOpenPatientChart?.(patient.id, source?.encounter?.id); }}>Open visit</button></td>
           </tr>;
-        })}{!rows.length && <tr><td colSpan={7} className="p-4 text-slate-500">No patients match this reading status.</td></tr>}</tbody>
+        })}{!rows.length && <tr><td colSpan={8} className="p-4 text-slate-500">No patients match this reading status.</td></tr>}</tbody>
       </table></div>
     </div>
   </dialog>;

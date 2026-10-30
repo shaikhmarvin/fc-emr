@@ -1,3 +1,4 @@
+import { mentalHealthRegistrationEnabled } from "./utils/mentalHealthAvailability.js";
 import { generalRoomReservation } from "./utils/roomReservations.js";
 import { encounterFromPatientSearch } from "./utils/patientEncounterSelection.js";
 import { normalizePapLab, parsePapReport, isPapLab } from "./lib/papResults.js";
@@ -2381,6 +2382,19 @@ export default function App() {
   const labPatientDirectoryRef = useRef(patients);
   labPatientDirectoryRef.current = patients;
 
+  const chartReturnRef = useRef(null);
+  const restoreChartReturnRef = useRef(null);
+
+  useEffect(() => {
+    const destination = restoreChartReturnRef.current;
+    if (!destination || activeView !== destination.view) return;
+    const frame = window.requestAnimationFrame(() => {
+      window.scrollTo({ top: destination.scrollY, left: 0, behavior: "auto" });
+      restoreChartReturnRef.current = null;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeView]);
+
   function rememberDashboardScrollPosition() {
     if (activeView !== "dashboard") return;
 
@@ -2395,6 +2409,13 @@ export default function App() {
   }
 
   function returnFromPatientChart() {
+    if (chartReturnRef.current) {
+      const destination = chartReturnRef.current;
+      chartReturnRef.current = null;
+      restoreChartReturnRef.current = destination;
+      setActiveView(destination.view);
+      return;
+    }
     if (userRole === "social_work") {
       setActiveView("queue");
       return;
@@ -7188,7 +7209,7 @@ export default function App() {
       pushEntry("Ophthalmology", intakeForm.ophthalmology, chiefComplaint);
     }
 
-    if (hasText(intakeForm.mentalHealthCombined)) {
+    if (mentalHealthRegistrationEnabled(clinicResourceSettings) && hasText(intakeForm.mentalHealthCombined)) {
       pushEntry("Mental Health", intakeForm.mentalHealthCombined, chiefComplaint);
     }
 
@@ -7201,8 +7222,8 @@ export default function App() {
     }
 
     if (
-      intakeForm.substanceUseTreatment === "Yes" ||
-      intakeForm.substanceUseTreatment === "Maybe"
+      mentalHealthRegistrationEnabled(clinicResourceSettings) && (intakeForm.substanceUseTreatment === "Yes" ||
+      intakeForm.substanceUseTreatment === "Maybe")
     ) {
       pushEntry(
         "Addiction Medicine",
@@ -7859,6 +7880,9 @@ export default function App() {
     const patient = patients.find((p) => p.id === patientId);
     if (!patient) return;
 
+    if (activeView !== "chart") {
+      chartReturnRef.current = { view: activeView, scrollY: window.scrollY || 0 };
+    }
     rememberDashboardScrollPosition();
 
     let encounter = null;
@@ -11830,6 +11854,7 @@ async function markSeenBySocialWork(encounterId) {
 
           {activeView === "undergrad-intake" && (userRole === "undergraduate" || isLeadershipView) && (
             <UndergradIntakeView
+        clinicResourceSettings={clinicResourceSettings}
               womensHealthDayActive={womensHealthDayToday}
               onSave={handleUndergradStartEncounter}
               womensHealthEventDate={womensHealthSettings.eventDate}
@@ -12161,8 +12186,10 @@ async function markSeenBySocialWork(encounterId) {
             />
           )}
 
-          {activeView === "research" && canAccessResearch && (
+          {canAccessResearch && (
+            <div className={activeView === "research" ? "" : "hidden"}>
             <ResearchView
+              isActive={activeView === "research"}
               onOpenPatientChart={openPatientChart}
               patients={patients}
               womensHealthEventDate={womensHealthSettings.eventDate}
@@ -12170,11 +12197,14 @@ async function markSeenBySocialWork(encounterId) {
               leadershipAccessEnabled={researchLeadershipAccess}
               onLeadershipAccessChange={handleResearchLeadershipAccessChange}
             />
+            </div>
           )}
 
           {canAccessPrograms && (
             <div className={activeView === "programs" ? "" : "hidden"}>
               <ProgramsView
+        clinicResourceSettings={clinicResourceSettings}
+        onSaveClinicResourceSetting={saveClinicResourceSetting}
                 openPatientChart={openPatientChart}
                 canOpenCharts={userRole !== "lab"}
                 programEntries={programEntries}
@@ -12285,6 +12315,7 @@ async function markSeenBySocialWork(encounterId) {
       />
 
       <UndergradRegistrationModal
+        clinicResourceSettings={clinicResourceSettings}
         show={showUndergradRegistrationModal}
         form={undergradRegistrationForm}
         setForm={setUndergradRegistrationForm}

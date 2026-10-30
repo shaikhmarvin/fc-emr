@@ -1,3 +1,4 @@
+import { mentalHealthRegistrationEnabled } from "../utils/mentalHealthAvailability.js";
 import { latestPapHistory } from "../lib/papResults.js";
 import { isClinicResourceAvailable } from "../utils/clinicResourceEligibility";
 
@@ -599,7 +600,7 @@ function renderExistingProgramWarning(programType) {
                     </select>
                   </Field>
 
-                  <Field label="Substance Use Treatment">
+                  {mentalHealthRegistrationEnabled(clinicResourceSettings) && <Field label="Substance Use Treatment">
                     <select
                       className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
                       value={intakeForm.substanceUseTreatment}
@@ -615,9 +616,9 @@ function renderExistingProgramWarning(programType) {
                       <option>Yes</option>
                       <option>Maybe</option>
                     </select>
-                  </Field>
+                  </Field>}
 
-                  {showSubstanceNotes && (
+                  {mentalHealthRegistrationEnabled(clinicResourceSettings) && showSubstanceNotes && (
                     <Field label="Substance Use Notes" className="md:col-span-2">
                       <textarea
                         className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
@@ -738,7 +739,7 @@ function renderExistingProgramWarning(programType) {
                     {renderExistingProgramWarning("Physical Therapy")}
                   </Field>
 
-                  <Field label="Mental Health Screening / Medications">
+                  {mentalHealthRegistrationEnabled(clinicResourceSettings) && <Field label="Mental Health Screening / Medications">
                     <input
                       className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
                       placeholder="Relevant details"
@@ -757,7 +758,7 @@ function renderExistingProgramWarning(programType) {
                       }
                     />
                     {renderExistingProgramWarning("Mental Health")}
-                  </Field>
+                  </Field>}
 
                   {showCounselingService && (
                     <Field label="Counseling">
