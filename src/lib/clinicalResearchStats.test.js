@@ -89,3 +89,24 @@ test('detail filters match summary counts, including missing and missing follow-
   assert.deepEqual(filterClinicalPatients(series, 'missing').map(item => item.patientId), ['missing']);
   assert.deepEqual(filterClinicalPatients(series, 'noFollowup').map(item => item.patientId), ['missing', 'single']);
 });
+
+
+test('profile-only HTN and DM populate outcomes even when daily intake flags are false', async () => {
+  const { buildResearchReport } = await import('../researchAnalytics.js');
+  const visit = (id, extra = {}) => ({ id, clinicDate: '2026-10-01', visitType: 'general', status: 'ready', htn: false, dm: false, ...extra });
+  const patients = [
+    { id: 'profile-both', chronicConditions: ['Hypertension', 'Diabetes'], encounters: [visit('both', { vitalsHistory: [{ bp: '145/95' }], inHouseLabs: { core: { a1c: '8.2' } } })] },
+    { id: 'profile-missing', chronicConditions: ['HTN', 'DM'], encounters: [visit('missing')] },
+    { id: 'legacy-profile', chronic_conditions: ['Hypertension', 'Diabetes'], encounters: [visit('legacy')] },
+    { id: 'neither', encounters: [visit('neither')] },
+  ];
+  const range = { startDate: '2026-10-01', endDate: '2026-10-29' };
+  const report = buildResearchReport(patients, range.startDate, range.endDate);
+  const [bp, a1c] = buildClinicalResearchStats(report.groups, patients, range);
+  for (const stats of [bp.measures.systolic, bp.measures.diastolic, a1c.measures.a1c]) {
+    assert.equal(stats.total, 3);
+    assert.equal(stats.available, 1);
+    assert.equal(stats.missing, 2);
+    assert.deepEqual(filterClinicalPatients(stats.series, 'missing').map(item => item.patientId).sort(), ['legacy-profile', 'profile-missing']);
+  }
+});

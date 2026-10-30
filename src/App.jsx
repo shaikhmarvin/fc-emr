@@ -957,10 +957,10 @@ function spanishBadge(encounter) {
   return null;
 }
 
-function htnBadge(encounter) {
+function htnBadge(encounter, patient) {
   const hasHTN = getEncounterIntakeValue(encounter, "htn");
 
-  if (hasHTN === true || hasHTN === "true" || hasHTN === "Yes") {
+  if (patientHasPriorDiagnosis(patient, "htn") || hasHTN === true || hasHTN === "true" || hasHTN === "Yes") {
     return (
       <span className="rounded-full bg-rose-100 px-2 py-1 text-xs font-semibold text-rose-700">
         HTN
@@ -971,10 +971,10 @@ function htnBadge(encounter) {
   return null;
 }
 
-function diabetesBadge(encounter) {
+function diabetesBadge(encounter, patient) {
   const hasDM = getEncounterIntakeValue(encounter, "dm");
 
-  if (hasDM === true || hasDM === "true" || hasDM === "Yes") {
+  if (patientHasPriorDiagnosis(patient, "dm") || hasDM === true || hasDM === "true" || hasDM === "Yes") {
     return (
       <span className="rounded-full bg-orange-100 px-2 py-1 text-xs font-semibold text-orange-700">
         DM
@@ -2378,6 +2378,10 @@ export default function App() {
     userRole,
     isBoardDisplayMode,
   });
+
+  const encounterPatientById = useMemo(() => new Map(patients.flatMap(patient =>
+    (patient.encounters || []).map(encounter => [encounter.id, patient])
+  )), [patients]);
 
   const labPatientDirectoryRef = useRef(patients);
   labPatientDirectoryRef.current = patients;
@@ -5847,8 +5851,8 @@ export default function App() {
         mammogramStatus: "",
         papStatus: "",
         fluShot: "",
-        htn: false,
-        dm: false,
+        htn: patientHasPriorDiagnosis(targetPatient, "htn"),
+        dm: patientHasPriorDiagnosis(targetPatient, "dm"),
         labsLast6Months: "",
         nicotineUse: "",
         nicotineDetails: "",
@@ -7939,8 +7943,8 @@ export default function App() {
       mammogramStatus: "",
       papStatus: "",
       fluShot: "",
-      htn: false,
-      dm: false,
+      htn: patientHasPriorDiagnosis(selectedPatient, "htn"),
+      dm: patientHasPriorDiagnosis(selectedPatient, "dm"),
       labsLast6Months: "",
       nicotineUse: "",
       nicotineDetails: "",
@@ -11503,11 +11507,11 @@ async function markSeenBySocialWork(encounterId) {
         getPatientBoardName={getPatientBoardName}
         getStudentBoardName={getStudentBoardName}
         spanishBadge={spanishBadge}
-        htnBadge={htnBadge}
+        htnBadge={encounter => htnBadge(encounter, encounterPatientById.get(encounter?.id))}
         priorityBadge={priorityBadge}
         newReturningBadge={newReturningBadge}
         elevatorBadge={elevatorBadge}
-        diabetesBadge={diabetesBadge}
+        diabetesBadge={encounter => diabetesBadge(encounter, encounterPatientById.get(encounter?.id))}
         fluBadge={fluBadge}
         papBadge={papBadge}
         getStatusClasses={getStatusClasses}
@@ -11891,8 +11895,8 @@ async function markSeenBySocialWork(encounterId) {
               spanishBadge={spanishBadge}
               priorityBadge={priorityBadge}
               newReturningBadge={newReturningBadge}
-              diabetesBadge={diabetesBadge}
-              htnBadge={htnBadge}
+              diabetesBadge={encounter => diabetesBadge(encounter, encounterPatientById.get(encounter?.id))}
+              htnBadge={encounter => htnBadge(encounter, encounterPatientById.get(encounter?.id))}
               elevatorBadge={elevatorBadge}
               fluBadge={fluBadge}
               papBadge={papBadge}
@@ -11966,8 +11970,8 @@ async function markSeenBySocialWork(encounterId) {
               priorityBadge={priorityBadge}
               newReturningBadge={newReturningBadge}
               elevatorBadge={elevatorBadge}
-              diabetesBadge={diabetesBadge}
-              htnBadge={htnBadge}
+              diabetesBadge={encounter => diabetesBadge(encounter, encounterPatientById.get(encounter?.id))}
+              htnBadge={encounter => htnBadge(encounter, encounterPatientById.get(encounter?.id))}
               fluBadge={fluBadge}
               papBadge={papBadge}
               getStatusClasses={getStatusClasses}
@@ -12066,7 +12070,7 @@ async function markSeenBySocialWork(encounterId) {
               papBadge={papBadge}
               dualVisitBadge={dualVisitBadge}
               pharmacyStatusBadge={pharmacyStatusBadge}
-              diabetesBadge={diabetesBadge}
+              diabetesBadge={encounter => diabetesBadge(encounter, encounterPatientById.get(encounter?.id))}
               elevatorBadge={elevatorBadge}
               fluBadge={fluBadge}
               priorityBadge={priorityBadge}

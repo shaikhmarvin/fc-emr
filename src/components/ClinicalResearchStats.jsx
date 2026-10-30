@@ -6,10 +6,11 @@ import { sortResearchDetails } from '../lib/researchDetailSort.js';
 const number = value => value === null ? '—' : value.toFixed(1);
 export default function ClinicalResearchStats({ isActive = true, groups, patients = [], dateRange, onOpenPatientChart }) {
   const [detail, setDetail] = useState(null);
-  const inspect = (cohort, key, stats, filter = 'all') => setDetail({ title: cohort.label + ': ' + (key === 'a1c' ? 'A1C' : key === 'systolic' ? 'Systolic BP' : 'Diastolic BP'), stats, filter });
+  const inspect = (cohort, key, stats, filter = 'all') => setDetail({ cohortLabel: cohort.label, measure: key, title: cohort.label + ': ' + (key === 'a1c' ? 'A1C' : key === 'systolic' ? 'Systolic BP' : 'Diastolic BP'), stats, filter });
   const cohorts = buildClinicalResearchStats(groups, patients, dateRange);
+  const currentDetail = detail && { ...detail, stats: cohorts.find(cohort => cohort.label === detail.cohortLabel)?.measures[detail.measure] || detail.stats };
   return <section className="mt-6 space-y-4" aria-label="BP and A1C research summaries">
-    {detail && <OutcomeDetails isActive={isActive} detail={detail} patients={patients} onOpenPatientChart={onOpenPatientChart} onClose={() => setDetail(null)} />}
+    {detail && <OutcomeDetails isActive={isActive} detail={currentDetail} patients={patients} onOpenPatientChart={onOpenPatientChart} onClose={() => setDetail(null)} />}
     <div><h3 className="text-lg font-semibold text-slate-900">BP and A1C Outcomes</h3>
       <p className="mt-1 text-sm text-slate-600">Uses patients from the selected general-clinic visits and filters. A1C also includes results saved directly to their charts by collection date within the selected dates. BP includes patients with HTN; A1C includes patients with DM.</p></div>
     <ResearchCalculations section="clinical" />

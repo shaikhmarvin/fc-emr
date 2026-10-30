@@ -32,7 +32,9 @@ export function patientHasPriorDiagnosis(patient, diagnosis) {
 
   const profileDiagnoses = [
     ...(Array.isArray(patient.chronicConditions) ? patient.chronicConditions : []),
+    ...(Array.isArray(patient.chronic_conditions) ? patient.chronic_conditions : []),
     patient.chronicConditionsOther,
+    patient.chronic_conditions_other,
   ];
 
   if (profileDiagnoses.some((value) => diagnosisTextMatches(value, diagnosis))) {
@@ -40,7 +42,7 @@ export function patientHasPriorDiagnosis(patient, diagnosis) {
   }
 
   return (patient.encounters || []).some((encounter) => {
-    if (!isGeneralClinicEncounter(encounter)) return false;
+    if (encounter.status === "cancelled" || !isGeneralClinicEncounter(encounter)) return false;
 
     if (isAffirmative(encounter?.[diagnosis])) return true;
 
