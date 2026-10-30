@@ -17,16 +17,19 @@ export default function ClinicalResearchStats({ isActive = true, groups, patient
     {cohorts.map(cohort => <div key={cohort.label} className="rounded-xl border border-slate-200 p-4">
       <h4 className="font-semibold text-slate-900">{cohort.label}</h4>
       <div className="mt-3 overflow-x-auto"><table className="research-table"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr>
-        {['Measure', 'Patients with data', 'Visits missing reading', 'Follow-up latest value', 'Follow-up latest range', 'Patients with follow-up', 'Paired first → latest', 'Average change', 'Lower / same / higher', 'Average follow-up'].map(label => <th key={label} className="px-3 py-3">{label}</th>)}
+        {['Measure', 'Patients with data', 'Visits missing reading', 'Average without follow-up', 'Total clinic average', 'Follow-up latest value', 'Follow-up latest range', 'Patients with follow-up', 'Paired first → latest', 'Average change', 'Lower / same / higher', 'Average follow-up'].map(label => <th key={label} className="px-3 py-3">{label}</th>)}
       </tr></thead><tbody>{Object.entries(cohort.measures).map(([key, stats]) => {
         const label = key === 'a1c' ? 'A1C' : key === 'systolic' ? 'Systolic BP' : 'Diastolic BP';
         const link = (value, filter = 'available') => <button type="button" className="text-blue-700 hover:underline" onClick={() => inspect(cohort, key, stats, filter)}>{value}</button>;
         const unit = key === 'a1c' ? '%' : 'mmHg';
         const followup = stats.followupComparison.withFollowup;
+        const withoutFollowup = stats.followupComparison.withoutFollowup;
         return <tr key={key} className="border-t border-slate-200">
           <td data-label="Measure" className="px-3 py-3 font-medium">{link(`${label} (${unit})`, 'all')}</td>
           <td data-label="Patients with data" className="px-3 py-3">{link(stats.available)} / {link(stats.total, 'all')}<span className="block text-xs text-slate-500">{link(`${stats.missing} with no readings`, 'noReadings')}</span></td>
           <td data-label="Visits missing reading" className="px-3 py-3">{link(`${stats.missingVisits} / ${stats.totalVisits} visits`, 'missing')}</td>
+          <td data-label="Average without follow-up" className="px-3 py-3">{withoutFollowup.count ? link(number(withoutFollowup.mean), 'single') : '—'}<span className="block text-xs text-slate-500">{withoutFollowup.count} patients with one reading date</span></td>
+          <td data-label="Total clinic average" className="px-3 py-3">{stats.available ? link(number(stats.mean), 'available') : '—'}<span className="block text-xs text-slate-500">{stats.available} patients · latest reading per patient</span></td>
           <td data-label="Follow-up latest value" className="px-3 py-3">{stats.paired ? link(number(followup.mean), 'paired') : '—'}<span className="block text-xs text-slate-500">{stats.paired > 1 ? `Average across ${stats.paired} patients` : stats.paired === 1 ? 'One patient with follow-up' : 'Needs two reading dates'}</span></td>
           <td data-label="Follow-up latest range" className="px-3 py-3">{stats.paired > 1 ? link(`${number(followup.min)} – ${number(followup.max)}`, 'paired') : '—'}</td>
           <td data-label="Patients with follow-up" className="px-3 py-3">{link(stats.paired, 'paired')}</td>
