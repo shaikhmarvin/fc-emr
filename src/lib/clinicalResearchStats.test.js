@@ -110,3 +110,51 @@ test('profile-only HTN and DM populate outcomes even when daily intake flags are
     assert.deepEqual(filterClinicalPatients(stats.series, 'missing').map(item => item.patientId).sort(), ['legacy-profile', 'profile-missing']);
   }
 });
+
+
+test('refill-only visits cannot create BP/A1C patients, visit dates, or follow-up readings', () => {
+  const row = (id, patientId, date, extra = {}) => ({ patientId, date, encounter: { id, clinicDate: date, vitalsHistory: [{ bp: '140/90' }], inHouseLabs: { core: { a1c: '7' } }, ...extra } });
+  const general = row('general', 'mixed', '2026-10-01');
+  const refill = row('refill', 'mixed', '2026-10-08', { visitType: 'refill_only' });
+  const refillOnly = row('refill-only', 'refill-only', '2026-10-09', { visit_type: 'general', intake_data: { visitType: 'refill_only' } });
+  const cohorts = buildClinicalResearchStats([{ label: 'HTN+ and DM+', rows: [general, refill, refillOnly] }]);
+  for (const measure of [cohorts[0].measures.systolic, cohorts[0].measures.diastolic, cohorts[1].measures.a1c]) {
+    assert.equal(measure.total, 1);
+    assert.equal(measure.paired, 0);
+    assert.deepEqual(measure.series[0].rows, [general]);
+    assert.deepEqual(measure.series[0].days.map(day => day.date), ['2026-10-01']);
+  }
+});
+
+
+test('missing readings track each encounter even with prior readings and same-day visits', () => {
+  const row = (id, date, extra = {}) => ({ patientId: 'p', patientName: 'Patient', date, encounter: { id, clinicDate: date, visitType: 'general', ...extra } });
+  const rows = [
+    row('recorded', '2026-10-01', { vitalsHistory: [{ bp: '140/90' }], inHouseLabs: { core: { a1c: '7' } } }),
+    row('missing-1', '2026-10-08'), row('missing-2', '2026-10-15'),
+    row('same-day-missing', '2026-10-01'),
+    row('refill', '2026-10-20', { visitType: 'refill_only' }),
+    row('cancelled', '2026-10-21', { status: 'cancelled' }),
+  ];
+  const build = () => buildClinicalResearchStats([{ label: 'HTN+ and DM+', rows }]);
+  const [bp, dm] = build();
+  for (const stats of [bp.measures.systolic, bp.measures.diastolic, dm.measures.a1c]) {
+    assert.equal(stats.available, 1);
+    assert.equal(stats.missing, 0);
+    assert.equal(stats.totalVisits, 4);
+    assert.equal(stats.missingVisits, 3);
+    assert.deepEqual(stats.visits.filter(visit => visit.value === null).map(visit => visit.encounterId), ['missing-1', 'missing-2', 'same-day-missing']);
+  }
+  rows[1].encounter.vitalsHistory = [{ bp: '130/80' }];
+  assert.equal(build()[0].measures.systolic.missingVisits, 2);
+  assert.equal(build()[1].measures.a1c.missingVisits, 3);
+});
+
+test('chart A1C only fills a visit with the matching collection date', () => {
+  const rows = ['2026-10-01', '2026-10-08'].map((date, id) => ({ patientId: 'p', date, encounter: { id, clinicDate: date } }));
+  const patients = [{ id: 'p', importedSendOutLabs: [{ key: 'a1c', value: '7', collectedDate: '2026-10-01' }] }];
+  const stats = buildClinicalResearchStats([{ label: 'DM+ only', rows }], patients, { startDate: '2026-10-01', endDate: '2026-10-29' })[1].measures.a1c;
+  assert.equal(stats.totalVisits, 2);
+  assert.equal(stats.missingVisits, 1);
+  assert.equal(stats.visits.find(visit => visit.value === null).date, '2026-10-08');
+});

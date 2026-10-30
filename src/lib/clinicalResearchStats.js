@@ -1,3 +1,4 @@
+import { isGeneralClinicEncounter } from "../constants.js";
 import { researchClinicalStatus } from './researchClinicalStatus.js';
 const mean = values => values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
 const median = values => {
@@ -23,7 +24,8 @@ export function summarizeClinicalMeasure(series) {
     delta: item.days.at(-1).value - item.days[0].value,
     days: Math.round((Date.parse(item.days.at(-1).date) - Date.parse(item.days[0].date)) / 86400000),
   }));
-  return { total: series.length, available: available.length, missing: series.length - available.length,
+  const visits = series.flatMap(item => item.visits || []);
+  return { visits, totalVisits: visits.length, missingVisits: visits.filter(visit => visit.value === null).length, total: series.length, available: available.length, missing: series.length - available.length,
     mean: mean(latest), min: latest.length ? Math.min(...latest) : null, max: latest.length ? Math.max(...latest) : null,
     paired: pairs.length, baseline: mean(pairs.map(p => p.first.value)), followup: mean(pairs.map(p => p.last.value)),
     change: mean(pairs.map(p => p.delta)), lower: pairs.filter(p => p.delta < -1e-9).length,
@@ -37,7 +39,7 @@ export function buildClinicalResearchStats(groups, patients = [], dateRange = {}
     { label: 'All DM patients', labels: ['DM+ only', 'HTN+ and DM+'], keys: ['a1c'] },
   ];
   return cohorts.map(cohort => {
-    const group = { rows: groups.filter(item => cohort.labels.includes(item.label)).flatMap(item => item.rows) };
+    const group = { rows: groups.filter(item => cohort.labels.includes(item.label)).flatMap(item => item.rows).filter(row => isGeneralClinicEncounter(row.encounter) && row.encounter.status !== "cancelled") };
     const cohortPatients = new Map();
     for (const row of group.rows) {
       if (!cohortPatients.has(row.patientId)) cohortPatients.set(row.patientId, []);
@@ -57,7 +59,15 @@ export function buildClinicalResearchStats(groups, patients = [], dateRange = {}
         const bp = status.bp.map(value => value.split('/').map(Number));
         return { date, systolic: mean(bp.map(pair => pair[0])), diastolic: mean(bp.map(pair => pair[1])), a1c: mean(status.a1c.map(Number)) };
       });
-      for (const key of Object.keys(series)) series[key].push({ patientId, patientName: rows[0].patientName, rows, days: days.filter(day => day[key] !== null).map(day => ({ date: day.date, value: day[key] })) });
+      for (const key of Object.keys(series)) {
+        const visits = encounters.map(encounter => {
+          const row = rows.find(row => row.encounter.id === encounter.id);
+          const status = researchClinicalStatus({ encounters: [encounter], importedSendOutLabs: chartLabs }, row.date);
+          const values = key === 'a1c' ? status.a1c.map(Number) : status.bp.map(value => Number(value.split('/')[key === 'systolic' ? 0 : 1]));
+          return { patientId, patientName: rows[0].patientName, encounterId: encounter.id, date: row.date, value: mean(values) };
+        });
+        series[key].push({ patientId, patientName: rows[0].patientName, rows, visits, days: days.filter(day => day[key] !== null).map(day => ({ date: day.date, value: day[key] })) });
+      }
     }
     return { label: cohort.label, measures: Object.fromEntries(Object.entries(series).filter(([key]) => cohort.keys.includes(key)).map(([key, values]) => [key, summarizeClinicalMeasure(values)])) };
   });

@@ -17,7 +17,7 @@ export default function ClinicalResearchStats({ isActive = true, groups, patient
     {cohorts.map(cohort => <div key={cohort.label} className="rounded-xl border border-slate-200 p-4">
       <h4 className="font-semibold text-slate-900">{cohort.label}</h4>
       <div className="mt-3 overflow-x-auto"><table className="research-table"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr>
-        {['Measure', 'Patients with data', 'Follow-up latest value', 'Follow-up latest range', 'Patients with follow-up', 'Paired first → latest', 'Average change', 'Lower / same / higher', 'Average follow-up'].map(label => <th key={label} className="px-3 py-3">{label}</th>)}
+        {['Measure', 'Patients with data', 'Visits missing reading', 'Follow-up latest value', 'Follow-up latest range', 'Patients with follow-up', 'Paired first → latest', 'Average change', 'Lower / same / higher', 'Average follow-up'].map(label => <th key={label} className="px-3 py-3">{label}</th>)}
       </tr></thead><tbody>{Object.entries(cohort.measures).map(([key, stats]) => {
         const label = key === 'a1c' ? 'A1C' : key === 'systolic' ? 'Systolic BP' : 'Diastolic BP';
         const link = (value, filter = 'available') => <button type="button" className="text-blue-700 hover:underline" onClick={() => inspect(cohort, key, stats, filter)}>{value}</button>;
@@ -25,7 +25,8 @@ export default function ClinicalResearchStats({ isActive = true, groups, patient
         const followup = stats.followupComparison.withFollowup;
         return <tr key={key} className="border-t border-slate-200">
           <td data-label="Measure" className="px-3 py-3 font-medium">{link(`${label} (${unit})`, 'all')}</td>
-          <td data-label="Patients with data" className="px-3 py-3">{link(stats.available)} / {link(stats.total, 'all')}<span className="block text-xs text-slate-500">{link(`${stats.missing} missing`, 'missing')}</span></td>
+          <td data-label="Patients with data" className="px-3 py-3">{link(stats.available)} / {link(stats.total, 'all')}<span className="block text-xs text-slate-500">{link(`${stats.missing} with no readings`, 'noReadings')}</span></td>
+          <td data-label="Visits missing reading" className="px-3 py-3">{link(`${stats.missingVisits} / ${stats.totalVisits} visits`, 'missing')}</td>
           <td data-label="Follow-up latest value" className="px-3 py-3">{stats.paired ? link(number(followup.mean), 'paired') : '—'}<span className="block text-xs text-slate-500">{stats.paired > 1 ? `Average across ${stats.paired} patients` : stats.paired === 1 ? 'One patient with follow-up' : 'Needs two reading dates'}</span></td>
           <td data-label="Follow-up latest range" className="px-3 py-3">{stats.paired > 1 ? link(`${number(followup.min)} – ${number(followup.max)}`, 'paired') : '—'}</td>
           <td data-label="Patients with follow-up" className="px-3 py-3">{link(stats.paired, 'paired')}</td>
@@ -76,20 +77,34 @@ function OutcomeDetails({ isActive, detail, patients, onOpenPatientChart, onClos
     document.body.style.overflow = 'hidden';
     return () => { detailScrollRef.current = dialog.querySelector(".research-dialog-body").scrollTop; dialog.close(); document.body.style.overflow = overflow; previousFocus?.focus(); };
   }, [isActive]);
-  const rows = sortResearchDetails(filterClinicalPatients(detail.stats.series, filter), sort,
+  const visitMode = filter === "missing" || filter === "visits" || filter === "visitReadings";
+  const visitRows = sortResearchDetails((detail.stats.visits || []).filter(visit => filter === "missing" ? visit.value === null : filter === "visitReadings" ? visit.value !== null : true), sort, visit => visit.date, visit => visit.patientName);
+  const rows = sortResearchDetails(filterClinicalPatients(detail.stats.series, filter === "noReadings" ? "missing" : filter), sort,
     item => item.days.at(-1)?.date || item.rows.reduce((latest, row) => row.date > latest ? row.date : latest, ''),
     item => item.patientName || patients.find(patient => String(patient.id) === String(item.patientId))?.name || item.patientId);
   return <dialog ref={dialogRef} aria-labelledby="outcome-detail-title" className="research-dialog" onCancel={onClose} onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
     <div className="research-dialog-content">
       <div className="flex items-start justify-between gap-3 border-b border-slate-200 p-4">
-        <div><h2 id="outcome-detail-title" className="text-lg font-bold text-slate-900">{detail.title}</h2><p className="text-sm text-slate-500">{rows.length} of {detail.stats.total} patients</p></div>
+        <div><h2 id="outcome-detail-title" className="text-lg font-bold text-slate-900">{detail.title}</h2><p className="text-sm text-slate-500">{visitMode ? `${visitRows.length} of ${detail.stats.totalVisits} visits` : `${rows.length} of ${detail.stats.total} patients`}</p></div>
         <button type="button" onClick={onClose} className="rounded-lg bg-slate-100 px-3 py-2">Close</button>
       </div>
-      <div className="px-4 pt-4"><ResearchDetailSort value={sort} onChange={setSort} /><p className="mt-2 text-xs text-slate-500">Dates use the latest reading, or latest clinic visit when a reading is missing.</p></div>
+      <div className="px-4 pt-4"><ResearchDetailSort value={sort} onChange={setSort} /><p className="mt-2 text-xs text-slate-500">Visit lists show the date of each individual visit. Patient summaries use the latest reading or latest clinic visit.</p></div>
       <div className="p-4"><label className="text-sm font-semibold">Reading status <select className="ml-2 rounded-lg border p-2" value={filter} onChange={event => setFilter(event.target.value)}>
-        {[['all', 'All patients'], ['missing', 'Missing reading'], ['available', 'With reading'], ['paired', 'With follow-up'], ['single', 'One dated reading; no follow-up'], ['noFollowup', 'Missing follow-up (fewer than 2 dates)'], ['lower', 'Lower'], ['unchanged', 'Same'], ['higher', 'Higher']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-      </select></label><p className="mt-2 text-xs text-slate-500">Missing means no valid reading in the selected dates and clinic event. Follow-up requires readings on two distinct dates.</p></div>
-      <div className="research-dialog-body"><table className="research-table">
+        {[['all', 'All patients'], ['missing', 'Visits missing reading'], ['visits', 'All visits'], ['visitReadings', 'Visits with reading'], ['noReadings', 'Patients with no readings'], ['available', 'With reading'], ['paired', 'With follow-up'], ['single', 'One dated reading; no follow-up'], ['noFollowup', 'Missing follow-up (fewer than 2 dates)'], ['lower', 'Lower'], ['unchanged', 'Same'], ['higher', 'Higher']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+      </select></label><p className="mt-2 text-xs text-slate-500">Visits missing reading checks each general-clinic encounter separately. A reading from another visit does not fill the gap. A1C chart results match by collection date. Refill-only visits are excluded.</p></div>
+      <div className="research-dialog-body">{visitMode ? <table className="research-table">
+        <thead><tr>{['Patient', 'MRN', 'Visit date', 'Reading', 'Chart'].map(label => <th key={label} className="p-3">{label}</th>)}</tr></thead>
+        <tbody>{visitRows.map(visit => {
+          const patient = patients.find(candidate => String(candidate.id) === String(visit.patientId));
+          return <tr key={visit.encounterId} className="border-t border-slate-200">
+            <td data-label="Patient" className="p-3">{visit.patientName || patient?.name || visit.patientId}</td>
+            <td data-label="MRN" className="p-3">{patient?.mrn || '—'}</td>
+            <td data-label="Visit date" className="whitespace-nowrap p-3">{visit.date}</td>
+            <td data-label="Reading" className="p-3">{visit.value === null ? 'Missing reading' : number(visit.value)}</td>
+            <td data-label="Chart" className="p-3"><button type="button" disabled={!patient || !onOpenPatientChart} className="rounded-lg bg-blue-600 px-3 py-2 text-white disabled:opacity-50" onClick={() => onOpenPatientChart?.(patient.id, visit.encounterId)}>Open visit</button></td>
+          </tr>;
+        })}{!visitRows.length && <tr><td colSpan={5} className="p-4 text-slate-500">No visits match this reading status.</td></tr>}</tbody>
+      </table> : <table className="research-table">
         <thead><tr>{['Patient', 'MRN', 'Visit date', 'Reading status', 'First / only reading', 'Latest follow-up reading', 'Change', 'Chart'].map(label => <th key={label} className="p-3">{label}</th>)}</tr></thead>
         <tbody>{rows.map(item => {
           const patient = patients.find(candidate => String(candidate.id) === String(item.patientId));
@@ -107,7 +122,7 @@ function OutcomeDetails({ isActive, detail, patients, onOpenPatientChart, onClos
             <td data-label="Chart" className="p-3"><button type="button" disabled={!patient || !onOpenPatientChart} className="rounded-lg bg-blue-600 px-3 py-2 text-white disabled:opacity-50" onClick={() => { onOpenPatientChart?.(patient.id, source?.encounter?.id); }}>Open visit</button></td>
           </tr>;
         })}{!rows.length && <tr><td colSpan={8} className="p-4 text-slate-500">No patients match this reading status.</td></tr>}</tbody>
-      </table></div>
+      </table>}</div>
     </div>
   </dialog>;
 }

@@ -1,8 +1,10 @@
+import { isGeneralClinicEncounter } from "../constants.js";
 import { trendNumber, labDateForTrend } from './labTrends.js';
 import { patientLabSources } from './labSaveTarget.js';
 const day = value => String(value || '').slice(0, 10);
 const a1cName = lab => /^(?:a1c|hba1c|hemoglobina1c|hgba1c|hemoglobina1chemoglobintotal)$/.test(String(lab.key || lab.testKey || lab.name || lab.displayName || lab.testName || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
 export function researchClinicalStatus(patient, date) {
+  patient = { ...patient, encounters: (patient?.encounters || []).filter(encounter => isGeneralClinicEncounter(encounter) && encounter.status !== "cancelled") };
   const bp = [], a1c = [];
   for (const encounter of patient?.encounters || []) {
     const visitDate = day(encounter.clinicDate || encounter.createdAt);

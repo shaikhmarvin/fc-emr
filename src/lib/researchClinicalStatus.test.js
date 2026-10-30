@@ -22,3 +22,12 @@ test('imported A1C follows collection date and ignores missing or nonnumeric ent
   assert.deepEqual(researchClinicalStatus(patient, '2026-10-24'), { bp: [], a1c: [] });
   assert.deepEqual(researchClinicalStatus(undefined, '2025-02-15'), { bp: [], a1c: [] });
 });
+
+
+test('visit reading checks ignore refill-only encounters on the same date', () => {
+  const patient = { encounters: [
+    { clinicDate: '2026-10-01', visitType: 'general' },
+    { clinicDate: '2026-10-01', intake_data: { visitType: 'refill_only' }, vitalsHistory: [{ bp: '160/100' }], inHouseLabs: { core: { a1c: '9' } } },
+  ] };
+  assert.deepEqual(researchClinicalStatus(patient, '2026-10-01'), { bp: [], a1c: [] });
+});
