@@ -20,7 +20,6 @@ const formulas = {
     ['Average change', 'Sum of (latest daily reading − first daily reading) for paired patients ÷ number of paired patients. BP change is in mmHg; A1C change is in percentage points.'],
     ['Lower / same / higher', 'Counts of paired patients whose latest − first reading is negative, zero, or positive (differences within 0.000000001 are treated as zero).'],
     ['Average follow-up', 'Sum of (latest reading date − first reading date) in days for paired patients ÷ number of paired patients.'],
-    ['HTN follow-up comparison', 'Only patients with two or more reading dates contribute to first / latest values and change. Patients with one dated reading appear in a separate count and patient list; they have no first-to-latest comparison. Values are averages when more than one patient has follow-up. Median and range are shown only for more than one patient. Latest median is the middle latest reading after sorting, or the average of the two middle readings for an even count.'],
     ['Display precision', 'Clinical averages, ranges, medians, changes, and average follow-up days are displayed to 1 decimal; calculations use the underlying values before display rounding.'],
   ],
   access: [

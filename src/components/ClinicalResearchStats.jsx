@@ -39,27 +39,7 @@ export default function ClinicalResearchStats({ isActive = true, groups, patient
           <td data-label="Average follow-up" className="px-3 py-3">{stats.paired ? link(`${number(stats.followupDays)} days`, 'paired') : '—'}</td>
         </tr>;
       })}</tbody></table></div>
-      {cohort.measures.systolic && <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50/40 p-3 sm:p-4">
-        <h5 className="font-semibold text-slate-900">HTN follow-up comparison</h5>
-        <p className="mt-1 text-sm text-slate-600">Follow-up means BP recorded on at least two distinct dates within the selected filters. Patients with only one dated reading are listed separately and do not contribute to these comparisons.</p>
-        <div className="mt-3 overflow-x-auto"><table className="research-table"><thead className="bg-white text-xs uppercase text-slate-500"><tr>
-          {['Measure', 'Follow-up readings', 'Patients', 'First value', 'Latest value', 'Latest median', 'Latest range', 'Change'].map(label => <th key={label} className="px-3 py-3">{label}</th>)}
-        </tr></thead><tbody>{['systolic', 'diastolic'].map(key => {
-          const stats = cohort.measures[key], comparison = stats.followupComparison.withFollowup;
-          return <tr key={key} className="border-t border-blue-100">
-            <td className="px-3 py-3">{key === 'systolic' ? 'Systolic' : 'Diastolic'} (mmHg)</td>
-            <td className="px-3 py-3">Two or more dates</td>
-            <td className="px-3 py-3"><button type="button" className="font-semibold text-blue-700 hover:underline" onClick={() => inspect(cohort, key, stats, 'paired')}>{comparison.count}</button></td>
-            <td className="px-3 py-3">{number(comparison.baseline)}</td>
-            <td className="px-3 py-3">{number(comparison.mean)}</td>
-            <td className="px-3 py-3">{comparison.count > 1 ? number(comparison.median) : '—'}</td>
-            <td className="px-3 py-3">{comparison.count > 1 ? `${number(comparison.min)} – ${number(comparison.max)}` : '—'}</td>
-            <td className="px-3 py-3">{number(comparison.change)}</td>
-          </tr>;
-        })}</tbody></table></div>
-        <div className="mt-3 space-y-1 text-sm text-slate-600">{['systolic', 'diastolic'].map(key => <p key={key}><button type="button" className="font-semibold text-blue-700 hover:underline" onClick={() => inspect(cohort, key, cohort.measures[key], 'single')}>{cohort.measures[key].followupComparison.withoutFollowup.count} patients with one dated {key === 'systolic' ? 'systolic' : 'diastolic'} reading</button> · No follow-up comparison available.</p>)}</div>
-        <p className="mt-2 text-xs text-slate-600">Values are averages across patients only when more than one patient has follow-up. Median and range require more than one patient. Each patient contributes one latest BP. First-to-latest change is available only with follow-up. These summaries describe observed readings and do not establish that clinic care caused the changes.</p>
-      </div>}
+
     </div>)}
     <p className="text-xs text-slate-500">Patients with one dated reading remain available in the patient list, but are excluded from follow-up averages, ranges, and changes. Each patient with follow-up contributes one latest dated value. Multiple distinct readings on the same day are averaged; identical values on that day count once. Changes compare each patient's first and latest dates within the filter, using only patients with at least two distinct dates. A1C uses collection date when available. Missing and nonnumeric values are excluded. Lower values describe observed change, not confirmed clinical improvement or an effect of clinic care. Retrospective entry and incomplete follow-up may affect these summaries.</p>
   </section>;
