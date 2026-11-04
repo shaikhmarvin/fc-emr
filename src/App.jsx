@@ -8645,6 +8645,28 @@ async function markSeenBySocialWork(encounterId) {
     }
     return false;
   }
+  async function confirmRoomVisitCompletion(roomNumber, incomingEncounter) {
+    const occupants = getActiveRoomRows(roomNumber, incomingEncounter.clinicDate || boardClinicDate)
+      .filter(({ encounter }) => String(encounter.id) !== String(incomingEncounter.id) &&
+        encounter.status !== "done" && encounter.status !== "cancelled");
+    if (!occupants.length) return true;
+
+    const names = occupants.map(({ patient }) => getPatientBoardName(patient)).join(", ");
+    if (!window.confirm(
+      `Room ${roomNumber} still has active visits for: ${names}.\n\nConfirm the existing visits are complete? Click OK to mark them complete and assign the new patient, or Cancel to keep the current assignment.`
+    )) return false;
+
+    const completedAt = new Date().toISOString();
+    for (const { encounter } of occupants) {
+      await applyEncounterTransition(encounter.id, {
+        status: "done",
+        doneAt: encounter.doneAt || completedAt,
+        visitCompletedAt: encounter.visitCompletedAt || completedAt,
+      });
+    }
+    return true;
+  }
+
   async function assignEncounterFromQueue(encounterId, updates) {
     if (!canManageRooms) return;
 
@@ -8701,23 +8723,9 @@ async function markSeenBySocialWork(encounterId) {
       return;
     }
 
-    const conflict = getRoomConflictDetails(numericRoom, encounterId, {
-      assignedStudent: nextStudent,
-      assignedUpperLevel: nextUpperLevel,
-      clinicDate: encounter.clinicDate,
-    });
-
-    if (conflict.hasConflict) {
-      const confirmed = window.confirm(
-        `This room is currently being used by a different student/provider (${conflict.occupiedByNames.join(", ")}). Assign anyway?`
-      );
-
-      if (!confirmed) {
-        return;
-      }
-    }
-
     try {
+      if (!(await confirmRoomVisitCompletion(numericRoom, encounter))) return;
+
       const studentChanged =
         String(nextStudent || "").trim() !== String(encounter.assignedStudent || "").trim();
 
@@ -8798,24 +8806,11 @@ async function markSeenBySocialWork(encounterId) {
     const nextAssignedUpperLevel =
       assignmentForm.upperLevelName || selectedEncounter.assignedUpperLevel || "";
 
-    const conflict = getRoomConflictDetails(roomNumber, selectedEncounter.id, {
-      assignedStudent: nextAssignedStudent,
-      assignedUpperLevel: nextAssignedUpperLevel,
-      clinicDate: selectedEncounter.clinicDate,
-    });
-
-    if (conflict.hasConflict) {
-      const confirmed = window.confirm(
-        `This room is currently being used by a different student/provider (${conflict.occupiedByNames.join(", ")}). Assign anyway?`
-      );
-
-      if (!confirmed) {
-        return;
-      }
-    }
     lockLeadershipActions();
 
     try {
+      if (!(await confirmRoomVisitCompletion(roomNumber, selectedEncounter))) return;
+
       const studentChanged =
         String(nextAssignedStudent || "").trim() !== String(selectedEncounter.assignedStudent || "").trim();
 

@@ -1931,8 +1931,113 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
       (entry) => entry.scheduleType === "backup" && entry.specialtyDate === specialtyDate
     );
 
+    const scheduler = (
+        <Card>
+          <h3 className="mb-4 text-lg font-semibold text-slate-900">
+            {programType} Scheduler
+          </h3>
+
+          {!specialtyDate ? (
+            <p className="text-sm text-slate-500">Set the next specialty clinic date first.</p>
+          ) : config.schedulingType === "timed" ? (
+            <div className="space-y-6">
+              <div>
+                <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+                  Primary Slots
+                </h4>
+                <div className="space-y-2">
+                  {config.primarySlots.map((slot) => {
+                    const assigned = primaryEntries.find(
+                      (entry) => entry.appointmentSlot === slot
+                    );
+
+                    return (
+                      <SchedulerRow
+                        key={slot}
+                        label={slot}
+                        entry={assigned}
+                        onUnassign={handleUnassign}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+                  Backups
+                </h4>
+                <div className="space-y-2">
+                  {Array.from({ length: config.backupCount }).map((_, i) => {
+                    const assigned = backupEntries.find(
+                      (entry) => entry.schedulePosition === i + 1
+                    );
+
+                    return (
+                      <SchedulerRow
+                        key={i + 1}
+                        label={`Backup ${i + 1}`}
+                        entry={assigned}
+                        onUnassign={handleUnassign}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              <div>
+                <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+                  Primary List
+                </h4>
+                <div className="space-y-2">
+                  {Array.from({ length: config.primaryCount }).map((_, i) => {
+                    const assigned = primaryEntries.find(
+                      (entry) => entry.schedulePosition === i + 1
+                    );
+
+                    return (
+                      <SchedulerRow
+                        key={i + 1}
+                        label={`Primary ${i + 1}`}
+                        entry={assigned}
+                        onUnassign={handleUnassign}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+                  Backup List
+                </h4>
+                <div className="space-y-2">
+                  {Array.from({ length: config.backupCount }).map((_, i) => {
+                    const assigned = backupEntries.find(
+                      (entry) => entry.schedulePosition === i + 1
+                    );
+
+                    return (
+                      <SchedulerRow
+                        key={i + 1}
+                        label={`Backup ${i + 1}`}
+                        entry={assigned}
+                        onUnassign={handleUnassign}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+        </Card>
+    );
+
     return (
       <div className="space-y-6">
+        {programType === "Physical Therapy" && scheduler}
         {canEditProgramSettings && (
           <Card>
             <div className="space-y-4">
@@ -2449,107 +2554,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
           )}
         </Card>
 
-        <Card>
-          <h3 className="mb-4 text-lg font-semibold text-slate-900">
-            {programType} Scheduler
-          </h3>
-
-          {!specialtyDate ? (
-            <p className="text-sm text-slate-500">Set the next specialty clinic date first.</p>
-          ) : config.schedulingType === "timed" ? (
-            <div className="space-y-6">
-              <div>
-                <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-                  Primary Slots
-                </h4>
-                <div className="space-y-2">
-                  {config.primarySlots.map((slot) => {
-                    const assigned = primaryEntries.find(
-                      (entry) => entry.appointmentSlot === slot
-                    );
-
-                    return (
-                      <SchedulerRow
-                        key={slot}
-                        label={slot}
-                        entry={assigned}
-                        onUnassign={handleUnassign}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-                  Backups
-                </h4>
-                <div className="space-y-2">
-                  {Array.from({ length: config.backupCount }).map((_, i) => {
-                    const assigned = backupEntries.find(
-                      (entry) => entry.schedulePosition === i + 1
-                    );
-
-                    return (
-                      <SchedulerRow
-                        key={i + 1}
-                        label={`Backup ${i + 1}`}
-                        entry={assigned}
-                        onUnassign={handleUnassign}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              <div>
-                <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-                  Primary List
-                </h4>
-                <div className="space-y-2">
-                  {Array.from({ length: config.primaryCount }).map((_, i) => {
-                    const assigned = primaryEntries.find(
-                      (entry) => entry.schedulePosition === i + 1
-                    );
-
-                    return (
-                      <SchedulerRow
-                        key={i + 1}
-                        label={`Primary ${i + 1}`}
-                        entry={assigned}
-                        onUnassign={handleUnassign}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-                  Backup List
-                </h4>
-                <div className="space-y-2">
-                  {Array.from({ length: config.backupCount }).map((_, i) => {
-                    const assigned = backupEntries.find(
-                      (entry) => entry.schedulePosition === i + 1
-                    );
-
-                    return (
-                      <SchedulerRow
-                        key={i + 1}
-                        label={`Backup ${i + 1}`}
-                        entry={assigned}
-                        onUnassign={handleUnassign}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
-        </Card>
+        {programType !== "Physical Therapy" && scheduler}
       </div>
     );
   }
