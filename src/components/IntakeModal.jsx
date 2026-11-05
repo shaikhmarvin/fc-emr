@@ -1,3 +1,4 @@
+import { intakeClinicalHistory } from "../lib/intakeClinicalHistory.js";
 import { mentalHealthRegistrationEnabled } from "../utils/mentalHealthAvailability.js";
 import { latestPapHistory } from "../lib/papResults.js";
 import { isClinicResourceAvailable } from "../utils/clinicResourceEligibility";
@@ -18,7 +19,7 @@ export default function IntakeModal({
   applyMatchedPatientToIntake,
   clinicResourceSettings = [],
   programEntries = [],
-  papHistoryPatient = null,
+  chartHistoryPatient = null,
 }) {
   const SEX_OPTIONS = ["Male", "Female", "Other", "Prefer not to say"];
 
@@ -57,7 +58,8 @@ function isResourceAvailable(resourceKey) {
   return isClinicResourceAvailable(resourceKey, clinicResourceSettings, intakeForm);
 }
 
-const savedPap = latestPapHistory(papHistoryPatient);
+const savedPap = latestPapHistory(chartHistoryPatient);
+const priorClinical = intakeClinicalHistory(chartHistoryPatient);
 const showPapScreening = isResourceAvailable("pap") || !!savedPap;
 const showMammogramScreening = isResourceAvailable("mammogram");
 const showFluShotScreening = isResourceAvailable("flu_shot");
@@ -465,7 +467,7 @@ function renderExistingProgramWarning(programType) {
                         <p className="mt-1 font-semibold text-slate-900">{savedPap.date ? new Date(savedPap.date + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : 'Date unavailable'}</p>
                         {savedPap.results.map(result => <p key={result} className="mt-1 text-sm text-slate-700">{result}</p>)}
                         <p className="mt-2 text-xs text-slate-500">{savedPap.dateSource === 'visit' ? 'Visit date used; collection date not recorded. ' : ''}Review screening history before choosing UTD or Interested.</p>
-                      </div> : papHistoryPatient ? <p className="mb-2 text-xs text-slate-500">No saved Pap result found in this chart.</p> : null}
+                      </div> : chartHistoryPatient ? <p className="mb-2 text-xs text-slate-500">No saved Pap result found in this chart.</p> : null}
                       <select
                         className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
                         value={intakeForm.papStatus}
@@ -520,6 +522,7 @@ function renderExistingProgramWarning(programType) {
 
                   <Field label="Chronic Conditions" className="md:col-span-2">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div>
                       <CheckboxCard
                         label="Hypertension (HTN)"
                         checked={!!intakeForm.htn}
@@ -527,12 +530,18 @@ function renderExistingProgramWarning(programType) {
                         className="min-h-12 items-center"
                       />
 
+                      {priorClinical.bp && <ClinicalHistoryReading label="Previous BP" reading={priorClinical.bp} unit="mmHg" />}
+                      </div>
+
+                      <div>
                       <CheckboxCard
                         label="Diabetes (DM)"
                         checked={!!intakeForm.dm}
                         onChange={(checked) => updateIntakeField("dm", checked)}
                         className="min-h-12 items-center"
                       />
+                      {priorClinical.a1c && <ClinicalHistoryReading label="Previous A1C" reading={priorClinical.a1c} />}
+                      </div>
                     </div>
                   </Field>
 
@@ -950,4 +959,12 @@ function InlineCheckbox({ label, checked, onChange }) {
       <span>{label}</span>
     </label>
   );
+}
+
+function ClinicalHistoryReading({ label, reading, unit = '' }) {
+  const date = reading.date ? reading.date.slice(5, 7) + '/' + reading.date.slice(8, 10) + '/' + reading.date.slice(0, 4) : 'Date not recorded';
+  return <div className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
+    <p><span className="font-semibold">{label}: </span>{reading.values.join(', ')}{unit ? ' ' + unit : ''}</p>
+    <p className="mt-1 text-xs text-slate-500">{date}{reading.date && label === 'Previous A1C' && reading.dateSource === 'visit' ? ' · Visit date; collection date not recorded' : ''}</p>
+  </div>;
 }

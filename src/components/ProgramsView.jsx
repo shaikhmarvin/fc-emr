@@ -1,6 +1,6 @@
 import { ophthoReferral, isOphthoEncounter, matchesOphthoDay, existingOphthoVisit } from "../utils/ophthalmology.js";
 import "./ProgramsView.css";
-import { specialtyProgram, specialtyTrackerVisits } from "../utils/specialtyTracker.js";
+import { specialtyProgram, specialtyTrackerVisits, specialtyVisitHistory, completedSpecialtyDates, trackerCompletionDates } from "../utils/specialtyTracker.js";
 import { useEffect, useMemo, useState } from "react";
 import {
   PT_TIME_SLOTS,
@@ -447,12 +447,16 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
 
   const trackerVisits = useMemo(() => specialtyTrackerVisits(programEntries, patients), [programEntries, patients]);
 
+  const specialtyHistory = useMemo(() => specialtyVisitHistory(patients), [patients]);
+
   function renderSpecialtyVisit(entry) {
     if (!specialtyProgram({ visitType: "specialty_only", specialtyType: entry.programType })) return null;
     const visit = trackerVisits.get(String(entry.id));
+    const dates = completedSpecialtyDates(specialtyHistory, entry);
     return <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
       <span className="font-medium">Specialty visit: </span>
-      {visit ? visit.status + " · " + formatDisplayDate(visit.date) : "Not checked in"}
+      {visit ? visit.status + " · " + formatDisplayDate(visit.date) : dates.length ? "See completed specialty history below" : "Not checked in"}
+      {dates.length > 0 && <p className="mt-1"><span className="font-medium">Completed specialty dates ({dates.length}): </span>{dates.map(date => formatDisplayDate(date)).join(", ")}</p>}
     </div>;
   }
 
@@ -464,13 +468,14 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
       const patientName = `${patient.firstName || ""} ${patient.lastName || ""}`.trim();
       return {
         ...entry,
+        status: trackerCompletionDates(specialtyHistory, entry).length ? "Completed" : entry.status,
         patientName: patientName || entry.patientName || "",
         mrn: patient.mrn || entry.mrn || "",
         dob: patient.dob || entry.dob || "",
         phone: patient.phone || entry.phone || "",
       };
     });
-  }, [programEntries, patientById]);
+  }, [programEntries, patientById, specialtyHistory]);
 
   useEffect(() => {
     if (!isActive) return;
@@ -482,6 +487,11 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
 
       const patientName = `${patient.firstName || ""} ${patient.lastName || ""}`.trim();
       const updates = {};
+      const completedDates = trackerCompletionDates(specialtyHistory, entry);
+      if (completedDates.length) {
+        if (entry.status !== "Completed") updates.status = "Completed";
+        if (!entry.specialtyDate) updates.specialtyDate = completedDates[completedDates.length - 1];
+      }
       if (patientName && patientName !== (entry.patientName || "")) updates.patientName = patientName;
       if (patient.mrn && patient.mrn !== (entry.mrn || "")) updates.mrn = patient.mrn;
       if (patient.dob && patient.dob !== (entry.dob || "")) updates.dob = patient.dob;
@@ -491,7 +501,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
         updateProgramEntryFields(entry.id, updates);
       }
     });
-  }, [isActive, programEntries, patientById, updateProgramEntryFields]);
+  }, [isActive, programEntries, patientById, updateProgramEntryFields, specialtyHistory]);
 
   const trackerEntries = useMemo(() => {
     return hydratedProgramEntries

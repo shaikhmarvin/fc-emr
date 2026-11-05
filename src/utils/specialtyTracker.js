@@ -2,16 +2,16 @@ import { getEncounterVisitTypeKey } from '../constants.js';
 
 const PROGRAMS = {
   pt: 'Physical Therapy', physical_therapy: 'Physical Therapy',
-  dermatology: 'Dermatology', ophthalmology: 'Ophthalmology',
+  dermatology: 'Dermatology', derm: 'Dermatology', ophthalmology: 'Ophthalmology', ophtho: 'Ophthalmology', optho: 'Ophthalmology',
   mental_health: 'Mental Health', counseling: 'Counseling',
   addiction: 'Addiction Medicine', addiction_medicine: 'Addiction Medicine',
 };
 
 export function specialtyProgram(encounter) {
   const intake = encounter?.intakeData || encounter?.intake_data || {};
-  const key = String(encounter?.specialtyType || intake.specialtyType || intake.specialty_type || '').trim().toLowerCase().replace(/[ -]+/g, '_');
+  const key = String(encounter?.specialtyType || encounter?.specialty_type || (encounter?.noteType === 'ophthalmology' ? 'ophthalmology' : '') || intake.specialtyType || intake.specialty_type || '').trim().toLowerCase().replace(/[ -]+/g, '_');
   const type = getEncounterVisitTypeKey(encounter);
-  if (!['specialty_only', 'both'].includes(type) && encounter?.dualVisit !== true && intake.dualVisit !== true) return '';
+  if (!['specialty_only', 'both'].includes(type) && encounter?.dualVisit !== true && intake.dualVisit !== true && encounter?.noteType !== 'ophthalmology') return '';
   return PROGRAMS[key] || '';
 }
 
@@ -48,4 +48,32 @@ export function specialtyTrackerVisits(entries, patients) {
     }
   }
   return visits;
+}
+
+export function specialtyVisitHistory(patients) {
+  const history = new Map();
+  for (const patient of patients || []) for (const encounter of patient.encounters || []) {
+    const program = specialtyProgram(encounter);
+    const date = String(encounter.clinicDate || encounter.clinic_date || '').slice(0, 10);
+    if (!program || !date) continue;
+    const status = String(encounter.status || '').toLowerCase();
+    const visit = { date, encounterId: encounter.id, status: status === 'cancelled' ? 'Cancelled' : ['done', 'completed'].includes(status) ? 'Visit completed' : 'Checked in' };
+    const key = patient.id + ':' + program;
+    const visits = history.get(key) || [];
+    if (!visits.some(v => v.encounterId === visit.encounterId)) visits.push(visit);
+    history.set(key, visits);
+  }
+  for (const visits of history.values()) visits.sort((a, b) => b.date.localeCompare(a.date));
+  return history;
+}
+export function completedSpecialtyDates(history, entry) {
+  return [...new Set((history.get(entry.patientId + ':' + entry.programType) || [])
+    .filter(visit => visit.status === 'Visit completed').map(visit => visit.date))].sort();
+}
+export function trackerCompletionDates(history, entry) {
+  return completedSpecialtyDates(history, entry).filter(date => entry.specialtyDate ? date === entry.specialtyDate : !entry.createdAt || date >= String(entry.createdAt).slice(0, 10));
+}
+
+export function matchesSpecialtyFilter(encounter, filter = '') {
+  return !filter || (filter === 'lwobs' ? String(encounter?.status).toLowerCase() === 'cancelled' : specialtyProgram(encounter) === filter);
 }

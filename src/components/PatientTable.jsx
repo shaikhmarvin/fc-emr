@@ -12,6 +12,7 @@ export default function PatientTable({
   deletePatientCompletely,
   selectedPatientId,
   getPatientVisitTypeSummary,
+  getPatientSpecialtySummary,
   getPatientClinicContext,
   renderPatientBadges,
 }) {
@@ -64,6 +65,7 @@ export default function PatientTable({
           "General"}
       </span>
     )}
+    {getPatientSpecialtySummary?.(patient) && <span className="text-xs font-semibold text-violet-700">{getPatientSpecialtySummary(patient)}</span>}
   </div>
 </td>
 
@@ -148,6 +150,7 @@ export default function PatientTable({
       "General"}
   </span>
 )}
+              {getPatientSpecialtySummary?.(patient) && <p className="text-xs font-semibold text-violet-700">{getPatientSpecialtySummary(patient)}</p>}
               <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-slate-600">
                 <span>MRN: {patient.mrn || "—"}</span>
                 <span>DOB: {formatDate(patient.dob) || "—"}</span>

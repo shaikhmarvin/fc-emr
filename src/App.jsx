@@ -27,7 +27,7 @@ import { clearWomensHealthTracker } from "./api/programs.js";
 import { clinicEventForDate, womensHealthChiefComplaint } from "./utils/clinicEvents.js";
 import { isolateGeneralVisitUpdates } from "./utils/encounterProgress.js";
 import { specialtyCheckIns } from "./utils/specialtyCheckInNotifications.js";
-import { specialtyProgram } from "./utils/specialtyTracker.js";
+import { specialtyProgram, matchesSpecialtyFilter } from "./utils/specialtyTracker.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./lib/supabase";
 import { createPatientInSupabase, updatePatientInSupabase, mergePatientsByMrnInSupabase, mergePatientsInSupabase } from "./api/patients";
@@ -7810,9 +7810,9 @@ export default function App() {
   }
 
 
-  function openPatientFromFilteredView(patientId, visitType = 'all') {
+  function openPatientFromFilteredView(patientId, visitType = 'all', specialtyFilter = '') {
     setDashboardSelectedPatientId(patientId);
-    const encounter = encounterFromPatientSearch(dashboardEncounterRows, patientId, dashboardClinicDate, visitType);
+    const encounter = encounterFromPatientSearch(dashboardEncounterRows.filter(({ encounter }) => matchesSpecialtyFilter(encounter, specialtyFilter)), patientId, dashboardClinicDate, visitType);
     if (encounter) {
       openPatientChart(patientId, encounter.id);
       return;
@@ -12300,7 +12300,7 @@ async function markSeenBySocialWork(encounterId) {
         intakeTab={intakeTab}
         setIntakeTab={setIntakeTab}
         intakeForm={intakeForm}
-        papHistoryPatient={patients.find(patient => patient.id === (isEditingIntake ? editingPatientId : autoFilledMatchPatientId)) || null}
+        chartHistoryPatient={patients.find(patient => patient.id === (isEditingIntake ? editingPatientId : autoFilledMatchPatientId)) || null}
         updateIntakeField={updateIntakeField}
         submitPatient={submitPatient}
         isSubmittingIntake={isSubmittingIntake}

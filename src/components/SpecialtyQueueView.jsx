@@ -179,7 +179,7 @@ function SpecialtyTable({
                                             <span
                                                 className={`inline-flex items-center whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold ${VISIT_TYPE_BADGE_STYLES.specialty_only.badgeClass}`}
                                             >
-                                                Specialty Only
+                                                Specialty Only · {getSpecialtyLabel(encounter?.specialtyType)}
                                             </span>
                                         )}
                                     </div>
@@ -231,7 +231,7 @@ function SpecialtyTable({
                                         <span
                                             className={`inline-flex items-center whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold ${VISIT_TYPE_BADGE_STYLES.specialty_only.badgeClass}`}
                                         >
-                                            Specialty Only
+                                            Specialty Only · {getSpecialtyLabel(encounter?.specialtyType)}
                                         </span>
                                     )}
                                 </div>

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { matchingSpecialtyTracker, specialtyTrackerVisits } from './specialtyTracker.js';
+import { matchingSpecialtyTracker, specialtyTrackerVisits, specialtyVisitHistory, completedSpecialtyDates, trackerCompletionDates, matchesSpecialtyFilter } from './specialtyTracker.js';
 const encounter = { id: 'e', clinicDate: '2026-09-25', specialtyType: 'dermatology', visitType: 'specialty_only', status: 'undergrad_complete' };
 const entry = { id: 't', patientId: 'p', programType: 'Dermatology', specialtyDate: '2026-09-25', status: 'Scheduled', reason: 'Rash', createdAt: '2026-09-01T12:00:00Z' };
 
@@ -36,4 +36,30 @@ test('physical therapy aliases and legacy saved specialty data match', () => {
   const pt = { ...entry, programType: 'Physical Therapy' };
   assert.equal(matchingSpecialtyTracker([pt], 'p', { ...encounter, specialtyType: 'physical_therapy' }).id, 't');
   assert.equal(matchingSpecialtyTracker([pt], 'p', { ...encounter, specialtyType: '', visitType: 'general', intake_data: { visitType: 'specialty_only', specialtyType: 'pt' } }).id, 't');
+});
+
+test('all specialty completion dates survive rescheduling, duplicates and multiple months', () => {
+  const patients = [{ id: 'p', encounters: [
+    { ...encounter, status: 'done' },
+    { ...encounter, id: 'duplicate', status: 'done' },
+    { ...encounter, id: 'oct', clinicDate: '2026-10-23', status: 'done' },
+    { ...encounter, id: 'cancel', clinicDate: '2026-10-24', status: 'cancelled' },
+    { ...encounter, id: 'general', clinicDate: '2026-10-25', visitType: 'general', status: 'done' },
+    { ...encounter, id: 'other', clinicDate: '2026-10-26', specialtyType: 'pt', status: 'done' },
+  ] }, { id: 'other', encounters: [{ ...encounter, clinicDate: '2026-10-27', status: 'done' }] }];
+  const history = specialtyVisitHistory(patients);
+  assert.deepEqual(completedSpecialtyDates(history, entry), ['2026-09-25', '2026-10-23']);
+  assert.deepEqual(trackerCompletionDates(history, entry), ['2026-09-25']);
+  assert.deepEqual(trackerCompletionDates(history, { ...entry, specialtyDate: '2026-11-20' }), []);
+  assert.deepEqual(trackerCompletionDates(history, { ...entry, specialtyDate: '', createdAt: '2026-10-01' }), ['2026-10-23']);
+  assert.deepEqual(completedSpecialtyDates(history, { ...entry, programType: 'Physical Therapy' }), ['2026-10-26']);
+});
+
+test('dashboard specialty and LWOBS filters match the encounter opened, including legacy aliases', () => {
+  assert.equal(matchesSpecialtyFilter(encounter, 'Dermatology'), true);
+  assert.equal(matchesSpecialtyFilter(encounter, 'Physical Therapy'), false);
+  assert.equal(matchesSpecialtyFilter({ ...encounter, specialtyType: 'physical_therapy' }, 'Physical Therapy'), true);
+  assert.equal(matchesSpecialtyFilter(encounter, 'lwobs'), false);
+  assert.equal(matchesSpecialtyFilter({ ...encounter, status: 'cancelled' }, 'lwobs'), true);
+  assert.equal(matchesSpecialtyFilter(encounter, ''), true);
 });

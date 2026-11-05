@@ -1,3 +1,4 @@
+import { specialtyProgram, matchesSpecialtyFilter as encounterMatchesSpecialtyFilter } from "../utils/specialtyTracker.js";
 import { patientHasPriorDiagnosis } from "../utils/patientDiagnoses.js";
 import { downloadCompletedRecordsPdf, printCompletedRecordsPdf } from "../utils/pdfGenerator.js";
 import { isWomensHealthEncounter } from "../utils/clinicEvents.js";
@@ -9,7 +10,7 @@ import PatientSearch from "./PatientSearch";
 import PatientTable from "./PatientTable";
 import logo from "../assets/free-clinic-logo.png";
 import { formatDate, getStatusLabel } from "../utils";
-import { getEncounterTypeCounts, getEncounterTypesForPatient, patientHasEncounterType } from "../utils/visitPools";
+import { getEncounterTypeCounts, getEncounterTypesForPatient } from "../utils/visitPools";
 import {
   VISIT_TYPE_BADGE_STYLES,
   VISIT_TYPE_FILTERS,
@@ -106,6 +107,7 @@ export default function DashboardView({
 
   const [showLabFollowUp, setShowLabFollowUp] = useState(false);
 
+  const [specialtyFilter, setSpecialtyFilter] = useState("");
   const [visitTypeFilter, setVisitTypeFilter] = useState("all");
 
   const [showAnalytics, setShowAnalytics] = useState(false);
@@ -449,7 +451,7 @@ export default function DashboardView({
     if (visitTypeFilter !== "all" && getPatientEncounterTypes(patient).has(visitTypeFilter)) {
       return visitTypeFilter;
     }
-    const rows = getRowsForPatient(patient);
+    const rows = getRowsForPatient(patient).filter(({ encounter }) => matchesSpecialtyFilter(encounter));
     const latest = [...rows].sort((a, b) =>
       new Date(b.encounter?.createdAt || b.encounter?.created_at || b.encounter?.clinicDate || 0) -
       new Date(a.encounter?.createdAt || a.encounter?.created_at || a.encounter?.clinicDate || 0)
@@ -459,9 +461,12 @@ export default function DashboardView({
 
   const visitTypeCounts = getEncounterTypeCounts(visibleEncounterRows);
 
-  const visitTypeFilteredPatients = visitTypeFilter === "all"
-    ? filteredVisiblePatients
-    : filteredVisiblePatients.filter((patient) => patientHasEncounterType(visibleEncounterRows, patient.id, visitTypeFilter));
+  const specialtyNames = { dermatology: 'Dermatology', pt: 'Physical Therapy', mental_health: 'Mental Health', addiction: 'Addiction Medicine', ophthalmology: 'Ophthalmology' };
+  const matchesSpecialtyFilter = encounter => encounterMatchesSpecialtyFilter(encounter, specialtyNames[specialtyFilter] || specialtyFilter);
+  const visitTypeFilteredPatients = visitTypeFilter === "all" && !specialtyFilter ? filteredVisiblePatients : filteredVisiblePatients.filter(patient => visibleEncounterRows.some(row => String(row.patient?.id) === String(patient.id) && matchesSpecialtyFilter(row.encounter) && (visitTypeFilter === 'all' || getVisitType(row.encounter) === visitTypeFilter)));
+  function getPatientSpecialtySummary(patient) {
+    return [...new Set(getRowsForPatient(patient).filter(({ encounter }) => matchesSpecialtyFilter(encounter) && (visitTypeFilter === 'all' || getVisitType(encounter) === visitTypeFilter)).map(({ encounter }) => specialtyProgram(encounter)).filter(Boolean))].join(', ');
+  }
 
   function isGeneralClinicEncounter(encounter) {
     const visitType = getVisitType(encounter);
@@ -1056,28 +1061,32 @@ export default function DashboardView({
               ["Ophtho", "ophthalmology"],
             ].map(([label, key]) => {
               const count = visibleEncounterRows.filter(({ encounter }) => {
-                const specialty = String(encounter?.specialtyType || "").toLowerCase();
-                return specialty === key;
+                const specialty = specialtyProgram(encounter);
+                return specialty === specialtyNames[key];
               }).length;
 
               return (
-                <span
+                <button
+                  type="button"
                   key={key}
-                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700"
+                  aria-pressed={specialtyFilter === key}
+                  onClick={() => setSpecialtyFilter(specialtyFilter === key ? "" : key)}
+                  className={`rounded-full border px-3 py-1.5 text-sm font-semibold ${specialtyFilter === key ? "border-blue-400 bg-blue-100 text-blue-900" : "border-slate-200 bg-white text-slate-700"}`}
                 >
                   {label} {count}
-                </span>
+                </button>
               );
             })}
 
-            <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-700">
+            <button type="button" aria-pressed={specialtyFilter === "lwobs"} onClick={() => setSpecialtyFilter(specialtyFilter === "lwobs" ? "" : "lwobs")} className={`rounded-full border px-3 py-1.5 text-sm font-semibold text-red-700 ${specialtyFilter === "lwobs" ? "border-red-500 bg-red-100" : "border-red-200 bg-red-50"}`}>
               LWOBS{" "}
               {
                 visibleEncounterRows.filter(
                   ({ encounter }) => encounter?.status === "cancelled"
                 ).length
               }
-            </span>
+            </button>
+            {specialtyFilter && <button type="button" onClick={() => setSpecialtyFilter("")} className="px-2 text-sm text-blue-700">Clear specialty / LWOBS filter</button>}
           </div>
         </div>
       </div>
@@ -1153,8 +1162,9 @@ export default function DashboardView({
         title={patientRecordsTitle}
         patients={visitTypeFilteredPatients}
         getPatientVisitTypeSummary={getPatientVisitTypeSummary}
+        getPatientSpecialtySummary={getPatientSpecialtySummary}
         getPatientClinicContext={canRefillAccess ? getPatientTodayContext : null}
-        onSelectPatient={patientId => openPatientFromFilteredView(patientId, visitTypeFilter)}
+        onSelectPatient={patientId => openPatientFromFilteredView(patientId, visitTypeFilter, specialtyNames[specialtyFilter] || specialtyFilter)}
         getFullPatientName={getFullPatientName}
         canEditMrn={canEditMrn}
         canEditPatient={canEditPatient}
