@@ -1,3 +1,4 @@
+import { mentalHealthSpecialtyType } from "../utils/mentalHealthService.js";
 import { mentalHealthRegistrationEnabled } from "../utils/mentalHealthAvailability.js";
 import { useMemo, useState } from "react";
 
@@ -75,7 +76,7 @@ export default function UndergradRegistrationModal({
 
   async function handleSafeSubmit() {
     if (isSaving) return;
-    if (["mental_health", "addiction"].includes(form.specialtyType) && !mentalHealthRegistrationEnabled(clinicResourceSettings, true)) {
+    if (mentalHealthSpecialtyType(form.specialtyType) === "mental_health" && !mentalHealthRegistrationEnabled(clinicResourceSettings, true)) {
       alert("Mental Health/Addiction Medicine registration is disabled. Please choose another specialty or visit type.");
       return;
     }
@@ -266,16 +267,15 @@ const displayMrn =
                   </label>
                   <select
                     className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
-                    value={form.specialtyType || ""}
+                    value={mentalHealthSpecialtyType(form.specialtyType) || ""}
                     onChange={(e) => handleChange("specialtyType", e.target.value)}
                   >
                     <option value="">Select Specialty</option>
                     <option value="pt">Physical Therapy</option>
                     <option value="dermatology">Dermatology</option>
                     <option value="ophthalmology">Ophthalmology</option>
-                    {mentalHealthRegistrationEnabled(clinicResourceSettings, true) && <option value="mental_health">Mental Health</option>}
+                    {mentalHealthRegistrationEnabled(clinicResourceSettings, true) && <option value="mental_health">Mental Health / Addiction Medicine</option>}
                     <option value="counseling">Counseling</option>
-                    {mentalHealthRegistrationEnabled(clinicResourceSettings, true) && <option value="addiction">Addiction Medicine</option>}
                   </select>
                   {tonightSpecialtyNames.length > 0 && (
                     <p className="mt-1 text-xs text-blue-700">

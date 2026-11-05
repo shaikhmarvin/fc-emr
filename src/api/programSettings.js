@@ -1,3 +1,4 @@
+import { mentalHealthProgramType } from "../utils/mentalHealthService.js";
 import { supabase } from "../lib/supabase";
 import { withCounselingSchedule } from "../utils/counselingSchedule.js";
 
@@ -19,7 +20,7 @@ export async function updateProgramSetting(program_type, updates) {
   const { error } = await supabase
     .from("program_settings")
     .update(updates)
-    .eq("program_type", program_type);
+    .in("program_type", mentalHealthProgramType(program_type) === "Mental Health" ? ["Mental Health", "Addiction Medicine"] : [program_type]);
 
   if (error) {
     console.error("Error updating program settings:", error);

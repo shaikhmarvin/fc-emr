@@ -1,3 +1,4 @@
+import { mentalHealthSpecialtyType } from "../utils/mentalHealthService.js";
 import { mentalHealthRegistrationEnabled } from "../utils/mentalHealthAvailability.js";
 import { SEX_OPTIONS, ETHNICITY_OPTIONS } from "../utils/patientDemographics.js";
 import { womensHealthAppointments } from "../utils/womensHealthIntake.js";
@@ -575,7 +576,7 @@ export default function UndergradIntakeView({
   }
 
   async function submitEncounterAfterFiredReview() {
-    if (["mental_health", "addiction"].includes(form.specialtyType) && !mentalHealthRegistrationEnabled(clinicResourceSettings, true)) {
+    if (mentalHealthSpecialtyType(form.specialtyType) === "mental_health" && !mentalHealthRegistrationEnabled(clinicResourceSettings, true)) {
       alert("Mental Health/Addiction Medicine registration is disabled. Please choose another specialty or visit type.");
       return;
     }
@@ -988,16 +989,15 @@ export default function UndergradIntakeView({
                   </label>
                   <select
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    value={form.specialtyType || ""}
+                    value={mentalHealthSpecialtyType(form.specialtyType) || ""}
                     onChange={(e) => handleChange("specialtyType", e.target.value)}
                   >
                     <option value="">Select Specialty</option>
                     <option value="pt">Physical Therapy</option>
                     <option value="dermatology">Dermatology</option>
                     <option value="ophthalmology">Ophthalmology</option>
-                    {mentalHealthRegistrationEnabled(clinicResourceSettings, true) && <option value="mental_health">Mental Health</option>}
+                    {mentalHealthRegistrationEnabled(clinicResourceSettings, true) && <option value="mental_health">Mental Health / Addiction Medicine</option>}
                       <option value="counseling">Counseling</option>
-                    {mentalHealthRegistrationEnabled(clinicResourceSettings, true) && <option value="addiction">Addiction Medicine</option>}
                   </select>
                 </div>
               )}

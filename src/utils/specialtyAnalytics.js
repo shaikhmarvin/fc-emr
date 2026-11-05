@@ -1,32 +1,48 @@
-import { specialtyProgram } from './specialtyTracker.js';
-export const SPECIALTY_INTEREST_FIELDS = {
-  Dermatology: 'dermatology', 'Physical Therapy': 'physicalTherapy',
-  'Mental Health': 'mentalHealthCombined', 'Addiction Medicine': 'substanceUseTreatment',
-  Ophthalmology: 'ophthalmology', Counseling: 'counseling',
-};
-const value = (e, key) => e?.[key] ?? (e?.intakeData || e?.intake_data || {})[key];
-export function hasSpecialtyInterest(raw) {
-  return !['', 'n/a', 'na', 'no', 'none', 'not interested', 'declined', 'false', '0'].includes(String(raw ?? '').trim().toLowerCase());
+import { specialtyProgram, specialtyReportingGroup, MENTAL_HEALTH_ADDICTION } from './specialtyTracker.js';
+
+const SPECIALTIES = ['Dermatology', 'Physical Therapy', MENTAL_HEALTH_ADDICTION, 'Ophthalmology', 'Counseling'];
+const completed = encounter => ['done', 'completed'].includes(String(encounter.status || '').toLowerCase());
+const day = encounter => String(encounter.clinicDate || encounter.clinic_date || '').slice(0, 10);
+const name = value => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+const patientName = patient => [patient.firstName, patient.lastName].filter(Boolean).join(' ');
+
+function trackerIdentity(entry, patients) {
+  // Resolve legacy tracker rows only when the chart match is unambiguous.
+  const matches = patients.filter(patient => entry.patientId
+    ? String(patient.id) === String(entry.patientId)
+    : entry.mrn ? name(patient.mrn) === name(entry.mrn)
+      : entry.patientName && entry.dob && name(patientName(patient)) === name(entry.patientName) && patient.dob === entry.dob);
+  const patient = matches.length === 1 ? matches[0] : null;
+  const key = patient ? 'patient:' + patient.id : entry.patientId ? 'patient:' + entry.patientId
+    : entry.mrn ? 'mrn:' + name(entry.mrn) : entry.patientName && entry.dob ? 'person:' + name(entry.patientName) + ':' + entry.dob : 'entry:' + entry.id;
+  return { key, patientId: patient?.id || entry.patientId || '', patientName: patient ? patientName(patient) : entry.patientName || 'Unnamed tracker patient',
+    date: '', encounter: null, program: specialtyReportingGroup(entry.programType), recordedProgram: entry.programType };
 }
-export function buildSpecialtyAnalytics(patients, start, end) {
-  const rows = (patients || []).flatMap(patient => (patient.encounters || []).map(encounter => ({
-    patient, patientId: patient.id, patientName: [patient.firstName, patient.lastName].filter(Boolean).join(' '), encounter,
-    date: String(encounter.clinicDate || encounter.clinic_date || '').slice(0, 10),
-    program: specialtyProgram(encounter),
-  }))).filter(row => row.date && (!start || row.date >= start) && (!end || row.date <= end));
-  const active = rows.filter(r => String(r.encounter.status).toLowerCase() !== 'cancelled');
-  const unique = list => new Set(list.map(r => String(r.patientId))).size;
-  const groups = Object.entries(SPECIALTY_INTEREST_FIELDS).map(([program, field]) => {
-    const visits = rows.filter(r => r.program === program);
-    const used = visits.filter(r => String(r.encounter.status).toLowerCase() !== 'cancelled');
-    const completed = used.filter(r => ['done', 'completed'].includes(String(r.encounter.status).toLowerCase()));
-    const interested = active.filter(r => hasSpecialtyInterest(value(r.encounter, field)));
-    const assessed = active.filter(r => !['', 'n/a', 'na'].includes(String(value(r.encounter, field) ?? '').trim().toLowerCase()));
-    const completedDates = new Map();
-    for (const row of completed) { const dates = completedDates.get(String(row.patientId)) || new Set(); dates.add(row.date); completedDates.set(String(row.patientId), dates); }
-    const repeat = completed.filter(r => completedDates.get(String(r.patientId)).size > 1);
-    const unmet = interested.filter(r => !used.some(u => String(u.patientId) === String(r.patientId) && u.date >= r.date));
-    return { program, visits, used, completed, interested, assessed, repeat, unmet, patients: unique(used), interestedPatients: unique(interested), assessedPatients: unique(assessed), repeatPatients: unique(repeat), unmetPatients: unique(unmet), cancelled: visits.filter(r => String(r.encounter.status).toLowerCase() === 'cancelled') };
-  });
-  return { rows, active, groups, patients: unique(active), used: active.filter(r => r.program), specialtyPatients: unique(active.filter(r => r.program)) };
+
+export function buildSpecialtyAnalytics(patients = [], start, end, programEntries = [], historyPatients = patients) {
+  const rows = patients.flatMap(patient => (patient.encounters || []).filter(completed).map(encounter => ({
+    patientId: patient.id, patientName: patientName(patient), encounter, date: day(encounter), program: specialtyReportingGroup(specialtyProgram(encounter)), recordedProgram: specialtyProgram(encounter),
+  }))).filter(row => row.program && row.date && (!start || row.date >= start) && (!end || row.date <= end));
+  const seenHistory = new Set(historyPatients.flatMap(patient => (patient.encounters || [])
+    .filter(encounter => completed(encounter) && day(encounter) && (!end || day(encounter) <= end) && specialtyProgram(encounter))
+    .map(encounter => String(patient.id) + ':' + specialtyReportingGroup(specialtyProgram(encounter)))));
+
+  return { groups: SPECIALTIES.map(program => {
+    // Multiple encounters on the same day represent one patient clinic visit.
+    const visitByPatientDate = new Map();
+    for (const row of rows.filter(row => row.program === program)) {
+      const key = String(row.patientId) + ':' + row.date;
+      const previous = visitByPatientDate.get(key);
+      const recordedPrograms = [...new Set([...(previous?.recordedPrograms || []), row.recordedProgram])];
+      visitByPatientDate.set(key, { ...row, recordedPrograms, recordedProgram: recordedPrograms.join(' + ') });
+    }
+    const visits = [...visitByPatientDate.values()];
+    const patientsSeen = [...new Map(visits.map(row => [String(row.patientId), row])).values()];
+    const repeatPatients = patientsSeen.filter(row => visits.filter(visit => String(visit.patientId) === String(row.patientId)).length > 1);
+    const trackerPatients = program === 'Ophthalmology' ? null : [...new Map(programEntries
+      .filter(entry => specialtyReportingGroup(entry.programType) === program && !entry.archivedAt && !entry.archived_at)
+      .map(entry => trackerIdentity(entry, historyPatients)).map(row => [row.key, row])).values()];
+    const notSeen = trackerPatients?.filter(row => !row.patientId || !seenHistory.has(String(row.patientId) + ':' + program)) ?? null;
+    return { program, visits, patientsSeen, repeatPatients, trackerPatients, notSeen };
+  }) };
 }

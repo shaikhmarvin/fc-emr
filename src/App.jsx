@@ -1,3 +1,4 @@
+import { combinedMentalHealthSettings, combinedMentalHealthAccess } from "./utils/mentalHealthService.js";
 import { mentalHealthRegistrationEnabled } from "./utils/mentalHealthAvailability.js";
 import { generalRoomReservation } from "./utils/roomReservations.js";
 import { encounterFromPatientSearch } from "./utils/patientEncounterSelection.js";
@@ -27,7 +28,7 @@ import { clearWomensHealthTracker } from "./api/programs.js";
 import { clinicEventForDate, womensHealthChiefComplaint } from "./utils/clinicEvents.js";
 import { isolateGeneralVisitUpdates } from "./utils/encounterProgress.js";
 import { specialtyCheckIns } from "./utils/specialtyCheckInNotifications.js";
-import { specialtyProgram, matchesSpecialtyFilter } from "./utils/specialtyTracker.js";
+import { specialtyProgram, specialtyReportingGroup, matchesSpecialtyFilter } from "./utils/specialtyTracker.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./lib/supabase";
 import { createPatientInSupabase, updatePatientInSupabase, mergePatientsByMrnInSupabase, mergePatientsInSupabase } from "./api/patients";
@@ -1792,16 +1793,16 @@ export default function App() {
   }
 
   const tonightSpecialtyPrograms = useMemo(() => {
-    return (programSettings || []).filter(
+    return combinedMentalHealthSettings(programSettings || []).filter(
       (program) =>
         program?.next_specialty_date &&
         String(program.next_specialty_date).slice(0, 10) === todayIso
     );
   }, [programSettings, todayIso]);
 
-  const tonightSpecialtyNames = tonightSpecialtyPrograms.map(
-    (program) => program.program_type
-  );
+  const tonightSpecialtyNames = [...new Set(tonightSpecialtyPrograms.map(
+    (program) => specialtyReportingGroup(program.program_type)
+  ))];
 
   const tonightReservedRooms = tonightSpecialtyPrograms.flatMap((program) =>
     (program.rooms_assigned?.rooms || []).map((roomNumber) => ({
@@ -5005,16 +5006,17 @@ export default function App() {
 
     const rules = {};
 
-    programSettings.forEach((row) => {
+    combinedMentalHealthSettings(programSettings).forEach((row) => {
       const encounterType = mapProgramTypeToEncounterType[row.program_type];
       if (!encounterType) return;
 
       if (normalizeClinicDate(row.next_specialty_date) !== boardClinicDate) return;
 
       rules[encounterType] = {
-        label: row.program_type,
+        label: specialtyReportingGroup(row.program_type),
         allowedRooms: (row.rooms_assigned?.rooms || []).map((room) => String(room)),
       };
+      if (row.program_type === "Mental Health") rules.addiction = rules[encounterType];
     });
 
     return rules;
@@ -5711,8 +5713,8 @@ export default function App() {
   const currentSpecialtyAccess = useMemo(() => {
     const value = currentUserProfile?.specialty_access;
     const access = Array.isArray(value)
-      ? value
-      : (typeof value === "string" && value.trim() ? [value.trim()] : []);
+      ? combinedMentalHealthAccess(value)
+      : combinedMentalHealthAccess(typeof value === "string" && value.trim() ? [value.trim()] : []);
     if (userRole === "physical_therapy" && !access.includes("Physical Therapy")) {
       return [...access, "Physical Therapy"];
     }
@@ -12188,6 +12190,7 @@ async function markSeenBySocialWork(encounterId) {
           {canAccessResearch && (
             <div className={activeView === "research" ? "" : "hidden"}>
             <ResearchView
+              programEntries={programEntries}
               isActive={activeView === "research"}
               onOpenPatientChart={openPatientChart}
               patients={patients}

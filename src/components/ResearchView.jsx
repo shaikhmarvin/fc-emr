@@ -39,7 +39,7 @@ function Breakdown({ title, values, total, onSelect }) {
   );
 }
 
-export default function ResearchView({ isActive = true, patients = [], womensHealthEventDate = "", isResearchOwner = false, leadershipAccessEnabled = false, onLeadershipAccessChange, onOpenPatientChart }) {
+export default function ResearchView({ isActive = true, patients = [], programEntries = [], womensHealthEventDate = "", isResearchOwner = false, leadershipAccessEnabled = false, onLeadershipAccessChange, onOpenPatientChart }) {
   const today = new Date().toISOString().slice(0, 10);
   const [startDate, setStartDate] = useState(`${today.slice(0, 4)}-01-01`);
   const [endDate, setEndDate] = useState(today);
@@ -185,13 +185,13 @@ export default function ResearchView({ isActive = true, patients = [], womensHea
 
         {startDate && endDate && startDate > endDate && <p role="alert" className="text-sm text-red-700">Choose a From date on or before the Through date.</p>}
         <nav aria-label="Research studies" className="research-navigation">
-          {[["patients", "Patients & returns"], ["chronic", "Chronic conditions management"], ["access", "Language & access"], ["times", "Visit times"], ["pharmacy", "Pharmacy & refills"], ["screening", "Screening"], ["specialty", "Specialty use & interest"]].map(([key, label]) => (
+          {[["patients", "Patients & returns"], ["chronic", "Chronic conditions management"], ["access", "Language & access"], ["times", "Visit times"], ["pharmacy", "Pharmacy & refills"], ["screening", "Screening"], ["specialty", "Specialty tracker"]].map(([key, label]) => (
             <button key={key} type="button" aria-current={study === key ? "page" : undefined} aria-controls="research-study-panel" onClick={() => { setStudy(key); setDailyPage(0); }} className={study === key ? "research-nav-active" : ""}>{label}</button>
           ))}
         </nav>
         <div id="research-study-panel" className="research-study-panel">
         <ResearchStudies key={`${clinicEvent}-${startDate}-${endDate}`} report={report} endDate={endDate} study={study} onInspect={setDrilldown} />
-        {study === "specialty" && <SpecialtyAnalytics patients={patientsForClinicEvent(patients, clinicEvent, womensHealthEventDate)} startDate={startDate} endDate={endDate} onInspect={setDrilldown} />}
+        {study === "specialty" && <SpecialtyAnalytics patients={patientsForClinicEvent(patients, clinicEvent, womensHealthEventDate)} historyPatients={patients} programEntries={programEntries} startDate={startDate} endDate={endDate} onInspect={setDrilldown} />}
         {study === "patients" && <section aria-label="Patients and return visits"><ResearchCalculations section="patients" />
 <h2 className="text-lg font-semibold text-slate-900">Patients and return visits</h2>
 <p className="mt-1 text-sm text-slate-600">Disease groups and follow-up patterns for general-clinic visits.</p>

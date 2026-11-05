@@ -1,29 +1,28 @@
 import { useMemo } from 'react';
 import { buildSpecialtyAnalytics } from '../utils/specialtyAnalytics.js';
-import { percent } from '../researchAnalytics.js';
-export default function SpecialtyAnalytics({ patients, startDate, endDate, onInspect }) {
-  const report = useMemo(() => buildSpecialtyAnalytics(patients, startDate, endDate), [patients, startDate, endDate]);
+
+export default function SpecialtyAnalytics({ patients, historyPatients = patients, programEntries = [], startDate, endDate, onInspect }) {
+  const report = useMemo(() => buildSpecialtyAnalytics(patients, startDate, endDate, programEntries, historyPatients), [patients, historyPatients, startDate, endDate, programEntries]);
   function inspect(title, rows, source) {
-    onInspect({ title, rows: rows.map(row => ({ patient: row.patientName, patientId: row.patientId, date: row.date, encounterId: row.encounter.id, value: row.program || 'Recorded interest / need', source })) });
+    onInspect({ title, rows: rows.map(row => ({ patient: row.patientName, patientId: row.patientId, date: row.date, encounterId: row.encounter?.id, value: row.recordedProgram && row.recordedProgram !== row.program ? row.program + ' · Saved as ' + row.recordedProgram : row.program, source })) });
   }
-  const count = (title, rows, number, source) => <button type="button" className="font-semibold text-blue-700 hover:underline" onClick={() => inspect(title, rows, source)}>{number}</button>;
+  function count(title, rows, source) {
+    return rows === null ? <span className="text-slate-400" title="No comparable Ophthalmology tracker total">N/A</span>
+      : <button type="button" className="font-semibold text-blue-700 hover:underline" onClick={() => inspect(title, rows, source)}>{rows.length}</button>;
+  }
   return <section aria-label="Specialty tracking" className="space-y-4">
-    <h2 className="text-lg font-semibold text-slate-900">Specialty use and interest</h2>
-    <div className="research-metrics">
-      <div className="research-metric rounded-xl bg-slate-50 p-4"><p>Specialty use rate</p><p className="text-2xl font-bold">{count('Specialty users', report.used, percent(report.specialtyPatients, report.patients), 'Unique specialty users ÷ all non-cancelled clinic patients')}</p><p className="text-xs text-slate-500">{report.specialtyPatients} of {report.patients} patients</p></div>
-      <div className="research-metric rounded-xl bg-slate-50 p-4"><p>Specialty visits</p><p className="text-2xl font-bold">{count('Specialty visits', report.used, report.used.length, 'Non-cancelled specialty encounters')}</p></div>
-    </div>
-    <div className="overflow-x-auto"><table className="research-table"><thead><tr>{['Specialty', 'Patients / use rate', 'Visits', 'Completed / rate', 'Interest / need', 'Interest rate', 'Not yet used', 'Repeat patients', 'LWOBS'].map(label => <th key={label} className="px-3 py-3">{label}</th>)}</tr></thead><tbody>{report.groups.map(g => <tr key={g.program}>
-      <td className="px-3 py-3 font-semibold">{g.program}</td>
-      <td className="px-3 py-3">{count(g.program + ' users', g.used, g.patients + ' / ' + percent(g.patients, report.patients), 'Unique specialty users ÷ all clinic patients')}</td>
-      <td className="px-3 py-3">{count(g.program + ' visits', g.used, g.used.length, 'Non-cancelled specialty visits')}</td>
-      <td className="px-3 py-3">{count(g.program + ' completed visits', g.completed, g.completed.length + ' / ' + percent(g.completed.length, g.used.length), 'Completed ÷ non-cancelled specialty visits')}</td>
-      <td className="px-3 py-3">{count(g.program + ' interest / need', g.interested, g.interestedPatients, 'Positive or free-text specialty intake response; includes Maybe')}</td>
-      <td className="px-3 py-3">{count(g.program + ' assessed interest', g.assessed, percent(g.interestedPatients, g.assessedPatients), 'Interested patients ÷ patients with a recorded response (excludes blank / N/A)')}</td>
-      <td className="px-3 py-3">{count(g.program + ' interest without subsequent use', g.unmet, g.unmetPatients, 'No same-specialty non-cancelled visit on or after interest date within selected range')}</td>
-      <td className="px-3 py-3">{count(g.program + ' repeat patients', g.repeat, g.repeatPatients, 'Completed specialty visits on two or more distinct dates within selected range')}</td>
-      <td className="px-3 py-3">{count(g.program + ' LWOBS', g.cancelled, g.cancelled.length, 'Cancelled specialty encounters')}</td>
-    </tr>)}</tbody></table></div>
-    <p className="text-xs text-slate-500">Uses the selected dates and clinic event. Use means a non-cancelled specialty check-in; completed care requires a completed encounter. Interest / need comes from recorded specialty intake responses, including free text and Maybe, and is not a clinical diagnosis. Interest rate excludes blank and N/A responses. Not yet used means no same-specialty visit on or after the recorded interest within this period. Repeat patients require completed visits on different dates. Patients may appear in multiple specialties; counts should not be added across rows.</p>
+    <h2 className="text-lg font-semibold text-slate-900">Specialty tracker</h2>
+    <div className="overflow-x-auto"><table className="research-table">
+      <thead><tr>{['Specialty', 'Patients seen', 'Total patients on tracker', 'Clinic visits', 'Repeat patients', 'Patients not yet seen'].map(label => <th key={label} className="px-3 py-3">{label}</th>)}</tr></thead>
+      <tbody>{report.groups.map(group => <tr key={group.program}>
+        <td className="px-3 py-3 font-semibold">{group.program}</td>
+        <td className="px-3 py-3">{count(group.program + ': patients seen', group.patientsSeen, 'Unique patients with completed specialty visits in the selected dates and clinic event')}</td>
+        <td className="px-3 py-3">{count(group.program + ': tracker patients', group.trackerPatients, 'Unique patients currently on the specialty tracker; includes all tracker statuses')}</td>
+        <td className="px-3 py-3">{count(group.program + ': clinic visits', group.visits, 'Completed specialty visits in the selected dates and clinic event; one visit per patient per date')}</td>
+        <td className="px-3 py-3">{count(group.program + ': repeat patients', group.repeatPatients, 'Patients with completed specialty visits on two or more dates in this period')}</td>
+        <td className="px-3 py-3">{count(group.program + ': patients not yet seen', group.notSeen, 'Tracker patients with no completed visit for this specialty in chart history through the selected end date')}</td>
+      </tr>)}</tbody>
+    </table></div>
+    <p className="text-xs text-slate-500">Patients seen, clinic visits, and repeat patients use the selected dates and clinic event. Clinic visits count completed patient visits, once per patient per date. Repeat patients were seen on at least two dates. Tracker totals count unique patients across all current tracker statuses. Patients not yet seen have no completed visit for that specialty anywhere in chart history through the selected end date. Mental Health and Addiction Medicine share one row; historical visits and tracker entries under either label are combined, with duplicate patients and same-day visits counted once. Ophtho tracker totals and patients not yet seen are unavailable.</p>
   </section>;
 }

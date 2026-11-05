@@ -63,3 +63,17 @@ test('dashboard specialty and LWOBS filters match the encounter opened, includin
   assert.equal(matchesSpecialtyFilter({ ...encounter, status: 'cancelled' }, 'lwobs'), true);
   assert.equal(matchesSpecialtyFilter(encounter, ''), true);
 });
+
+test('program tracker completion history checks both mental health and addiction labels', () => {
+  const history = specialtyVisitHistory([{ id: 'p', encounters: [
+    { ...encounter, id: 'mh', specialtyType: 'mental_health', clinicDate: '2026-09-25', status: 'done' },
+    { ...encounter, id: 'add', specialtyType: 'addiction', clinicDate: '2026-10-23', status: 'done' },
+    { ...encounter, id: 'cancelled', specialtyType: 'addiction', clinicDate: '2026-10-24', status: 'cancelled' },
+  ] }]);
+  for (const programType of ['Mental Health', 'Addiction Medicine']) {
+    const tracker = { ...entry, programType };
+    assert.deepEqual(completedSpecialtyDates(history, tracker), ['2026-09-25', '2026-10-23']);
+    assert.deepEqual(trackerCompletionDates(history, { ...tracker, specialtyDate: '2026-10-23' }), ['2026-10-23']);
+    assert.deepEqual(trackerCompletionDates(history, { ...tracker, specialtyDate: '2026-11-20' }), []);
+  }
+});

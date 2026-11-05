@@ -1,6 +1,7 @@
+import { mentalHealthProgramType, combinedMentalHealthSettings } from "../utils/mentalHealthService.js";
 import { ophthoReferral, isOphthoEncounter, matchesOphthoDay, existingOphthoVisit } from "../utils/ophthalmology.js";
 import "./ProgramsView.css";
-import { specialtyProgram, specialtyTrackerVisits, specialtyVisitHistory, completedSpecialtyDates, trackerCompletionDates } from "../utils/specialtyTracker.js";
+import { specialtyProgram, specialtyReportingGroup, MENTAL_HEALTH_ADDICTION, specialtyTrackerVisits, specialtyVisitHistory, completedSpecialtyDates, trackerCompletionDates } from "../utils/specialtyTracker.js";
 import { useEffect, useMemo, useState } from "react";
 import {
   PT_TIME_SLOTS,
@@ -21,7 +22,6 @@ const PROGRAM_TYPES = [
   "Ophthalmology",
   "Mental Health",
   "Counseling",
-  "Addiction Medicine",
   "Mammogram",
   "Colonoscopy",
   "Women's Health Day",
@@ -79,7 +79,7 @@ function isGenericTrackingProgram(programType) {
 }
 
 export default function ProgramsView({
-  programEntries,
+  programEntries: savedProgramEntries = [],
   openPatientChart,
   canOpenCharts = true,
   addProgramEntry,
@@ -101,6 +101,7 @@ export default function ProgramsView({
   onSaveWomensHealthSettings,
   isActive = false,
 }) {
+  const programEntries = useMemo(() => savedProgramEntries.map(entry => ({ ...entry, programType: mentalHealthProgramType(entry.programType) })), [savedProgramEntries]);
   const [savingWomensHealthSettings, setSavingWomensHealthSettings] = useState(false);
   const [womensHealthSettingsMessage, setWomensHealthSettingsMessage] = useState("");
   const [womensHealthView, setWomensHealthView] = useState("waitlist");
@@ -135,14 +136,14 @@ export default function ProgramsView({
   }
   const [activeTab, setActiveTab] = useState(() => {
     try {
-      return window.sessionStorage.getItem("specialty-programs-active-tab") || "Tracker";
+      return mentalHealthProgramType(window.sessionStorage.getItem("specialty-programs-active-tab")) || "Tracker";
     } catch {
       return "Tracker";
     }
   });
 
   const normalizedSpecialtyAccess = useMemo(() => {
-    return Array.isArray(specialtyAccess) ? specialtyAccess : [];
+    return Array.isArray(specialtyAccess) ? [...new Set(specialtyAccess.map(mentalHealthProgramType))] : [];
   }, [specialtyAccess]);
 
   const accessibleProgramTypes = useMemo(() => {
@@ -403,10 +404,10 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
 
   async function loadProgramSettings() {
     const data = await fetchProgramSettings();
-    const rows = data || [];
+    const rows = combinedMentalHealthSettings(data || []);
 
     setProgramSettings(rows);
-    onProgramSettingsChange?.(rows);
+    onProgramSettingsChange?.(data || []);
 
     setNextProgramDates(
       rows.reduce((acc, row) => {
@@ -456,7 +457,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
     return <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
       <span className="font-medium">Specialty visit: </span>
       {visit ? visit.status + " · " + formatDisplayDate(visit.date) : dates.length ? "See completed specialty history below" : "Not checked in"}
-      {dates.length > 0 && <p className="mt-1"><span className="font-medium">Completed specialty dates ({dates.length}): </span>{dates.map(date => formatDisplayDate(date)).join(", ")}</p>}
+      {dates.length > 0 && <p className="mt-1"><span className="font-medium">{specialtyReportingGroup(entry.programType) === MENTAL_HEALTH_ADDICTION ? "Completed Mental Health / Addiction Medicine dates" : "Completed specialty dates"} ({dates.length}): </span>{dates.map(date => formatDisplayDate(date)).join(", ")}</p>}
     </div>;
   }
 
@@ -704,13 +705,6 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
         };
       }
 
-      if (type === "Addiction Medicine") {
-        return {
-          schedulingType: "count",
-          primaryCount: 8,
-          backupCount: 3,
-        };
-      }
     }
 
     return {
@@ -761,7 +755,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
     const conflict = programEntries.some(
       (item) =>
         item.id !== entry.id &&
-        item.programType === entry.programType &&
+        mentalHealthProgramType(item.programType) === mentalHealthProgramType(entry.programType) &&
         item.specialtyDate === (entry.specialtyDate || nextProgramDates[entry.programType]) &&
         item.scheduleType === "primary" &&
         item.schedulePosition === slotOrPosition
@@ -879,7 +873,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                   Add Referral Entry
                 </h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  {specialty ? `Create a new ${specialty} referral.` : "Create a new specialty referral from intake."}
+                  {specialty ? `Create a new ${specialtyReportingGroup(specialty)} referral.` : "Create a new specialty referral from intake."}
                 </p>
               </div>
 
@@ -1118,7 +1112,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                       >
                         {accessibleProgramTypes.map((type) => (
                           <option key={type} value={type}>
-                            {type}
+                            {specialtyReportingGroup(type)}
                           </option>
                         ))}
                       </select>
@@ -1247,7 +1241,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                 <option value="">All programs</option>
                 {accessibleProgramTypes.map((type) => (
                   <option key={type} value={type}>
-                    {type}
+                    {specialtyReportingGroup(type)}
                   </option>
                 ))}
               </select>
@@ -1312,7 +1306,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                         <div className="tracker-dob"><ReadOnlyField label="DOB" value={formatDisplayDate(entry.dob)} /></div>
                         <div className="tracker-phone"><ReadOnlyField label="Phone Number" value={entry.phone || "—"} /></div>
                         <div className="md:col-span-1"><ReadOnlyField label="MRN" value={entry.mrn || "—"} /></div>
-                        <div className="md:col-span-2"><ReadOnlyField label="Program" value={entry.programType === "Mammogram" ? "Mammogram/Breast Exam" : entry.programType} copyable={false} /></div>
+                        <div className="md:col-span-2"><ReadOnlyField label="Program" value={entry.programType === "Mammogram" ? "Mammogram/Breast Exam" : specialtyReportingGroup(entry.programType)} copyable={false} /></div>
 
                         <div className="md:col-span-1">
                           <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -1407,7 +1401,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                             onClick={() => setActiveTab(entry.programType)}
                             className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200"
                           >
-                            Open {entry.programType}
+                            Open {specialtyReportingGroup(entry.programType)}
                           </button>
 
                           <button
@@ -1704,7 +1698,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
             onUpdate={updateProgramEntryFields}
           /> : <Card>
             <h3 className="mb-4 text-lg font-semibold text-slate-900">
-              {programType} Tracking
+              {specialtyReportingGroup(programType)} Tracking
             </h3>
             {programType === "Women's Health Day" && (
               <p className="mb-4 text-sm text-slate-600">
@@ -1787,7 +1781,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
             </div>
 
             {entries.length === 0 ? (
-              <p className="text-sm text-slate-500">No {programType} entries.</p>
+              <p className="text-sm text-slate-500">No {specialtyReportingGroup(programType)} entries.</p>
             ) : (
               <div className="space-y-3">
                 {entries.map((entry) => {
@@ -1941,11 +1935,18 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
       (entry) => entry.scheduleType === "backup" && entry.specialtyDate === specialtyDate
     );
 
+    const scheduledEntries = [...primaryEntries, ...backupEntries];
+    const conflictingEntries = programType === 'Mental Health' ? scheduledEntries.filter(entry => entry.schedulePosition != null && scheduledEntries.some(other => other.id !== entry.id && other.scheduleType === entry.scheduleType && other.schedulePosition === entry.schedulePosition)) : [];
+
     const scheduler = (
         <Card>
           <h3 className="mb-4 text-lg font-semibold text-slate-900">
-            {programType} Scheduler
+            {specialtyReportingGroup(programType)} Scheduler
           </h3>
+          {conflictingEntries.length > 0 && <div role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            <p className="font-semibold">Some appointments from the previous trackers share a position. Review and reassign these appointments.</p>
+            {conflictingEntries.map(entry => <div key={entry.id} className="mt-2 flex items-center justify-between gap-3"><span>{entry.patientName} · {entry.scheduleType} {entry.schedulePosition}</span><button type="button" className="font-semibold underline" onClick={() => handleUnassign(entry)}>Unassign</button></div>)}
+          </div>}
 
           {!specialtyDate ? (
             <p className="text-sm text-slate-500">Set the next specialty clinic date first.</p>
@@ -2055,7 +2056,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
 
               <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div className="grid flex-1 grid-cols-1 gap-4 md:grid-cols-3">
-                  <Field label={programType === "Counseling" ? "Counseling — every Wednesday" : `Next ${programType} Clinic Date`}>
+                  <Field label={programType === "Counseling" ? "Counseling — every Wednesday" : `Next ${specialtyReportingGroup(programType)} Clinic Date`}>
                     {programType === "Counseling" ? <label className="flex items-center gap-2 text-sm">
                       <input type="checkbox" checked={programSettings.find(row => row.program_type === "Counseling")?.counseling_enabled !== false} onChange={async event => {
                         try {
@@ -2273,7 +2274,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
           <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h3 className="text-lg font-semibold text-slate-900">
-                {programType} Referral List
+                {specialtyReportingGroup(programType)} Referral List
               </h3>
               <p className="text-sm text-slate-500">
                 Running list for this specialty, including scheduled and completed patients.
@@ -2585,7 +2586,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
           const isActive = activeTab === tab;
           return (
             <button
-              key={tab}
+              key={specialtyReportingGroup(tab)}
               onClick={() => {
                 if (tab !== activeTab) setShowAddReferral(false);
                 setActiveTab(tab);
@@ -2595,7 +2596,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                 : "bg-white text-slate-700 hover:bg-slate-100"
                 }`}
             >
-              {tab}
+              {specialtyReportingGroup(tab)}
             </button>
           );
         })}

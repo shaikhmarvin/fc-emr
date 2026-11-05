@@ -7,6 +7,14 @@ const PROGRAMS = {
   addiction: 'Addiction Medicine', addiction_medicine: 'Addiction Medicine',
 };
 
+export const MENTAL_HEALTH_ADDICTION = 'Mental Health / Addiction Medicine';
+
+// Historical check-ins used these labels interchangeably. Keep clinical labels
+// intact while treating both as one service for reporting and visit history.
+export function specialtyReportingGroup(program) {
+  return ['Mental Health', 'Addiction Medicine', MENTAL_HEALTH_ADDICTION].includes(program) ? MENTAL_HEALTH_ADDICTION : program;
+}
+
 export function specialtyProgram(encounter) {
   const intake = encounter?.intakeData || encounter?.intake_data || {};
   const key = String(encounter?.specialtyType || encounter?.specialty_type || (encounter?.noteType === 'ophthalmology' ? 'ophthalmology' : '') || intake.specialtyType || intake.specialty_type || '').trim().toLowerCase().replace(/[ -]+/g, '_');
@@ -19,10 +27,10 @@ export function matchingSpecialtyTracker(entries, patientId, encounter) {
   const program = specialtyProgram(encounter);
   const date = String(encounter?.clinicDate || encounter?.clinic_date || '').slice(0, 10);
   if (!program || !patientId || !date) return null;
-  const linkedId = encounter.specialtyTrackerId || encounter.intake_data?.specialtyTrackerId;
-  if (linkedId) return (entries || []).find(entry => String(entry.id) === String(linkedId) && String(entry.patientId) === String(patientId) && entry.programType === program) || null;
+  const linkedId = encounter.specialtyTrackerId || encounter.intakeData?.specialtyTrackerId || encounter.intake_data?.specialtyTrackerId;
+  if (linkedId) return (entries || []).find(entry => String(entry.id) === String(linkedId) && String(entry.patientId) === String(patientId) && specialtyReportingGroup(entry.programType) === specialtyReportingGroup(program)) || null;
   const matches = (entries || []).filter((entry) => {
-    if (String(entry.patientId) !== String(patientId) || entry.programType !== program) return false;
+    if (String(entry.patientId) !== String(patientId) || specialtyReportingGroup(entry.programType) !== specialtyReportingGroup(program)) return false;
     if (entry.createdAt && String(entry.createdAt).slice(0, 10) > date) return false;
     if (entry.specialtyDate) return entry.specialtyDate === date;
     return !['Completed', 'Declined', 'Denied', 'Unable to Reach'].includes(entry.status);
@@ -67,8 +75,10 @@ export function specialtyVisitHistory(patients) {
   return history;
 }
 export function completedSpecialtyDates(history, entry) {
-  return [...new Set((history.get(entry.patientId + ':' + entry.programType) || [])
-    .filter(visit => visit.status === 'Visit completed').map(visit => visit.date))].sort();
+  const programs = specialtyReportingGroup(entry.programType) === MENTAL_HEALTH_ADDICTION
+    ? ['Mental Health', 'Addiction Medicine'] : [entry.programType];
+  const visits = programs.flatMap(program => history.get(entry.patientId + ':' + program) || []);
+  return [...new Set(visits.filter(visit => visit.status === 'Visit completed').map(visit => visit.date))].sort();
 }
 export function trackerCompletionDates(history, entry) {
   return completedSpecialtyDates(history, entry).filter(date => entry.specialtyDate ? date === entry.specialtyDate : !entry.createdAt || date >= String(entry.createdAt).slice(0, 10));
