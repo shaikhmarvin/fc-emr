@@ -7,8 +7,13 @@ const formulas = {
     ['Patient and visit counts', 'Patients are distinct patient IDs in each group; visits count qualifying encounters. Patients with refill-only visits count distinct patients with at least one qualifying refill visit, separately from general visits.'],
   ],
   followup: [
-    ['30 / 60 / 90-day return share', 'Eligible index patients who have a later general visit within the selected number of days ÷ all eligible index patients × 100, calculated separately for each group.'],
-    ['Eligibility and return interval', 'Index date = the patient’s earliest qualifying general visit in the selected period. Days observed = selected Through date − index date; eligibility requires at least the selected 30, 60, or 90 days. Return interval = next distinct general-visit date − index date; intervals from 1 through the selected number of days count as returned. Insufficient follow-up is excluded from the denominator.'],
+    ['Patient return rate', 'Patients with at least one later general-clinic date ÷ patients with a general-clinic visit in the group × 100. Each patient contributes once to the denominator.'],
+    ['Return frequency', 'Count distinct general-clinic dates after each patient’s first general-clinic date in the selected period. The frequency columns count patients with 0, 1, 2, 3, or 4+ later dates. Multiple encounters on one date count once.'],
+    ['Group assignment', 'Diagnosis uses current profile diagnoses and qualifying saved history through the selected end date.'],
+    ['Transportation visit share', 'General visits reporting the transportation mode ÷ all qualifying general visits × 100.'],
+    ['Transportation return-visit counts', 'For each patient and mode, count distinct general-visit dates after their earliest visit reporting that mode within the selected period and clinic event. Patients with returns are split into exactly 1, 2, 3, or 4+ later dates. Later visits may use another mode. Same-day encounters count once; refill, specialty-only, and cancelled visits are excluded.'],
+    ['Transportation average days between general visits', 'Average days from a general visit reporting the mode to the patient’s next distinct general-visit date within the selected dates and clinic event. The next visit may report a different mode. Same-day visits count once per mode; visits without a later general visit do not contribute. Refill, specialty-only, and cancelled visits are excluded. Displayed to 1 decimal.'],
+    ['Transportation observed return share', 'Distinct patients reporting the mode who have a later general visit in the selected period ÷ distinct patients reporting that mode × 100. The later visit may report a different mode. A patient can appear in multiple transportation groups.'],
   ],
   clinical: [
     ['Daily patient reading', 'Sum of distinct valid readings for a patient on a date ÷ number of distinct valid readings that day. Identical readings on the same date count once. BP components and A1C are calculated separately.'],
@@ -25,10 +30,6 @@ const formulas = {
   access: [
     ['Language share', 'General visits in the language category ÷ all qualifying general visits × 100.'],
     ['Language average visit time', 'Sum of valid (completion time − undergrad-complete time) minutes in the language category ÷ visits in that category with valid timing. Intervals and averages are rounded to whole minutes; only intervals of 1–480 minutes qualify. Completion uses medication pickup, then visit-complete, then done time, in that order.'],
-    ['Transportation visit share', 'General visits reporting the transportation mode ÷ all qualifying general visits × 100.'],
-    ['Transportation return-visit counts', 'For each patient and mode, count distinct general-visit dates after their earliest visit reporting that mode within the selected period and clinic event. Patients with returns are split into exactly 1, 2, 3, or 4+ later dates. Later visits may use another mode. Same-day encounters count once; refill, specialty-only, and cancelled visits are excluded.'],
-    ['Transportation average days between general visits', 'Average days from a general visit reporting the mode to the patient’s next distinct general-visit date within the selected dates and clinic event. The next visit may report a different mode. Same-day visits count once per mode; visits without a later general visit do not contribute. Refill, specialty-only, and cancelled visits are excluded. Displayed to 1 decimal.'],
-    ['Transportation observed return share', 'Distinct patients reporting the mode who have a later general visit in the selected period ÷ distinct patients reporting that mode × 100. The later visit may report a different mode. A patient can appear in multiple transportation groups.'],
   ],
   times: [
     ['Each average time', 'For the interval named on the metric or column: sum of valid elapsed minutes ÷ encounters with a valid interval. Elapsed minutes = (end timestamp − start timestamp) ÷ 60,000 milliseconds, rounded to whole minutes. Only 1–480 minutes qualify; missing or invalid intervals are excluded separately for each average. Averages are rounded to whole minutes.'],

@@ -4,31 +4,36 @@ import { buildResearchReport } from './researchAnalytics.js';
 import { buildResearchStudies } from './researchStudies.js';
 
 const visit = (id, clinicDate, extra = {}) => ({ id, clinicDate, visitType: 'general', ...extra });
-const build = (patients, end = '2026-04-01', event = '') => buildResearchStudies(buildResearchReport(patients, '2026-01-01', end, event), end);
+const build = (patients, end = '2026-04-01', event = '') => buildResearchStudies(buildResearchReport(patients, '2026-01-01', end, event));
 
-test('follow-up uses a single index, exact inclusive boundaries, and full observation windows', () => {
-  const data = build([
-    { id: 'a', encounters: [visit('a2', '2026-01-31', { transportation: 'Car' }), visit('a1', '2026-01-01', { transportation: 'Bus' }), visit('a3', '2026-02-10')] },
-    { id: 'b', encounters: [visit('b1', '2026-03-15'), visit('b2', '2026-03-20')] },
-    { id: 'c', encounters: [visit('c1', '2026-01-01'), visit('c2', '2026-02-01')] },
+test('return frequency counts distinct later dates and assigns each patient once by diagnosis', () => {
+  const { returnPatterns } = build([
+    { id: 'a', encounters: [
+      visit('a1', '2026-01-01', { transportation: 'Bus', htn: true, dm: true }),
+      visit('a2', '2026-01-01'),
+      visit('a3', '2026-01-31', { transportation: 'Car' }),
+      visit('a4', '2026-01-31'),
+      visit('a5', '2026-02-10'),
+      visit('a6', '2026-02-11'),
+      visit('a7', '2026-02-12'),
+      visit('a8', '2026-02-13'),
+    ] },
+    { id: 'b', encounters: [visit('b1', '2026-03-30'), visit('b2', '2026-03-31')] },
+    { id: 'c', encounters: [visit('c1', '2026-04-01'), visit('c2', '2026-04-02')] },
   ]);
-  const [thirty, sixty, ninety] = data.followup;
-  assert.equal(thirty.rows.length, 3);
-  assert.equal(thirty.eligible.length, 2);
-  assert.equal(thirty.returned.length, 1);
-  assert.equal(thirty.excluded.length, 1);
-  assert.equal(sixty.returned.length, 2);
-  assert.equal(ninety.eligible.length, 2);
-  assert.equal(thirty.groups.find(g => g.label === 'Transportation: Bus').returned.length, 1);
-  assert.ok(!thirty.groups.some(g => g.label === 'Transportation: Car'));
-  assert.equal(data.missingTransport.length, 2);
-  assert.match(thirty.returned[0].researchSource, /a2/);
+  const { overall, diagnoses } = returnPatterns;
+  assert.equal(overall.patients.length, 3);
+  assert.equal(overall.returned.length, 2);
+  assert.deepEqual(overall.frequency.map(rows => rows.length), [1, 1, 0, 0, 1]);
+  assert.equal(overall.frequency[4][0].returnCount, 5);
+  assert.equal(diagnoses.find(group => group.label === 'HTN and DM').returned.length, 1);
+  assert.equal(diagnoses.flatMap(group => group.patients).length, 3);
 });
 
-test('follow-up excludes cancelled, specialty, refill, and other-event returns', () => {
+test('return frequency excludes cancelled, specialty, refill, and other-event returns', () => {
   const data = build([{ id: 'a', encounters: [visit('a', '2026-01-01'), visit('r', '2026-01-02', { visitType: 'refill_only' }), visit('s', '2026-01-03', { visitType: 'specialty_only' }), visit('c', '2026-01-04', { status: 'cancelled' }), visit('e', '2026-01-05', { clinicEvent: 'womens_health_day' })] }]);
-  assert.equal(data.followup[0].eligible.length, 1);
-  assert.equal(data.followup[0].returned.length, 0);
+  assert.equal(data.returnPatterns.overall.patients.length, 1);
+  assert.equal(data.returnPatterns.overall.returned.length, 0);
   assert.equal(data.pharmacyRows.length, 2);
 });
 
@@ -76,13 +81,13 @@ test('same-day ambiguity never invents a visit order', () => {
 
 test('future and cancelled diagnoses cannot define historical research cohorts', () => {
   const data = build([{ id: 'a', encounters: [visit('a', '2026-01-01'), visit('c', '2026-02-01', { status: 'cancelled', htn: true }), visit('f', '2026-05-01', { dm: true })] }]);
-  assert.equal(data.followup[0].groups.find(g => g.label === 'Neither recorded').eligible.length, 1);
+  assert.equal(data.returnPatterns.diagnoses.find(g => g.label === 'Neither recorded').patients.length, 1);
 });
 
 test('empty data and invalid dates produce no fabricated statistics', () => {
   const data = build([{ id: 'a', encounters: [visit('bad', '2026-02-30')] }]);
   assert.equal(data.invalidDates.length, 1);
-  assert.equal(data.followup[0].eligible.length, 0);
+  assert.equal(data.returnPatterns.overall.patients.length, 0);
   assert.equal(data.stages[0].median, '—');
   assert.equal(data.transitions[0].share, '—');
   assert.equal(data.transitions[0].median, '—');

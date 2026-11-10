@@ -10,13 +10,11 @@ function StudyTable({ columns, rows }) {
   </table></div>;
 }
 
-export default function ResearchStudies({ report, endDate, study, onInspect }) {
-  const data = useMemo(() => buildResearchStudies(report, endDate), [report, endDate]);
-  const [windowDays, setWindowDays] = useState(30);
+export default function ResearchStudies({ report, study, onInspect, children }) {
+  const data = useMemo(() => buildResearchStudies(report), [report]);
   const [clinicDate, setClinicDate] = useState('');
   const inspect = (label, rows) => onInspect({ title: label, rows: rows.map(row => ({ patient: row.patientName, date: row.date, encounterId: row.encounter.id, value: row.researchValue || 'Included visit', source: row.researchSource || 'Saved encounter' })) });
   const count = (label, rows) => <button type="button" className="text-blue-700 underline decoration-blue-200 underline-offset-2" onClick={() => inspect(label, rows)}>{rows.length}</button>;
-  const followup = data.followup.find(window => window.days === windowDays);
   const stages = clinicDate ? data.daily.find(day => day.date === clinicDate)?.stages || [] : data.stages;
   const bottleneck = [...stages].filter(stage => stage.valid).sort((a, b) => b.median - a.median)[0];
   const pickupGroups = ['general', 'refill_only'].map(visitType => {
@@ -28,14 +26,30 @@ export default function ResearchStudies({ report, endDate, study, onInspect }) {
     return { label: visitType === 'general' ? 'General clinic' : 'Refill only', rows: collect('rows'), pickedUp: collect('pickedUp'), resolved: [...collect('pickedUp'), ...collect('notPickedUp')], notPickedUp: collect('notPickedUp'), pending: collect('pending'), noMeds: collect('noMeds'), unrecorded: collect('unrecorded') };
   });
 
-  if (study === 'patients') return <section aria-label="Follow-up research" className="mb-6 rounded-xl border border-blue-200 bg-blue-50/30 p-4">
-    <h2 className="text-lg font-semibold text-slate-900">30 / 60 / 90-day follow-up</h2><ResearchCalculations section="followup" />
-    <p className="mt-1 text-sm text-slate-600">Question: How does observed return to general clinic differ by transportation and recorded HTN/DM group?</p>
-    <label className="mt-3 block text-sm font-medium">Follow-up window <select className="ml-2 rounded-lg border bg-white p-2" value={windowDays} onChange={event => setWindowDays(Number(event.target.value))}>{[30, 60, 90].map(days => <option key={days} value={days}>{days} days</option>)}</select></label>
-    <p className="mt-3 text-sm text-slate-700">{count('All index visits', followup.rows)} index patients · {count('Missing index transportation', data.missingTransport)} missing transportation · {count('Invalid clinic dates excluded', data.invalidDates)} invalid clinic dates excluded</p>
-    <StudyTable columns={['Group', 'Eligible patients', 'Returned within window', 'Return share', 'Insufficient follow-up']} rows={[followup, ...followup.groups].map(group => [group.label, count(`${group.label}: eligible at ${windowDays} days`, group.eligible), count(`${group.label}: returned within ${windowDays} days`, group.returned), percent(group.returned.length, group.eligible.length), count(`${group.label}: insufficient follow-up`, group.excluded)])} />
-    <p className="mt-3 text-xs text-slate-600">One index visit per patient: the earliest non-cancelled general visit in the selected period, not necessarily their first-ever visit. Returns must occur on a later clinic date within the window. Eligibility requires the full window through the selected end date. Transportation is taken from the index visit, including Not recorded. HTN/DM groups use current profile diagnoses and saved history through the end date, not verified status at the index visit. Only saved visits in the selected clinic event count; no recorded return does not establish absence of care elsewhere. These are unadjusted associations.</p>
-  </section>;
+  if (study === 'patients') {
+    const frequencyLabels = ['0 returns', '1 return', '2 returns', '3 returns', '4+ returns'];
+    const columns = ['Group', 'Patients', 'Returned', 'Return rate', ...frequencyLabels];
+    const breakdown = (title, groups) => <div className="mt-4">
+      <h3 className="font-semibold text-slate-900">{title}</h3>
+      <StudyTable columns={columns} rows={groups.map(group => [
+        group.label,
+        count(`${title} · ${group.label} · All patients`, group.patients),
+        count(`${title} · ${group.label} · Returned`, group.returned),
+        percent(group.returned.length, group.patients.length),
+        ...group.frequency.map((rows, i) => count(`${title} · ${group.label} · ${frequencyLabels[i]}`, rows)),
+      ])} />
+    </div>;
+    return <section aria-label="Patient return patterns" className="mb-6 rounded-xl border border-blue-200 bg-blue-50/30 p-4">
+      <h2 className="text-lg font-semibold text-slate-900">Patient return rates and frequency</h2>
+      <p className="mt-1 text-sm text-slate-600">Each patient appears once in the overall total and once in the diagnosis breakdown.</p>
+      <ResearchCalculations section="followup" />
+      {breakdown('Overall', [data.returnPatterns.overall])}
+      {breakdown('By recorded diagnosis', data.returnPatterns.diagnoses)}
+      <p className="mt-3 text-xs text-slate-600">Counts use saved, non-cancelled general-clinic visits within the selected dates and clinic event. Patients whose first visit is near the end of the period have less time to return.</p>
+      {data.invalidDates.length > 0 && <p className="mt-2 text-sm text-slate-700">{count('Invalid clinic dates excluded', data.invalidDates)} visits excluded for invalid clinic dates</p>}
+      {children}
+    </section>;
+  }
 
   if (study === 'times') return <section aria-label="Workflow bottleneck research" className="mb-6 rounded-xl border border-blue-200 bg-blue-50/30 p-4">
     <h2 className="text-lg font-semibold text-slate-900">Workflow bottlenecks</h2><ResearchCalculations section="workflow" />

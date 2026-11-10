@@ -10,7 +10,7 @@ import { researchClinicalStatus } from "../lib/researchClinicalStatus.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./ResearchView.css";
 import ResearchStudies from "./ResearchStudies.jsx";
-import { buildResearchReport, normalizeDate, minutesBetween, completionTime, isComplete, percent } from "../researchAnalytics.js";
+import { buildResearchReport, buildTransportationReturnStats, normalizeDate, minutesBetween, completionTime, isComplete, percent } from "../researchAnalytics.js";
 
 function Metric({ label, value, helper, onClick }) {
   const Component = onClick ? "button" : "div";
@@ -48,6 +48,7 @@ export default function ResearchView({ isActive = true, patients = [], programEn
   const sortedDetailRows = useMemo(() => sortResearchDetails(drilldown?.rows || [], detailSort), [drilldown, detailSort]);
   const [clinicEvent, setClinicEvent] = useState("");
   const [study, setStudy] = useState("patients");
+  const [transportDiagnosis, setTransportDiagnosis] = useState("");
   const [dailyPage, setDailyPage] = useState(0);
   const dialogRef = useRef(null);
   const detailScrollRef = useRef(0);
@@ -88,6 +89,9 @@ export default function ResearchView({ isActive = true, patients = [], programEn
   }, [startDate, endDate, isActive]);
 
   const report = useMemo(() => buildResearchReport(patients, startDate, endDate, clinicEvent, womensHealthEventDate, attendingArrivals), [patients, startDate, endDate, clinicEvent, womensHealthEventDate, attendingArrivals]);
+  const transportGroup = report.groups.find(group => group.label === transportDiagnosis);
+  const transportStats = useMemo(() => transportGroup ? buildTransportationReturnStats(transportGroup.rows) : report.transportationReturnStats, [report, transportGroup]);
+  const transportVisitCount = (transportGroup?.rows ?? report.rows).length;
 
   function showRows(title, sourceRows, recordedField = "Encounter included") {
     detailScrollRef.current = 0;
@@ -190,7 +194,40 @@ export default function ResearchView({ isActive = true, patients = [], programEn
           ))}
         </nav>
         <div id="research-study-panel" className="research-study-panel">
-        <ResearchStudies key={`${clinicEvent}-${startDate}-${endDate}`} report={report} endDate={endDate} study={study} onInspect={setDrilldown} />
+        <ResearchStudies key={`${clinicEvent}-${startDate}-${endDate}`} report={report} study={study} onInspect={setDrilldown}>
+          {study === "patients" && (
+            <div className="mt-6 min-w-0 rounded-xl border border-slate-200 p-4">
+              <h3 className="font-semibold text-slate-900">Transportation and return visits</h3>
+              <label className="mt-3 flex flex-wrap items-center gap-2 text-sm font-medium">
+                Diagnosis group
+                <select className="rounded-lg border border-slate-300 bg-white p-2" value={transportDiagnosis} onChange={event => setTransportDiagnosis(event.target.value)}>
+                  <option value="">All patients</option>
+                  {report.groups.map(group => <option key={group.label} value={group.label}>{group.label}</option>)}
+                </select>
+              </label>
+              <p className="mt-1 text-xs text-slate-600">Visit share uses all general-clinic visits in the selected diagnosis group. Each visit counts under the mode recorded that day. Patients can appear in more than one mode. Returns are counted after a patient’s first visit using that mode, and later visits may use a different mode.</p>
+              <div className="mt-3 rounded-lg border border-slate-200">
+                <table className="research-table">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr>
+                    {["Transportation", "Visits", "Visit share", "Unique patients", "Patients who returned", "Return rate", "1 return visit", "2 return visits", "3 return visits", "4+ return visits", "Avg days between general visits"].map(label => <th scope="col" key={label} className="px-4 py-3">{label}</th>)}
+                  </tr></thead>
+                  <tbody className="divide-y divide-slate-200">{transportStats.map(mode => <tr key={mode.label} onClick={() => showRows(`Transportation return data: ${mode.label}`, mode.rows, "Transportation")} tabIndex={0} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); event.currentTarget.click(); } }} className="cursor-pointer hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500">
+                      <td data-label="Transportation" className="px-4 py-3 font-semibold text-slate-900">{mode.label}</td>
+                      <td data-label="Visits" className="px-4 py-3">{mode.visits}</td>
+                      <td data-label="Visit share" className="px-4 py-3">{percent(mode.visits, transportVisitCount)}</td>
+                      <td data-label="Unique patients" className="px-4 py-3">{mode.patients}</td>
+                      <td data-label="Patients who returned" className="px-4 py-3">{mode.returnedPatients}</td>
+                      <td data-label="Return rate" className="px-4 py-3">{mode.rate}</td>
+                      {mode.returnBreakdown.map(bucket => <td key={bucket.label} data-label={bucket.label} className="px-4 py-3"><button type="button" className="text-blue-700 hover:underline" onClick={(event) => { event.stopPropagation(); setDrilldown({ title: mode.label + ': ' + bucket.label, rows: bucket.rows.map(row => ({ patient: row.patientName, patientId: row.patientId, date: row.date, encounterId: row.encounter.id, value: row.returnCount + ' return visits', source: 'Distinct general-visit dates after ' + row.date + ' in the selected period' })) }); }}>{bucket.rows.length}</button></td>)}
+                      <td data-label="Avg days between general visits" className="px-4 py-3"><button type="button" className="text-blue-700 hover:underline" onClick={(event) => { event.stopPropagation(); setDrilldown({ title: mode.label + ': days between general visits', rows: mode.visitIntervals.map(row => ({ patient: row.patientName, patientId: row.patientId, date: row.date, encounterId: row.encounter.id, value: row.daysBetween + ' days', source: row.previousDate + ' → ' + row.date + ' (transportation at earlier visit: ' + mode.label + ')' })) }); }}>{mode.averageDaysBetweenVisits}</button></td>
+                    </tr>)}</tbody>
+                </table>
+              </div>
+              {transportStats.length === 0 && <p className="mt-2 text-sm text-slate-500">No general-clinic visits for this diagnosis group in the selected period.</p>}
+              <p className="mt-2 text-xs text-slate-500">Return counts use distinct clinic dates. Average days uses the gap to the next general-clinic date, grouped by the mode at the earlier visit.</p>
+            </div>
+          )}
+        </ResearchStudies>
         {study === "specialty" && <SpecialtyAnalytics patients={patientsForClinicEvent(patients, clinicEvent, womensHealthEventDate)} historyPatients={patients} programEntries={programEntries} startDate={startDate} endDate={endDate} onInspect={setDrilldown} />}
         {study === "patients" && <section aria-label="Patients and return visits"><ResearchCalculations section="patients" />
 <h2 className="text-lg font-semibold text-slate-900">Patients and return visits</h2>
@@ -220,19 +257,11 @@ export default function ResearchView({ isActive = true, patients = [], programEn
         </section>}
         {study === "access" && <section aria-label="Language and access"><ResearchCalculations section="access" />
           <h2 className="text-lg font-semibold text-slate-900">Language and access</h2>
-          <p className="mt-1 text-sm text-slate-600">Recorded language indicators, visit duration, and transportation patterns for general-clinic visits.</p>
+          <p className="mt-1 text-sm text-slate-600">Recorded language and visit duration for general-clinic visits.</p>
           <div className="rounded-xl border border-slate-200 p-4">
             <h3 className="font-semibold text-slate-900">Language and average visit time</h3>
             <p className="mt-1 text-xs text-slate-500">General clinic only: Undergrad Registration Complete → Visit Complete.</p>
             <div className="mt-3 space-y-2">{!report.languageStats.length && <p className="text-sm text-slate-500">No general-clinic visits in this date range.</p>}{report.languageStats.map(([label, count, avgMinutes]) => <button type="button" key={label} onClick={() => showTiming(`${label} general-clinic visit times`, report.rows.filter((row) => row.language === label), "undergradCompletedAt")} className="grid w-full grid-cols-1 gap-1 rounded-lg px-1 py-2 text-left text-sm hover:bg-blue-50 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:gap-3"><span className="break-words text-slate-600">{label}</span><span className="font-semibold text-slate-900">{count} <span className="font-normal text-slate-400">({percent(count, report.rows.length)})</span></span><span className="font-semibold text-blue-700 sm:min-w-20 sm:text-right">{avgMinutes === "—" ? "—" : `${avgMinutes} min avg`}</span></button>)}</div>
-          </div>
-          <div className="mt-6 min-w-0 rounded-xl border border-slate-200 p-4">
-            <h3 className="font-semibold text-slate-900">Transportation and return visits</h3>
-            <p className="mt-1 text-xs text-slate-500">Evaluated per general-clinic visit. Patients are unique within a mode but may appear under multiple modes when their transportation changes. Average days uses the next distinct general-visit date within the selected dates and clinic event, grouped by transportation at the earlier visit. The next visit may use a different mode; same-day visits count once. Return-count buckets show distinct general-visit dates after each patient’s earliest visit reporting that mode in the selected period; each patient appears in one bucket per mode.</p>
-            <div className="mt-3 rounded-lg border border-slate-200">
-              <table className="research-table"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Transportation reported</th><th className="px-4 py-3">Visit share</th><th className="px-4 py-3">Unique patients</th><th className="px-4 py-3">Visits</th><th className="px-4 py-3">Patients with return visits</th>{["1 return visit", "2 return visits", "3 return visits", "4+ return visits"].map(label => <th key={label} className="px-4 py-3">{label}</th>)}<th className="px-4 py-3">Observed return share</th><th className="px-4 py-3">Avg days between general visits</th></tr></thead><tbody className="divide-y divide-slate-200">{report.transportationReturnStats.map((mode) => <tr key={mode.label} onClick={() => showRows(`Transportation return data: ${mode.label}`, mode.rows, "Transportation")} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.currentTarget.click(); } }} className="cursor-pointer hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"><td data-label="Transportation reported" className="px-4 py-3 font-semibold text-slate-900">{mode.label}</td><td data-label="Visit share" className="px-4 py-3">{percent(mode.visits, report.rows.length)}</td><td data-label="Unique patients" className="px-4 py-3">{mode.patients}</td><td data-label="Visits" className="px-4 py-3">{mode.visits}</td><td data-label="Patients with return visits" className="px-4 py-3">{mode.returnedPatients}</td>{mode.returnBreakdown.map(bucket => <td key={bucket.label} data-label={bucket.label} className="px-4 py-3"><button type="button" className="text-blue-700 hover:underline" onClick={(event) => { event.stopPropagation(); setDrilldown({ title: mode.label + ': ' + bucket.label, rows: bucket.rows.map(row => ({ patient: row.patientName, patientId: row.patientId, date: row.date, encounterId: row.encounter.id, value: row.returnCount + ' return visits', source: 'Distinct general-visit dates after ' + row.date + ' in the selected period' })) }); }}>{bucket.rows.length}</button></td>)}<td data-label="Observed return share" className="px-4 py-3 font-semibold text-blue-700">{mode.rate}</td><td data-label="Avg days between general visits" className="px-4 py-3"><button type="button" className="text-blue-700 hover:underline" onClick={(event) => { event.stopPropagation(); setDrilldown({ title: mode.label + ': days between general visits', rows: mode.visitIntervals.map(row => ({ patient: row.patientName, patientId: row.patientId, date: row.date, encounterId: row.encounter.id, value: row.daysBetween + ' days', source: row.previousDate + ' → ' + row.date + ' (transportation at earlier visit: ' + mode.label + ')' })) }); }}>{mode.averageDaysBetweenVisits}</button></td></tr>)}</tbody></table>
-            </div>
-            <p className="mt-2 text-xs text-slate-500">Unique-patient columns should not be summed across modes. Observed return share is observational and does not establish causation.</p>
           </div>
         </section>}
         {study === "times" && <section aria-label="Visit times"><ResearchCalculations section="times" />

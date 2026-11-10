@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildResearchReport } from './researchAnalytics.js';
+import { buildResearchReport, buildTransportationReturnStats } from './researchAnalytics.js';
 import { buildResearchStudies } from './researchStudies.js';
 import { buildClinicalResearchStats } from './lib/clinicalResearchStats.js';
 
@@ -42,6 +42,21 @@ test('transportation return buckets count unique patients and distinct later gen
   assert.equal(bus.returnedPatients, 5);
   assert.deepEqual(bus.returnBreakdown.map(bucket => bucket.rows.length), [1, 1, 1, 2]);
   assert.deepEqual(bus.returnBreakdown[3].rows.map(row => row.returnCount), [4, 5]);
+});
+
+test('transportation rates can be scoped to one diagnosis group', () => {
+  const result = buildResearchReport([
+    { id: 'htn', encounters: [visit('htn-drive', '2026-01-01', { htn: true, transportation: 'Drove Self' }), visit('htn-ride', '2026-01-02', { transportation: 'Someone drove pt' })] },
+    { id: 'dm', encounters: [visit('dm-drive', '2026-01-01', { dm: true, transportation: 'Drove Self' })] },
+  ], '2026-01-01', '2026-02-01');
+  const group = result.groups.find(group => group.label === 'HTN+ only');
+  const [drive, ride] = buildTransportationReturnStats(group.rows);
+  assert.equal(group.rows.length, 2);
+  assert.equal(drive.label, 'Drove Self');
+  assert.equal(drive.patients, 1);
+  assert.equal(drive.rate, '100.00%');
+  assert.equal(ride.label, 'Someone drove pt');
+  assert.equal(ride.rate, '0.00%');
 });
 
 test('transportation averages consecutive general dates by earlier mode and excludes ineligible visits', () => {

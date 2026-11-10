@@ -38,34 +38,38 @@ function summarizeStage(rows, [label, start, end]) {
   };
 }
 
-export function buildResearchStudies(report, endDate) {
+export function buildResearchStudies(report) {
   const rows = report.rows.filter(row => dayNumber(row.date) !== null);
   const byPatient = new Map();
   rows.forEach(row => {
     if (!byPatient.has(row.patientId)) byPatient.set(row.patientId, []);
     byPatient.get(row.patientId).push(row);
   });
-  const indices = [...byPatient.values()].map(visits => [...visits].sort((a, b) => a.date.localeCompare(b.date) || String(a.encounter.id).localeCompare(String(b.encounter.id)))[0]);
-  const endDay = dayNumber(endDate);
-  const followup = [30, 60, 90].map(days => {
-    const source = indices.map(index => {
-      const next = byPatient.get(index.patientId).filter(row => row.date > index.date).sort((a, b) => a.date.localeCompare(b.date))[0];
-      const gap = next ? dayNumber(next.date) - dayNumber(index.date) : null;
-      const eligible = endDay !== null && endDay - dayNumber(index.date) >= days;
-      const returned = eligible && gap !== null && gap <= days;
-      return { ...index, eligible, returned, researchValue: !eligible ? 'Insufficient follow-up' : returned ? `Returned in ${gap} days` : `No return within ${days} days`, researchSource: `Index encounter ${index.encounter.id} on ${index.date}; next general visit: ${next ? `${next.date} (${next.encounter.id})` : 'none recorded through end date'}` };
-    });
-    const group = (label, subset) => {
-      const eligible = subset.filter(row => row.eligible);
-      return { label, rows: subset, eligible, returned: eligible.filter(row => row.returned), excluded: subset.filter(row => !row.eligible) };
-    };
-    return { days, ...group('All patients', source),
-      groups: [
-        ...[['HTN+ only', c => c.htn && !c.dm], ['DM+ only', c => c.dm && !c.htn], ['HTN+ and DM+', c => c.htn && c.dm], ['Neither recorded', c => !c.htn && !c.dm]].map(([label, matches]) => group(label, source.filter(row => matches(row.chronic)))),
-        ...[...new Set(source.map(row => row.transportation))].sort().map(mode => group(`Transportation: ${mode}`, source.filter(row => row.transportation === mode))),
-      ],
+  const patientReturns = [...byPatient.values()].map(visits => {
+    const ordered = [...visits].sort((a, b) => a.date.localeCompare(b.date) || String(a.encounter.id).localeCompare(String(b.encounter.id)));
+    const returnDates = [...new Set(ordered.map(row => row.date))].slice(1);
+    return {
+      ...ordered[0],
+      returnCount: returnDates.length,
+      researchValue: `${returnDates.length} return dates`,
+      researchSource: returnDates.length ? `Later general-clinic dates: ${returnDates.join(', ')}` : 'No later general-clinic date in the selected period',
     };
   });
+  const summarizeReturns = (label, patients) => {
+    const frequency = [[], [], [], [], []];
+    patients.forEach(patient => frequency[Math.min(patient.returnCount, 4)].push(patient));
+    return { label, patients, returned: patients.filter(patient => patient.returnCount > 0), frequency };
+  };
+  const diagnoses = [
+    ['HTN only', c => c.htn && !c.dm],
+    ['DM only', c => c.dm && !c.htn],
+    ['HTN and DM', c => c.htn && c.dm],
+    ['Neither recorded', c => !c.htn && !c.dm],
+  ];
+  const returnPatterns = {
+    overall: summarizeReturns('All patients', patientReturns),
+    diagnoses: diagnoses.map(([label, matches]) => summarizeReturns(label, patientReturns.filter(row => matches(row.chronic)))),
+  };
   const stages = workflowStages.map(stage => summarizeStage(rows, stage));
   const daily = [...new Set(rows.map(row => row.date))].sort().reverse().map(date => ({ date, stages: workflowStages.map(stage => summarizeStage(rows.filter(row => row.date === date), stage)) }));
   const pharmacyRows = [...report.generalAnalyticsRows, ...report.refillAnalyticsRows].filter(row => row.encounter.status !== 'cancelled' && dayNumber(row.date) !== null);
@@ -88,7 +92,7 @@ export function buildResearchStudies(report, endDate) {
         researchValue: `${type(previous)} → ${type(current)} in ${days} days`, researchSource: `${previous.encounter.id} (${previous.date}) → ${current.encounter.id} (${current.date})` });
     }
   });
-  return { followup, stages, daily, missingTransport: indices.filter(row => row.transportation === 'Not recorded'), invalidDates: report.rows.filter(row => dayNumber(row.date) === null),
+  return { returnPatterns, stages, daily, invalidDates: report.rows.filter(row => dayNumber(row.date) === null),
     transitions: ['General → General', 'General → Refill', 'Refill → General', 'Refill → Refill'].map(label => {
       const source = transitions.filter(row => row.transition === label);
       const sorted = source.map(row => row.days).sort((a, b) => a - b);

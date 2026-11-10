@@ -144,6 +144,45 @@ function buildPharmacyGroups(rows) {
   });
 }
 
+const countBy = (key, sourceRows) => Object.entries(sourceRows.reduce((counts, row) => {
+    const value = row[key] || "Not recorded";
+    counts[value] = (counts[value] || 0) + 1;
+    return counts;
+  }, {})).sort((a, b) => b[1] - a[1]);
+
+export function buildTransportationReturnStats(rows) {
+  return countBy("transportation", rows).map(([label]) => {
+    const modeRows = rows.filter((row) => row.transportation === label);
+    const visitIntervals = modeRows.flatMap((row) => {
+      const next = rows.filter((later) => later.patientId === row.patientId && later.date > row.date)
+        .sort((a, b) => a.date.localeCompare(b.date))[0];
+      if (!next) return [];
+      const start = Date.parse(row.date + 'T00:00:00Z');
+      const end = Date.parse(next.date + 'T00:00:00Z');
+      if (!Number.isFinite(start) || !Number.isFinite(end) ||
+        new Date(start).toISOString().slice(0, 10) !== row.date ||
+        new Date(end).toISOString().slice(0, 10) !== next.date) return [];
+      return [{ ...next, previousDate: row.date, daysBetween: (end - start) / 86400000 }];
+    }).filter((interval, index, intervals) => intervals.findIndex((other) =>
+      other.patientId === interval.patientId && other.previousDate === interval.previousDate) === index);
+    const patientIds = new Set(modeRows.map((row) => row.patientId));
+    const patientReturns = [...patientIds].map((patientId) => {
+      const first = modeRows.filter(row => row.patientId === patientId)
+        .sort((a, b) => a.date.localeCompare(b.date))[0];
+      const returnCount = new Set(rows.filter(row => row.patientId === patientId && row.date > first.date)
+        .map(row => row.date)).size;
+      return { ...first, returnCount };
+    });
+    const returnedPatients = patientReturns.filter(row => row.returnCount > 0).length;
+    const returnBreakdown = [1, 2, 3, 4].map(count => ({
+      label: count === 4 ? '4+ return visits' : `${count} return visit${count === 1 ? '' : 's'}`,
+      rows: patientReturns.filter(row => count === 4 ? row.returnCount >= 4 : row.returnCount === count),
+    }));
+    return { label, rows: modeRows, patients: patientIds.size, visits: modeRows.length, returnedPatients, returnBreakdown, rate: percent(returnedPatients, patientIds.size), visitIntervals,
+      averageDaysBetweenVisits: visitIntervals.length ? Math.round(visitIntervals.reduce((sum, row) => sum + row.daysBetween, 0) / visitIntervals.length * 10) / 10 : '—' };
+  });
+}
+
 export function buildResearchReport(patients, startDate, endDate, clinicEvent = "", eventDate = "", attendingArrivals = {}) {
   // Current eligibility applies to all tracker data, including historical visits.
   patients = patientsForClinicEvent(patients.filter(patient => !patient.fired), clinicEvent, eventDate);
@@ -199,49 +238,15 @@ export function buildResearchReport(patients, startDate, endDate, clinicEvent = 
     });
   });
 
-  const countBy = (key, sourceRows = rows) => Object.entries(sourceRows.reduce((counts, row) => {
-    const value = row[key] || "Not recorded";
-    counts[value] = (counts[value] || 0) + 1;
-    return counts;
-  }, {})).sort((a, b) => b[1] - a[1]);
   const unique = (subset) => new Set(subset.map((row) => row.patientId)).size;
   const chronicRows = rows.filter((row) => row.chronic.htn || row.chronic.dm);
   const papEligibleRows = rows.filter((row) => row.papEligible);
   const mammogramEligibleRows = rows.filter((row) => row.mammogramEligible);
-  const languageStats = countBy("language").map(([label, count]) => {
+  const languageStats = countBy("language", rows).map(([label, count]) => {
     const languageRows = rows.filter((row) => row.language === label);
     return [label, count, average(languageRows.map((row) => minutesBetween(row.encounter.undergradCompletedAt, completionTime(row.encounter))))];
   });
-  const transportationReturnStats = countBy("transportation").map(([label]) => {
-    const modeRows = rows.filter((row) => row.transportation === label);
-    const visitIntervals = modeRows.flatMap((row) => {
-      const next = rows.filter((later) => later.patientId === row.patientId && later.date > row.date)
-        .sort((a, b) => a.date.localeCompare(b.date))[0];
-      if (!next) return [];
-      const start = Date.parse(row.date + 'T00:00:00Z');
-      const end = Date.parse(next.date + 'T00:00:00Z');
-      if (!Number.isFinite(start) || !Number.isFinite(end) ||
-        new Date(start).toISOString().slice(0, 10) !== row.date ||
-        new Date(end).toISOString().slice(0, 10) !== next.date) return [];
-      return [{ ...next, previousDate: row.date, daysBetween: (end - start) / 86400000 }];
-    }).filter((interval, index, intervals) => intervals.findIndex((other) =>
-      other.patientId === interval.patientId && other.previousDate === interval.previousDate) === index);
-    const patientIds = new Set(modeRows.map((row) => row.patientId));
-    const patientReturns = [...patientIds].map((patientId) => {
-      const first = modeRows.filter(row => row.patientId === patientId)
-        .sort((a, b) => a.date.localeCompare(b.date))[0];
-      const returnCount = new Set(rows.filter(row => row.patientId === patientId && row.date > first.date)
-        .map(row => row.date)).size;
-      return { ...first, returnCount };
-    });
-    const returnedPatients = patientReturns.filter(row => row.returnCount > 0).length;
-    const returnBreakdown = [1, 2, 3, 4].map(count => ({
-      label: count === 4 ? '4+ return visits' : `${count} return visit${count === 1 ? '' : 's'}`,
-      rows: patientReturns.filter(row => count === 4 ? row.returnCount >= 4 : row.returnCount === count),
-    }));
-    return { label, rows: modeRows, patients: patientIds.size, visits: modeRows.length, returnedPatients, returnBreakdown, rate: percent(returnedPatients, patientIds.size), visitIntervals,
-      averageDaysBetweenVisits: visitIntervals.length ? Math.round(visitIntervals.reduce((sum, row) => sum + row.daysBetween, 0) / visitIntervals.length * 10) / 10 : '—' };
-  });
+  const transportationReturnStats = buildTransportationReturnStats(rows);
   const generalAnalyticsRows = analyticsRows.filter((row) => ["general", "both"].includes(row.visitType));
   const refillAnalyticsRows = analyticsRows
     .filter((row) => row.visitType === "refill_only" && row.encounter.status !== "cancelled")
@@ -287,5 +292,5 @@ export function buildResearchReport(patients, startDate, endDate, clinicEvent = 
   }, {});
   const dailyFlow = Object.entries(dailyGroups).sort((a, b) => b[0].localeCompare(a[0])).map(([date, dateRows]) => ({ date, ...flowMetrics(dateRows) }));
 
-  return { pharmacyGroups: buildPharmacyGroups(analyticsRows), rows, chronicRows, papEligibleRows, mammogramEligibleRows, uniquePatients: unique(rows), chronicPatients: unique(chronicRows), chronicReturns: chronicRows.filter((row) => row.returning).length, groups, language: countBy("language"), languageStats, transportation: countBy("transportation"), transportationReturnStats, pap: countBy("pap", papEligibleRows), mammogram: countBy("mammogram", mammogramEligibleRows), flow: flowMetrics(generalAnalyticsRows), refillFlow: flowMetrics(refillAnalyticsRows), generalAnalyticsRows, refillAnalyticsRows, dailyFlow };
+  return { pharmacyGroups: buildPharmacyGroups(analyticsRows), rows, chronicRows, papEligibleRows, mammogramEligibleRows, uniquePatients: unique(rows), chronicPatients: unique(chronicRows), chronicReturns: chronicRows.filter((row) => row.returning).length, groups, language: countBy("language", rows), languageStats, transportation: countBy("transportation", rows), transportationReturnStats, pap: countBy("pap", papEligibleRows), mammogram: countBy("mammogram", mammogramEligibleRows), flow: flowMetrics(generalAnalyticsRows), refillFlow: flowMetrics(refillAnalyticsRows), generalAnalyticsRows, refillAnalyticsRows, dailyFlow };
 }
