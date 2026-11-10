@@ -84,6 +84,50 @@ export function trackerCompletionDates(history, entry) {
   return completedSpecialtyDates(history, entry).filter(date => entry.specialtyDate ? date === entry.specialtyDate : !entry.createdAt || date >= String(entry.createdAt).slice(0, 10));
 }
 
+export function isPtNoShow(history, entry, today) {
+  if (entry.programType !== 'Physical Therapy' || entry.status !== 'Scheduled' ||
+      !entry.patientId || !entry.specialtyDate || entry.specialtyDate >= today) return false;
+  const visits = history.get(entry.patientId + ':Physical Therapy') || [];
+  return !visits.some(visit => visit.date === entry.specialtyDate);
+}
+
+export function specialtyScheduleByDate(entries, history, today) {
+  const byDate = new Map();
+  for (const entry of entries) {
+    const schedule = { ...entry.scheduleHistory };
+    const { specialtyDate, status, scheduleType, appointmentSlot } = entry;
+    if (specialtyDate && !schedule[specialtyDate] && (
+      ['Scheduled', 'Backup', 'Attempted Contact', 'Unable to Reach'].includes(status) ||
+      (status === 'Completed' && ['primary', 'backup'].includes(scheduleType))
+    )) {
+      schedule[specialtyDate] = { status, scheduleType, appointmentSlot };
+    }
+
+    const programs = specialtyReportingGroup(entry.programType) === MENTAL_HEALTH_ADDICTION
+      ? ['Mental Health', 'Addiction Medicine'] : [entry.programType];
+    const visits = programs.flatMap(program => history.get(entry.patientId + ':' + program) || []);
+    for (const [date, appointment] of Object.entries(schedule)) {
+      const sameDay = visits.filter(visit => visit.date === date);
+      const attendance = ['Visit completed', 'Checked in', 'Cancelled'].find(
+        visitStatus => sameDay.some(visit => visit.status === visitStatus)
+      );
+      const savedCompletion = date === specialtyDate && status === 'Completed';
+      const noShow = !attendance && !savedCompletion && isPtNoShow(history, {
+        ...entry, status: appointment.status, specialtyDate: date,
+      }, today);
+      const roster = byDate.get(date) || [];
+      roster.push({
+        id: entry.id,
+        patientName: entry.patientName,
+        appointmentSlot: appointment.appointmentSlot,
+        status: attendance || (savedCompletion ? 'Completed' : noShow ? 'No Show' : appointment.status),
+      });
+      byDate.set(date, roster);
+    }
+  }
+  return byDate;
+}
+
 export function matchesSpecialtyFilter(encounter, filter = '') {
   return !filter || (filter === 'lwobs' ? String(encounter?.status).toLowerCase() === 'cancelled' : specialtyProgram(encounter) === filter);
 }

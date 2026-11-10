@@ -13,6 +13,7 @@ function mapProgramRow(row) {
     assignedCoordinator: row.assigned_coordinator || "",
     status: row.status || "",
     specialtyDate: row.specialty_date || "",
+    scheduleHistory: row.schedule_history || {},
     scheduleType: row.schedule_group || "",
     schedulePosition: row.schedule_position ?? null,
     appointmentSlot: row.appointment_slot || "",

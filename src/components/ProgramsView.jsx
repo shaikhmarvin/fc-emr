@@ -1,7 +1,7 @@
 import { mentalHealthProgramType, combinedMentalHealthSettings } from "../utils/mentalHealthService.js";
 import { ophthoReferral, isOphthoEncounter, matchesOphthoDay, existingOphthoVisit } from "../utils/ophthalmology.js";
 import "./ProgramsView.css";
-import { specialtyProgram, specialtyReportingGroup, MENTAL_HEALTH_ADDICTION, specialtyTrackerVisits, specialtyVisitHistory, completedSpecialtyDates, trackerCompletionDates } from "../utils/specialtyTracker.js";
+import { specialtyProgram, specialtyReportingGroup, MENTAL_HEALTH_ADDICTION, specialtyTrackerVisits, specialtyVisitHistory, completedSpecialtyDates, trackerCompletionDates, isPtNoShow, specialtyScheduleByDate } from "../utils/specialtyTracker.js";
 import { useEffect, useMemo, useState } from "react";
 import {
   PT_TIME_SLOTS,
@@ -12,6 +12,7 @@ import { supabase } from "../lib/supabase";
 import { fetchProgramSettings, updateProgramSetting } from "../api/programSettings";
 import { createPatientInSupabase } from "../api/patients";
 import WomensHealthSchedule from "./WomensHealthSchedule";
+import SpecialtyScheduleCalendar from "./SpecialtyScheduleCalendar";
 import { WHD_SLOTS, whdSlotLabel } from "../utils/womensHealthSchedule";
 
 
@@ -26,6 +27,13 @@ const PROGRAM_TYPES = [
   "Colonoscopy",
   "Women's Health Day",
 ];
+
+const clinicDayFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Chicago",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
 
 const PROGRAM_STATUSES = [
   "New Referral",
@@ -452,7 +460,9 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
 
   function renderSpecialtyVisit(entry) {
     if (!specialtyProgram({ visitType: "specialty_only", specialtyType: entry.programType })) return null;
-    const visit = trackerVisits.get(String(entry.id));
+    const visit = entry.ptNoShow
+      ? { status: "No Show", date: entry.specialtyDate }
+      : trackerVisits.get(String(entry.id));
     const dates = completedSpecialtyDates(specialtyHistory, entry);
     return <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
       <span className="font-medium">Specialty visit: </span>
@@ -461,6 +471,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
     </div>;
   }
 
+  const today = clinicDayFormatter.format(new Date());
   const hydratedProgramEntries = useMemo(() => {
     return (programEntries || []).map((entry) => {
       const patient = patientById.get(String(entry.patientId || ""));
@@ -470,13 +481,14 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
       return {
         ...entry,
         status: trackerCompletionDates(specialtyHistory, entry).length ? "Completed" : entry.status,
+        ptNoShow: isPtNoShow(specialtyHistory, entry, today),
         patientName: patientName || entry.patientName || "",
         mrn: patient.mrn || entry.mrn || "",
         dob: patient.dob || entry.dob || "",
         phone: patient.phone || entry.phone || "",
       };
     });
-  }, [programEntries, patientById, specialtyHistory]);
+  }, [programEntries, patientById, specialtyHistory, today]);
 
   useEffect(() => {
     if (!isActive) return;
@@ -1526,6 +1538,14 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
     };
 
     const allSpecialtyEntries = specialtyEntries[programType] || [];
+    const scheduleCalendar = !isGenericTracker && (
+      <SpecialtyScheduleCalendar
+        key={programType}
+        byDate={specialtyScheduleByDate(allSpecialtyEntries, specialtyHistory, today)}
+        nextDate={specialtyDate}
+        today={today}
+      />
+    );
 
     const entries = sortReferralList(allSpecialtyEntries.filter((entry) => {
       const patientText = (entry.patientName || "").toLowerCase();
@@ -1540,7 +1560,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
       const matchesStatus =
         !currentFilters.status ||
         currentFilters.status === "All" ||
-        entry.status === currentFilters.status;
+        (entry.ptNoShow ? "No Show" : entry.status) === currentFilters.status;
 
       return matchesPatient && matchesDob && matchesStatus;
     }));
@@ -1551,6 +1571,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
 
       return (
         <div className="space-y-6">
+          {scheduleCalendar}
           <Card>
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
@@ -1943,6 +1964,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
           <h3 className="mb-4 text-lg font-semibold text-slate-900">
             {specialtyReportingGroup(programType)} Scheduler
           </h3>
+          {scheduleCalendar}
           {conflictingEntries.length > 0 && <div role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
             <p className="font-semibold">Some appointments from the previous trackers share a position. Review and reassign these appointments.</p>
             {conflictingEntries.map(entry => <div key={entry.id} className="mt-2 flex items-center justify-between gap-3"><span>{entry.patientName} · {entry.scheduleType} {entry.schedulePosition}</span><button type="button" className="font-semibold underline" onClick={() => handleUnassign(entry)}>Unassign</button></div>)}
@@ -2330,6 +2352,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                 }
               >
                 <option value="All">All statuses</option>
+                {programType === "Physical Therapy" && <option value="No Show">No Show</option>}
                 {getStatusOptions(programType).map((status) => (
                   <option key={status} value={status}>
                     {status}
@@ -2422,7 +2445,7 @@ const [savingManualPatient, setSavingManualPatient] = useState(false);
                           <label className="mb-1 block text-sm font-medium text-slate-700">
                             Status
                           </label>
-                          <StatusBadge status={entry.status} />
+                          <StatusBadge status={entry.ptNoShow ? "No Show" : entry.status} />
                         </div>
 
                         <div className="tracker-reason">
@@ -2635,6 +2658,7 @@ function getStatusStyles(status) {
       return "bg-yellow-100 text-yellow-700";
     case "Unable to Reach":
       return "bg-orange-100 text-orange-700";
+    case "No Show":
     case "Declined":
       return "bg-red-100 text-red-700";
     case "Completed":
@@ -2780,7 +2804,7 @@ function SchedulerRow({ label, entry, onUnassign }) {
               >
                 {entry.patientName} • {entry.phone || "No phone"}
               </span>
-              <StatusBadge status={entry.status} />
+              <StatusBadge status={entry.ptNoShow ? "No Show" : entry.status} />
             </>
           ) : (
             "OPEN"
