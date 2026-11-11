@@ -16,6 +16,26 @@ export default function PatientTable({
   getPatientClinicContext,
   renderPatientBadges,
 }) {
+  function renderVisitTypeBadges(patient) {
+    if (!getPatientVisitTypeSummary) return null;
+    const summary = getPatientVisitTypeSummary(patient);
+    const types = Array.isArray(summary) ? summary : [summary];
+
+    return (
+      <span className="flex flex-wrap gap-1">
+        {types.map((type) => {
+          const style = VISIT_TYPE_BADGE_STYLES[type] || VISIT_TYPE_BADGE_STYLES.general;
+          const label = type === "refill_only" && types.length > 1 ? "Refill" : style.label;
+          return (
+            <span key={type} className={`inline-flex w-fit rounded-full border px-2 py-0.5 text-xs font-semibold ${style.badgeClass}`}>
+              {label}
+            </span>
+          );
+        })}
+      </span>
+    );
+  }
+
   return (
     <div className="rounded-2xl bg-white shadow">
       <div className="border-b px-4 py-4 sm:px-5">
@@ -54,17 +74,7 @@ export default function PatientTable({
       {getFullPatientName(patient)} {renderPatientBadges?.(patient)}
     </span>
 
-    {getPatientVisitTypeSummary && (
-      <span
-        className={`w-fit rounded-full border px-2 py-0.5 text-xs font-semibold ${
-          VISIT_TYPE_BADGE_STYLES[getPatientVisitTypeSummary(patient)]?.badgeClass ||
-          VISIT_TYPE_BADGE_STYLES.general.badgeClass
-        }`}
-      >
-        {VISIT_TYPE_BADGE_STYLES[getPatientVisitTypeSummary(patient)]?.label ||
-          "General"}
-      </span>
-    )}
+    {renderVisitTypeBadges(patient)}
     {getPatientSpecialtySummary?.(patient) && <span className="text-xs font-semibold text-violet-700">{getPatientSpecialtySummary(patient)}</span>}
   </div>
 </td>
@@ -139,17 +149,7 @@ export default function PatientTable({
               <p className="text-base font-semibold text-slate-900">
                 {getFullPatientName(patient)} {renderPatientBadges?.(patient)}
               </p>
-              {getPatientVisitTypeSummary && (
-  <span
-    className={`inline-flex w-fit rounded-full border px-2 py-0.5 text-xs font-semibold ${
-      VISIT_TYPE_BADGE_STYLES[getPatientVisitTypeSummary(patient)]?.badgeClass ||
-      VISIT_TYPE_BADGE_STYLES.general.badgeClass
-    }`}
-  >
-    {VISIT_TYPE_BADGE_STYLES[getPatientVisitTypeSummary(patient)]?.label ||
-      "General"}
-  </span>
-)}
+              {renderVisitTypeBadges(patient)}
               {getPatientSpecialtySummary?.(patient) && <p className="text-xs font-semibold text-violet-700">{getPatientSpecialtySummary(patient)}</p>}
               <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-slate-600">
                 <span>MRN: {patient.mrn || "—"}</span>

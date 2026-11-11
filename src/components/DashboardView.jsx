@@ -448,6 +448,11 @@ export default function DashboardView({
   }
 
   function getPatientVisitTypeSummary(patient) {
+    // Keep every same-day visit visible, even while filtering the patient list.
+    if (selectedClinicDate) {
+      const types = getPatientEncounterTypes(patient);
+      return VISIT_TYPE_FILTERS.filter(({ key }) => types.has(key)).map(({ key }) => key);
+    }
     if (visitTypeFilter !== "all" && getPatientEncounterTypes(patient).has(visitTypeFilter)) {
       return visitTypeFilter;
     }
