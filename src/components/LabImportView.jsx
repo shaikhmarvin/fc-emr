@@ -794,7 +794,6 @@ if (onAfterSaveCleanup) {
   const reviewedPages = reviewedPagesByPacket[selectedPacket.packetId] || [];
   const targetKey = `${selectedPacket.packetId}:${confirmedPatient?.id || ""}:${selectedEncounterId || ""}:${collectionDate}`;
   const savedRecognition = recognizeSavedImport(reviewedLabs, { ...selectedPacket, collectedDate: collectionDate }, encounters, selectedEncounterId, patientChartLabs);
-  const pendingPages = (sourceDocument?.pages || []).filter(page => !reviewedPages.includes(page.pageNumber) && !savedRecognition.completedPages.includes(page.pageNumber));
   const savableLabs = labsReadyToSave(reviewedLabs);
   const pendingLabs = reviewedLabs.filter((lab, index) => labsReadyToSave([lab]).length && !savedRecognition.matchedIndexes.has(index) && needsExtractionReview(lab));
   const patientCandidates = patientSearch.trim().length >= 2 ? patients.filter(patient =>
@@ -815,8 +814,7 @@ if (onAfterSaveCleanup) {
     saveDisabledReason = "Enter a collection date and choose where to save.";
   } else if (confirmedTarget !== targetKey) {
     saveDisabledReason = "Verify the patient and save destination below.";
-  } else if (pendingPages.length) {
-    saveDisabledReason = `Check ${pendingPages.length} source page(s) for missing results.`;
+
   } else if (pendingLabs.length) {
     saveDisabledReason = `Verify or remove ${pendingLabs.length} uncertain result(s).`;
   } else if (savableLabs.some(lab => !String(lab.displayName || "").trim())) {
@@ -1026,13 +1024,7 @@ if (onAfterSaveCleanup) {
             <p className="flex h-16 shrink-0 items-center text-xs text-slate-500">{pendingReviewSaves > 0 ? "Saving review… A local recovery copy is kept while the save is pending." : saveError ? "Check the review message above. Unsynced edits are kept in this browser when recovery storage is available." : "Review progress saved. Use Save Imported Lab to save results to the chart."}</p>
           </div>
           <LabSourceViewer key={selectedPacket.packetId} source={sourceDocument} file={sourceFile} activeLab={activeSourceLab}
-            onAttachSource={onAttachSource} reviewedPages={reviewedPages}
-            onReviewPage={(pageNumber, checked) => {
-              const current = progressSync.current.get(selectedPacket.packetId)?.reviewedPages || reviewedPages;
-              const pages = checked ? [...new Set([...current, pageNumber])] : current.filter(number => number !== pageNumber);
-              setReviewedPagesByPacket(prev => ({ ...prev, [selectedPacket.packetId]: pages }));
-              updateReviewProgress({ reviewedPages: pages });
-            }} />
+            onAttachSource={onAttachSource} />
         </div>
 
         <div className="min-w-0 space-y-4 xl:col-span-2">

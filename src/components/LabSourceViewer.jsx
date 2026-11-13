@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-export default function LabSourceViewer({ source, file, activeLab, onAttachSource, onReviewPage, reviewedPages = [] }) {
+export default function LabSourceViewer({ source, file, activeLab, onAttachSource }) {
   const [pageNumber, setPageNumber] = useState(source?.pages?.[0]?.pageNumber || 1);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -105,10 +105,6 @@ export default function LabSourceViewer({ source, file, activeLab, onAttachSourc
             {box && <div aria-label="Selected result on source page" className="pointer-events-none absolute border-2 border-blue-600 bg-yellow-300/30" style={{ left: `${box.x * 100}%`, top: `${box.y * 100}%`, width: `${box.width * 100}%`, height: `${box.height * 100}%` }} />}
           </div>
         </div>
-        <label className="flex h-16 shrink-0 items-center gap-2 text-sm text-slate-700">
-          <input type="checkbox" checked={reviewedPages.includes(pageNumber)} onChange={event => onReviewPage?.(pageNumber, event.target.checked)} />
-          I checked this page for missing results and patient details.
-        </label>
       </>}
     </section>
   );

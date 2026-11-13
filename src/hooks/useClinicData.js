@@ -222,7 +222,13 @@ socialWorkSeenBy:
 }
 
 export function useClinicData({ authReady, session, userRole, isBoardDisplayMode = false }) {
-  const [patients, setPatients] = useState([]);
+  const [patients, replacePatients] = useState([]);
+  const dataRevisionRef = useRef(0);
+  // A fetch started before a local save or realtime event must not undo it.
+  const setPatients = useCallback((next) => {
+    dataRevisionRef.current += 1;
+    replacePatients(next);
+  }, []);
 
   const timeoutRef = useRef(null);
   const inFlightRef = useRef(false);
@@ -237,12 +243,16 @@ export function useClinicData({ authReady, session, userRole, isBoardDisplayMode
   const loadData = useCallback(async () => {
     if (!authReady || !session || !userRole) return;
 
+    // Saves that only request a reload (pharmacy/lab actions, for example)
+    // also invalidate any older snapshot already being fetched.
+    dataRevisionRef.current += 1;
     if (inFlightRef.current) {
       queuedReloadRef.current = true;
       return;
     }
 
     inFlightRef.current = true;
+    const startingRevision = dataRevisionRef.current;
 
     try {
       const [patientsData, encountersData, socialWorkNotesData] =
@@ -267,7 +277,11 @@ export function useClinicData({ authReady, session, userRole, isBoardDisplayMode
             fetchAllergies(activePatientIds),
           ]);
 
-      setPatients(
+      if (startingRevision !== dataRevisionRef.current) {
+        queuedReloadRef.current = true;
+        return;
+      }
+      replacePatients(
         buildPatientMap(
           patientsData,
           encountersData,
@@ -411,7 +425,7 @@ export function useClinicData({ authReady, session, userRole, isBoardDisplayMode
       }
       supabase.removeChannel(channel);
     };
-  }, [authReady, session, userRole, loadData, isBoardDisplayMode]);
+  }, [authReady, session, userRole, loadData, isBoardDisplayMode, setPatients]);
 
   useEffect(() => {
     if (!authReady || !session || !userRole) return;
